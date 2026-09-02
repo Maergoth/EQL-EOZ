@@ -13,14 +13,13 @@
             <div class="brand-mark">EQL</div>
             <div>
                 <div class="brand-title">Eye of Zomm</div>
-                <div class="brand-subtitle">EQLWiki companion · local intelligence for EverQuest Legends</div>
             </div>
         </div>
         <form id="wiki-search-form" class="global-search" role="search">
             <div class="global-search-box">
                 <span class="global-search-icon">⌕</span>
                 <input id="wiki-search" type="search" autocomplete="off" placeholder="Search EQLWiki" aria-label="Search EQLWiki">
-                <button id="wiki-search-button" type="button">Search EQLWiki</button>
+                <button id="wiki-search-button" type="button" aria-label="Search EQLWiki" title="Search EQLWiki">↗</button>
             </div>
         </form>
         <div class="window-controls">
@@ -44,19 +43,14 @@
         <button class="nav-button" data-view="drops"><span>▣</span>Drops</button>
         <button class="nav-button" data-view="combat"><span>⚔</span>Combat</button>
         <button class="nav-button" data-view="settings"><span>⚙</span>Settings</button>
-        <div class="sidebar-note">
-            <strong>Local-first</strong>
-            <span>Live data stays on this PC. The game client is never hooked or modified.</span>
-        </div>
     </aside>
 
     <main class="content">
         <section class="view is-active" data-view-panel="overview">
-            <div class="hero">
+            <div class="hero overview-hero">
                 <div>
-                    <span class="eyebrow">CURRENT ADVENTURE</span>
+                    <span class="eyebrow">CURRENT ZONE</span>
                     <h1 id="hero-zone">Waiting for EverQuest log…</h1>
-                    <p id="hero-detail">Select an active log file in the launcher. Zone changes are detected automatically.</p>
                 </div>
                 <div class="hero-actions">
                     <button class="primary-button" data-go-view="map">Open live map</button>
@@ -64,21 +58,22 @@
                 </div>
             </div>
 
-            <div class="metric-grid">
-                <article class="metric-card">
-                    <span class="metric-label">Player</span>
-                    <strong id="metric-player">—</strong>
-                    <small id="metric-classes">Classes not detected</small>
-                </article>
+            <article id="overview-target" class="panel target-focus">
+                <div class="target-focus-heading">
+                    <div>
+                        <span class="eyebrow">CURRENT TARGET</span>
+                        <h2 id="target-name">No target</h2>
+                        <div id="target-con" class="target-con">Consider an NPC to see its level and loot.</div>
+                    </div>
+                    <label class="check-control"><input id="target-my-class" type="checkbox" checked> My Class</label>
+                </div>
+                <div id="target-loot" class="target-loot empty-state">No target selected.</div>
+            </article>
+
+            <div class="metric-grid overview-metrics">
                 <article class="metric-card">
                     <span class="metric-label">Last /location</span>
                     <strong id="metric-location">—</strong>
-                    <small>Only reads logged coordinates; never sends commands.</small>
-                </article>
-                <article class="metric-card">
-                    <span class="metric-label">Current target</span>
-                    <strong id="metric-target">—</strong>
-                    <small id="metric-con">No consider level yet</small>
                 </article>
                 <article class="metric-card">
                     <span class="metric-label">Current fight</span>
@@ -115,7 +110,7 @@
                 <div>
                     <span class="eyebrow">LOCAL 3D NAVIGATION</span>
                     <h2 id="map-title">Zone Viewer</h2>
-                    <p id="map-subtitle">Grant the viewer access to your EverQuest folder once, then current-zone syncing can take over.</p>
+                    <p id="map-subtitle">Select your EverQuest folder once.</p>
                 </div>
                 <div class="map-actions">
                     <button id="select-eq-folder" class="secondary-button">Select EQ folder</button>
@@ -128,14 +123,27 @@
                     <iframe id="zone-viewer" class="viewer-frame" src="./zoneviewer/viewer.html" title="EQL Zone Viewer"></iframe>
                 </div>
                 <aside class="minimal-drop-panel panel">
+                    <div class="minimal-fight">
+                        <span>Current fight</span>
+                        <strong id="minimal-fight-dps">0 DPS</strong>
+                        <small id="minimal-fight-name">No active fight</small>
+                    </div>
+                    <section id="minimal-target" class="minimal-target" aria-live="polite">
+                        <div class="minimal-target-heading">
+                            <span>Current target</span>
+                            <strong id="minimal-target-name">No target</strong>
+                            <small id="minimal-target-con"></small>
+                        </div>
+                        <div id="minimal-target-loot" class="minimal-target-loot"></div>
+                    </section>
                     <div class="panel-heading">
-                        <div><span class="eyebrow">CURRENT ZONE</span><h2>Named &amp; drops</h2></div>
+                        <div><span class="eyebrow">CURRENT ZONE</span><h2>Mob list</h2></div>
                     </div>
                     <div class="minimal-filters">
                         <label class="check-control"><input id="minimal-my-class" type="checkbox" checked> My Class</label>
                         <label class="check-control"><input id="minimal-named-only" type="checkbox" checked> Named only</label>
                     </div>
-                    <div id="minimal-zone-drops" class="minimal-zone-drops empty-state">Waiting for a detected zone.</div>
+                    <div id="minimal-zone-drops" class="minimal-zone-drops empty-state">Waiting for a zone.</div>
                 </aside>
             </div>
         </section>

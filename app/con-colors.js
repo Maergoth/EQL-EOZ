@@ -4,7 +4,7 @@ export const CON_ORDER = ['gray', 'green', 'blue', 'white', 'yellow', 'red'];
  * EverQuest Legends con model.
  *
  * White / yellow / red are the classic relative-level rules:
- *   same level = white, +1/+2 = yellow, +3+ = red.
+ *   same level = white, +1 through +3 = yellow, +4+ = red.
  *
  * For lower-level NPCs, classic EQ widens the blue range as the player
  * levels. The 0.75 threshold below reproduces the documented classic blue
@@ -47,7 +47,7 @@ export function conForLevel(mobLevel, playerLevel) {
 
     const delta = mob - player;
 
-    if (delta >= 3) return { key: 'red', label: 'Red', delta };
+    if (delta >= 4) return { key: 'red', label: 'Red', delta };
     if (delta >= 1) return { key: 'yellow', label: 'Yellow', delta };
     if (delta === 0) return { key: 'white', label: 'White', delta };
 

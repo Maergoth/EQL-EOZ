@@ -135,10 +135,12 @@ class BuildEyeOfZommPack extends Maintenance {
         } );
         usort( $items, static fn ( $a, $b ) => strcasecmp( $a['name'], $b['name'] ) );
 
+        $icons = $this->buildItemIconMap( $services->getRepoGroup(), $items );
+
         $generated = gmdate( 'c' );
         $pack = [
             'meta' => [
-                'schemaVersion' => 1,
+                'schemaVersion' => 2,
                 'version' => 'wiki-' . gmdate( 'Ymd\THis\Z' ),
                 'generatedAt' => $generated,
                 'currentEra' => $currentEra,
@@ -149,11 +151,13 @@ class BuildEyeOfZommPack extends Maintenance {
                     'zones' => count( $this->zoneCatalog ),
                     'npcs' => count( $npcs ),
                     'items' => count( $items ),
+                    'icons' => count( $icons ),
                 ],
             ],
             'zones' => $this->zoneCatalog,
             'npcs' => $npcs,
             'items' => $items,
+            'icons' => (object)$icons,
         ];
 
         $this->writeAtomicJson( $output, $pack );
@@ -162,6 +166,7 @@ class BuildEyeOfZommPack extends Maintenance {
         $this->output( 'Zones: ' . count( $this->zoneCatalog ) . "\n" );
         $this->output( 'NPC records: ' . count( $npcs ) . " (skipped pages: {$npcSkipped})\n" );
         $this->output( 'Items: ' . count( $items ) . " (skipped pages: {$itemSkipped})\n" );
+        $this->output( 'Embedded item icons: ' . count( $icons ) . "\n" );
         $this->output( "Output: {$output}\n" );
     }
 
@@ -348,6 +353,9 @@ class BuildEyeOfZommPack extends Maintenance {
         $classes = $this->parseClasses( $statsBlock );
         $slots = $this->parseSlots( $statsBlock );
         $stats = $this->parseItemStats( $statsBlock );
+        $displayLines = $this->parseItemDisplayLines( $statsBlock );
+        $iconText = $this->extractParamByLine( $body, [ 'lucy_img_ID', 'lucy_img_id' ] );
+        $iconId = preg_match( '/\d+/', $iconText, $iconMatch ) ? (int)$iconMatch[0] : 0;
         $dropsFrom = $this->extractParamByLine( $body, [ 'dropsfrom', 'drops_from' ] );
         $dropSources = $this->parseDropSources( $dropsFrom );
         $revision = $page->getRevisionRecord();
@@ -360,13 +368,81 @@ class BuildEyeOfZommPack extends Maintenance {
             'classes' => $classes,
             'slots' => $slots,
             'stats' => (object)$stats,
+            'displayLines' => $displayLines,
             'dropSources' => $dropSources,
             'revisionId' => $revisionId,
         ];
         if ( $notes !== '' ) {
             $record['notes'] = $notes;
         }
+        if ( $iconId > 0 ) {
+            $record['iconId'] = $iconId;
+        }
         return $record;
+    }
+
+    private function parseItemDisplayLines( string $statsBlock ): array {
+        $text = preg_replace( '/<br\s*\/?\s*>/i', "\n", $statsBlock );
+        $lines = [];
+        foreach ( preg_split( '/\r\n|\n|\r/', (string)$text ) as $line ) {
+            $clean = $this->cleanWikiText( $line );
+            if ( $clean !== '' ) {
+                $lines[] = $clean;
+            }
+            if ( count( $lines ) >= 16 ) {
+                break;
+            }
+        }
+        return $lines;
+    }
+
+    private function buildItemIconMap( $repoGroup, array $items ): array {
+        $ids = [];
+        foreach ( $items as $item ) {
+            $id = (int)( $item['iconId'] ?? 0 );
+            if ( $id > 0 ) {
+                $ids[$id] = true;
+            }
+        }
+
+        $icons = [];
+        $total = count( $ids );
+        $index = 0;
+        foreach ( array_keys( $ids ) as $id ) {
+            $index++;
+            try {
+                $title = Title::makeTitle( NS_FILE, 'Item_' . $id . '.png' );
+                $file = $repoGroup->findFile( $title );
+                if ( !$file || !method_exists( $file, 'getLocalRefPath' ) ) {
+                    continue;
+                }
+                $path = $file->getLocalRefPath();
+                if ( !$path || !is_file( $path ) ) {
+                    continue;
+                }
+                $size = filesize( $path );
+                if ( $size === false || $size <= 0 || $size > 131072 ) {
+                    continue;
+                }
+                $bytes = file_get_contents( $path );
+                if ( $bytes === false ) {
+                    continue;
+                }
+                $mime = method_exists( $file, 'getMimeType' )
+                    ? (string)$file->getMimeType()
+                    : 'image/png';
+                if ( strpos( $mime, 'image/' ) !== 0 ) {
+                    $mime = 'image/png';
+                }
+                $icons[(string)$id] = 'data:' . $mime . ';base64,' . base64_encode( $bytes );
+            } catch ( Throwable $error ) {
+                $this->output( "Icon {$id} skipped: {$error->getMessage()}\n" );
+            }
+            if ( $index % 250 === 0 ) {
+                $this->output( "Item icons processed: {$index}/{$total}\n" );
+            }
+        }
+        return $icons;
     }
 
     private function detectZonesFromCategories( array $categories ): array {

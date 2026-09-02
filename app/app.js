@@ -17,6 +17,10 @@ let viewerReady = false;
 let pollTimer = null;
 let packRefreshTimer = null;
 let selectedEncounterId = '';
+let minimalTargetHovered = false;
+let targetExpiryTimer = null;
+let fightExpiryTimer = null;
+let viewerSyncChain = Promise.resolve();
 
 const prefs = {
     get key(){ return 'eql-companion-prefs-v1'; },
@@ -31,7 +35,8 @@ let settings = Object.assign({
     era: '',
     currentZoneOnly: true,
     itemTier: 0,
-    encounterGapSeconds: 15
+    encounterGapSeconds: 15,
+    targetMyClassOnly: true
 }, prefs.load());
 parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
@@ -97,6 +102,12 @@ function formatTime(value) {
 
 function itemRecord(name) {
     return itemByName.get(String(name || '').trim().toLowerCase()) || null;
+}
+
+function itemIconSource(item) {
+    const id = String(item?.iconId || '');
+    const source = id && pack.icons ? pack.icons[id] : '';
+    return typeof source === 'string' && source.startsWith('data:image/') ? source : '';
 }
 
 function itemHoverAttrs(itemOrName) {
@@ -252,8 +263,8 @@ function consumeText(text) {
     partialLine = lines.pop() || '';
     for (const line of lines) {
         const event = parser.parse(line);
-        if (event?.type === 'zone') syncZoneToViewer(false);
-        if (event?.type === 'location') syncLocationToViewer(false);
+        if (event?.type === 'zone') queueViewerSync(() => syncZoneToViewer(false));
+        if (event?.type === 'location') queueViewerSync(() => syncLocationToViewer(false));
     }
 }
 
@@ -309,6 +320,15 @@ function knownDropsForNpc(npc) {
     });
 }
 
+function npcRecordForName(name, zone = state().zone) {
+    const wanted = String(name || '').trim().toLowerCase();
+    if (!wanted) return null;
+    return allNpcsForState(state()).find(npc =>
+        String(npc.name || '').trim().toLowerCase() === wanted &&
+        (!zone || !npc.zone || zoneKey(npc.zone) === zoneKey(zone))
+    ) || null;
+}
+
 function allNpcsForState(s) {
     const observed = s.observed.map(o => ({
         name:o.name, zone:o.zone, avgLevel:o.level || 0, levelMin:o.level || 0, levelMax:o.level || 0,
@@ -339,12 +359,15 @@ function renderMinimalZoneDrops(s, profile) {
         name = String(name || '').trim();
         if (!name || (namedOnly && !isNamedSource(name))) return null;
         const key = name.toLowerCase();
-        if (!bySource.has(key)) bySource.set(key, { name, items: [] });
+        if (!bySource.has(key)) bySource.set(key, { name, items: [], npc:null });
         return bySource.get(key);
     };
 
     for (const npc of pack.npcs || []) {
-        if (zoneKey(npc.zone) === zoneKey(s.zone) && (!namedOnly || isNamedSource(npc.name))) addSource(npc.name);
+        if (zoneKey(npc.zone) === zoneKey(s.zone) && (!namedOnly || isNamedSource(npc.name))) {
+            const source = addSource(npc.name);
+            if (source) source.npc = npc;
+        }
     }
     for (const item of pack.items || []) {
         if (!eraAllowed(item.era) || (myClassOnly && !itemMatchesProfile(item, profile))) continue;
@@ -367,10 +390,14 @@ function renderMinimalZoneDrops(s, profile) {
     }
 
     host.className = 'minimal-zone-drops';
-    host.innerHTML = sources.map(source => `<div class="minimal-drop-row">
-        <strong>${esc(source.name)}</strong>
+    host.innerHTML = sources.map(source => {
+        const con = conForLevel(source.npc?.avgLevel, profile.level);
+        return `<div class="minimal-drop-row npc-con-${con.key}">
+        <div class="minimal-mob-heading"><div><strong>${esc(source.name)}</strong>${source.npc?.avgLevel ? `<small class="${conClass(con.key)}">Level ${source.npc.avgLevel} · ${esc(con.label)}</small>` : ''}</div><button type="button" class="text-button path-npc" data-npc="${esc(source.name)}">Path</button></div>
         ${source.items.length ? source.items.slice(0, 12).map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${esc(item.name)}</a>`).join('') : '<small>No known item drops in the current dataset.</small>'}
-    </div>`).join('');
+    </div>`;
+    }).join('');
+    bindPathButtons(host);
 }
 
 function renderHeader(s, profile) {
@@ -378,10 +405,6 @@ function renderHeader(s, profile) {
     $('#top-zone').textContent = s.zone || 'Waiting for log';
     $('#top-level').textContent = profile.level || '—';
     $('#hero-zone').textContent = s.zone || 'Waiting for EverQuest log…';
-    $('#hero-detail').textContent = s.zone
-        ? `Detected from the local log. ${profile.classes.length ? profile.classes.join(' / ') : 'Set classes in Settings if /who has not exposed them yet.'}`
-        : 'Zone changes are detected automatically from “You have entered …” lines.';
-
     const zr = zoneRecord(s.zone);
     const link = $('#zone-wiki-link');
     if (zr || s.zone) {
@@ -394,24 +417,59 @@ function renderHeader(s, profile) {
 }
 
 function renderMetrics(s, profile) {
-    $('#metric-player').textContent = s.character ? `${s.character}${profile.level ? ` · ${profile.level}` : ''}` : '—';
-    $('#metric-classes').textContent = profile.classes.length ? profile.classes.join(' / ') : 'Classes not detected';
     $('#metric-location').textContent = s.location ? `${s.location.x.toFixed(1)}, ${s.location.y.toFixed(1)}, ${s.location.z.toFixed(1)}` : '—';
 
-    if (s.target) {
-        $('#metric-target').textContent = s.target.name;
-        const con = conForLevel(s.target.level, profile.level);
-        $('#metric-con').innerHTML = s.target.level
-            ? `<span class="${conClass(con.key)}">${esc(con.label)} · L${s.target.level}${con.delta === null ? '' : ` (${con.delta >= 0 ? '+' : ''}${con.delta})`}</span>`
-            : 'Target level unknown';
-    } else {
-        $('#metric-target').textContent = '—';
-        $('#metric-con').textContent = 'No consider level yet';
-    }
-
-    const fight = s.fight;
+    const fight = s.fight?.active ? s.fight : null;
     $('#metric-fight').textContent = fight ? `${formatNum(fight.dps)} DPS` : '0 DPS';
     $('#metric-fight-detail').textContent = fight ? `${fight.name} · ${formatNum(fight.damage)} damage${fight.active ? ' · active' : ''}` : 'No outgoing damage yet';
+    $('#minimal-fight-dps').textContent = fight ? `${formatNum(fight.dps)} DPS` : '0 DPS';
+    $('#minimal-fight-name').textContent = fight ? `${fight.name} · ${formatNum(fight.damage)} damage` : 'No active fight';
+    clearTimeout(fightExpiryTimer);
+    if (fight) {
+        const remaining = (settings.encounterGapSeconds * 1000) - (Date.now() - Number(fight.lastAt || 0));
+        fightExpiryTimer = setTimeout(renderAll, Math.max(100, remaining + 50));
+    }
+}
+
+function targetConHtml(target, profile) {
+    if (!target?.level) return 'Level unknown';
+    const con = conForLevel(target.level, profile.level);
+    const delta = con.delta === null ? '' : ` · ${con.delta >= 0 ? '+' : ''}${con.delta}`;
+    return `<span class="${conClass(con.key)}">${esc(con.label)} · Level ${target.level}${delta}</span>`;
+}
+
+function targetLootHtml(target, profile, compact = false) {
+    if (!target) return '<div class="empty-state">No target selected.</div>';
+    const npc = npcRecordForName(target.name);
+    let drops = knownDropsForNpc(npc || { name:target.name, zone:state().zone }).filter(item => eraAllowed(item.era));
+    if (settings.targetMyClassOnly) drops = drops.filter(item => itemMatchesProfile(item, profile));
+    if (!drops.length) {
+        return `<div class="empty-state">No ${settings.targetMyClassOnly && profile.classes.length ? 'class-matching ' : ''}loot is listed for this target.</div>`;
+    }
+    return `<div class="target-drop-grid">${drops.slice(0, compact ? 10 : 24).map(item => {
+        const icon = itemIconSource(item);
+        return `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${icon ? `<img src="${esc(icon)}" alt="">` : '<span class="item-icon-placeholder">◇</span>'}<span>${esc(item.name)}</span></a>`;
+    }).join('')}</div>`;
+}
+
+function renderCurrentTarget(s, profile) {
+    const target = s.target;
+    $('#target-name').textContent = target?.name || 'No target';
+    $('#target-con').innerHTML = target ? targetConHtml(target, profile) : 'Consider an NPC to see its level and loot.';
+    $('#target-loot').innerHTML = targetLootHtml(target, profile);
+    $('#target-my-class').checked = Boolean(settings.targetMyClassOnly);
+    $('#minimal-my-class').checked = Boolean(settings.targetMyClassOnly);
+
+    $('#minimal-target-name').textContent = target?.name || 'No target';
+    $('#minimal-target-con').innerHTML = target ? targetConHtml(target, profile) : '';
+    $('#minimal-target-loot').innerHTML = targetLootHtml(target, profile, true);
+    const fresh = Boolean(target && Date.now() - Number(target.at || 0) < 45000);
+    $('#minimal-target').classList.toggle('is-visible', fresh || minimalTargetHovered);
+
+    clearTimeout(targetExpiryTimer);
+    if (fresh && !minimalTargetHovered) {
+        targetExpiryTimer = setTimeout(renderAll, Math.max(100, 45050 - (Date.now() - Number(target.at || 0))));
+    }
 }
 
 function renderOverviewNpcs(s, profile) {
@@ -539,17 +597,23 @@ function renderDropLog(s) {
 function tooltipHtml(item) {
     const tier = Number(settings.itemTier) || 0;
     const stats = scaledItemStats(item, tier);
-    const statHtml = Object.entries(stats).slice(0, 18).map(([key, value]) => `
-        <div class="tooltip-stat"><span>${esc(key.replace(/_/g, ' '))}</span><strong>${formatNum(value)}</strong></div>`
+    const statHtml = Object.entries(stats).slice(0, 18).map(([key, value]) =>
+        `<div class="tooltip-stat"><span>${esc(key.replace(/_/g, ' '))}:</span><strong>${Number(value) > 0 ? '+' : ''}${formatNum(value)}</strong></div>`
     ).join('');
     const sources = (item.dropSources || []).slice(0, 8)
         .map(source => esc(`${source.zone ? `${source.zone} · ` : ''}${source.name}`))
         .join('<br>');
-    return `<h3>${esc(item.name)}</h3>
-        <div class="tooltip-meta">${esc((item.slots || []).join(' · ') || 'Unknown slot')} · ${esc((item.classes || []).join(' · ') || 'Unknown classes')} · ${esc(item.era || 'Unknown era')}</div>
-        ${statHtml ? `<div class="tooltip-stats">${statHtml}</div>` : ''}
-        ${sources ? `<div class="tooltip-source"><strong>Sources</strong><br>${sources}</div>` : ''}
-        ${item.notes ? `<div class="tooltip-source">${esc(item.notes)}</div>` : ''}`;
+    const icon = itemIconSource(item);
+    const displayLines = Array.isArray(item.displayLines) ? item.displayLines.slice(0, 12) : [];
+    return `<div class="itembox-title">${esc(item.name)}</div>
+        <div class="itembox-body">
+            <div class="itembox-summary">${icon ? `<img class="itembox-icon" src="${esc(icon)}" alt="">` : '<span class="itembox-icon item-icon-placeholder">◇</span>'}<div>
+                ${displayLines.length ? displayLines.map(line => `<div>${esc(line)}</div>`).join('') : `<div>${esc((item.slots || []).length ? `Slot: ${(item.slots || []).join(' ')}` : 'Slot: Unknown')}</div><div>Class: ${esc((item.classes || []).join(' ') || 'Unknown')}</div>`}
+            </div></div>
+            ${statHtml && !displayLines.length ? `<div class="tooltip-stats">${statHtml}</div>` : ''}
+            ${sources ? `<div class="tooltip-source"><strong>Drops from</strong><br>${sources}</div>` : ''}
+            ${item.notes ? `<div class="tooltip-source">${esc(item.notes)}</div>` : ''}
+        </div>`;
 }
 
 function positionTooltip(event) {
@@ -615,12 +679,7 @@ function renderNpcList(s, profile) {
         $('#npc-list').insertAdjacentHTML('beforeend', `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`);
     }
 
-    $$('.path-npc').forEach(btn => {
-        if (!btn.dataset.eqlBound) {
-            btn.dataset.eqlBound = '1';
-            btn.addEventListener('click', () => pathToNpc(btn.dataset.npc));
-        }
-    });
+    bindPathButtons($('#npc-list'));
 }
 
 function renderItems(s, profile) {
@@ -660,12 +719,7 @@ function renderItems(s, profile) {
         $('#item-list').insertAdjacentHTML('beforeend', `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`);
     }
 
-    $$('.path-npc').forEach(btn => {
-        if (!btn.dataset.eqlBound) {
-            btn.dataset.eqlBound = '1';
-            btn.addEventListener('click', () => pathToNpc(btn.dataset.npc));
-        }
-    });
+    bindPathButtons($('#item-list'));
 }
 
 function buildClassChips() {
@@ -712,14 +766,15 @@ function renderAll() {
     const activeView = $('.nav-button.is-active')?.dataset.view || 'overview';
     renderHeader(s, profile);
     renderMetrics(s, profile);
+    renderCurrentTarget(s, profile);
     renderViewPanel(activeView, s, profile);
     if (document.body.classList.contains('minimal-mode') && activeView !== 'map') {
         renderMinimalZoneDrops(s, profile);
     }
     $('#map-title').textContent = s.zone ? `${s.zone} · Zone Viewer` : 'Zone Viewer';
     $('#map-subtitle').textContent = s.location
-        ? `Latest logged location: ${s.location.x.toFixed(1)}, ${s.location.y.toFixed(1)}, ${s.location.z.toFixed(1)}`
-        : 'Select your EverQuest folder in the viewer. Type /location in-game when you want an exact camera sync.';
+        ? `${s.location.x.toFixed(1)}, ${s.location.y.toFixed(1)}, ${s.location.z.toFixed(1)}`
+        : (bridgeInfo?.eqRootPath ? `EverQuest folder: ${bridgeInfo.eqRootPath}` : 'Select your EverQuest folder once.');
     $('#manual-level').value = settings.manualLevel || '';
     $('#item-tier').value = settings.itemTier || 0;
     $('#item-tier-value').textContent = settings.itemTier || 0;
@@ -775,6 +830,11 @@ async function toggleMinimalMode() {
 function viewerApi() {
     const frame = $('#zone-viewer');
     return frame?.contentWindow?.eqlCompanionViewer || null;
+}
+
+function queueViewerSync(operation) {
+    viewerSyncChain = viewerSyncChain.catch(() => false).then(operation);
+    return viewerSyncChain;
 }
 
 async function waitForViewerApi(timeout = 8000) {
@@ -848,12 +908,22 @@ async function syncLocationToViewer(showFeedback = true) {
     return true;
 }
 
+function bindPathButtons(host = document) {
+    host?.querySelectorAll?.('.path-npc').forEach(btn => {
+        if (btn.dataset.eqlBound) return;
+        btn.dataset.eqlBound = '1';
+        btn.addEventListener('click', () => pathToNpc(btn.dataset.npc));
+    });
+}
+
 async function pathToNpc(name) {
     setView('map');
-    await syncZoneToViewer(false);
+    const loaded = await syncZoneToViewer(false);
+    if (!loaded) return;
+    const npc = npcRecordForName(name);
     setTimeout(async () => {
-        const result = await viewerApi()?.pathTo(name);
-        if (!result?.ok) alert(`The loaded local map does not currently have a path label matching “${name}”.`);
+        const result = await viewerApi()?.pathTo(name, npc?.loc || null);
+        if (!result?.ok) alert(`No baked-in map label or wiki location is available for “${name}”.`);
     }, 400);
 }
 
@@ -926,8 +996,16 @@ function wireUi() {
     });
     $('#wiki-search-form').addEventListener('submit', e => { e.preventDefault(); runWikiSearch(); });
     $('#wiki-search-button').addEventListener('click', runWikiSearch);
-    $('#minimal-my-class').addEventListener('change', renderAll);
+    for (const checkbox of [$('#target-my-class'), $('#minimal-my-class')]) {
+        checkbox.addEventListener('change', event => {
+            settings.targetMyClassOnly = Boolean(event.target.checked);
+            prefs.save(settings);
+            renderAll();
+        });
+    }
     $('#minimal-named-only').addEventListener('change', renderAll);
+    $('#minimal-target').addEventListener('pointerenter', () => { minimalTargetHovered = true; renderAll(); });
+    $('#minimal-target').addEventListener('pointerleave', () => { minimalTargetHovered = false; renderAll(); });
     for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
         button.addEventListener('click', () => toggleAlwaysOnTop().catch(error => alert(`Unable to change pinning: ${error.message}`)));
     }
@@ -949,14 +1027,26 @@ function wireUi() {
             alert('The Zone Viewer is still loading. Try again in a moment.');
             return;
         }
-        apiObj.selectFolder();
+        apiObj.selectFolder().then(result => {
+            if (result?.ok) {
+                queueViewerSync(async () => {
+                    await syncZoneToViewer(false);
+                    return syncLocationToViewer(false);
+                });
+            }
+        });
     });
     $('#sync-zone').addEventListener('click', () => syncZoneToViewer(true));
     $('#sync-location').addEventListener('click', () => syncLocationToViewer(true));
     window.addEventListener('message', event => {
         if (event.data?.type === 'eoz-viewer-ready') {
             viewerReady = true;
-            syncZoneToViewer(false);
+            viewerApi()?.restoreFolder?.().then(() =>
+                queueViewerSync(async () => {
+                    await syncZoneToViewer(false);
+                    return syncLocationToViewer(false);
+                })
+            );
         }
     });
 }

@@ -30,8 +30,9 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Shows item sources and known NPC drops without requesting item/NPC pages from the wiki.
 - Embeds a deliberately simplified EQL Zone Viewer.
 - Can synchronize the viewer with logged `/location` output when a supported line is present.
-- Provides a pin-to-top window option and a minimal map + named-drop overlay.
-- Shows local-data item tooltips on item and drop names.
+- Provides a pin-to-top window option that also hides the app from the Windows taskbar.
+- Provides a minimal map, live-fight DPS, mob list, and temporary current-target loot view.
+- Shows EQLWiki Itembox-inspired local-data tooltips, including embedded wiki icons when present in the pack.
 - Searches EQLWiki from the global search field and opens exact wiki links from local records.
 
 ## Data architecture
@@ -64,7 +65,7 @@ The generated pack currently contains:
 
 - the Zone Viewer zone/alias catalog;
 - NPC names, zones, level ranges/averages, race, class, era, wiki title, revision ID, description, and coordinates when available;
-- item names, classes, slots, Item Level Slider-relevant stats, era, notes, wiki title, revision ID, and drop/source records.
+- item names, classes, slots, Itembox display lines/icons, Item Level Slider-relevant stats, era, notes, wiki title, revision ID, and drop/source records.
 
 The app derives NPC loot indexes locally from the item drop/source records.
 
@@ -128,7 +129,7 @@ EQLWiki-Eye-of-Zomm-Setup-<version>-x64.exe
 
 The installer creates Start Menu/Desktop shortcuts and registers the `eqleoz://` protocol so EQLWiki can launch/focus the installed companion.
 
-Until the project has a code-signing certificate, Windows SmartScreen may warn about an unsigned installer. Source and automated build workflows remain public for inspection/reproducibility.
+The build and release workflows automatically Authenticode-sign and verify installers when the repository's certificate secrets are configured. See [SIGNING.md](SIGNING.md). Unsigned builds can still trigger SmartScreen.
 
 ## Development
 

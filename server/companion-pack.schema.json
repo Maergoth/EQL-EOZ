@@ -148,6 +148,16 @@
               "type": "number"
             }
           },
+          "iconId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "displayLines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "notes": {
             "type": "string"
           },
@@ -172,6 +182,13 @@
             "type": "integer"
           }
         }
+      }
+    },
+    "icons": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^data:image/"
       }
     }
   }

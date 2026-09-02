@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 - Map and target focus
+
+- Corrected consider colors so +1 through +3 are yellow and +4 or higher is red.
+- Made Current Target a permanent, prominent Overview panel with class-filtered loot.
+- Expanded minimal mode with current-fight DPS, a pathable mob list, and a temporary hoverable target-loot panel.
+- Persisted the user-approved EverQuest folder handle and inferred the installation root from the selected log path.
+- Added automatic first-person location focus and NPC route fallback to exported EQLWiki coordinates.
+- Changed pinned mode to hide the application from the Windows taskbar.
+- Restyled item hovers after EQLWiki's Itembox and extended the cPanel exporter with Itembox lines and embedded icons.
+- Removed redundant helper copy and the duplicate Player card.
+- Added optional Authenticode signing and signature verification to Windows build/release workflows.
+
 ## 0.3.0 - EQLWiki - Eye of Zomm
 
 - Rebranded the project as **EQLWiki - Eye of Zomm**.

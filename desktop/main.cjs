@@ -92,6 +92,7 @@ async function saveConfig(logPath) {
 async function setAlwaysOnTop(enabled) {
     enabled = Boolean(enabled);
     windowRef?.setAlwaysOnTop(enabled);
+    windowRef?.setSkipTaskbar(enabled);
     await updateConfig({ alwaysOnTop: enabled });
     return enabled;
 }
@@ -123,6 +124,14 @@ function logFamily(filePath) {
         directory,
         prefix: match ? match[1] : path.basename(name, path.extname(name))
     };
+}
+
+function inferEqRootPath(logPath) {
+    if (!logPath) return '';
+    const logDirectory = path.dirname(logPath);
+    return path.basename(logDirectory).toLowerCase() === 'logs'
+        ? path.dirname(logDirectory)
+        : logDirectory;
 }
 
 async function resolveLogPath() {
@@ -388,6 +397,7 @@ async function apiInfo() {
         server: `${HOST}:${port}`,
         logPath,
         logExists: Boolean(logPath && fs.existsSync(logPath)),
+        eqRootPath: inferEqRootPath(logPath),
         safety: 'log/local-file reads only; optional static wiki data pack',
         dataPack: state,
         productionPack: fs.existsSync(productionPackPath()),
@@ -484,6 +494,7 @@ function createWindow(config = {}) {
         }
     });
     windowRef.setAlwaysOnTop(Boolean(config.alwaysOnTop));
+    windowRef.setSkipTaskbar(Boolean(config.alwaysOnTop));
 
     windowRef.webContents.setWindowOpenHandler(({ url }) => {
         if (/^https?:\/\//i.test(url)) void shell.openExternal(url);

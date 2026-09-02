@@ -32,6 +32,8 @@ assert(blueFloorForPlayerLevel(30) === 22, 'L30 blue floor');
 assert(blueFloorForPlayerLevel(50) === 37, 'L50 blue floor');
 assert(greenFloorForPlayerLevel(50) === 33, 'L50 green floor');
 assert(conForLevel(52,50).key === 'yellow', 'yellow con');
+assert(conForLevel(53,50).key === 'yellow', '+3 remains yellow');
+assert(conForLevel(54,50).key === 'red', '+4 begins red');
 assert(conForLevel(50,50).key === 'white', 'white con');
 assert(conForLevel(49,50).key === 'blue', 'blue con');
 assert(conForLevel(35,50).key === 'green', 'green con');

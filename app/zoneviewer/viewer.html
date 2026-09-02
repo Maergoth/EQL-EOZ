@@ -73,6 +73,96 @@ function viewerName(zoneName) {
     return zoneAliases.get(norm(cleaned)) || cleaned;
 }
 
+const HANDLE_DB = 'eoz-zone-viewer';
+const HANDLE_STORE = 'directory-handles';
+const HANDLE_KEY = 'everquest-root';
+
+function handleStore(mode = 'readonly') {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(HANDLE_DB, 1);
+        request.onupgradeneeded = () => request.result.createObjectStore(HANDLE_STORE);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result.transaction(HANDLE_STORE, mode).objectStore(HANDLE_STORE));
+    });
+}
+
+async function loadSavedHandle() {
+    const store = await handleStore();
+    return new Promise((resolve, reject) => {
+        const request = store.get(HANDLE_KEY);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function saveHandle(handle) {
+    if (!handle) return;
+    const store = await handleStore('readwrite');
+    await new Promise((resolve, reject) => {
+        const request = store.put(handle, HANDLE_KEY);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function connectSavedHandle(handle) {
+    if (!handle) return false;
+    const originalPicker = globalThis.showDirectoryPicker;
+    globalThis.showDirectoryPicker = async () => handle;
+    try {
+        await app.selectDirectory();
+        return Boolean(app.source?.directoryHandle);
+    } finally {
+        if (originalPicker) globalThis.showDirectoryPicker = originalPicker;
+        else delete globalThis.showDirectoryPicker;
+    }
+}
+
+async function pathToWikiLocation(label, location) {
+    if (!app?.currentZoneRecord || !Array.isArray(location) || location.length < 3) return false;
+    const [eqX, eqY, eqZ] = location.map(Number);
+    if (![eqX, eqY, eqZ].every(Number.isFinite)) return false;
+
+    app.mapFileVisible && app.setGameMapVisible(false, false);
+    const start = app.navigationStartPoint();
+    if (app.mode !== 'first') app.setMode('first');
+    const point = app.perspective.position.clone().set(eqY, eqZ, -eqX);
+    const ground = app.findGroundPointAt(point.x, point.z, point.y + 35) || point.clone();
+    const key = `${label}:${ground.x.toFixed(2)}:${ground.y.toFixed(2)}:${ground.z.toFixed(2)}`;
+    if (app.navigationTarget?.key === key) return true;
+
+    app.clearNavigationGuide();
+    const token = app.navigationBuildToken;
+    app.navigationTarget = { key, label, point:point.clone(), ground:ground.clone(), requestStart:start.clone() };
+    app.addNavigationBeam(ground, label);
+    app.lastPick = ground.clone();
+    app.setNavigationBuildActive(true);
+    app.setStatus(`Preparing a path to ${label} from your current location…`, .01);
+    app.updateNavigationOverlay();
+    app.requestRender();
+    let route;
+    try {
+        route = await app.findNavigationPath(start.clone(), ground, token);
+    } catch (error) {
+        if (token === app.navigationBuildToken) {
+            app.setNavigationBuildActive(false);
+            app.setStatus(`Unable to calculate a path to ${label}: ${error.message}`, 0);
+        }
+        return false;
+    }
+    if (token !== app.navigationBuildToken) return false;
+    app.setNavigationBuildActive(false);
+    if (route?.length >= 2) {
+        app.addNavigationPath(route);
+        app.setStatus(`Path to ${label} ready.`, 0);
+    } else {
+        app.setStatus(`${label} is marked from its EQLWiki location; no grounded route was found.`, 0);
+    }
+    app.updateNavigationOverlay();
+    app.requestRender();
+    return true;
+}
+
 async function waitForZoneSelect(timeout = 15000) {
     const started = Date.now();
     while (Date.now() - started < timeout) {
@@ -84,9 +174,30 @@ async function waitForZoneSelect(timeout = 15000) {
 }
 
 window.eqlCompanionViewer = {
-    selectFolder() {
-        app?.selectDirectory?.();
-        return { ok:Boolean(app) };
+    async selectFolder() {
+        if (!app) return { ok:false };
+        const saved = await loadSavedHandle().catch(() => null);
+        if (saved) {
+            let permission = await saved.queryPermission?.({ mode:'read' });
+            if (permission !== 'granted') permission = await saved.requestPermission?.({ mode:'read' });
+            if (permission === 'granted' && await connectSavedHandle(saved)) {
+                return { ok:true, restored:true, name:saved.name || '' };
+            }
+        }
+        await app.selectDirectory();
+        const handle = app.source?.directoryHandle;
+        if (handle) await saveHandle(handle).catch(() => {});
+        return { ok:Boolean(handle), restored:false, name:handle?.name || '' };
+    },
+
+    async restoreFolder() {
+        if (!app) return { ok:false };
+        const handle = await loadSavedHandle().catch(() => null);
+        if (!handle) return { ok:false, reason:'no-saved-folder' };
+        const permission = await handle.queryPermission?.({ mode:'read' });
+        if (permission !== 'granted') return { ok:false, reason:'permission-required', name:handle.name || '' };
+        const ok = await connectSavedHandle(handle);
+        return { ok, restored:ok, name:handle.name || '' };
     },
 
     async loadZone(zoneName) {
@@ -157,10 +268,12 @@ window.eqlCompanionViewer = {
         return { ok:true };
     },
 
-    async pathTo(label) {
+    async pathTo(label, wikiLocation = null) {
         if (!app || !label) return { ok:false };
         const ok = await app.gotoNpcLabel(String(label), { teleport:false });
-        return { ok:Boolean(ok) };
+        if (ok) return { ok:true, source:'map-label' };
+        const wikiOk = await pathToWikiLocation(String(label), wikiLocation);
+        return { ok:Boolean(wikiOk), source:wikiOk ? 'wiki-location' : '' };
     },
 
     status() {
