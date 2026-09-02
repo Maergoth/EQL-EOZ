@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EQLWiki - Eye of Zomm Dataset",
+  "type": "object",
+  "required": [
+    "meta",
+    "zones",
+    "npcs",
+    "items"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "version",
+        "generatedAt"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "integer" },
+        "version": { "type": "string" },
+        "generatedAt": { "type": "string" },
+        "currentEra": { "type": "string" },
+        "sample": { "type": "boolean" }
+      }
+    },
+    "zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [ "name" ],
+        "properties": {
+          "name": { "type": "string" },
+          "viewerName": { "type": "string" },
+          "wikiTitle": { "type": "string" },
+          "aliases": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "npcs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [ "name", "zone" ],
+        "properties": {
+          "name": { "type": "string" },
+          "zone": { "type": "string" },
+          "levelMin": { "type": "number" },
+          "levelMax": { "type": "number" },
+          "avgLevel": { "type": "number" },
+          "era": { "type": "string" },
+          "wikiTitle": { "type": "string" },
+          "loc": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+          "race": { "type": "string" },
+          "class": { "type": "string" },
+          "description": { "type": "string" },
+          "revisionId": { "type": "integer" }
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [ "name" ],
+        "properties": {
+          "name": { "type": "string" },
+          "wikiTitle": { "type": "string" },
+          "era": { "type": "string" },
+          "classes": { "type": "array", "items": { "type": "string" } },
+          "slots": { "type": "array", "items": { "type": "string" } },
+          "stats": { "type": "object", "additionalProperties": { "type": "number" } },
+          "notes": { "type": "string" },
+          "dropSources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [ "name" ],
+              "properties": {
+                "name": { "type": "string" },
+                "zone": { "type": "string" }
+              }
+            }
+          },
+          "revisionId": { "type": "integer" }
+        }
+      }
+    }
+  }
+}
