@@ -1,0 +1,19 @@
+/* EQLWiki - Eye of Zomm launcher
+ * Opens the installed desktop app through its registered URL protocol.
+ * No log/game data is sent to the wiki.
+ */
+mw.loader.using( 'mediawiki.util' ).then( function () {
+    var link = mw.util.addPortletLink(
+        'p-personal',
+        'eqleoz://open',
+        'Companion',
+        'pt-eql-companion',
+        'Open EQLWiki - Eye of Zomm'
+    );
+
+    if ( link ) {
+        link.addEventListener( 'click', function () {
+            // Let the operating system hand the custom URL to EQLWiki - Eye of Zomm.
+        } );
+    }
+} );

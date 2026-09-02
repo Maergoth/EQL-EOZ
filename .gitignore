@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+app/data/companion-pack.bootstrap.json
+app/data/companion-pack.json
+companion-config.json
+companion-pack-state.json

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Eye of Zomm - Zone Viewer</title>
+<link rel="stylesheet" href="./ext.eqlZoneViewer.css">
+<style>
+html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
+.eqlzv-root{height:100%;min-height:100%}
+.eqlzv-app{height:100%}
+.eqlzv-viewport{flex:1;min-height:0}
+/* Eye of Zomm mode deliberately keeps the viewer focused on navigation.
+   Advanced diagnostics/display tuning remain in the upstream ZoneViewer source
+   but are not exposed in the companion UI. */
+.eqlzv-source-label,.eqlzv-world-button,.eqlzv-goto-label,.eqlzv-slider-label,
+.eqlzv-options,.eqlzv-performance,.eqlzv-performance-panel,.eqlzv-help-panel,
+.eqlzv-control-hint{display:none!important}
+.eqlzv-toolbar{gap:8px!important;flex-wrap:wrap}
+.eqlzv-toolbar-secondary{padding-top:6px!important}
+</style>
+</head>
+<body>
+<div id="zone-root" class="eqlzv-root"></div>
+<script type="module">
+import { mountZoneViewer } from './ZoneViewerApp.js';
+
+const root = document.getElementById('zone-root');
+const app = mountZoneViewer(root, {
+    moduleUrl: './ZoneViewerApp.js',
+    workerUrl: './zone-parser.worker.js',
+    navigationWorkerUrl: './navigation.worker.js',
+    height: '100%'
+});
+window.eqlZoneViewer = app;
+
+function simplifyViewerUi() {
+    root.querySelectorAll('.eqlzv-toolbar-secondary .eqlzv-button').forEach(button => {
+        const text = String(button.textContent || '').trim();
+        if (text === 'Controls' || text === 'Full Screen') button.remove();
+    });
+}
+
+const trimObserver = new MutationObserver(simplifyViewerUi);
+trimObserver.observe(root, { childList:true, subtree:true });
+simplifyViewerUi();
+
+const zoneAliases = new Map(Object.entries({
+    'the northern desert of ro': 'North Ro',
+    'northern desert of ro': 'North Ro',
+    'north ro': 'North Ro',
+    'the southern desert of ro': 'South Ro',
+    'southern desert of ro': 'South Ro',
+    'south ro': 'South Ro',
+    'the oasis of marr': 'Oasis of Marr',
+    'oasis of marr': 'Oasis of Marr',
+    'the plane of sky': 'Plane of Sky',
+    'plane of sky': 'Plane of Sky',
+    'new sebilis expedition': 'New Sebilis Expedition',
+    'nagafen\\'s lair': 'Nagafen\\'s Lair (Sol B)'
+}));
+
+function norm(text) {
+    return String(text || '')
+        .replace(/\s+\d+\s+\([^)]*\)\s*$/,'')
+        .replace(/\s+/g,' ')
+        .trim()
+        .toLowerCase();
+}
+
+function viewerName(zoneName) {
+    const cleaned = String(zoneName || '').replace(/\s+\d+\s+\([^)]*\)\s*$/,'').trim();
+    return zoneAliases.get(norm(cleaned)) || cleaned;
+}
+
+async function waitForZoneSelect(timeout = 15000) {
+    const started = Date.now();
+    while (Date.now() - started < timeout) {
+        const select = root.querySelector('.eqlzv-zone-select');
+        if (select && !select.disabled && select.options.length > 1) return select;
+        await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    return null;
+}
+
+window.eqlCompanionViewer = {
+    async loadZone(zoneName) {
+        if (!app) return { ok:false, reason:'viewer-not-mounted' };
+        const select = await waitForZoneSelect();
+        if (!select) return { ok:false, reason:'select-eq-folder-first' };
+
+        const wanted = norm(viewerName(zoneName));
+        let option = Array.from(select.options).find(o => norm(o.textContent) === wanted);
+        if (!option) {
+            option = Array.from(select.options).find(o =>
+                norm(o.textContent).includes(wanted) || wanted.includes(norm(o.textContent))
+            );
+        }
+        if (!option) return { ok:false, reason:'zone-not-found', zone:zoneName };
+
+        if (select.value !== option.value) {
+            select.value = option.value;
+            select.dispatchEvent(new Event('change', { bubbles:true }));
+        }
+
+        const badge = root.querySelector('.eqlzv-zone-badge');
+        if (!badge || norm(badge.textContent) !== norm(option.textContent)) {
+            root.querySelector('.eqlzv-toolbar .eqlzv-button:not(.eqlzv-primary)')?.focus();
+            app.loadSelectedZone();
+        }
+        return { ok:true, viewerZone:option.textContent };
+    },
+
+    syncLocation(location) {
+        if (!app || !location || !Number.isFinite(Number(location.x)) ||
+            !Number.isFinite(Number(location.y)) || !Number.isFinite(Number(location.z))) {
+            return { ok:false, reason:'no-location' };
+        }
+        if (!app.fp || !app.perspective || !app.currentBounds) {
+            return { ok:false, reason:'load-zone-first' };
+        }
+
+        // EQL Zone Viewer canonical transform:
+        // Three X = EQ Y, Three Y = EQ Z, Three Z = -EQ X.
+        const threeX = Number(location.y);
+        const threeY = Number(location.z) + (app.fp.eyeHeight || 6);
+        const threeZ = -Number(location.x);
+
+        if (app.mode !== 'first') app.setMode('first');
+        app.perspective.position.set(threeX, threeY, threeZ);
+        app.fp.activate(app.perspective.position);
+        if (typeof app.captureFirstPersonPose === 'function') app.captureFirstPersonPose();
+        if (typeof app.updateCoordinateHud === 'function') app.updateCoordinateHud(true);
+        if (typeof app.drawMiniMap === 'function') app.drawMiniMap();
+        if (typeof app.setStatus === 'function') {
+            app.setStatus(`Synced to logged EQ location X ${Number(location.x).toFixed(1)} Y ${Number(location.y).toFixed(1)} Z ${Number(location.z).toFixed(1)}.`);
+        }
+        app.requestRender?.();
+        return { ok:true };
+    },
+
+    async pathTo(label) {
+        if (!app || !label) return { ok:false };
+        const ok = await app.gotoNpcLabel(String(label), { teleport:false });
+        return { ok:Boolean(ok) };
+    },
+
+    status() {
+        const select = root.querySelector('.eqlzv-zone-select');
+        const badge = root.querySelector('.eqlzv-zone-badge');
+        return {
+            mounted: Boolean(app),
+            directorySelected: Boolean(select && !select.disabled),
+            zone: badge ? badge.textContent.trim() : ''
+        };
+    }
+};
+
+window.parent?.postMessage({ type:'eoz-viewer-ready' }, '*');
+</script>
+</body>
+</html>
