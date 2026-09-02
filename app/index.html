@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EQLWiki - Eye of Zomm</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div class="app-shell">
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-mark">EQL</div>
+            <div>
+                <div class="brand-title">Eye of Zomm</div>
+                <div class="brand-subtitle">EQLWiki companion · local intelligence for EverQuest Legends</div>
+            </div>
+        </div>
+        <div class="global-search" role="search">
+            <div class="global-search-box">
+                <span class="global-search-icon">⌕</span>
+                <input id="wiki-search" type="search" autocomplete="off" placeholder="Search companion or EQL Wiki">
+                <button id="wiki-search-button" type="button">Search Wiki</button>
+            </div>
+            <div id="wiki-search-results" class="global-search-results" hidden></div>
+        </div>
+        <div class="live-strip">
+            <span id="bridge-status" class="status-pill status-warn">Connecting</span>
+            <span class="live-item"><span>Character</span><strong id="top-character">—</strong></span>
+            <span class="live-item"><span>Zone</span><strong id="top-zone">Waiting for log</strong></span>
+            <span class="live-item"><span>Level</span><strong id="top-level">—</strong></span>
+        </div>
+    </header>
+
+    <aside class="sidebar">
+        <button class="nav-button is-active" data-view="overview"><span>◆</span>Overview</button>
+        <button class="nav-button" data-view="map"><span>⌖</span>Live Map</button>
+        <button class="nav-button" data-view="npcs"><span>♟</span>NPCs</button>
+        <button class="nav-button" data-view="items"><span>◇</span>Items</button>
+        <button class="nav-button" data-view="combat"><span>⚔</span>Combat</button>
+        <button class="nav-button" data-view="settings"><span>⚙</span>Settings</button>
+        <div class="sidebar-note">
+            <strong>Local-first</strong>
+            <span>Live data stays on this PC. The game client is never hooked or modified.</span>
+        </div>
+    </aside>
+
+    <main class="content">
+        <section class="view is-active" data-view-panel="overview">
+            <div class="hero">
+                <div>
+                    <span class="eyebrow">CURRENT ADVENTURE</span>
+                    <h1 id="hero-zone">Waiting for EverQuest log…</h1>
+                    <p id="hero-detail">Select an active log file in the launcher. Zone changes are detected automatically.</p>
+                </div>
+                <div class="hero-actions">
+                    <button class="primary-button" data-go-view="map">Open live map</button>
+                    <a id="zone-wiki-link" class="secondary-button" target="_blank" rel="noopener">Open zone wiki</a>
+                </div>
+            </div>
+
+            <div class="metric-grid">
+                <article class="metric-card">
+                    <span class="metric-label">Player</span>
+                    <strong id="metric-player">—</strong>
+                    <small id="metric-classes">Classes not detected</small>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-label">Last /location</span>
+                    <strong id="metric-location">—</strong>
+                    <small>Only reads logged coordinates; never sends commands.</small>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-label">Current target</span>
+                    <strong id="metric-target">—</strong>
+                    <small id="metric-con">No consider level yet</small>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-label">Current fight</span>
+                    <strong id="metric-fight">0 DPS</strong>
+                    <small id="metric-fight-detail">No outgoing damage yet</small>
+                </article>
+            </div>
+
+            <div class="two-col">
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="eyebrow">ZONE INTEL</span>
+                            <h2>NPCs near your level</h2>
+                        </div>
+                        <button class="text-button" data-go-view="npcs">View all</button>
+                    </div>
+                    <div id="overview-npcs" class="list-stack empty-state">No zone NPC data loaded yet.</div>
+                </article>
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="eyebrow">LIVE LOG</span>
+                            <h2>Recent activity</h2>
+                        </div>
+                    </div>
+                    <div id="recent-events" class="event-feed empty-state">Waiting for log activity.</div>
+                </article>
+            </div>
+        </section>
+
+        <section class="view map-view" data-view-panel="map">
+            <div class="map-toolbar panel">
+                <div>
+                    <span class="eyebrow">LOCAL 3D NAVIGATION</span>
+                    <h2 id="map-title">Zone Viewer</h2>
+                    <p id="map-subtitle">Grant the viewer access to your EverQuest folder once, then current-zone syncing can take over.</p>
+                </div>
+                <div class="map-actions">
+                    <button id="sync-zone" class="secondary-button">Sync current zone</button>
+                    <button id="sync-location" class="primary-button">Sync /location</button>
+                </div>
+            </div>
+            <div class="viewer-frame-wrap">
+                <iframe id="zone-viewer" class="viewer-frame" src="./zoneviewer/viewer.html" title="EQL Zone Viewer"></iframe>
+            </div>
+        </section>
+
+        <section class="view" data-view-panel="npcs">
+            <div class="section-heading">
+                <div>
+                    <span class="eyebrow">NPC DATABASE</span>
+                    <h1>NPCs</h1>
+                    <p>Static wiki pack + NPCs observed in your current logs.</p>
+                </div>
+                <div class="filter-row">
+                    <input id="npc-search" class="search-input" type="search" placeholder="Search NPCs">
+                    <label class="check-control"><input id="npc-current-zone" type="checkbox" checked> Current zone only</label>
+                </div>
+            </div>
+            <div id="npc-list" class="card-grid"></div>
+        </section>
+
+        <section class="view" data-view-panel="items">
+            <div class="section-heading">
+                <div>
+                    <span class="eyebrow">LOCAL ITEM DATABASE</span>
+                    <h1>Items</h1>
+                    <p>Filtering and item-tier calculations happen entirely in your browser.</p>
+                </div>
+                <div class="filter-row">
+                    <input id="item-search" class="search-input" type="search" placeholder="Search items">
+                    <label class="compact-field">Item tier
+                        <input id="item-tier" type="range" min="0" max="10" step="1" value="0">
+                        <strong id="item-tier-value">0</strong>
+                    </label>
+                </div>
+            </div>
+            <div class="filter-panel panel">
+                <div>
+                    <span class="filter-label">Selected classes</span>
+                    <div id="class-chips" class="chip-row"></div>
+                </div>
+                <label class="compact-field">Era
+                    <select id="era-select"></select>
+                </label>
+            </div>
+            <div id="item-list" class="card-grid"></div>
+        </section>
+
+        <section class="view" data-view-panel="combat">
+            <div class="section-heading">
+                <div>
+                    <span class="eyebrow">LOCAL LOG PARSER</span>
+                    <h1>Combat</h1>
+                    <p>Basic parser coverage is derived from the supplied ACT EQ1 plugin patterns and your Legends log sample.</p>
+                </div>
+            </div>
+            <div class="metric-grid combat-metrics">
+                <article class="metric-card"><span class="metric-label">Session damage</span><strong id="combat-damage">0</strong></article>
+                <article class="metric-card"><span class="metric-label">Session DPS</span><strong id="combat-dps">0</strong></article>
+                <article class="metric-card"><span class="metric-label">Healing</span><strong id="combat-healing">0</strong></article>
+                <article class="metric-card"><span class="metric-label">Observed NPCs</span><strong id="combat-observed">0</strong></article>
+            </div>
+            <article class="panel">
+                <div class="panel-heading"><div><span class="eyebrow">EVENT STREAM</span><h2>Recent parsed events</h2></div></div>
+                <div id="combat-events" class="combat-table"></div>
+            </article>
+        </section>
+
+        <section class="view" data-view-panel="settings">
+            <div class="section-heading">
+                <div>
+                    <span class="eyebrow">EYE OF ZOMM SETTINGS</span>
+                    <h1>Settings</h1>
+                    <p>Manual values act as fallbacks when the log has not exposed them.</p>
+                </div>
+            </div>
+            <div class="settings-grid">
+                <article class="panel">
+                    <h2>Log bridge</h2>
+                    <div class="setting-line"><span>Active log</span><code id="settings-log-path">—</code></div>
+                    <div class="setting-line"><span>Local server</span><code id="settings-server">127.0.0.1</code></div>
+                    <button id="change-log" class="primary-button">Change log file</button>
+                </article>
+                <article class="panel">
+                    <h2>Character fallback</h2>
+                    <label>Level <input id="manual-level" type="number" min="1" max="100" placeholder="Auto"></label>
+                    <span class="filter-label">Classes</span>
+                    <div id="settings-class-chips" class="chip-row"></div>
+                    <small>Detected `/who` data wins unless you set a manual level/classes.</small>
+                </article>
+                <article class="panel">
+                    <h2>Wiki data</h2>
+                    <p>Eye of Zomm uses a static EQLWiki dataset mirrored on GitHub. The app never crawls MediaWiki.</p>
+                    <div class="setting-line"><span>Pack version</span><code id="pack-version">—</code></div>
+                    <div class="setting-line"><span>Pack mode</span><code id="pack-mode">Sample</code></div>
+                    <div class="setting-line"><span>Update status</span><code id="pack-update-status">—</code></div>
+                    <button id="update-pack" class="secondary-button">Sync with Wiki</button>
+                    <small>Checked automatically on startup or when you press Sync with Wiki. The check and download come from GitHub, not eqlwiki.com.</small>
+                </article>
+                <article class="panel warning-panel">
+                    <h2>Boundary</h2>
+                    <p>No process hooks. No DLL injection. No memory inspection. No game-file writes. No automated commands. Log and local-file reads only.</p>
+                </article>
+            </div>
+        </section>
+    </main>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
