@@ -1,0 +1,33 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Test
+        run: npm test
+      - name: Fetch production bootstrap data
+        shell: bash
+        run: node scripts/fetch-bootstrap-pack.mjs
+      - name: Build NSIS installer
+        run: npm run dist:win
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EQLWiki-Eye-of-Zomm-Windows-x64
+          path: dist/EQLWiki-Eye-of-Zomm-Setup-*-x64.exe
+          if-no-files-found: error
