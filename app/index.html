@@ -16,13 +16,17 @@
                 <div class="brand-subtitle">EQLWiki companion · local intelligence for EverQuest Legends</div>
             </div>
         </div>
-        <div class="global-search" role="search">
+        <form id="wiki-search-form" class="global-search" role="search">
             <div class="global-search-box">
                 <span class="global-search-icon">⌕</span>
-                <input id="wiki-search" type="search" autocomplete="off" placeholder="Search companion or EQL Wiki">
-                <button id="wiki-search-button" type="button">Search Wiki</button>
+                <input id="wiki-search" type="search" autocomplete="off" placeholder="Search EQLWiki" aria-label="Search EQLWiki">
+                <button id="wiki-search-button" type="button">Search EQLWiki</button>
             </div>
-            <div id="wiki-search-results" class="global-search-results" hidden></div>
+        </form>
+        <div class="window-controls">
+            <span id="minimal-zone-title" class="minimal-zone-title">Waiting for zone</span>
+            <button id="pin-window" class="topbar-control" type="button" aria-pressed="false">◇ Pin to top</button>
+            <button id="minimal-mode" class="topbar-control" type="button" aria-pressed="false">Minimal</button>
         </div>
         <div class="live-strip">
             <span id="bridge-status" class="status-pill status-warn">Connecting</span>
@@ -37,6 +41,7 @@
         <button class="nav-button" data-view="map"><span>⌖</span>Live Map</button>
         <button class="nav-button" data-view="npcs"><span>♟</span>NPCs</button>
         <button class="nav-button" data-view="items"><span>◇</span>Items</button>
+        <button class="nav-button" data-view="drops"><span>▣</span>Drops</button>
         <button class="nav-button" data-view="combat"><span>⚔</span>Combat</button>
         <button class="nav-button" data-view="settings"><span>⚙</span>Settings</button>
         <div class="sidebar-note">
@@ -113,12 +118,25 @@
                     <p id="map-subtitle">Grant the viewer access to your EverQuest folder once, then current-zone syncing can take over.</p>
                 </div>
                 <div class="map-actions">
+                    <button id="select-eq-folder" class="secondary-button">Select EQ folder</button>
                     <button id="sync-zone" class="secondary-button">Sync current zone</button>
                     <button id="sync-location" class="primary-button">Sync /location</button>
                 </div>
             </div>
-            <div class="viewer-frame-wrap">
-                <iframe id="zone-viewer" class="viewer-frame" src="./zoneviewer/viewer.html" title="EQL Zone Viewer"></iframe>
+            <div class="map-workspace">
+                <div class="viewer-frame-wrap">
+                    <iframe id="zone-viewer" class="viewer-frame" src="./zoneviewer/viewer.html" title="EQL Zone Viewer"></iframe>
+                </div>
+                <aside class="minimal-drop-panel panel">
+                    <div class="panel-heading">
+                        <div><span class="eyebrow">CURRENT ZONE</span><h2>Named &amp; drops</h2></div>
+                    </div>
+                    <div class="minimal-filters">
+                        <label class="check-control"><input id="minimal-my-class" type="checkbox" checked> My Class</label>
+                        <label class="check-control"><input id="minimal-named-only" type="checkbox" checked> Named only</label>
+                    </div>
+                    <div id="minimal-zone-drops" class="minimal-zone-drops empty-state">Waiting for a detected zone.</div>
+                </aside>
             </div>
         </section>
 
@@ -164,6 +182,26 @@
             <div id="item-list" class="card-grid"></div>
         </section>
 
+        <section class="view" data-view-panel="drops">
+            <div class="section-heading">
+                <div>
+                    <span class="eyebrow">OBSERVED LOOT</span>
+                    <h1>Drop log</h1>
+                    <p>Loot is associated with its logged source, or the most recent slain NPC when the loot line omits one.</p>
+                </div>
+            </div>
+            <div class="metric-grid combat-metrics">
+                <article class="metric-card"><span class="metric-label">Items looted</span><strong id="drop-count">0</strong></article>
+                <article class="metric-card"><span class="metric-label">Sources observed</span><strong id="drop-source-count">0</strong></article>
+                <article class="metric-card"><span class="metric-label">Current zone</span><strong id="drop-current-zone">—</strong></article>
+                <article class="metric-card"><span class="metric-label">Estimates</span><strong>Session data</strong><small>Drop % = observed drops ÷ observed kills.</small></article>
+            </div>
+            <article class="panel">
+                <div class="panel-heading"><div><span class="eyebrow">LOOT HISTORY</span><h2>Recent drops</h2></div></div>
+                <div id="drop-log" class="drop-table empty-state">No loot lines observed yet.</div>
+            </article>
+        </section>
+
         <section class="view" data-view-panel="combat">
             <div class="section-heading">
                 <div>
@@ -178,10 +216,16 @@
                 <article class="metric-card"><span class="metric-label">Healing</span><strong id="combat-healing">0</strong></article>
                 <article class="metric-card"><span class="metric-label">Observed NPCs</span><strong id="combat-observed">0</strong></article>
             </div>
-            <article class="panel">
-                <div class="panel-heading"><div><span class="eyebrow">EVENT STREAM</span><h2>Recent parsed events</h2></div></div>
-                <div id="combat-events" class="combat-table"></div>
-            </article>
+            <div class="encounter-layout">
+                <article class="panel encounter-list-panel">
+                    <div class="panel-heading"><div><span class="eyebrow">ENCOUNTERS</span><h2>Recent encounters</h2></div></div>
+                    <div id="combat-encounters" class="encounter-list empty-state">No encounters yet.</div>
+                </article>
+                <article class="panel encounter-detail-panel">
+                    <div class="panel-heading"><div><span class="eyebrow">EVENTS</span><h2 id="encounter-detail-title">Select an encounter</h2></div></div>
+                    <div id="combat-events" class="combat-table"></div>
+                </article>
+            </div>
         </section>
 
         <section class="view" data-view-panel="settings">
@@ -207,6 +251,21 @@
                     <small>Detected `/who` data wins unless you set a manual level/classes.</small>
                 </article>
                 <article class="panel">
+                    <h2>Window</h2>
+                    <p>Keep Eye of Zomm visible over the game or switch to the compact map-and-drops layout.</p>
+                    <div class="settings-actions">
+                        <button id="settings-pin-window" class="secondary-button" type="button">Pin to top</button>
+                        <button id="settings-minimal-mode" class="secondary-button" type="button">Minimal view</button>
+                    </div>
+                </article>
+                <article class="panel">
+                    <h2>Combat encounters</h2>
+                    <label>End encounter after
+                        <span class="number-with-unit"><input id="encounter-gap" type="number" min="3" max="300" step="1" value="15"> seconds</span>
+                    </label>
+                    <small>A new encounter begins when combat resumes after this many quiet seconds.</small>
+                </article>
+                <article class="panel">
                     <h2>Wiki data</h2>
                     <p>Eye of Zomm uses a static EQLWiki dataset mirrored on GitHub. The app never crawls MediaWiki.</p>
                     <div class="setting-line"><span>Pack version</span><code id="pack-version">—</code></div>
@@ -223,6 +282,7 @@
         </section>
     </main>
 </div>
+<div id="item-tooltip" class="item-tooltip" role="tooltip" hidden></div>
 <script type="module" src="./app.js"></script>
 </body>
 </html>

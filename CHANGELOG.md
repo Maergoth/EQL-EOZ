@@ -11,4 +11,10 @@
 - Kept the embedded Zone Viewer navigation-focused and removed additional nonessential viewer controls from the companion UI.
 - Expanded exported NPC metadata with race, class, and description where present.
 - Retained local wiki search and explicit Open on Wiki behavior.
+- Added persistent **Pin to top** and a compact map + named-drop minimal view.
+- Added local item hover tooltips, observed loot history, and logged drop-rate estimates.
+- Added configurable combat encounters named for the first attacked NPC and their start time.
+- Repaired embedded Zone Viewer startup and current-zone/location synchronization.
+- Simplified the header search to a reliable, wiki-only **Search EQLWiki** field.
+- Added con-color tinting to NPC cards and current-zone NPC rows.
 - Screen reading remains intentionally unimplemented.

@@ -20,6 +20,7 @@ const MAX_PACK_DOWNLOAD_BYTES = 128 * 1024 * 1024;
 let server = null;
 let windowRef = null;
 let port = DEFAULT_PORT;
+let normalWindowBounds = null;
 
 function rootDir() {
     return path.join(__dirname, '..');
@@ -69,11 +70,48 @@ async function atomicWriteJson(filePath, value) {
 }
 
 async function readConfig() {
-    return readJson(configPath(), { logPath: '' });
+    return {
+        logPath: '',
+        alwaysOnTop: false,
+        minimalMode: false,
+        ...(await readJson(configPath(), {}))
+    };
+}
+
+async function updateConfig(values) {
+    const config = await readConfig();
+    const next = { ...config, ...values };
+    await atomicWriteJson(configPath(), next);
+    return next;
 }
 
 async function saveConfig(logPath) {
-    await atomicWriteJson(configPath(), { logPath: String(logPath || '') });
+    await updateConfig({ logPath: String(logPath || '') });
+}
+
+async function setAlwaysOnTop(enabled) {
+    enabled = Boolean(enabled);
+    windowRef?.setAlwaysOnTop(enabled);
+    await updateConfig({ alwaysOnTop: enabled });
+    return enabled;
+}
+
+async function setMinimalMode(enabled) {
+    enabled = Boolean(enabled);
+    if (windowRef && !windowRef.isDestroyed()) {
+        if (enabled) {
+            normalWindowBounds ||= windowRef.getBounds();
+            windowRef.setMinimumSize(720, 420);
+            const bounds = windowRef.getBounds();
+            windowRef.setBounds({ ...bounds, width: Math.min(bounds.width, 1040), height: Math.min(bounds.height, 680) }, true);
+        } else {
+            windowRef.setMinimumSize(1024, 700);
+            if (normalWindowBounds) windowRef.setBounds(normalWindowBounds, true);
+            normalWindowBounds = null;
+        }
+    }
+    await updateConfig({ minimalMode: enabled });
+    return enabled;
 }
 
 function logFamily(filePath) {
@@ -344,6 +382,7 @@ function safeStaticPath(urlPath) {
 async function apiInfo() {
     const logPath = await resolveLogPath();
     const state = await readPackState();
+    const config = await readConfig();
     return {
         version: APP_VERSION,
         server: `${HOST}:${port}`,
@@ -352,6 +391,10 @@ async function apiInfo() {
         safety: 'log/local-file reads only; optional static wiki data pack',
         dataPack: state,
         productionPack: fs.existsSync(productionPackPath()),
+        windowState: {
+            alwaysOnTop: Boolean(windowRef?.isAlwaysOnTop() ?? config.alwaysOnTop),
+            minimalMode: Boolean(config.minimalMode)
+        },
         desktop: true
     };
 }
@@ -370,6 +413,16 @@ async function requestHandler(req, res) {
         if (pathname === '/api/select-log') {
             await selectLogFile();
             return sendJson(res, 200, await apiInfo());
+        }
+        if (pathname === '/api/window/always-on-top') {
+            const enabled = url.searchParams.get('enabled') === '1';
+            await setAlwaysOnTop(enabled);
+            return sendJson(res, 200, { ok: true, enabled });
+        }
+        if (pathname === '/api/window/minimal') {
+            const enabled = url.searchParams.get('enabled') === '1';
+            await setMinimalMode(enabled);
+            return sendJson(res, 200, { ok: true, enabled });
         }
         if (pathname === '/api/update-pack') {
             return sendJson(res, 200, await updateStaticDataPack(url.searchParams.get('force') === '1'));
@@ -413,12 +466,13 @@ async function startServer() {
     port = server.address().port;
 }
 
-function createWindow() {
+function createWindow(config = {}) {
+    const minimalMode = Boolean(config.minimalMode);
     windowRef = new BrowserWindow({
-        width: 1440,
-        height: 900,
-        minWidth: 1024,
-        minHeight: 700,
+        width: minimalMode ? 1040 : 1440,
+        height: minimalMode ? 680 : 900,
+        minWidth: minimalMode ? 720 : 1024,
+        minHeight: minimalMode ? 420 : 700,
         backgroundColor: '#08101b',
         autoHideMenuBar: true,
         show: false,
@@ -429,6 +483,7 @@ function createWindow() {
             webSecurity: true
         }
     });
+    windowRef.setAlwaysOnTop(Boolean(config.alwaysOnTop));
 
     windowRef.webContents.setWindowOpenHandler(({ url }) => {
         if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
@@ -450,12 +505,13 @@ function createWindow() {
 
 async function bootstrap() {
     await ensureUserDirs();
+    const config = await readConfig();
     await startServer();
 
     // Never delay first paint on remote data. The cached/bootstrap pack loads immediately;
     // a tiny GitHub dataset-manifest check runs in parallel on every startup.
     void updateStaticDataPack(false).catch(error => console.warn('[Eye of Zomm] data sync:', error));
-    createWindow();
+    createWindow(config);
 }
 
 const gotLock = app.requestSingleInstanceLock();

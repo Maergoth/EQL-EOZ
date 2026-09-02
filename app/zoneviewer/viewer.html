@@ -57,7 +57,7 @@ const zoneAliases = new Map(Object.entries({
     'the plane of sky': 'Plane of Sky',
     'plane of sky': 'Plane of Sky',
     'new sebilis expedition': 'New Sebilis Expedition',
-    'nagafen\\'s lair': 'Nagafen\\'s Lair (Sol B)'
+    "nagafen's lair": "Nagafen's Lair (Sol B)"
 }));
 
 function norm(text) {
@@ -84,10 +84,16 @@ async function waitForZoneSelect(timeout = 15000) {
 }
 
 window.eqlCompanionViewer = {
+    selectFolder() {
+        app?.selectDirectory?.();
+        return { ok:Boolean(app) };
+    },
+
     async loadZone(zoneName) {
         if (!app) return { ok:false, reason:'viewer-not-mounted' };
-        const select = await waitForZoneSelect();
+        const select = app.els?.zoneSelect || await waitForZoneSelect();
         if (!select) return { ok:false, reason:'select-eq-folder-first' };
+        if (select.disabled || select.options.length <= 1) return { ok:false, reason:'select-eq-folder-first' };
 
         const wanted = norm(viewerName(zoneName));
         let option = Array.from(select.options).find(o => norm(o.textContent) === wanted);
@@ -103,12 +109,24 @@ window.eqlCompanionViewer = {
             select.dispatchEvent(new Event('change', { bubbles:true }));
         }
 
-        const badge = root.querySelector('.eqlzv-zone-badge');
-        if (!badge || norm(badge.textContent) !== norm(option.textContent)) {
-            root.querySelector('.eqlzv-toolbar .eqlzv-button:not(.eqlzv-primary)')?.focus();
-            app.loadSelectedZone();
+        const selected = app.selectedZoneRecord?.();
+        const alreadyLoaded = app.currentZoneRecord && selected &&
+            app.currentZoneRecord.id === selected.id && app.currentZoneRecord.format === selected.format;
+        if (!alreadyLoaded) {
+            await app.loadSelectedZone();
         }
-        return { ok:true, viewerZone:option.textContent };
+        if (!app.currentZoneRecord) {
+            return {
+                ok:false,
+                reason:'load-failed',
+                message:app.els?.statusText?.textContent || `Unable to load ${zoneName}.`
+            };
+        }
+        return {
+            ok:true,
+            viewerZone:option.textContent,
+            status:app.els?.statusText?.textContent || 'Zone ready'
+        };
     },
 
     syncLocation(location) {
@@ -116,7 +134,7 @@ window.eqlCompanionViewer = {
             !Number.isFinite(Number(location.y)) || !Number.isFinite(Number(location.z))) {
             return { ok:false, reason:'no-location' };
         }
-        if (!app.fp || !app.perspective || !app.currentBounds) {
+        if (!app.fp || !app.perspective || !app.currentBounds || !app.currentZoneRecord) {
             return { ok:false, reason:'load-zone-first' };
         }
 
@@ -151,8 +169,14 @@ window.eqlCompanionViewer = {
         return {
             mounted: Boolean(app),
             directorySelected: Boolean(select && !select.disabled),
-            zone: badge ? badge.textContent.trim() : ''
+            zone: app?.currentZoneRecord ? (badge ? badge.textContent.trim() : app.currentZoneRecord.id) : '',
+            message:app?.els?.statusText?.textContent || ''
         };
+    },
+
+    resize() {
+        app?.resize?.();
+        return { ok:Boolean(app) };
     }
 };
 

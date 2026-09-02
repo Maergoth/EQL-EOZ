@@ -21,14 +21,18 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Detects the active character from the log filename.
 - Detects zones from normal log output.
 - Detects level/classes when `/who` output appears and follows later level-up messages.
-- Parses considers, targets, outgoing damage, DoTs, heals, runes, kills, and recent activity.
-- Shows current-zone NPCs and EQ-style con colors relative to the player's level.
+- Parses considers, targets, outgoing damage, DoTs, heals, runes, kills, loot, and recent activity.
+- Groups combat into timestamped encounters using a configurable quiet-period threshold.
+- Records looted items and their sources, with observed drop rates derived from nearby logged kills.
+- Shows current-zone NPCs with EQ-style con labels and color-tinted cards relative to the player's level.
 - Filters items locally by class and era.
 - Applies EQLWiki Item Level Slider scaling locally.
 - Shows item sources and known NPC drops without requesting item/NPC pages from the wiki.
 - Embeds a deliberately simplified EQL Zone Viewer.
 - Can synchronize the viewer with logged `/location` output when a supported line is present.
-- Searches the local structured dataset first and offers **Open on Wiki** / EQLWiki search for anything better handled in the browser.
+- Provides a pin-to-top window option and a minimal map + named-drop overlay.
+- Shows local-data item tooltips on item and drop names.
+- Searches EQLWiki from the global search field and opens exact wiki links from local records.
 
 ## Data architecture
 
@@ -93,12 +97,7 @@ If the manifest version matches the cached version, nothing else is downloaded. 
 
 ## Wiki search / Open in browser
 
-The global search box searches the local zone/NPC/item dataset first.
-
-- Known zones, NPCs, and items can open their exact EQLWiki page.
-- Item/NPC cards expose direct Wiki links.
-- The current zone exposes an **Open zone wiki** action.
-- Queries that are not represented neatly in the structured dataset open EQLWiki `Special:Search` in the normal browser.
+The global **Search EQLWiki** field always opens an EQLWiki `Special:Search` query in the normal browser. Item/NPC cards and the current-zone action still expose direct links to exact wiki pages.
 
 This keeps Eye of Zomm useful without trying to recreate every wiki article inside the desktop application.
 

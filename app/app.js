@@ -9,12 +9,14 @@ const parser = new EQLogParser();
 let pack = { meta:{}, zones:[], npcs:[], items:[] };
 let lootByNpcZone = new Map();
 let lootByNpcName = new Map();
+let itemByName = new Map();
 let bridgeInfo = null;
 let logOffset = 0;
 let partialLine = '';
 let viewerReady = false;
 let pollTimer = null;
 let packRefreshTimer = null;
+let selectedEncounterId = '';
 
 const prefs = {
     get key(){ return 'eql-companion-prefs-v1'; },
@@ -28,8 +30,10 @@ let settings = Object.assign({
     manualClasses: [],
     era: '',
     currentZoneOnly: true,
-    itemTier: 0
+    itemTier: 0,
+    encounterGapSeconds: 15
 }, prefs.load());
+parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => Array.from(document.querySelectorAll(selector));
@@ -86,6 +90,37 @@ function formatNum(value) {
     return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
+function formatTime(value) {
+    const date = new Date(Number(value) || Date.now());
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+}
+
+function itemRecord(name) {
+    return itemByName.get(String(name || '').trim().toLowerCase()) || null;
+}
+
+function itemHoverAttrs(itemOrName) {
+    const item = typeof itemOrName === 'string' ? itemRecord(itemOrName) : itemOrName;
+    const name = item?.name || itemOrName || '';
+    return `class="item-hover" data-item-title="${esc(name)}"`;
+}
+
+function itemMatchesProfile(item, profile) {
+    if (!profile.classes.length) return true;
+    const classes = (item.classes || []).map(c => String(c).toUpperCase());
+    return !classes.length || classes.includes('ALL') || profile.classes.some(c => classes.includes(c));
+}
+
+function isNamedSource(name) {
+    const clean = String(name || '').trim();
+    if (!clean) return false;
+    if (/^(?:a|an|some)\s+/i.test(clean)) return false;
+    // Lowercase "the ..." names are generic descriptions, while canonical
+    // named NPCs such as "The Spiroc Lord" retain their title casing.
+    if (/^the\s+[a-z]/.test(clean)) return false;
+    return true;
+}
+
 async function api(path, options) {
     const response = await fetch(path, Object.assign({ cache:'no-store' }, options || {}));
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -140,6 +175,7 @@ async function connectBridge() {
         $('#settings-server').textContent = bridgeInfo.server || location.host;
         const packState = bridgeInfo.dataPack || {};
         $('#pack-update-status').textContent = packState.lastStatus || (bridgeInfo.productionPack ? 'cached' : 'sample fallback');
+        applyWindowState(bridgeInfo.windowState || {});
         if (!logOffset) logOffset = 0;
         schedulePoll(50);
         schedulePackRefreshCheck();
@@ -176,6 +212,7 @@ function schedulePoll(delay = 700) {
 async function pollLog() {
     try {
         const data = await api(`/api/log?offset=${encodeURIComponent(logOffset)}`);
+        let changed = false;
         if (data.logPath && (!bridgeInfo || data.logPath !== bridgeInfo.logPath)) {
             bridgeInfo = bridgeInfo || {};
             bridgeInfo.logPath = data.logPath;
@@ -195,11 +232,12 @@ async function pollLog() {
                 incoming = firstNewline >= 0 ? incoming.slice(firstNewline + 1) : '';
             }
             if (incoming) consumeText(incoming);
+            changed = Boolean(incoming);
         }
         logOffset = Number(data.newOffset ?? logOffset);
         $('#bridge-status').textContent = 'Live log';
         $('#bridge-status').className = 'status-pill status-ok';
-        renderAll();
+        if (changed) renderAll();
         schedulePoll(700);
     } catch (error) {
         $('#bridge-status').textContent = 'Reconnecting';
@@ -238,7 +276,11 @@ function eraAllowed(era) {
 function rebuildPackIndexes() {
     lootByNpcZone = new Map();
     lootByNpcName = new Map();
+    itemByName = new Map();
     for (const item of pack.items || []) {
+        for (const key of [item.name, item.wikiTitle]) {
+            if (key) itemByName.set(String(key).trim().toLowerCase(), item);
+        }
         for (const source of item.dropSources || []) {
             const sourceName = String(source?.name || '').trim();
             if (!sourceName) continue;
@@ -281,6 +323,56 @@ function allNpcsForState(s) {
     return Array.from(merged.values());
 }
 
+function renderMinimalZoneDrops(s, profile) {
+    const host = $('#minimal-zone-drops');
+    $('#minimal-zone-title').textContent = s.zone || 'Waiting for zone';
+    if (!s.zone) {
+        host.className = 'minimal-zone-drops empty-state';
+        host.textContent = 'Waiting for a detected zone.';
+        return;
+    }
+
+    const myClassOnly = $('#minimal-my-class')?.checked ?? true;
+    const namedOnly = $('#minimal-named-only')?.checked ?? true;
+    const bySource = new Map();
+    const addSource = name => {
+        name = String(name || '').trim();
+        if (!name || (namedOnly && !isNamedSource(name))) return null;
+        const key = name.toLowerCase();
+        if (!bySource.has(key)) bySource.set(key, { name, items: [] });
+        return bySource.get(key);
+    };
+
+    for (const npc of pack.npcs || []) {
+        if (zoneKey(npc.zone) === zoneKey(s.zone) && (!namedOnly || isNamedSource(npc.name))) addSource(npc.name);
+    }
+    for (const item of pack.items || []) {
+        if (!eraAllowed(item.era) || (myClassOnly && !itemMatchesProfile(item, profile))) continue;
+        for (const source of item.dropSources || []) {
+            if (zoneKey(source.zone) !== zoneKey(s.zone)) continue;
+            addSource(source.name)?.items.push(item);
+        }
+    }
+
+    const sources = Array.from(bySource.values())
+        .filter(source => source.items.length || namedOnly)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .slice(0, 120);
+    if (!sources.length) {
+        host.className = 'minimal-zone-drops empty-state';
+        host.textContent = myClassOnly && profile.classes.length
+            ? 'No matching named drops are known for your class in this zone.'
+            : 'No named or drop records are known for this zone.';
+        return;
+    }
+
+    host.className = 'minimal-zone-drops';
+    host.innerHTML = sources.map(source => `<div class="minimal-drop-row">
+        <strong>${esc(source.name)}</strong>
+        ${source.items.length ? source.items.slice(0, 12).map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${esc(item.name)}</a>`).join('') : '<small>No known item drops in the current dataset.</small>'}
+    </div>`).join('');
+}
+
 function renderHeader(s, profile) {
     $('#top-character').textContent = s.character || '—';
     $('#top-zone').textContent = s.zone || 'Waiting for log';
@@ -319,7 +411,7 @@ function renderMetrics(s, profile) {
 
     const fight = s.fight;
     $('#metric-fight').textContent = fight ? `${formatNum(fight.dps)} DPS` : '0 DPS';
-    $('#metric-fight-detail').textContent = fight ? `${fight.victim} · ${formatNum(fight.damage)} damage${fight.active ? ' · active' : ''}` : 'No outgoing damage yet';
+    $('#metric-fight-detail').textContent = fight ? `${fight.name} · ${formatNum(fight.damage)} damage${fight.active ? ' · active' : ''}` : 'No outgoing damage yet';
 }
 
 function renderOverviewNpcs(s, profile) {
@@ -340,7 +432,7 @@ function renderOverviewNpcs(s, profile) {
     host.className = 'list-stack';
     host.innerHTML = npcs.map(n => {
         const con = conForLevel(n.avgLevel, profile.level);
-        return `<div class="list-row">
+        return `<div class="list-row npc-con-${con.key}">
             <span class="con-dot ${conClass(con.key)}"></span>
             <div><strong>${esc(n.name)}</strong><small>${n.avgLevel ? `Level ${n.avgLevel}` : 'Level unknown'}${n.observed ? ' · observed' : ''}</small></div>
             <span class="${conClass(con.key)}">${esc(con.label)}</span>
@@ -358,6 +450,7 @@ function eventText(e) {
     if (e.type === 'kill') return `Slain ${e.victim}`;
     if (e.type === 'target') return `Targeted ${e.target.name}`;
     if (e.type === 'rune') return `Rune absorbed ${e.amount}`;
+    if (e.type === 'loot') return `${Number(e.quantity) > 1 ? `${e.quantity}× ` : ''}${e.item} · from ${e.source || 'Unknown'}`;
     return e.type;
 }
 
@@ -366,7 +459,6 @@ function renderEvents(s) {
     const html = events.map(e => `<div class="event-row"><span class="event-type">${esc(e.type)}</span><span>${esc(eventText(e))}</span><span class="event-value">${e.amount ? formatNum(e.amount) : ''}</span></div>`).join('');
     $('#recent-events').className = events.length ? 'event-feed' : 'event-feed empty-state';
     $('#recent-events').innerHTML = events.length ? html : 'Waiting for log activity.';
-    $('#combat-events').innerHTML = s.recentEvents.slice(0,35).map(e => `<div class="combat-line"><span>${esc(e.type)}</span><span>${esc(eventText(e))}</span><span>${e.victim ? esc(e.victim) : ''}</span><span>${e.amount ? formatNum(e.amount) : ''}</span></div>`).join('') || '<div class="empty-state">No parsed combat events yet.</div>';
 }
 
 function renderCombat(s) {
@@ -374,6 +466,117 @@ function renderCombat(s) {
     $('#combat-dps').textContent = formatNum(s.sessionDps);
     $('#combat-healing').textContent = formatNum(s.totalHealing);
     $('#combat-observed').textContent = s.observed.length.toLocaleString();
+}
+
+function encounterLabel(encounter) {
+    return `${encounter.name || 'Encounter'} · ${formatTime(encounter.startAt)}`;
+}
+
+function renderEncounters(s) {
+    const encounters = s.encounters || [];
+    if (!encounters.length) {
+        selectedEncounterId = '';
+        $('#combat-encounters').className = 'encounter-list empty-state';
+        $('#combat-encounters').textContent = 'No encounters yet.';
+        $('#encounter-detail-title').textContent = 'Select an encounter';
+        $('#combat-events').innerHTML = '<div class="empty-state">No parsed combat events yet.</div>';
+        return;
+    }
+
+    if (!encounters.some(encounter => encounter.id === selectedEncounterId)) {
+        selectedEncounterId = encounters[0].id;
+    }
+    $('#combat-encounters').className = 'encounter-list';
+    $('#combat-encounters').innerHTML = encounters.slice(0, 100).map(encounter => `
+        <button type="button" class="encounter-row ${encounter.id === selectedEncounterId ? 'is-active' : ''}" data-encounter-id="${esc(encounter.id)}">
+            <strong>${esc(encounterLabel(encounter))}</strong>
+            <small><span>${encounter.active ? 'Active · ' : ''}${formatNum(encounter.damage)} damage · ${formatNum(encounter.dps)} DPS</span><span>${encounter.duration.toFixed(1)}s</span></small>
+        </button>`).join('');
+    $('#combat-encounters').querySelectorAll('[data-encounter-id]').forEach(button => {
+        button.addEventListener('click', () => {
+            selectedEncounterId = button.dataset.encounterId;
+            renderEncounters(state());
+        });
+    });
+
+    const selected = encounters.find(encounter => encounter.id === selectedEncounterId) || encounters[0];
+    $('#encounter-detail-title').textContent = encounterLabel(selected);
+    $('#combat-events').innerHTML = selected.events.slice().reverse().map(e => `
+        <div class="combat-line"><span>${esc(e.type)}</span><span>${esc(eventText(e))}</span><span>${esc(e.victim || e.target || '')}</span><span>${e.amount ? formatNum(e.amount) : ''}</span></div>`
+    ).join('') || '<div class="empty-state">No events recorded for this encounter.</div>';
+}
+
+function renderDropLog(s) {
+    const entries = s.lootLog || [];
+    const itemCount = entries.reduce((sum, entry) => sum + Math.max(1, Number(entry.quantity) || 1), 0);
+    $('#drop-count').textContent = itemCount.toLocaleString();
+    $('#drop-source-count').textContent = new Set(entries.map(entry => `${entry.zone}|${entry.source}`)).size.toLocaleString();
+    $('#drop-current-zone').textContent = s.zone || '—';
+    const host = $('#drop-log');
+    if (!entries.length) {
+        host.className = 'drop-table empty-state';
+        host.textContent = 'No loot lines observed yet.';
+        return;
+    }
+    host.className = 'drop-table';
+    host.innerHTML = entries.slice(0, 500).map(entry => {
+        const item = itemRecord(entry.item);
+        const rate = entry.estimatedRate === null
+            ? 'Collecting kill data'
+            : `${entry.estimatedRate.toFixed(entry.estimatedRate < 10 ? 1 : 0)}% observed`;
+        const evidence = entry.killsObserved
+            ? `${entry.dropsObserved} drop${entry.dropsObserved === 1 ? '' : 's'} / ${entry.killsObserved} kill${entry.killsObserved === 1 ? '' : 's'}`
+            : 'No matching kill count yet';
+        return `<div class="drop-row">
+            <div><strong ${itemHoverAttrs(item || entry.item)}>${Number(entry.quantity) > 1 ? `${entry.quantity}× ` : ''}${esc(entry.item)}</strong><small>${esc(entry.zone || 'Unknown zone')}</small></div>
+            <div>${esc(entry.source || 'Unknown source')}</div>
+            <div>${formatTime(entry.at)}</div>
+            <div class="drop-rate">${rate}<small>${evidence}</small></div>
+        </div>`;
+    }).join('');
+}
+
+function tooltipHtml(item) {
+    const tier = Number(settings.itemTier) || 0;
+    const stats = scaledItemStats(item, tier);
+    const statHtml = Object.entries(stats).slice(0, 18).map(([key, value]) => `
+        <div class="tooltip-stat"><span>${esc(key.replace(/_/g, ' '))}</span><strong>${formatNum(value)}</strong></div>`
+    ).join('');
+    const sources = (item.dropSources || []).slice(0, 8)
+        .map(source => esc(`${source.zone ? `${source.zone} · ` : ''}${source.name}`))
+        .join('<br>');
+    return `<h3>${esc(item.name)}</h3>
+        <div class="tooltip-meta">${esc((item.slots || []).join(' · ') || 'Unknown slot')} · ${esc((item.classes || []).join(' · ') || 'Unknown classes')} · ${esc(item.era || 'Unknown era')}</div>
+        ${statHtml ? `<div class="tooltip-stats">${statHtml}</div>` : ''}
+        ${sources ? `<div class="tooltip-source"><strong>Sources</strong><br>${sources}</div>` : ''}
+        ${item.notes ? `<div class="tooltip-source">${esc(item.notes)}</div>` : ''}`;
+}
+
+function positionTooltip(event) {
+    const tooltip = $('#item-tooltip');
+    if (!tooltip || tooltip.hidden) return;
+    const gap = 14;
+    const rect = tooltip.getBoundingClientRect();
+    let left = event.clientX + gap;
+    let top = event.clientY + gap;
+    if (left + rect.width > window.innerWidth - 8) left = event.clientX - rect.width - gap;
+    if (top + rect.height > window.innerHeight - 8) top = event.clientY - rect.height - gap;
+    tooltip.style.left = `${Math.max(8, left)}px`;
+    tooltip.style.top = `${Math.max(8, top)}px`;
+}
+
+function showItemTooltip(target, event) {
+    const item = itemRecord(target?.dataset?.itemTitle);
+    const tooltip = $('#item-tooltip');
+    if (!item || !tooltip) return;
+    tooltip.innerHTML = tooltipHtml(item);
+    tooltip.hidden = false;
+    positionTooltip(event);
+}
+
+function hideItemTooltip() {
+    const tooltip = $('#item-tooltip');
+    if (tooltip) tooltip.hidden = true;
 }
 
 function renderNpcList(s, profile) {
@@ -389,7 +592,7 @@ function renderNpcList(s, profile) {
     $('#npc-list').innerHTML = visible.map(n => {
         const con = conForLevel(n.avgLevel, profile.level);
         const drops = knownDropsForNpc(n).filter(item => eraAllowed(item.era)).slice(0, 4);
-        return `<article class="data-card">
+        return `<article class="data-card npc-card npc-con-${con.key}">
             <div class="card-top">
                 <div><h3>${esc(n.name)}</h3><div class="sub">${esc(n.zone || 'Unknown zone')}</div></div>
                 <span class="pill ${conClass(con.key)}">${esc(con.label)}</span>
@@ -399,7 +602,7 @@ function renderNpcList(s, profile) {
                 ${n.era && n.era !== 'Observed' ? `<span class="pill">${esc(n.era)}</span>` : ''}
                 ${n.observed ? '<span class="pill">Observed locally</span>' : ''}
             </div>
-            ${drops.length ? `<div class="known-drops"><span class="filter-label">Known drops</span>${drops.map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener">${esc(item.name)}</a>`).join('')}</div>` : ''}
+            ${drops.length ? `<div class="known-drops"><span class="filter-label">Known drops</span>${drops.map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${esc(item.name)}</a>`).join('')}</div>` : ''}
             ${n.damageDone ? `<div class="sub" style="margin-top:9px">${formatNum(n.damageDone)} damage observed this session</div>` : ''}
             <div class="card-actions">
                 <a class="mini-button" href="${wikiUrl(n.wikiTitle || n.name)}" target="_blank" rel="noopener">Open on Wiki</a>
@@ -439,7 +642,7 @@ function renderItems(s, profile) {
         const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
         return `<article class="data-card">
             <div class="card-top">
-                <div><h3>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}</div></div>
+                <div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}</div></div>
                 <span class="pill">${esc(item.era || '')}</span>
             </div>
             <div class="pill-row" style="margin-top:9px">${(item.classes||[]).map(c => `<span class="pill">${esc(c)}</span>`).join('')}</div>
@@ -485,16 +688,34 @@ function buildEraSelect() {
     select.innerHTML = ERAS.map(e => `<option ${e === settings.era ? 'selected' : ''}>${e}</option>`).join('');
 }
 
+function renderViewPanel(view, s, profile) {
+    if (view === 'overview') {
+        renderOverviewNpcs(s, profile);
+        renderEvents(s);
+    } else if (view === 'npcs') {
+        renderNpcList(s, profile);
+    } else if (view === 'items') {
+        renderItems(s, profile);
+    } else if (view === 'drops') {
+        renderDropLog(s);
+    } else if (view === 'combat') {
+        renderCombat(s);
+        renderEncounters(s);
+    } else if (view === 'map') {
+        renderMinimalZoneDrops(s, profile);
+    }
+}
+
 function renderAll() {
     const s = state();
     const profile = effectiveProfile(s);
+    const activeView = $('.nav-button.is-active')?.dataset.view || 'overview';
     renderHeader(s, profile);
     renderMetrics(s, profile);
-    renderOverviewNpcs(s, profile);
-    renderEvents(s);
-    renderCombat(s);
-    renderNpcList(s, profile);
-    renderItems(s, profile);
+    renderViewPanel(activeView, s, profile);
+    if (document.body.classList.contains('minimal-mode') && activeView !== 'map') {
+        renderMinimalZoneDrops(s, profile);
+    }
     $('#map-title').textContent = s.zone ? `${s.zone} · Zone Viewer` : 'Zone Viewer';
     $('#map-subtitle').textContent = s.location
         ? `Latest logged location: ${s.location.x.toFixed(1)}, ${s.location.y.toFixed(1)}, ${s.location.z.toFixed(1)}`
@@ -502,13 +723,53 @@ function renderAll() {
     $('#manual-level').value = settings.manualLevel || '';
     $('#item-tier').value = settings.itemTier || 0;
     $('#item-tier-value').textContent = settings.itemTier || 0;
+    $('#encounter-gap').value = settings.encounterGapSeconds || 15;
     if ($('#era-select').value !== settings.era) $('#era-select').value = settings.era;
 }
 
 function setView(view) {
     $$('.nav-button').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
     $$('[data-view-panel]').forEach(p => p.classList.toggle('is-active', p.dataset.viewPanel === view));
+    const s = state();
+    renderViewPanel(view, s, effectiveProfile(s));
     if (view === 'map') setTimeout(() => syncZoneToViewer(false), 100);
+}
+
+function applyWindowState(windowState = {}) {
+    const pinned = Boolean(windowState.alwaysOnTop);
+    const minimal = Boolean(windowState.minimalMode);
+    document.body.classList.toggle('minimal-mode', minimal);
+    for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
+        if (!button) continue;
+        button.classList.toggle('is-active', pinned);
+        button.setAttribute('aria-pressed', String(pinned));
+        button.textContent = pinned ? '◆ Pinned to top' : '◇ Pin to top';
+    }
+    for (const button of [$('#minimal-mode'), $('#settings-minimal-mode')]) {
+        if (!button) continue;
+        button.classList.toggle('is-active', minimal);
+        button.setAttribute('aria-pressed', String(minimal));
+        button.textContent = minimal ? 'Full view' : 'Minimal view';
+    }
+    if (minimal) setView('map');
+    setTimeout(() => viewerApi()?.resize?.(), 80);
+}
+
+async function toggleAlwaysOnTop() {
+    const current = Boolean(bridgeInfo?.windowState?.alwaysOnTop);
+    const result = await api(`/api/window/always-on-top?enabled=${current ? '0' : '1'}`);
+    bridgeInfo ||= {};
+    bridgeInfo.windowState = { ...(bridgeInfo.windowState || {}), alwaysOnTop: Boolean(result.enabled) };
+    applyWindowState(bridgeInfo.windowState);
+}
+
+async function toggleMinimalMode() {
+    const current = Boolean(bridgeInfo?.windowState?.minimalMode);
+    const result = await api(`/api/window/minimal?enabled=${current ? '0' : '1'}`);
+    bridgeInfo ||= {};
+    bridgeInfo.windowState = { ...(bridgeInfo.windowState || {}), minimalMode: Boolean(result.enabled) };
+    applyWindowState(bridgeInfo.windowState);
+    renderAll();
 }
 
 function viewerApi() {
@@ -516,27 +777,75 @@ function viewerApi() {
     return frame?.contentWindow?.eqlCompanionViewer || null;
 }
 
-async function syncZoneToViewer(showFeedback = true) {
-    const s = state();
-    const apiObj = viewerApi();
-    if (!s.zone || !apiObj) return false;
-    const result = await apiObj.loadZone(s.zone);
-    if (showFeedback && result && !result.ok && result.reason === 'select-eq-folder-first') {
-        alert('Select your EverQuest folder inside the Zone Viewer first. After that, zone changes can sync automatically.');
+async function waitForViewerApi(timeout = 8000) {
+    const started = Date.now();
+    while (Date.now() - started < timeout) {
+        const apiObj = viewerApi();
+        if (apiObj) return apiObj;
+        await new Promise(resolve => setTimeout(resolve, 100));
     }
-    return Boolean(result?.ok);
+    return null;
 }
 
-function syncLocationToViewer(showFeedback = true) {
+async function syncZoneToViewer(showFeedback = true) {
     const s = state();
-    const apiObj = viewerApi();
-    if (!s.location || !apiObj) {
+    if (!s.zone) {
+        if (showFeedback) alert('No current zone has been detected from the log yet.');
+        return false;
+    }
+    const apiObj = await waitForViewerApi();
+    if (!apiObj) {
+        if (showFeedback) alert('The Zone Viewer did not finish loading. Reopen Live Map and try again.');
+        return false;
+    }
+    $('#map-subtitle').textContent = `Loading ${s.zone} from your local EverQuest files…`;
+    try {
+        const record = zoneRecord(s.zone);
+        const result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
+        if (!result?.ok) {
+            const messages = {
+                'select-eq-folder-first': 'Select your EverQuest folder inside the Zone Viewer first.',
+                'zone-not-found': `The Zone Viewer could not match ${s.zone} to a local zone archive.`,
+                'load-failed': result.message || `The local files for ${s.zone} could not be loaded.`
+            };
+            const message = messages[result?.reason] || 'The current zone could not be synchronized.';
+            $('#map-subtitle').textContent = message;
+            if (showFeedback) alert(message);
+            return false;
+        }
+        $('#map-subtitle').textContent = `${s.zone} loaded · ${result.status || 'ready for location sync'}`;
+        return true;
+    } catch (error) {
+        $('#map-subtitle').textContent = `Zone sync failed: ${error.message}`;
+        if (showFeedback) alert(`Zone sync failed: ${error.message}`);
+        return false;
+    }
+}
+
+async function syncLocationToViewer(showFeedback = true) {
+    const s = state();
+    if (!s.location) {
         if (showFeedback) alert('No logged /location coordinate is available yet.');
         return false;
     }
+    const apiObj = await waitForViewerApi();
+    if (!apiObj) {
+        if (showFeedback) alert('The Zone Viewer did not finish loading.');
+        return false;
+    }
+    if (!apiObj.status()?.zone) {
+        const loaded = await syncZoneToViewer(showFeedback);
+        if (!loaded) return false;
+    }
     const result = apiObj.syncLocation(s.location);
-    if (showFeedback && !result?.ok) alert('Load the current zone in the Zone Viewer first, then sync the logged location.');
-    return Boolean(result?.ok);
+    if (!result?.ok) {
+        const message = result?.message || 'The zone is not ready for location sync yet.';
+        $('#map-subtitle').textContent = message;
+        if (showFeedback) alert(message);
+        return false;
+    }
+    $('#map-subtitle').textContent = `Synced to ${s.location.x.toFixed(1)}, ${s.location.y.toFixed(1)}, ${s.location.z.toFixed(1)} in ${s.zone}.`;
+    return true;
 }
 
 async function pathToNpc(name) {
@@ -548,103 +857,19 @@ async function pathToNpc(name) {
     }, 400);
 }
 
-function globalSearchMatches(query) {
-    const q = String(query || '').trim().toLowerCase();
-    if (q.length < 2) return [];
-
-    const s = state();
-    const currentZone = zoneKey(s.zone);
-    const rows = [];
-    const seen = new Set();
-
-    function add(kind, name, wikiTitle, meta, bonus = 0) {
-        const hay = `${name || ''} ${wikiTitle || ''} ${meta || ''}`.toLowerCase();
-        if (!hay.includes(q)) return;
-        const key = `${kind}|${String(wikiTitle || name).toLowerCase()}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        const normalizedName = String(name || '').toLowerCase();
-        let score = bonus;
-        if (normalizedName === q) score += 100;
-        else if (normalizedName.startsWith(q)) score += 55;
-        else score += 20;
-        score -= Math.min(18, Math.abs(normalizedName.length - q.length) * 0.15);
-        rows.push({ kind, name, wikiTitle: wikiTitle || name, meta, score });
-    }
-
-    for (const z of pack.zones || []) {
-        add('Zone', z.name, z.wikiTitle || z.name, (z.aliases || []).join(' '), zoneKey(z.name) === currentZone ? 20 : 0);
-    }
-    for (const n of pack.npcs || []) {
-        add('NPC', n.name, n.wikiTitle || n.name, `${n.zone || ''} ${n.era || ''}`, zoneKey(n.zone) === currentZone ? 18 : 0);
-    }
-    for (const item of pack.items || []) {
-        add('Item', item.name, item.wikiTitle || item.name, `${(item.classes || []).join(' ')} ${(item.slots || []).join(' ')} ${item.era || ''}`);
-    }
-
-    return rows.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)).slice(0, 8);
-}
-
-function closeGlobalSearch() {
-    const host = $('#wiki-search-results');
-    if (!host) return;
-    host.hidden = true;
-    host.innerHTML = '';
-}
-
-function renderGlobalSearch(query) {
-    const host = $('#wiki-search-results');
-    if (!host) return;
-    const clean = String(query || '').trim();
-    if (clean.length < 2) {
-        closeGlobalSearch();
-        return;
-    }
-
-    const matches = globalSearchMatches(clean);
-    host.innerHTML = [
-        ...matches.map(row => `<button type="button" class="global-search-result" data-wiki-title="${esc(row.wikiTitle)}">
-            <span class="global-search-kind">${esc(row.kind)}</span>
-            <span class="global-search-name">${esc(row.name)}</span>
-            <span class="global-search-meta">${esc(row.meta || '')}</span>
-        </button>`),
-        `<button type="button" class="global-search-result global-search-footer" data-wiki-search="${esc(clean)}">
-            <span class="global-search-kind">Wiki</span>
-            <span class="global-search-name">Search all of EQL Wiki for “${esc(clean)}”</span>
-            <span class="global-search-meta">Open in browser ↗</span>
-        </button>`
-    ].join('');
-    host.hidden = false;
-
-    host.querySelectorAll('[data-wiki-title]').forEach(button => {
-        button.addEventListener('click', () => {
-            openExternal(wikiUrl(button.dataset.wikiTitle));
-            closeGlobalSearch();
-        });
-    });
-    host.querySelectorAll('[data-wiki-search]').forEach(button => {
-        button.addEventListener('click', () => {
-            openExternal(wikiSearchUrl(button.dataset.wikiSearch));
-            closeGlobalSearch();
-        });
-    });
-}
-
 function runWikiSearch() {
     const input = $('#wiki-search');
     const query = input?.value.trim() || '';
     if (!query) return;
-    const exact = globalSearchMatches(query).find(row => row.name.toLowerCase() === query.toLowerCase());
-    openExternal(exact ? wikiUrl(exact.wikiTitle) : wikiSearchUrl(query));
-    closeGlobalSearch();
+    openExternal(wikiSearchUrl(query));
 }
 
 function wireUi() {
     $$('.nav-button').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
     $$('[data-go-view]').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.goView)));
-    $('#npc-search').addEventListener('input', renderAll);
-    $('#npc-current-zone').addEventListener('change', renderAll);
-    $('#item-search').addEventListener('input', renderAll);
+    $('#npc-search').addEventListener('input', () => { const s = state(); renderNpcList(s, effectiveProfile(s)); });
+    $('#npc-current-zone').addEventListener('change', () => { const s = state(); renderNpcList(s, effectiveProfile(s)); });
+    $('#item-search').addEventListener('input', () => { const s = state(); renderItems(s, effectiveProfile(s)); });
     $('#item-tier').addEventListener('input', e => {
         settings.itemTier = Number(e.target.value) || 0;
         prefs.save(settings);
@@ -657,6 +882,13 @@ function wireUi() {
     });
     $('#manual-level').addEventListener('change', e => {
         settings.manualLevel = Number(e.target.value) || 0;
+        prefs.save(settings);
+        renderAll();
+    });
+    $('#encounter-gap').addEventListener('change', e => {
+        settings.encounterGapSeconds = Math.max(3, Math.min(300, Number(e.target.value) || 15));
+        parser.setEncounterGapSeconds(settings.encounterGapSeconds);
+        selectedEncounterId = '';
         prefs.save(settings);
         renderAll();
     });
@@ -692,16 +924,32 @@ function wireUi() {
             button.disabled = false;
         }
     });
-    const wikiSearch = $('#wiki-search');
-    wikiSearch.addEventListener('input', e => renderGlobalSearch(e.target.value));
-    wikiSearch.addEventListener('focus', e => renderGlobalSearch(e.target.value));
-    wikiSearch.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); runWikiSearch(); }
-        if (e.key === 'Escape') closeGlobalSearch();
-    });
+    $('#wiki-search-form').addEventListener('submit', e => { e.preventDefault(); runWikiSearch(); });
     $('#wiki-search-button').addEventListener('click', runWikiSearch);
-    document.addEventListener('pointerdown', e => {
-        if (!e.target.closest('.global-search')) closeGlobalSearch();
+    $('#minimal-my-class').addEventListener('change', renderAll);
+    $('#minimal-named-only').addEventListener('change', renderAll);
+    for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
+        button.addEventListener('click', () => toggleAlwaysOnTop().catch(error => alert(`Unable to change pinning: ${error.message}`)));
+    }
+    for (const button of [$('#minimal-mode'), $('#settings-minimal-mode')]) {
+        button.addEventListener('click', () => toggleMinimalMode().catch(error => alert(`Unable to change the window view: ${error.message}`)));
+    }
+    document.addEventListener('pointerover', event => {
+        const target = event.target.closest?.('[data-item-title]');
+        if (target) showItemTooltip(target, event);
+    });
+    document.addEventListener('pointermove', positionTooltip);
+    document.addEventListener('pointerout', event => {
+        const target = event.target.closest?.('[data-item-title]');
+        if (target && !target.contains(event.relatedTarget)) hideItemTooltip();
+    });
+    $('#select-eq-folder').addEventListener('click', () => {
+        const apiObj = viewerApi();
+        if (!apiObj) {
+            alert('The Zone Viewer is still loading. Try again in a moment.');
+            return;
+        }
+        apiObj.selectFolder();
     });
     $('#sync-zone').addEventListener('click', () => syncZoneToViewer(true));
     $('#sync-location').addEventListener('click', () => syncLocationToViewer(true));
