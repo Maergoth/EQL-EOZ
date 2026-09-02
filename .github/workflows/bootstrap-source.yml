@@ -1,0 +1,42 @@
+name: Bootstrap full source
+
+on:
+  push:
+    branches:
+      - agent/full-v0.3.0
+    paths:
+      - '.bootstrap/READY'
+
+permissions:
+  contents: write
+
+jobs:
+  import-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-v0.3.0
+          fetch-depth: 0
+
+      - name: Reconstruct source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .bootstrap/parts/*.txt | tr -d '\r\n\t ' | base64 --decode > "$RUNNER_TEMP/eoz-source.txz"
+          mkdir -p "$RUNNER_TEMP/eoz-source"
+          tar -xJf "$RUNNER_TEMP/eoz-source.txz" -C "$RUNNER_TEMP/eoz-source"
+
+      - name: Import source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a "$RUNNER_TEMP/eoz-source/" ./
+          rm -rf .bootstrap
+          rm -f .github/workflows/bootstrap-source.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Import complete Eye of Zomm v0.3.0 source"
+          git push origin HEAD:agent/full-v0.3.0
