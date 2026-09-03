@@ -24,7 +24,16 @@ assert(s.level === 50, 'level');
 assert(s.classes.join('/') === 'MNK/ROG/BER', 'classes');
 assert(s.observed.some(npc => npc.name === 'Guard Wytiffin' && npc.level === 50), 'considered NPC');
 assert(s.totalDamage === 372, 'outgoing damage only');
-assert(s.location.x === 10.5 && s.location.y === -20.25 && s.location.z === 4, 'location');
+assert(s.location.x === 20.25 && s.location.y === -10.5 && s.location.z === 4, 'normalized map location');
+assert(s.location.logX === -20.25 && s.location.logY === 10.5, 'raw /loc axes retained');
+
+const befallenLocation = new EQLogParser();
+befallenLocation.parse('[Thu Sep 03 00:00:00 2026] Your Location is 30, 957, -66');
+const befallenState = befallenLocation.snapshot();
+assert(
+    befallenState.location.x === -957 && befallenState.location.y === -30 && befallenState.location.z === -66,
+    'Befallen /loc aligns with the EQ map coordinate display'
+);
 
 // Modern EQ bands: blue, light blue, green, then gray below player level.
 assert(grayCeilingForPlayerLevel(15) === 9, 'L15 gray ceiling');

@@ -219,7 +219,8 @@ async function pathToWikiLocation(label, location) {
     app.setNavigationBuildActive(false);
     if (route?.length >= 2) {
         app.addNavigationPath(route);
-        app.setStatus(`Path to ${label} ready.`, 0);
+        const distance = route.slice(1).reduce((sum, point, index) => sum + point.distanceTo(route[index]), 0);
+        app.setStatus(`Path to ${label} ready · ${Math.round(distance).toLocaleString()} units.`, 0);
     } else {
         app.setStatus(`${label} is marked from its EQLWiki location; no grounded route was found.`, 0);
     }
@@ -361,9 +362,10 @@ window.eqlEyeOfZommViewer = {
         lastSyncedLocation = eqLocation;
         if (typeof app.captureFirstPersonPose === 'function') app.captureFirstPersonPose();
         if (typeof app.updateCoordinateHud === 'function') app.updateCoordinateHud(true);
-        if (typeof app.drawMiniMap === 'function') app.drawMiniMap();
+        if (typeof app.setMiniMapVisible === 'function') app.setMiniMapVisible(true);
+        else if (typeof app.drawMiniMap === 'function') app.drawMiniMap();
         if (typeof app.setStatus === 'function') {
-            app.setStatus(`Synced to logged EQ location X ${Number(location.x).toFixed(1)} Y ${Number(location.y).toFixed(1)} Z ${Number(location.z).toFixed(1)}.`);
+            app.setStatus(`Synced to map location X ${Number(location.x).toFixed(1)} Y ${Number(location.y).toFixed(1)} Z ${Number(location.z).toFixed(1)}.`);
         }
         app.requestRender?.();
         return { ok:true };

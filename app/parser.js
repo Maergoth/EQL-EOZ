@@ -259,8 +259,15 @@ export class EQLogParser {
         for (const pattern of locationPatterns) {
             x = text.match(pattern);
             if (x) {
+                // EverQuest writes /loc as Y, X, Z while its map files and
+                // exported EQLWiki locations use X, Y, Z with both planar
+                // axes negated. Normalize at the parser boundary so every
+                // marker, view, route, and distance calculation agrees.
+                const logY = Number(x[1]);
+                const logX = Number(x[2]);
                 this.location = {
-                    x: Number(x[1]), y: Number(x[2]), z: Number(x[3]),
+                    x: -logX, y: -logY, z: Number(x[3]),
+                    logX, logY,
                     heading: x[4] === undefined ? null : Number(x[4]),
                     at: this.currentLineAt || Date.now()
                 };

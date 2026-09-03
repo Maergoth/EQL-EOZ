@@ -5,13 +5,14 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const textExtensions = new Set(['.md', '.js', '.cjs', '.mjs', '.json', '.html', '.css', '.php', '.sh', '.txt', '.yml', '.yaml']);
 const ignoredDirectories = new Set(['.git', 'dist', 'node_modules', 'THIRD_PARTY']);
+const ignoredContentFiles = new Set(['eye-of-zomm-pack.bootstrap.json']);
 const files = [];
 
 function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes:true })) {
         if (entry.isDirectory()) {
             if (!ignoredDirectories.has(entry.name)) visit(join(directory, entry.name));
-        } else if (textExtensions.has(extname(entry.name).toLowerCase())) {
+        } else if (!ignoredContentFiles.has(entry.name) && textExtensions.has(extname(entry.name).toLowerCase())) {
             files.push(join(directory, entry.name));
         }
     }

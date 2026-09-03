@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1 - Map alignment and navigation
+
+- Normalized logged `/loc` output into the coordinate basis used by EverQuest map files and EQLWiki locations, fixing the swapped and inverted player marker in Befallen and other zones.
+- Made the first-person minimap player-centered and heading-up from consecutive `/loc` samples, with nearby named mobs and the active route labeled directly on the map.
+- Switched route calculation to a height-aware walkable-surface graph derived from the rendered zone collision mesh, preserving floors, ramps, walls, jump limits, and drops while reporting shortest-route distance.
+- Repaired S3D material-to-bitmap resolution so original zone textures load instead of placeholder gray/white materials.
+- Bumped the parsed-zone cache version so existing installations rebuild previously cached zones with corrected texture data.
+
 ## 0.5.0 - Release UX and map overhaul
 
 - Added first-run EverQuest folder setup and automatic selection of the most recently modified `eqlog_*.txt` under `Logs`, with folder and log overrides in Settings.

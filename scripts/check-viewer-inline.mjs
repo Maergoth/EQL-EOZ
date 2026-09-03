@@ -12,6 +12,20 @@ for (const required of ['window.eqlEyeOfZommViewer', 'useConfiguredFolder()', 's
     if (!html.includes(required)) throw new Error(`Zone Viewer integration is missing ${required}.`);
 }
 
+for (const required of ['app.setMiniMapVisible(true)', 'Path to ${label} ready ·']) {
+    if (!html.includes(required)) throw new Error(`Zone Viewer integration is missing ${required}.`);
+}
+
+const viewer = readFileSync(new URL('../app/zoneviewer/ZoneViewerApp.js', import.meta.url), 'utf8');
+for (const required of ['Building walkable-mesh route', 'this.findNavigationPathAttempt(', 'const headingUp =', 'this.navigationPath?.length > 1']) {
+    if (!viewer.includes(required)) throw new Error(`Zone Viewer bundle is missing ${required}.`);
+}
+
+const worker = readFileSync(new URL('../app/zoneviewer/zone-parser.worker.js', import.meta.url), 'utf8');
+for (const required of ['this.images=i', 'bitmapNames?.[0]?.name']) {
+    if (!worker.includes(required)) throw new Error(`Zone parser texture patch is missing ${required}.`);
+}
+
 for (const [index, match] of modules.entries()) {
     const result = spawnSync(process.execPath, ['--input-type=module', '--check'], {
         input: match[1],
