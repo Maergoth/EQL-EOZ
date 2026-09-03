@@ -27,8 +27,15 @@ let viewerFolderStatus = 'idle';
 let consideredTarget = null;
 let considerTrayTimer = null;
 let activeTooltipItem = null;
+let activeTooltipTarget = null;
 let lastTooltipPointer = null;
+let activeRoute = null;
+let routeRefreshTimer = null;
+let routeRequestSerial = 0;
+let renderedDestinationZone = '';
+let renderedDestinationCount = 0;
 const CONSIDER_TRAY_DURATION = 16000;
+const ROUTE_REFRESH_DISTANCE = 8;
 
 const prefs = {
     get key(){ return 'eql-eye-of-zomm-prefs-v1'; },
@@ -49,9 +56,15 @@ let settings = Object.assign({
     considerMyClassOnly: true,
     itemCurrentZoneOnly: true,
     itemZoneFilterExplicit: false,
-    mapMode: 'first'
+    itemSlot: '',
+    itemSort: 'recommended',
+    mapMode: 'first',
+    lastView: 'overview',
+    minimalIntelVisible: true
 }, prefs.load());
 if (!['first', 'top', 'map'].includes(settings.mapMode)) settings.mapMode = 'first';
+if (!['recommended', 'name'].includes(settings.itemSort)) settings.itemSort = 'recommended';
+if (!['overview', 'map', 'npcs', 'items', 'drops', 'combat', 'settings'].includes(settings.lastView)) settings.lastView = 'overview';
 let itemZoneFilterExplicit = Boolean(settings.itemZoneFilterExplicit || settings.itemCurrentZoneOnly === false);
 parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
@@ -75,6 +88,47 @@ function wikiSearchUrl(query) {
 function openExternal(url) {
     if (!url) return;
     window.open(String(url), '_blank', 'noopener');
+}
+
+function showNotice(message, options = {}) {
+    const host = $('#toast-region');
+    if (!host || !message) return;
+    const tone = ['success', 'warning', 'error'].includes(options.tone) ? options.tone : 'info';
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${tone}`;
+    toast.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+    const copy = document.createElement('span');
+    copy.textContent = String(message);
+    toast.append(copy);
+    if (options.actionLabel && typeof options.onAction === 'function') {
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.textContent = options.actionLabel;
+        action.addEventListener('click', () => {
+            options.onAction();
+            toast.remove();
+        });
+        toast.append(action);
+    }
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'toast-close';
+    close.setAttribute('aria-label', 'Dismiss notification');
+    close.textContent = '×';
+    close.addEventListener('click', () => toast.remove());
+    toast.append(close);
+    host.prepend(toast);
+    while (host.children.length > 4) host.lastElementChild?.remove();
+    const duration = Number(options.duration ?? (tone === 'error' ? 9000 : 5000));
+    if (duration > 0) setTimeout(() => toast.remove(), duration);
+}
+
+function showSettingsNotice(message, tone = 'warning') {
+    showNotice(message, {
+        tone,
+        actionLabel:'Open Settings',
+        onAction:() => setView('settings')
+    });
 }
 
 function zoneRecord(name) {
@@ -140,7 +194,7 @@ function itemIconSource(item) {
 function itemHoverAttrs(itemOrName) {
     const item = typeof itemOrName === 'string' ? itemRecord(itemOrName) : itemOrName;
     const name = item?.name || itemOrName || '';
-    return `class="item-hover" data-item-title="${esc(name)}"`;
+    return `class="item-hover" data-item-title="${esc(name)}" tabindex="0" aria-describedby="item-tooltip"`;
 }
 
 function itemMatchesProfile(item, profile) {
@@ -214,6 +268,7 @@ async function loadPack() {
     $('#pack-version').textContent = pack.meta.version || 'unknown';
     $('#pack-mode').textContent = pack.meta.sample ? 'Sample' : 'Production';
     buildEraSelect();
+    buildItemSlotSelect();
     renderAll();
 }
 
@@ -221,6 +276,7 @@ async function connectBridge() {
     try {
         bridgeInfo = await api('/api/info');
         parser.setCharacterFromFilename(bridgeInfo.logPath || '');
+        $('#app-version').textContent = bridgeInfo.version || 'unknown';
         $('#bridge-status').textContent = bridgeInfo.logExists ? 'Live log' : 'Waiting for log';
         $('#bridge-status').className = bridgeInfo.logExists ? 'status-pill status-ok' : 'status-pill status-warn';
         $('#settings-eq-root').textContent = bridgeInfo.eqRootPath || 'No folder selected';
@@ -280,13 +336,18 @@ async function pollLog() {
     try {
         const data = await api(`/api/log?offset=${encodeURIComponent(logOffset)}`);
         let changed = false;
+        const previousLogReady = Boolean(bridgeInfo?.logExists);
         if (data.logPath && (!bridgeInfo || data.logPath !== bridgeInfo.logPath)) {
+            const previousLog = bridgeInfo?.logPath || '';
             bridgeInfo = bridgeInfo || {};
             bridgeInfo.logPath = data.logPath;
             parser.setCharacterFromFilename(data.logPath);
             $('#settings-log-path').textContent = data.logPath;
+            changed = true;
+            if (previousLog) showNotice(`Now following ${data.logPath.split(/[\\/]/).pop()}.`, { tone:'success' });
         }
         if (bridgeInfo) bridgeInfo.logExists = Boolean(data.logExists);
+        if (previousLogReady !== Boolean(data.logExists)) changed = true;
         if (data.reset) {
             logOffset = Number(data.startOffset) || 0;
             partialLine = '';
@@ -322,6 +383,7 @@ function consumeText(text, allowTransientUi = true) {
     for (const line of lines) {
         const event = parser.parse(line);
         if (event?.type === 'zone') {
+            if (activeRoute && zoneKey(activeRoute.zone) !== zoneKey(event.zone)) clearActiveRoute({ clearViewer:false });
             viewerOperations.length = 0;
             viewerOperations.push({ type:'zone' });
         }
@@ -330,7 +392,11 @@ function consumeText(text, allowTransientUi = true) {
     }
     for (const operation of viewerOperations) {
         if (operation.type === 'zone') queueViewerSync(() => syncZoneToViewer(false));
-        else queueViewerSync(() => syncLocationToViewer(false, operation.location));
+        else queueViewerSync(async () => {
+            const synced = await syncLocationToViewer(false, operation.location);
+            if (synced) scheduleRouteRefresh(operation.location);
+            return synced;
+        });
     }
 }
 
@@ -355,6 +421,8 @@ function rebuildPackIndexes() {
     lootByNpcName = new Map();
     itemByName = new Map();
     normalizedZoneKeys = new Map();
+    renderedDestinationZone = '';
+    renderedDestinationCount = 0;
     for (const item of pack.items || []) {
         for (const key of [item.name, item.wikiTitle]) {
             if (key) itemByName.set(String(key).trim().toLowerCase(), item);
@@ -683,21 +751,23 @@ function renderDropLog(s) {
 function tooltipHtml(item) {
     const tier = Number(settings.itemTier) || 0;
     const stats = scaledItemStats(item, tier);
-    const statHtml = Object.entries(stats).slice(0, 18).map(([key, value]) =>
-        `<div class="tooltip-stat"><span>${esc(key.replace(/_/g, ' '))}:</span><strong>${Number(value) > 0 ? '+' : ''}${formatNum(value)}</strong></div>`
+    const statHtml = Object.entries(stats).slice(0, 18).map(([key, value]) => {
+        const base = Number(item?.stats?.[key]);
+        const changed = tier > 0 && Number.isFinite(base) && Number(value) !== base;
+        return `<div class="tooltip-stat ${changed ? 'is-scaled' : ''}"><span>${esc(key.replace(/_/g, ' '))}:</span><strong>${Number(value) > 0 ? '+' : ''}${formatNum(value)}${changed ? `<small> (${base > 0 ? '+' : ''}${formatNum(base)})</small>` : ''}</strong></div>`;
+    }
     ).join('');
     const sources = (item.dropSources || []).slice(0, 8)
         .map(source => esc(`${source.zone ? `${source.zone} · ` : ''}${source.name}`))
         .join('<br>');
     const icon = itemIconSource(item);
     const displayLines = Array.isArray(item.displayLines) ? item.displayLines.slice(0, 12) : [];
-    const showScaledStats = Boolean(statHtml && (tier > 0 || !displayLines.length));
     return `<div class="itembox-title"><span>${esc(item.name)}</span>${tier > 0 ? `<span class="itembox-tier">Tier ${tier}</span>` : ''}</div>
         <div class="itembox-body">
             <div class="itembox-summary">${icon ? `<img class="itembox-icon" src="${esc(icon)}" alt="">` : '<span class="itembox-icon item-icon-placeholder">◇</span>'}<div>
                 ${displayLines.length ? displayLines.map(line => `<div>${esc(line)}</div>`).join('') : `<div>${esc((item.slots || []).length ? `Slot: ${(item.slots || []).join(' ')}` : 'Slot: Unknown')}</div><div>Class: ${esc((item.classes || []).join(' ') || 'Unknown')}</div>`}
             </div></div>
-            ${showScaledStats ? `${tier > 0 ? `<div class="tooltip-scale-label">Tier ${tier} adjusted stats</div>` : ''}<div class="tooltip-stats">${statHtml}</div>` : ''}
+            ${statHtml ? `<div class="tooltip-scale-label">${tier > 0 ? `Tier ${tier} adjusted stats <small>(base)</small>` : 'Base stats'}</div><div class="tooltip-stats">${statHtml}</div>` : ''}
             ${sources ? `<div class="tooltip-source"><strong>Drops from</strong><br>${sources}</div>` : ''}
             ${item.notes ? `<div class="tooltip-source">${esc(item.notes)}</div>` : ''}
         </div>`;
@@ -721,10 +791,14 @@ function showItemTooltip(target, event) {
     const tooltip = $('#item-tooltip');
     if (!item || !tooltip) return;
     activeTooltipItem = item;
-    lastTooltipPointer = { clientX:event.clientX, clientY:event.clientY };
+    activeTooltipTarget = target;
+    const rect = target.getBoundingClientRect();
+    lastTooltipPointer = Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
+        ? { clientX:event.clientX, clientY:event.clientY }
+        : { clientX:Math.min(window.innerWidth - 8, rect.right), clientY:Math.min(window.innerHeight - 8, rect.bottom) };
     tooltip.innerHTML = tooltipHtml(item);
     tooltip.hidden = false;
-    positionTooltip(event);
+    positionTooltip(lastTooltipPointer);
 }
 
 function refreshItemTooltip() {
@@ -738,6 +812,7 @@ function hideItemTooltip() {
     const tooltip = $('#item-tooltip');
     if (tooltip) tooltip.hidden = true;
     activeTooltipItem = null;
+    activeTooltipTarget = null;
     lastTooltipPointer = null;
 }
 
@@ -747,13 +822,22 @@ function renderNpcList(s, profile) {
     let npcs = allNpcsForState(s).filter(n => (eraAllowed(n.era) || n.observed));
     if (currentOnly && s.zone) npcs = npcs.filter(n => zoneKey(n.zone) === zoneKey(s.zone));
     if (query) npcs = npcs.filter(n => `${n.name} ${n.zone}`.toLowerCase().includes(query));
-    npcs.sort((a,b) => a.name.localeCompare(b.name));
+    const relevance = new Map(npcs.map(npc => {
+        const classDrops = knownDropsForNpc(npc).filter(item => eraAllowed(item.era) && itemMatchesProfile(item, profile)).length;
+        const levelDistance = npc.avgLevel && profile.level ? Math.abs(Number(npc.avgLevel) - Number(profile.level)) : 50;
+        return [npc, (isNamedSource(npc.name) ? 200 : 0) + Math.min(classDrops, 8) * 25 - levelDistance];
+    }));
+    npcs.sort((a,b) => relevance.get(b) - relevance.get(a) || a.name.localeCompare(b.name));
     const total = npcs.length;
     const visible = npcs.slice(0, 300);
 
     $('#npc-list').innerHTML = visible.map(n => {
         const con = conForLevel(n.avgLevel, profile.level);
-        const drops = knownDropsForNpc(n).filter(item => eraAllowed(item.era)).slice(0, 4);
+        const knownDrops = knownDropsForNpc(n).filter(item => eraAllowed(item.era));
+        const drops = knownDrops.slice().sort((left, right) =>
+            Number(itemMatchesProfile(right, profile)) - Number(itemMatchesProfile(left, profile)) ||
+            itemBrowsePriority(right, s.zone) - itemBrowsePriority(left, s.zone)
+        ).slice(0, 4);
         return `<article class="data-card npc-card npc-con-${con.key}">
             <div class="card-top">
                 <div><h3>${esc(n.name)}</h3><div class="sub">${esc(n.zone || 'Unknown zone')}</div></div>
@@ -783,6 +867,8 @@ function renderNpcList(s, profile) {
 function renderItems(s, profile) {
     const query = $('#item-search')?.value.trim().toLowerCase() || '';
     const tier = Number(settings.itemTier) || 0;
+    const selectedSlot = String($('#item-slot')?.value || settings.itemSlot || '').toUpperCase();
+    const sortMode = $('#item-sort')?.value || settings.itemSort || 'recommended';
     const currentZoneOnly = Boolean($('#item-current-zone')?.checked && s.zone);
     let items = pack.items.filter(item => eraAllowed(item.era));
     if (query) items = items.filter(i => `${i.name} ${(i.classes||[]).join(' ')} ${(i.slots||[]).join(' ')} ${(i.dropSources||[]).map(d => `${d.name} ${d.zone||''}`).join(' ')}`.toLowerCase().includes(query));
@@ -790,19 +876,26 @@ function renderItems(s, profile) {
         items = items.filter(item => itemMatchesProfile(item, profile));
     }
     if (currentZoneOnly) items = items.filter(item => itemDropsInZone(item, s.zone));
+    if (selectedSlot) items = items.filter(item => (item.slots || []).some(slot => String(slot).toUpperCase() === selectedSlot));
     const priorities = new Map(items.map(item => [item, itemBrowsePriority(item, s.zone)]));
-    items.sort((a,b) => priorities.get(b) - priorities.get(a) || String(a.name || '').localeCompare(String(b.name || '')));
+    items.sort((a,b) => sortMode === 'name'
+        ? String(a.name || '').localeCompare(String(b.name || ''))
+        : priorities.get(b) - priorities.get(a) || String(a.name || '').localeCompare(String(b.name || ''))
+    );
     const total = items.length;
     const visible = items.slice(0, 250);
     const classLabel = profile.classes.length ? profile.classes.join('/') : 'all classes';
     const scopeLabel = currentZoneOnly ? `in <strong>${esc(s.zone)}</strong>` : 'across all zones';
-    $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}.`;
+    const slotLabel = selectedSlot ? ` · <strong>${esc(selectedSlot)}</strong>` : '';
+    const rankingLabel = sortMode === 'recommended' ? ' · useful gear and named drops first' : ' · sorted by name';
+    $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel}${slotLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}${rankingLabel}.`;
     $('#item-list').innerHTML = visible.map(item => {
         const stats = scaledItemStats(item, tier);
         const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
+        const icon = itemIconSource(item);
         return `<article class="data-card">
             <div class="card-top">
-                <div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}</div></div>
+                <div class="item-card-heading">${icon ? `<img src="${esc(icon)}" alt="">` : '<span class="item-card-icon">◇</span>'}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}${tier ? ` · Tier ${tier}` : ''}</div></div></div>
                 <span class="pill">${esc(item.era || '')}</span>
             </div>
             <div class="pill-row" style="margin-top:9px">${(item.classes||[]).map(c => `<span class="pill">${esc(c)}</span>`).join('')}</div>
@@ -814,13 +907,21 @@ function renderItems(s, profile) {
             ${item.notes ? `<div class="sub" style="margin-top:9px">${esc(item.notes)}</div>` : ''}
             <div class="card-actions"><a class="mini-button" href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener">Item wiki</a></div>
         </article>`;
-    }).join('') || `<div class="empty-state">No matching items are known${currentZoneOnly ? ` in ${esc(s.zone)}` : ''}. Search or turn off Current zone to broaden the results.</div>`;
+    }).join('') || `<div class="empty-state item-empty-state">No matching items are known${currentZoneOnly ? ` in ${esc(s.zone)}` : ''}.${currentZoneOnly ? ' <button type="button" class="secondary-button" data-broaden-items>Show all zones</button>' : ''}</div>`;
 
     if (total > visible.length) {
         $('#item-list').insertAdjacentHTML('beforeend', `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`);
     }
 
     bindPathButtons($('#item-list'));
+    $('#item-list').querySelector('[data-broaden-items]')?.addEventListener('click', () => {
+        itemZoneFilterExplicit = true;
+        settings.itemCurrentZoneOnly = false;
+        settings.itemZoneFilterExplicit = true;
+        prefs.save(settings);
+        $('#item-current-zone').checked = false;
+        renderItems(state(), effectiveProfile(state()));
+    });
 }
 
 function buildClassChips() {
@@ -867,6 +968,99 @@ function buildEraSelect() {
     select.innerHTML = ERAS.map(e => `<option ${e === settings.era ? 'selected' : ''}>${e}</option>`).join('');
 }
 
+function buildItemSlotSelect() {
+    const select = $('#item-slot');
+    if (!select) return;
+    const slots = Array.from(new Set((pack.items || []).flatMap(item => item.slots || [])
+        .map(slot => String(slot || '').trim().toUpperCase()).filter(Boolean))).sort();
+    if (settings.itemSlot && !slots.includes(String(settings.itemSlot).toUpperCase())) settings.itemSlot = '';
+    select.innerHTML = `<option value="">All slots</option>${slots.map(slot => `<option value="${esc(slot)}">${esc(slot)}</option>`).join('')}`;
+    select.value = settings.itemSlot || '';
+}
+
+function mapDestinationNames(s = state()) {
+    if (!s.zone) return [];
+    const names = new Map();
+    const add = value => {
+        const name = String(value || '').trim();
+        if (name && isNamedSource(name)) names.set(npcNameKey(name), name);
+    };
+    for (const npc of pack.npcs || []) {
+        if (zoneKey(npc.zone) === zoneKey(s.zone)) add(npc.name);
+    }
+    for (const item of pack.items || []) {
+        for (const source of item.dropSources || []) {
+            if (zoneKey(source.zone) === zoneKey(s.zone)) add(source.name);
+        }
+    }
+    return Array.from(names.values()).sort((a, b) => a.localeCompare(b));
+}
+
+function renderMapRoutePlanner(s = state()) {
+    const zoneIdentity = `${zoneKey(s.zone)}:${pack.meta?.version || ''}`;
+    const destinationInput = $('#map-destination');
+    const list = $('#map-destinations');
+    if (list && renderedDestinationZone !== zoneIdentity) {
+        const names = mapDestinationNames(s);
+        list.innerHTML = names.map(name => `<option value="${esc(name)}"></option>`).join('');
+        renderedDestinationZone = zoneIdentity;
+        renderedDestinationCount = names.length;
+    }
+    if (destinationInput) {
+        destinationInput.disabled = !s.zone;
+        if (activeRoute && document.activeElement !== destinationInput) destinationInput.value = activeRoute.name;
+        destinationInput.placeholder = s.zone ? 'Named mob or map label' : 'Waiting for a zone';
+    }
+    const start = $('#start-route');
+    if (start) start.disabled = !s.zone;
+    const clear = $('#clear-route');
+    if (clear) clear.hidden = !activeRoute;
+    const status = $('#route-status');
+    if (!status) return;
+    if (!activeRoute) {
+        const count = renderedDestinationCount;
+        status.className = 'route-status';
+        status.textContent = s.zone
+            ? `${count.toLocaleString()} named destination${count === 1 ? '' : 's'} available · route starts at your latest /loc.`
+            : 'Waiting for a detected zone.';
+        return;
+    }
+    status.className = `route-status is-${activeRoute.status || 'working'}`;
+    status.textContent = activeRoute.message || `Path to ${activeRoute.name}`;
+}
+
+function renderMapReadiness(s = state()) {
+    const states = {
+        folder:Boolean(bridgeInfo?.eqRootExists),
+        log:Boolean(bridgeInfo?.logExists),
+        zone:Boolean(s.zone),
+        location:Boolean(s.location)
+    };
+    let waitingFound = false;
+    for (const name of ['folder', 'log', 'zone', 'location']) {
+        const node = $(`[data-readiness="${name}"]`);
+        if (!node) continue;
+        node.className = states[name] ? 'is-ready' : waitingFound ? 'is-blocked' : 'is-waiting';
+        if (name === 'folder') node.title = bridgeInfo?.eqRootPath || 'No EverQuest folder selected';
+        if (name === 'log') node.title = bridgeInfo?.logPath || 'No active eqlog_*.txt';
+        waitingFound ||= !states[name];
+    }
+    const primary = $('#sync-location');
+    if (primary) {
+        primary.textContent = !states.folder
+            ? 'Choose folder'
+            : !states.log
+                ? 'Find active log'
+                : !states.zone
+                    ? 'Waiting for zone'
+                    : !states.location
+                        ? 'How to place me'
+                        : 'Center on last /loc';
+    }
+    const reload = $('#sync-zone');
+    if (reload) reload.disabled = !states.zone;
+}
+
 function renderViewPanel(view, s, profile) {
     if (view === 'overview') {
         renderOverviewNpcs(s, profile);
@@ -905,23 +1099,47 @@ function renderAll() {
     $('#map-subtitle').textContent = mapReadinessMessage(s);
     $('#manual-level').value = settings.manualLevel || '';
     $('#item-tier').value = settings.itemTier || 0;
-    $('#item-tier-value').textContent = settings.itemTier || 0;
+    $('#item-tier-value').textContent = settings.itemTier ? `Tier ${settings.itemTier}` : 'Base';
+    $('#item-slot').value = settings.itemSlot || '';
+    $('#item-sort').value = settings.itemSort || 'recommended';
     $('#encounter-gap').value = settings.encounterGapSeconds || 15;
     if ($('#era-select').value !== settings.era) $('#era-select').value = settings.era;
     setActiveMapMode(settings.mapMode || 'first');
+    renderMapReadiness(s);
+    renderMapRoutePlanner(s);
+    applyMinimalIntelState();
 }
 
-function setView(view) {
+function setView(view, options = {}) {
+    if (!$(`[data-view-panel="${view}"]`)) view = 'overview';
     $$('.nav-button').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
     $$('[data-view-panel]').forEach(p => p.classList.toggle('is-active', p.dataset.viewPanel === view));
+    document.body.classList.toggle('map-active', view === 'map');
+    if (options.remember !== false && !document.body.classList.contains('minimal-mode')) {
+        settings.lastView = view;
+        prefs.save(settings);
+    }
     const s = state();
     renderViewPanel(view, s, effectiveProfile(s));
-    if (view === 'map') setTimeout(() => syncZoneToViewer(false), 100);
+    renderMapReadiness(s);
+    renderMapRoutePlanner(s);
+    if (view === 'map' && options.sync !== false) setTimeout(() => syncZoneToViewer(false), 100);
+}
+
+function applyMinimalIntelState() {
+    const visible = settings.minimalIntelVisible !== false;
+    document.body.classList.toggle('minimal-intel-hidden', !visible);
+    const button = $('#minimal-intel-toggle');
+    if (button) {
+        button.setAttribute('aria-pressed', String(visible));
+        button.textContent = visible ? 'Hide intel' : 'Show intel';
+    }
 }
 
 function applyWindowState(windowState = {}) {
     const pinned = Boolean(windowState.alwaysOnTop);
     const minimal = Boolean(windowState.minimalMode);
+    const wasMinimal = document.body.classList.contains('minimal-mode');
     document.body.classList.toggle('minimal-mode', minimal);
     document.body.classList.toggle('pinned-mode', pinned);
     for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
@@ -936,7 +1154,9 @@ function applyWindowState(windowState = {}) {
         button.setAttribute('aria-pressed', String(minimal));
         button.textContent = minimal ? 'Full view' : 'Minimal view';
     }
-    if (minimal) setView('map');
+    if (minimal && !wasMinimal) setView('map', { remember:false });
+    else if (!minimal && wasMinimal) setView(settings.lastView || 'overview', { remember:false });
+    applyMinimalIntelState();
     setTimeout(() => viewerApi()?.resize?.(), 80);
 }
 
@@ -975,10 +1195,12 @@ function updateViewerFolderStatus(status, detail = '') {
     const badge = $('#map-source-status');
     if (badge) {
         badge.textContent = label;
+        badge.title = bridgeInfo?.eqRootPath || 'No EverQuest folder selected';
         badge.className = `map-source-status ${status === 'ready' ? 'is-ready' : status === 'error' || status === 'missing' ? 'is-error' : 'is-waiting'}`;
     }
     const settingsStatus = $('#settings-map-status');
     if (settingsStatus) settingsStatus.textContent = label;
+    renderMapReadiness(state());
 }
 
 function mapReadinessMessage(s = state()) {
@@ -1009,7 +1231,7 @@ async function waitForViewerApi(timeout = 8000) {
 async function ensureViewerFolderConnected(showFeedback = false, force = false) {
     if (!bridgeInfo?.eqRootExists) {
         updateViewerFolderStatus('missing');
-        if (showFeedback) alert('Choose your EverQuest folder in Settings first.');
+        if (showFeedback) showSettingsNotice('Choose your EverQuest folder first.');
         return false;
     }
 
@@ -1018,7 +1240,7 @@ async function ensureViewerFolderConnected(showFeedback = false, force = false) 
     const apiObj = await waitForViewerApi();
     if (!apiObj) {
         updateViewerFolderStatus('error', 'Viewer unavailable');
-        if (showFeedback) alert('The Zone Viewer did not finish loading. Reopen Live Map and try again.');
+        if (showFeedback) showNotice('The Zone Viewer did not finish loading. Reopen Live Map and try again.', { tone:'error' });
         return false;
     }
     if (!force && viewerFolderPath === targetPath && apiObj.status?.().directorySelected) {
@@ -1042,11 +1264,11 @@ async function ensureViewerFolderConnected(showFeedback = false, force = false) 
                     ? 'No zone archives found'
                 : 'Folder unavailable';
             updateViewerFolderStatus('error', message);
-            if (showFeedback) alert('The selected EverQuest folder is saved, but its game/map files could not be opened. Choose the folder again in Settings.');
+            if (showFeedback) showSettingsNotice('The folder is saved, but its game/map files could not be opened. Choose it again.', 'error');
             return false;
         } catch (error) {
             updateViewerFolderStatus('error');
-            if (showFeedback) alert(`Unable to open the selected EverQuest folder: ${error.message}`);
+            if (showFeedback) showSettingsNotice(`Unable to open the selected EverQuest folder: ${error.message}`, 'error');
             return false;
         }
     })();
@@ -1060,12 +1282,12 @@ async function ensureViewerFolderConnected(showFeedback = false, force = false) 
 async function syncZoneToViewer(showFeedback = true) {
     const s = state();
     if (!s.zone) {
-        if (showFeedback) alert('No current zone has been detected from the log yet.');
+        if (showFeedback) showNotice('The folder and log are ready. Eye of Zomm is waiting for the next zone line.', { tone:'warning' });
         return false;
     }
     const apiObj = await waitForViewerApi();
     if (!apiObj) {
-        if (showFeedback) alert('The Zone Viewer did not finish loading. Reopen Live Map and try again.');
+        if (showFeedback) showNotice('The Zone Viewer did not finish loading. Reopen Live Map and try again.', { tone:'error' });
         return false;
     }
     if (!await ensureViewerFolderConnected(showFeedback)) return false;
@@ -1086,14 +1308,14 @@ async function syncZoneToViewer(showFeedback = true) {
             };
             const message = messages[result?.reason] || 'The current zone could not be synchronized.';
             $('#map-subtitle').textContent = message;
-            if (showFeedback) alert(message);
+            if (showFeedback) showNotice(message, { tone:'error' });
             return false;
         }
         $('#map-subtitle').textContent = `${s.zone} loaded · ${result.status || 'ready for location sync'}`;
         return true;
     } catch (error) {
         $('#map-subtitle').textContent = `Zone sync failed: ${error.message}`;
-        if (showFeedback) alert(`Zone sync failed: ${error.message}`);
+        if (showFeedback) showNotice(`Zone sync failed: ${error.message}`, { tone:'error' });
         return false;
     }
 }
@@ -1108,12 +1330,18 @@ async function syncLocationToViewer(showFeedback = true, requestedLocation = nul
                 ? 'The game folder is ready, but no eqlog_*.txt file was found in its Logs folder.'
                 : 'The folder and log are ready. Type /loc in EverQuest once, then Eye of Zomm will follow later /loc updates automatically.';
         $('#map-subtitle').textContent = message;
-        if (showFeedback) alert(message);
+        if (showFeedback) showNotice(message, {
+            tone:'warning',
+            ...(!bridgeInfo?.eqRootExists ? {
+                actionLabel:'Choose folder',
+                onAction:() => chooseEqFolder().catch(error => showNotice(error.message, { tone:'error' }))
+            } : {})
+        });
         return false;
     }
     const apiObj = await waitForViewerApi();
     if (!apiObj) {
-        if (showFeedback) alert('The Zone Viewer did not finish loading.');
+        if (showFeedback) showNotice('The Zone Viewer did not finish loading.', { tone:'error' });
         return false;
     }
     if (!apiObj.status()?.zone) {
@@ -1124,7 +1352,7 @@ async function syncLocationToViewer(showFeedback = true, requestedLocation = nul
     if (!result?.ok) {
         const message = result?.message || 'The zone is not ready for location sync yet.';
         $('#map-subtitle').textContent = message;
-        if (showFeedback) alert(message);
+        if (showFeedback) showNotice(message, { tone:'warning' });
         return false;
     }
     const desiredMode = settings.mapMode || 'first';
@@ -1153,7 +1381,7 @@ async function setMapMode(mode, showFeedback = true) {
     }
     const result = await apiObj.setView(mode);
     if (!result?.ok) {
-        if (showFeedback) alert(result?.message || 'That map view is not available for this zone.');
+        if (showFeedback) showNotice(result?.message || 'That map view is not available for this zone.', { tone:'warning' });
         return false;
     }
     settings.mapMode = result.mode || mode;
@@ -1170,24 +1398,129 @@ function bindPathButtons(host = document) {
     });
 }
 
-async function pathToNpc(name) {
-    setView('map');
-    const loaded = await syncZoneToViewer(false);
-    if (!loaded) return;
-    const npc = npcRecordForName(name);
-    setTimeout(async () => {
-        const rawLocation = Array.isArray(npc?.loc) ? npc.loc.map(Number).filter(Number.isFinite) : null;
-        const location = rawLocation && rawLocation.length >= 2
-            ? rawLocation.slice(0, Number(pack.meta?.schemaVersion) >= 3 ? 3 : 2)
-            : null;
-        const result = await viewerApi()?.pathTo(name, location);
-        if (!result?.ok) alert(`No baked-in map label or wiki location is available for “${name}”.`);
-        else {
-            const desiredMode = settings.mapMode || 'first';
-            if (desiredMode !== 'first') await viewerApi()?.setView(desiredMode);
-            setActiveMapMode(desiredMode);
+function locationDistance(left, right) {
+    if (!left || !right) return Infinity;
+    return Math.hypot(Number(left.x) - Number(right.x), Number(left.y) - Number(right.y), Number(left.z) - Number(right.z));
+}
+
+function clearActiveRoute(options = {}) {
+    clearTimeout(routeRefreshTimer);
+    routeRefreshTimer = null;
+    routeRequestSerial += 1;
+    activeRoute = null;
+    const input = $('#map-destination');
+    if (input && options.keepInput !== true) input.value = '';
+    if (options.clearViewer !== false) viewerApi()?.clearPath?.();
+    renderMapRoutePlanner(state());
+}
+
+function scheduleRouteRefresh(location) {
+    if (!activeRoute || zoneKey(activeRoute.zone) !== zoneKey(state().zone)) return;
+    if (locationDistance(location, activeRoute.lastRoutedLocation) < ROUTE_REFRESH_DISTANCE) return;
+    clearTimeout(routeRefreshTimer);
+    routeRefreshTimer = setTimeout(() => calculateActiveRoute({ automatic:true }), 280);
+}
+
+async function calculateActiveRoute(options = {}) {
+    if (!activeRoute) return false;
+    const automatic = Boolean(options.automatic);
+    const routeIdentity = `${zoneKey(activeRoute.zone)}|${npcNameKey(activeRoute.name)}`;
+    const requestSerial = ++routeRequestSerial;
+    clearTimeout(routeRefreshTimer);
+    routeRefreshTimer = null;
+    const s = state();
+    if (zoneKey(activeRoute.zone) !== zoneKey(s.zone)) {
+        clearActiveRoute();
+        return false;
+    }
+    if (!s.location) {
+        activeRoute.status = 'waiting';
+        activeRoute.message = `Destination saved · type /loc in EverQuest to start the path from your position.`;
+        renderMapRoutePlanner(s);
+        if (!automatic) showNotice('Destination saved. Type /loc in EverQuest once and the route will start automatically.', { tone:'warning' });
+        return false;
+    }
+
+    activeRoute.status = 'working';
+    activeRoute.message = automatic ? `Updating path to ${activeRoute.name} from your latest /loc…` : `Calculating path to ${activeRoute.name}…`;
+    renderMapRoutePlanner(s);
+    const apiObj = await waitForViewerApi();
+    if (!apiObj || !await ensureViewerFolderConnected(!automatic)) {
+        if (requestSerial === routeRequestSerial && activeRoute) {
+            activeRoute.status = 'error';
+            activeRoute.message = 'Map files are not ready. Your destination is still saved.';
+            renderMapRoutePlanner(state());
         }
-    }, 400);
+        return false;
+    }
+    if ((!automatic || !apiObj.status?.().zone) && !await syncZoneToViewer(!automatic)) return false;
+    if (!await syncLocationToViewer(false, s.location)) {
+        if (requestSerial === routeRequestSerial && activeRoute) {
+            activeRoute.status = 'error';
+            activeRoute.message = 'Your destination is saved, but the latest /loc could not be placed on this zone.';
+            renderMapRoutePlanner(state());
+        }
+        return false;
+    }
+
+    const npc = npcRecordForName(activeRoute.name, activeRoute.zone);
+    const rawLocation = Array.isArray(npc?.loc) ? npc.loc.map(Number).filter(Number.isFinite) : null;
+    const wikiLocation = rawLocation && rawLocation.length >= 2
+        ? rawLocation.slice(0, Number(pack.meta?.schemaVersion) >= 3 ? 3 : 2)
+        : null;
+    apiObj.clearPath?.();
+    const result = await apiObj.pathTo(activeRoute.name, wikiLocation);
+    if (requestSerial !== routeRequestSerial || !activeRoute || `${zoneKey(activeRoute.zone)}|${npcNameKey(activeRoute.name)}` !== routeIdentity) return false;
+
+    activeRoute.lastRoutedLocation = { ...s.location };
+    if (!result?.ok) {
+        activeRoute.status = 'error';
+        activeRoute.message = `No local map label or EQLWiki location was found for ${activeRoute.name}.`;
+        if (!automatic) showNotice(activeRoute.message, {
+            tone:'warning',
+            actionLabel:'Open Wiki',
+            onAction:() => openExternal(wikiUrl(npc?.wikiTitle || activeRoute?.name))
+        });
+    } else if (result.routed) {
+        const source = result.source === 'map-label' ? 'local map label' : 'EQLWiki location';
+        activeRoute.status = 'ready';
+        activeRoute.message = `Path to ${result.label || activeRoute.name} · ${source} · ${Math.round(result.distance || 0).toLocaleString()} units · updates with /loc.`;
+    } else {
+        const source = result.source === 'map-label' ? 'local map label' : 'EQLWiki location';
+        activeRoute.status = 'marked';
+        activeRoute.message = `${result.label || activeRoute.name} marked from ${source}; no collision-valid grounded route was found.`;
+        if (!automatic) showNotice(activeRoute.message, { tone:'warning' });
+    }
+
+    const desiredMode = settings.mapMode || 'first';
+    if (desiredMode !== 'first') await apiObj.setView(desiredMode);
+    setActiveMapMode(desiredMode);
+    renderMapRoutePlanner(state());
+    return Boolean(result?.ok);
+}
+
+async function pathToNpc(name) {
+    name = String(name || '').trim();
+    if (!name) {
+        showNotice('Choose a named mob or enter a map label first.', { tone:'warning' });
+        $('#map-destination').focus();
+        return false;
+    }
+    setView('map', { sync:false });
+    const s = state();
+    if (!s.zone) {
+        showNotice('A current zone must be detected before choosing a destination.', { tone:'warning' });
+        return false;
+    }
+    activeRoute = {
+        name,
+        zone:s.zone,
+        status:s.location ? 'working' : 'waiting',
+        message:s.location ? `Preparing path to ${name}…` : `Destination saved · waiting for /loc.`
+    };
+    $('#map-destination').value = name;
+    renderMapRoutePlanner(s);
+    return calculateActiveRoute({ automatic:false });
 }
 
 function runWikiSearch() {
@@ -1207,6 +1540,7 @@ async function applyLogSelection(info) {
     $('#settings-eq-root').textContent = info.eqRootPath || 'No folder selected';
     $('#settings-log-path').textContent = info.logPath || 'No log selected';
     $('#settings-log-mode').textContent = info.logSelection === 'manual' ? 'Specific file' : 'Newest log automatically';
+    $('#app-version').textContent = info.version || bridgeInfo?.version || 'unknown';
     $('#automatic-log').hidden = info.logSelection !== 'manual';
     $('#setup-overlay').hidden = Boolean(info.eqRootExists);
     if (previousRoot !== String(info.eqRootPath || '')) viewerFolderPath = '';
@@ -1216,9 +1550,16 @@ async function applyLogSelection(info) {
 }
 
 async function chooseEqFolder() {
+    const previousRoot = String(bridgeInfo?.eqRootPath || '');
     const info = await mutate('/api/select-eq-root');
     await applyLogSelection(info);
     if (info.eqRootExists) {
+        if (String(info.eqRootPath || '') !== previousRoot) {
+            const logName = String(info.logPath || '').split(/[\\/]/).pop();
+            showNotice(logName
+                ? `Folder saved. Following ${logName}. Type /loc in EverQuest once to place yourself.`
+                : 'Folder saved. Waiting for the newest eqlog_*.txt in its Logs folder.', { tone:'success', duration:8000 });
+        }
         queueViewerSync(async () => {
             const s = state();
             if (s.zone) await syncZoneToViewer(false);
@@ -1226,6 +1567,24 @@ async function chooseEqFolder() {
             return true;
         });
     }
+}
+
+async function handleMapPrimaryAction() {
+    const s = state();
+    if (!bridgeInfo?.eqRootExists) return chooseEqFolder();
+    if (!bridgeInfo?.logExists) {
+        showSettingsNotice(`The folder is ready, but no eqlog_*.txt was found under ${bridgeInfo.eqRootPath}\\Logs.`);
+        return false;
+    }
+    if (!s.zone) {
+        showNotice('The folder and log are ready. Enter or zone in EverQuest; the map will load automatically.', { tone:'warning' });
+        return false;
+    }
+    if (!s.location) {
+        showNotice('Type /loc in EverQuest once. Eye of Zomm will center automatically and follow later /loc updates.', { tone:'warning', duration:8000 });
+        return false;
+    }
+    return syncLocationToViewer(true);
 }
 
 function wireUi() {
@@ -1249,8 +1608,36 @@ function wireUi() {
     $('#item-tier').addEventListener('input', e => {
         settings.itemTier = Number(e.target.value) || 0;
         prefs.save(settings);
-        renderAll();
+        $('#item-tier-value').textContent = settings.itemTier ? `Tier ${settings.itemTier}` : 'Base';
+        const s = state();
+        renderItems(s, effectiveProfile(s));
         refreshItemTooltip();
+    });
+    $('#item-slot').addEventListener('change', e => {
+        settings.itemSlot = e.target.value;
+        prefs.save(settings);
+        const s = state();
+        renderItems(s, effectiveProfile(s));
+    });
+    $('#item-sort').addEventListener('change', e => {
+        settings.itemSort = e.target.value;
+        prefs.save(settings);
+        const s = state();
+        renderItems(s, effectiveProfile(s));
+    });
+    $('#reset-item-filters').addEventListener('click', () => {
+        $('#item-search').value = '';
+        itemZoneFilterExplicit = false;
+        settings.itemCurrentZoneOnly = true;
+        settings.itemZoneFilterExplicit = false;
+        settings.itemSlot = '';
+        settings.itemSort = 'recommended';
+        $('#item-current-zone').checked = true;
+        $('#item-slot').value = '';
+        $('#item-sort').value = 'recommended';
+        prefs.save(settings);
+        const s = state();
+        renderItems(s, effectiveProfile(s));
     });
     $('#era-select').addEventListener('change', e => {
         settings.era = e.target.value;
@@ -1273,18 +1660,19 @@ function wireUi() {
         try {
             await applyLogSelection(await mutate('/api/select-log'));
         } catch (error) {
-            alert(`Unable to change log: ${error.message}`);
+            showNotice(`Unable to change log: ${error.message}`, { tone:'error' });
         }
     });
     $('#automatic-log').addEventListener('click', async () => {
         try {
             await applyLogSelection(await mutate('/api/log/automatic'));
+            showNotice('Automatic log selection is on. Eye of Zomm will follow the newest eqlog_*.txt.', { tone:'success' });
         } catch (error) {
-            alert(`Unable to select the newest log: ${error.message}`);
+            showNotice(`Unable to select the newest log: ${error.message}`, { tone:'error' });
         }
     });
-    $('#change-eq-folder').addEventListener('click', () => chooseEqFolder().catch(error => alert(`Unable to change folder: ${error.message}`)));
-    $('#setup-choose-folder').addEventListener('click', () => chooseEqFolder().catch(error => alert(`Unable to choose folder: ${error.message}`)));
+    $('#change-eq-folder').addEventListener('click', () => chooseEqFolder().catch(error => showNotice(`Unable to change folder: ${error.message}`, { tone:'error' })));
+    $('#setup-choose-folder').addEventListener('click', () => chooseEqFolder().catch(error => showNotice(`Unable to choose folder: ${error.message}`, { tone:'error' })));
     $('#update-pack').addEventListener('click', async () => {
         const button = $('#update-pack');
         button.disabled = true;
@@ -1294,11 +1682,13 @@ function wireUi() {
             $('#pack-update-status').textContent = result.status || (result.ok ? 'current' : 'unavailable');
             if (result.productionPack) await loadPack();
             if (!result.ok && result.error) {
-                alert(`Wiki dataset sync is not available yet: ${result.error}`);
+                showNotice(`Using the last valid dataset. Update unavailable: ${result.error}`, { tone:'warning' });
+            } else {
+                showNotice('EQLWiki dataset is current.', { tone:'success' });
             }
         } catch (error) {
             $('#pack-update-status').textContent = 'unavailable';
-            alert(`Unable to sync wiki dataset: ${error.message}`);
+            showNotice(`Using the last valid dataset. Unable to sync: ${error.message}`, { tone:'error' });
         } finally {
             button.disabled = false;
         }
@@ -1333,11 +1723,17 @@ function wireUi() {
         if (!event.currentTarget.contains(event.relatedTarget)) armConsiderTrayTimeout(8000);
     });
     for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
-        button.addEventListener('click', () => toggleAlwaysOnTop().catch(error => alert(`Unable to change pinning: ${error.message}`)));
+        button.addEventListener('click', () => toggleAlwaysOnTop().catch(error => showNotice(`Unable to change pinning: ${error.message}`, { tone:'error' })));
     }
     for (const button of [$('#minimal-mode'), $('#settings-minimal-mode')]) {
-        button.addEventListener('click', () => toggleMinimalMode().catch(error => alert(`Unable to change the window view: ${error.message}`)));
+        button.addEventListener('click', () => toggleMinimalMode().catch(error => showNotice(`Unable to change the window view: ${error.message}`, { tone:'error' })));
     }
+    $('#minimal-intel-toggle').addEventListener('click', () => {
+        settings.minimalIntelVisible = settings.minimalIntelVisible === false;
+        prefs.save(settings);
+        applyMinimalIntelState();
+        setTimeout(() => viewerApi()?.resize?.(), 50);
+    });
     document.addEventListener('pointerover', event => {
         const target = event.target.closest?.('[data-item-title]');
         if (target) showItemTooltip(target, event);
@@ -1348,11 +1744,44 @@ function wireUi() {
     });
     document.addEventListener('pointerout', event => {
         const target = event.target.closest?.('[data-item-title]');
+        if (target && !target.contains(event.relatedTarget) && document.activeElement !== target) hideItemTooltip();
+    });
+    document.addEventListener('focusin', event => {
+        const target = event.target.closest?.('[data-item-title]');
+        if (target) showItemTooltip(target);
+    });
+    document.addEventListener('focusout', event => {
+        const target = event.target.closest?.('[data-item-title]');
         if (target && !target.contains(event.relatedTarget)) hideItemTooltip();
+    });
+    document.addEventListener('keydown', event => {
+        const editing = /^(?:INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName || '');
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+            $('#wiki-search').focus();
+            $('#wiki-search').select();
+        } else if (event.key === '/' && !editing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            event.preventDefault();
+            $('#wiki-search').focus();
+        } else if (event.key === 'Escape') {
+            hideItemTooltip();
+            if (consideredTarget) hideConsiderTray();
+        }
     });
     $$('[data-map-mode]').forEach(button => button.addEventListener('click', () => setMapMode(button.dataset.mapMode, true)));
     $('#sync-zone').addEventListener('click', () => syncZoneToViewer(true));
-    $('#sync-location').addEventListener('click', () => syncLocationToViewer(true));
+    $('#sync-location').addEventListener('click', () => handleMapPrimaryAction().catch(error => showNotice(error.message, { tone:'error' })));
+    $('#start-route').addEventListener('click', () => pathToNpc($('#map-destination').value));
+    $('#map-destination').addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            pathToNpc(event.currentTarget.value);
+        }
+    });
+    $('#map-destination').addEventListener('input', event => {
+        if (activeRoute && npcNameKey(event.currentTarget.value) !== npcNameKey(activeRoute.name)) clearActiveRoute({ keepInput:true });
+    });
+    $('#clear-route').addEventListener('click', () => clearActiveRoute());
     $('#window-minimize').addEventListener('click', () => window.eyeOfZommWindow?.minimize());
     $('#window-maximize').addEventListener('click', () => window.eyeOfZommWindow?.toggleMaximize());
     $('#window-close').addEventListener('click', () => window.eyeOfZommWindow?.close());
@@ -1377,6 +1806,7 @@ function wireUi() {
 
 buildClassChips();
 wireUi();
+setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();
 renderAll();

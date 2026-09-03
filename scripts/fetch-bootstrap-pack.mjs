@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 const OUT = resolve(ROOT, 'app/data/eye-of-zomm-pack.bootstrap.json');
+const APP_VERSION = JSON.parse(await readFile(resolve(ROOT, 'package.json'), 'utf8')).version;
+const USER_AGENT = `EQLWiki-EyeOfZomm-build/${APP_VERSION}`;
 const MANIFEST_URL = process.env.EQL_EOZ_MANIFEST_URL || 'https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json';
 const required = process.argv.includes('--required');
 
@@ -22,7 +24,7 @@ function fail(message, error) {
 
 try {
     const manifestResponse = await fetch(MANIFEST_URL, {
-        headers: { 'User-Agent': 'EQLWiki-EyeOfZomm-build/0.5.0', 'Cache-Control': 'no-cache' },
+        headers: { 'User-Agent': USER_AGENT, 'Cache-Control': 'no-cache' },
         signal: AbortSignal.timeout(10_000)
     });
     if (!manifestResponse.ok) fail(`Bootstrap manifest HTTP ${manifestResponse.status}`);
@@ -31,7 +33,7 @@ try {
 
     const packUrl = new URL(String(manifest.pack), MANIFEST_URL).toString();
     const packResponse = await fetch(packUrl, {
-        headers: { 'User-Agent': 'EQLWiki-EyeOfZomm-build/0.5.0', 'Cache-Control': 'no-cache' },
+        headers: { 'User-Agent': USER_AGENT, 'Cache-Control': 'no-cache' },
         signal: AbortSignal.timeout(60_000)
     });
     if (!packResponse.ok) fail(`Eye of Zomm bootstrap pack HTTP ${packResponse.status}`);

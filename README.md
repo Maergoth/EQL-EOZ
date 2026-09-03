@@ -16,7 +16,7 @@ Eye of Zomm may:
 
 Eye of Zomm does **not** inspect process memory, inject code, load into the game process, patch game files, automate keyboard/mouse input, or issue game commands. See [SAFETY.md](SAFETY.md).
 
-The detailed product direction, click budgets, user stories, recovery flows, acceptance scenarios, and phased UX backlog live in [docs/UX_VISION.md](docs/UX_VISION.md).
+The detailed product direction, click budgets, user stories, recovery flows, acceptance scenarios, and road to v1 live in [docs/UX_VISION.md](docs/UX_VISION.md).
 
 ## What it does
 
@@ -34,9 +34,12 @@ The detailed product direction, click budgets, user stories, recovery flows, acc
 - Prompts for the EverQuest folder on first launch, then selects the newest log under `Logs` automatically.
 - Provides First Person 3D, Top Down 3D, and local Map Overlay views with all floors visible by default.
 - Synchronizes logged `/location` output into the selected map view and derives first-person facing from consecutive coordinates.
+- Shows Folder, Log, Zone, and `/loc` readiness separately instead of collapsing setup and live-state problems into one Sync error.
+- Keeps one named destination active, reports path/marker/error state and routed distance, and re-routes from later `/loc` samples.
 - Provides a pin-to-top option that hides the draggable title bar while keeping the app in the Windows taskbar.
-- Provides a minimal map, live-fight DPS, and class-filtered named-mob/drop list.
-- Shows EQLWiki Itembox-inspired local-data tooltips, including embedded wiki icons when present in the pack.
+- Provides a minimal map, live-fight DPS, class-filtered named-mob/drop list, and a collapsible intel rail without losing map controls.
+- Opens Items to recommended current-zone/class loot, with explicit search, slot, sort, class, era, tier, and scope overrides.
+- Shows keyboard-accessible EQLWiki Itembox-inspired local-data tooltips, including embedded wiki icons and tier/base comparisons.
 - Searches EQLWiki from the global search field and opens exact wiki links from local records.
 
 ## Data architecture
@@ -148,6 +151,8 @@ npm ci
 npm test
 npm start
 ```
+
+Before publishing a Windows build, run the real-client checks in [docs/V0.6_MANUAL_TEST.md](docs/V0.6_MANUAL_TEST.md).
 
 Build Windows installer:
 

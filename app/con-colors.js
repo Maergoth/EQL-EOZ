@@ -4,7 +4,8 @@ export const CON_ORDER = ['gray', 'green', 'light-blue', 'blue', 'white', 'yello
  * Modern EverQuest consider bands, matching the server-side con-level rules:
  * equal = white, +1..+3 = yellow, and +4 or more = red. Lower-level bands
  * widen as the player levels and, above level 20, include light blue between
- * blue and green.
+ * blue and green. Reference: EQEmu's modern (UseOldConSystem=false)
+ * Mob::GetLevelCon implementation in zone/mob_ai.cpp.
  */
 
 export function grayCeilingForPlayerLevel(playerLevel) {

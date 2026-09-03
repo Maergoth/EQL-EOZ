@@ -468,8 +468,8 @@ for (const required of [
     if (!viewer.includes(required)) throw new Error(`Unable to install floor-aware map grounding: ${required}`);
 }
 
-viewer = viewer.replace(/fh="v(?:13|14)"/, 'fh="v15"');
-if (!viewer.includes('fh="v15"')) throw new Error('Unable to bump the parsed-zone cache version.');
+viewer = viewer.replace(/fh="v(?:13|14|15)"/, 'fh="v16"');
+if (!viewer.includes('fh="v16"')) throw new Error('Unable to bump the parsed-zone cache version.');
 writeFileSync(viewerPath, viewer);
 
 const workerPath = `${root}/app/zoneviewer/zone-parser.worker.js`;
@@ -477,10 +477,24 @@ let worker = readFileSync(workerPath, 'utf8');
 if (!worker.includes('let i=[];this.images=i;this.shaderMap={}')) {
     worker = worker.replace('let i=[];this.shaderMap={}', 'let i=[];this.images=i;this.shaderMap={}');
 }
-const oldMaterialName = 'let[a]=i.name.toLowerCase().split(/_mdf/i);/m\\d+/.test(a)&&i.bitmapInfo?.reference&&(a=i.bitmapInfo.reference.bitmapNames[0].name);';
-const newMaterialName = 'let[a]=i.name.toLowerCase().split(/_mdf/i);i.bitmapInfo?.reference?.bitmapNames?.[0]?.name&&(a=i.bitmapInfo.reference.bitmapNames[0].name);';
-if (!worker.includes(newMaterialName)) worker = worker.replace(oldMaterialName, newMaterialName);
-if (!worker.includes('let i=[];this.images=i;this.shaderMap={}') || !worker.includes(newMaterialName)) {
+const materialNameVariants = [
+    'let[a]=i.name.toLowerCase().split(/_mdf/i);/m\\d+/.test(a)&&i.bitmapInfo?.reference&&(a=i.bitmapInfo.reference.bitmapNames[0].name);',
+    'let[a]=i.name.toLowerCase().split(/_mdf/i);i.bitmapInfo?.reference?.bitmapNames?.[0]?.name&&(a=i.bitmapInfo.reference.bitmapNames[0].name);'
+];
+const normalizedMaterialName = 'let[a]=i.name.toLowerCase().split(/_mdf/i);i.bitmapInfo?.reference?.bitmapNames?.[0]?.fileName&&(a=i.bitmapInfo.reference.bitmapNames[0].fileName.toLowerCase().replace(/\\.(?:bmp|dds)$/i,""));';
+for (const variant of materialNameVariants) {
+    if (worker.includes(variant)) worker = worker.replace(variant, normalizedMaterialName);
+}
+const animatedName = 'i.bitmapInfo?.reference?.flags?.isAnimated&&(a=i.bitmapInfo.reference.bitmapNames[0].name,o.setName(a),f={...f,animationDelay:i.bitmapInfo.reference.animationDelayMs,frames:i.bitmapInfo.reference.bitmapNames.map(x=>x.name.toLowerCase())});';
+const normalizedAnimatedName = 'i.bitmapInfo?.reference?.flags?.isAnimated&&(a=i.bitmapInfo.reference.bitmapNames[0].fileName.toLowerCase().replace(/\\.(?:bmp|dds)$/i,""),o.setName(a),f={...f,animationDelay:i.bitmapInfo.reference.animationDelayMs,frames:i.bitmapInfo.reference.bitmapNames.map(x=>x.fileName.toLowerCase())});';
+if (worker.includes(animatedName)) worker = worker.replace(animatedName, normalizedAnimatedName);
+const imageLookup = 'A.name?.replace(".dds","")?.replace(".bmp","")?.toLowerCase()===a.toLowerCase()';
+const normalizedImageLookup = 'A.name?.toLowerCase().replace(/\\.(?:dds|bmp)$/i,"")===a.toLowerCase().replace(/\\.(?:dds|bmp)$/i,"")';
+if (worker.includes(imageLookup)) worker = worker.replace(imageLookup, normalizedImageLookup);
+if (!worker.includes('let i=[];this.images=i;this.shaderMap={}') ||
+    !worker.includes(normalizedMaterialName) ||
+    !worker.includes(normalizedAnimatedName) ||
+    !worker.includes(normalizedImageLookup)) {
     throw new Error('Unable to install the S3D texture fixes.');
 }
 writeFileSync(workerPath, worker);

@@ -28,13 +28,18 @@ for (const required of [
     'same six-unit upward step limit as Grounded mode',
     'this.findGroundPointAt(f.x,f.z,f.y)||f',
     'this.findGroundPointAt(o.x,o.z,o.y)||o.clone()',
-    'fh="v15"'
+    'fh="v16"'
 ]) {
     if (!viewer.includes(required)) throw new Error(`Zone Viewer bundle is missing ${required}.`);
 }
 
 const worker = readFileSync(new URL('../app/zoneviewer/zone-parser.worker.js', import.meta.url), 'utf8');
-for (const required of ['this.images=i', 'bitmapNames?.[0]?.name']) {
+for (const required of [
+    'this.images=i',
+    'bitmapNames?.[0]?.fileName',
+    'x.fileName.toLowerCase()',
+    'A.name?.toLowerCase().replace(/\\.(?:dds|bmp)$/i,"")'
+]) {
     if (!worker.includes(required)) throw new Error(`Zone parser texture patch is missing ${required}.`);
 }
 

@@ -37,6 +37,7 @@
                 <button class="map-mode-button" type="button" data-map-mode="top" title="Top Down 3D">Top</button>
                 <button class="map-mode-button" type="button" data-map-mode="map" title="Map Overlay">Map</button>
             </div>
+            <button id="minimal-intel-toggle" class="topbar-control minimal-only-control" type="button" aria-pressed="true">Hide intel</button>
             <button id="pin-window" class="topbar-control" type="button" aria-pressed="false">◇ Pin to top</button>
             <button id="minimal-mode" class="topbar-control" type="button" aria-pressed="false">Minimal</button>
         </div>
@@ -111,16 +112,26 @@
                         <span id="map-source-status" class="map-source-status is-waiting">Checking folder…</span>
                     </div>
                     <p id="map-subtitle">Waiting for a zone.</p>
+                    <div id="map-readiness" class="readiness-steps" aria-label="Live map readiness">
+                        <span data-readiness="folder">Folder</span>
+                        <span data-readiness="log">Log</span>
+                        <span data-readiness="zone">Zone</span>
+                        <span data-readiness="location">/loc</span>
+                    </div>
                 </div>
                 <div class="map-actions">
-                    <div class="map-mode-switch" role="group" aria-label="Map view">
-                        <button class="map-mode-button is-active" type="button" data-map-mode="first">First Person 3D</button>
-                        <button class="map-mode-button" type="button" data-map-mode="top">Top Down 3D</button>
-                        <button class="map-mode-button" type="button" data-map-mode="map">Map Overlay</button>
-                    </div>
                     <button id="sync-zone" class="secondary-button">Reload zone</button>
                     <button id="sync-location" class="primary-button">Center on last /loc</button>
                 </div>
+            </div>
+            <div class="map-route-bar panel">
+                <label class="route-field" for="map-destination"><span>Navigate to</span>
+                    <input id="map-destination" class="search-input" type="search" list="map-destinations" autocomplete="off" placeholder="Named mob or map label">
+                </label>
+                <datalist id="map-destinations"></datalist>
+                <button id="start-route" class="primary-button" type="button">Find path</button>
+                <button id="clear-route" class="secondary-button" type="button" hidden>Clear</button>
+                <div id="route-status" class="route-status" aria-live="polite">Choose a current-zone named mob or map label.</div>
             </div>
             <div class="map-workspace">
                 <div class="viewer-frame-wrap">
@@ -166,9 +177,9 @@
                 </div>
                 <div class="filter-row">
                     <input id="item-search" class="search-input" type="search" placeholder="Search items">
-                    <label class="compact-field">Item tier
+                    <label class="compact-field item-tier-control">Item tier
                         <input id="item-tier" type="range" min="0" max="10" step="1" value="0">
-                        <strong id="item-tier-value">0</strong>
+                        <strong id="item-tier-value">Base</strong>
                     </label>
                 </div>
             </div>
@@ -179,9 +190,19 @@
                 </div>
                 <div class="item-filter-actions">
                     <label class="check-control"><input id="item-current-zone" type="checkbox" checked> Current zone</label>
+                    <label class="compact-field">Slot
+                        <select id="item-slot"><option value="">All slots</option></select>
+                    </label>
+                    <label class="compact-field">Sort
+                        <select id="item-sort">
+                            <option value="recommended">Recommended</option>
+                            <option value="name">Name</option>
+                        </select>
+                    </label>
                     <label class="compact-field">Era
                         <select id="era-select"></select>
                     </label>
+                    <button id="reset-item-filters" class="text-button" type="button">Reset</button>
                 </div>
             </div>
             <div id="item-context" class="item-context" aria-live="polite"></div>
@@ -272,6 +293,7 @@
                 </article>
                 <article class="panel">
                     <h2>Wiki data</h2>
+                    <div class="setting-line"><span>App version</span><code id="app-version">—</code></div>
                     <div class="setting-line"><span>Pack version</span><code id="pack-version">—</code></div>
                     <div class="setting-line"><span>Pack mode</span><code id="pack-mode">Sample</code></div>
                     <div class="setting-line"><span>Update status</span><code id="pack-update-status">—</code></div>
@@ -305,6 +327,7 @@
     </div>
 </div>
 <div id="item-tooltip" class="item-tooltip" role="tooltip" hidden></div>
+<div id="toast-region" class="toast-region" aria-live="polite" aria-relevant="additions"></div>
 <script type="module" src="./app.js"></script>
 </body>
 </html>

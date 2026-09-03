@@ -237,6 +237,20 @@ async function pathToWikiLocation(label, location) {
     return true;
 }
 
+function navigationResult(label, source) {
+    const path = Array.isArray(app?.navigationPath) ? app.navigationPath : [];
+    const distance = path.length >= 2
+        ? path.slice(1).reduce((sum, point, index) => sum + point.distanceTo(path[index]), 0)
+        : 0;
+    return {
+        ok:Boolean(app?.navigationTarget),
+        source,
+        label:app?.navigationTarget?.label || label,
+        routed:path.length >= 2,
+        distance
+    };
+}
+
 async function waitForZoneSelect(timeout = 15000) {
     const started = Date.now();
     while (Date.now() - started < timeout) {
@@ -354,14 +368,15 @@ window.eqlEyeOfZommViewer = {
             };
         }
         const zoneIdentity = `${app.currentZoneRecord.id || ''}:${app.currentZoneRecord.format || ''}`;
-        if (zoneIdentity !== loadedZoneIdentity) {
+        const changedZone = zoneIdentity !== loadedZoneIdentity;
+        if (changedZone) {
             lastSyncedLocation = null;
             lastSyncedGround = null;
             loadedZoneIdentity = zoneIdentity;
+            app.selectedFloorIndices?.clear?.();
+            root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
+            app.applyFloorSelection?.();
         }
-        app.selectedFloorIndices?.clear?.();
-        root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
-        app.applyFloorSelection?.();
         return {
             ok:true,
             viewerZone:option.textContent,
@@ -435,9 +450,18 @@ window.eqlEyeOfZommViewer = {
     async pathTo(label, wikiLocation = null) {
         if (!app || !label) return { ok:false };
         const ok = await app.gotoNpcLabel(String(label), { teleport:false });
-        if (ok) return { ok:true, source:'map-label' };
+        if (ok) return navigationResult(String(label), 'map-label');
         const wikiOk = await pathToWikiLocation(String(label), wikiLocation);
-        return { ok:Boolean(wikiOk), source:wikiOk ? 'wiki-location' : '' };
+        return wikiOk ? navigationResult(String(label), 'wiki-location') : { ok:false, source:'' };
+    },
+
+    clearPath() {
+        if (!app) return { ok:false };
+        app.clearNavigationGuide?.();
+        app.updateNavigationOverlay?.();
+        app.drawMiniMap?.();
+        app.requestRender?.();
+        return { ok:true };
     },
 
     status() {
@@ -449,6 +473,7 @@ window.eqlEyeOfZommViewer = {
             zone: app?.currentZoneRecord ? (badge ? badge.textContent.trim() : app.currentZoneRecord.id) : '',
             mode: app?.mapFileVisible ? 'map' : (app?.mode || 'top'),
             floors: app?.selectedFloorIndices?.size ? 'filtered' : 'all',
+            navigation:navigationResult('', app?.navigationTarget ? 'active' : ''),
             message:app?.els?.statusText?.textContent || ''
         };
     },

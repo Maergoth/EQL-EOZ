@@ -1,7 +1,7 @@
 # Eye of Zomm — Product and UX Vision
 
-Status: working product direction for review  
-Baseline: 0.5.4
+Status: working product direction and road-to-v1 release contract
+Baseline: 0.6.0
 Last updated: 2026-09-03
 
 ## 1. Product promise
@@ -250,7 +250,7 @@ Entry points:
 - **Path** beside a current-zone mob in minimal mode;
 - **Path in map** on an NPC card;
 - **Path** in the consider tray;
-- a future destination search within Live Map.
+- the persistent **Navigate to** field within Live Map.
 
 Flow:
 
@@ -264,6 +264,8 @@ Flow:
 5. Build a collision-validated, directed route from the player's current location.
 6. Show the route and shortest traversable distance.
 7. Preserve the player's selected First/Top/Map presentation.
+8. Keep the destination active. A later `/loc` re-routes after meaningful movement without making the player select the NPC again.
+9. **Clear** removes the route and destination explicitly; a zone change clears a destination from the old zone.
 
 Movement contract:
 
@@ -301,8 +303,9 @@ If no drops are known, keep the NPC identity and path action visible. Explain wh
 4. Show one compact scope line stating item count, class scope, zone scope, and query if present.
 5. Typing in Search broadens to all zones by default, because a deliberate query overrides the contextual default.
 6. The user can explicitly re-enable **Current zone** to constrain that search.
-7. Class, era, and tier changes update results locally.
-8. Hovering an item shows its wiki-formatted Itembox data. Tier greater than zero adds a clearly labeled adjusted-stat block and updates an already open tooltip immediately.
+7. Class, slot, era, sort, and tier changes update results locally.
+8. **Reset** restores the contextual current-zone, detected-class, recommended-order state.
+9. Hovering or keyboard-focusing an item shows its wiki-formatted Itembox data. Tier greater than zero adds a clearly labeled adjusted-stat block, shows base values beside changed values, and updates an already open tooltip immediately.
 
 ### 8.7 Combat and loot review
 
@@ -362,6 +365,7 @@ User stories:
 - As a compact-mode user, I want all three view controls to remain reachable.
 - As a player, I want named mobs labeled and pathable without exposing editor controls.
 - As a user with a configured folder, I want the viewer to reconnect on launch automatically.
+- As a player following a route, I want my destination and route result to remain visible while `/loc` updates re-center me.
 
 Requirements:
 
@@ -369,9 +373,11 @@ Requirements:
 - Selected mode persists and survives `/loc` updates and window-mode changes.
 - All floors are visible unless the user explicitly filters them.
 - Folder badge conveys needed, connecting, ready, or unavailable.
+- Folder, log, zone, and `/loc` readiness are separate visible steps; an already valid folder is never described as missing.
 - Manual Sync actions are available as recovery, but automatic log events are primary.
 - Location status uses labeled X/Y/Z to make axis debugging possible.
 - Named-mob labels, player marker, destination, and route share the same transform.
+- Destination search, route status, distance, and **Clear** remain in the Live Map workspace in full and minimal modes.
 - Advanced rendering diagnostics and duplicate navigation controls remain hidden.
 
 ### 9.4 Minimal mode
@@ -381,6 +387,7 @@ User stories:
 - As a player keeping the game foregrounded, I want only navigation, current DPS, and zone loot intelligence.
 - As a player switching between map styles, I want mode controls in the compact header.
 - As a loot planner, I want **My Class** and **Named only** without opening Settings.
+- As a player who needs more map room, I want to collapse and restore the intel panel without leaving minimal mode.
 
 Requirements:
 
@@ -388,6 +395,7 @@ Requirements:
 - Consider tray overlays the bottom and remains inspectable.
 - Does not hide the app from the taskbar.
 - Does not remove the ability to unpin or return to Full view.
+- Intel panel is visible by default and can be collapsed from the compact header.
 - At the minimum supported width, map controls and window actions do not overlap.
 
 ### 9.5 NPCs
@@ -414,6 +422,7 @@ User stories:
 - As a researcher, I want a deliberate search to override contextual defaults.
 - As a multi-class player, I want detected classes shown as automatic selections and manual overrides available.
 - As a Legends player, I want tier scaling visible in cards and tooltips.
+- As a focused researcher, I want slot and sort controls that override the smart default without losing my class context.
 
 Requirements:
 
@@ -422,8 +431,9 @@ Requirements:
 - Generic consumables do not dominate the first screen.
 - An **Auto** class chip returns to detected log classes.
 - Search index includes name, class, slot, source, and source zone.
+- Slot and sort overrides persist; **Reset** restores contextual recommended browsing.
 - Item hovers use cached data/icons and never fetch an article in the background.
-- Adjusted stats are distinctly labeled to avoid confusing them with base wiki lines.
+- Adjusted stats are distinctly labeled, changed values include their base value, and the open detail updates while the slider moves.
 
 ### 9.7 Drop log
 
@@ -516,7 +526,7 @@ Avoid “try again” without identifying what is missing. Avoid directing users
 - Enter submits Search EQLWiki; Escape closes transient trays/tooltips where appropriate.
 - Con, connection, and route states include text in addition to color.
 - Minimum pointer target is 32×32 px in compact surfaces and 36×36 px elsewhere where layout permits.
-- Tooltips must also be reachable by keyboard focus; hover-only behavior is an interim implementation, not the final accessibility state.
+- Tooltips are reachable by keyboard focus; Escape dismisses tooltip and consider-tray content without moving focus automatically.
 - Transient consider content uses a polite live region and does not move keyboard focus automatically.
 - Animation is short and nonessential; reduced-motion preferences should disable entrance movement.
 - Text remains legible at 125% and 150% Windows scale.
@@ -611,6 +621,8 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 - Any exposed downward height is allowed.
 - An overlapping upper floor prevents a route from falling through it.
 - Every displayed route segment is collision-valid.
+- A selected destination survives later `/loc` samples and re-routes after at least eight units of movement.
+- Route state says whether a path was built, only a marker was available, or no destination coordinate was found.
 
 ### Catalog relevance
 
@@ -619,6 +631,8 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 - Search broadens globally by default.
 - Explicit Current zone toggle remains respected.
 - Auto classes reflect the detected class combination.
+- Slot and alphabetical sort are explicit overrides; Reset returns to recommended current-zone browsing.
+- Moving Item tier updates the visible cards and an already-open Itembox hover immediately.
 
 ### Window behavior
 
@@ -627,71 +641,192 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 - App remains on the taskbar.
 - Minimal mode retains First/Top/Map, Pin, and Full view controls.
 
-## 16. Phased roadmap
+## 16. Road to v1
 
-### Phase A — 0.5 stabilization
+The route to 1.0 is organized around user confidence, not the number of features shipped. Each release must close one complete loop and retain all earlier acceptance contracts.
 
-Goal: make existing promises dependable.
+| Release | Product question it must answer | Primary scope | Exit gate |
+|---|---|---|---|
+| 0.5 — foundation | “Can the app read the right things safely?” | Folder/log selection, coordinate contract, three map modes, consider tray, encounters, drops, production data | Automated contracts pass and the app installs with a real dataset |
+| 0.6 — usable loop | “Can I understand state and get somewhere without fighting the UI?” | Explicit readiness, persistent destination routing, item relevance, texture correction, keyboard details, non-modal recovery | Complete explorer and loot-planner journeys work with no dead-end or generic Sync error |
+| 0.7 — spatial confidence | “Can I trust this path in difficult zones?” | Formal navmesh, directed movement links, route guidance, transform/texture diagnostics, zone corpus | Route matrix passes on outdoor, indoor, stacked-floor, ramp, door, and drop cases |
+| 0.8 — decision intelligence | “What is worth doing and how did it perform?” | Durable sessions, encounter analysis, observed-loot evidence, upgrade ranking, watchlists, export | A user can plan, play, and review a session without reconstructing it manually |
+| 0.9 — public beta | “Will this recover gracefully on someone else’s PC?” | Migration, updater, diagnostics, scaling, accessibility, performance, beta feedback | No open release-blocking defects across supported Windows and scale-factor matrix |
+| 1.0 — trusted release | “Can we support this as a stable public product?” | Signed distribution, support docs, compatibility policy, final polish | Signed reproducible installer, green release gates, documented known limits, support path |
 
-- Canonical coordinate transform and regression fixtures.
-- Legends consider variants and docked loot tray.
-- Directed route elevation policy.
-- Persistent compact map controls and map-mode preservation.
-- Visible folder/log/location readiness states.
-- Current-zone/class item defaults and meaningful ranking.
-- Tier-aware hover cards.
-- Production-pack and unsigned installer delivery.
+### 16.1 Version 0.6 — usable loop
 
-Exit condition: all acceptance scenarios above pass on at least two real zones, including a multi-floor indoor zone.
+Release thesis: the app should reveal what it knows, preserve what the player chose, and turn the most frequent goals into either zero-click reactions or one-click actions.
 
-### Phase B — navigation confidence
+Committed user stories:
 
-Goal: make route output explainable and dependable enough for routine use.
+- As a first-time user, I choose the game folder once and immediately see whether folder, log, zone, and `/loc` are individually ready.
+- As a returning user, I resume my last full view and map mode while automatic log selection follows the newest log.
+- As an explorer, I type or choose a current-zone destination once, see whether it produced a path or marker, and keep that destination while later `/loc` lines re-route me.
+- As a minimal-mode user, I retain map-mode and destination controls and can collapse the intel rail when I need more map width.
+- As a loot planner, I open Items to current-zone/class gear and deliberately override slot, order, zone, class, era, or search.
+- As an item researcher, I can focus the same Itembox card with mouse or keyboard and see tier-adjusted values update while the slider moves.
+- As a player with the game foregrounded, routine recovery feedback appears inside Eye of Zomm instead of a modal browser alert.
 
-- Formal navmesh generation/caching per zone where source geometry supports it.
-- Directed off-mesh links for drops and +6 climbs.
-- Route recalculation from new `/loc` without discarding destination.
-- Off-route detection and a subtle re-route affordance.
-- Destination search in Live Map.
-- Floor-aware route visualization and next-turn/remaining-distance cues.
-- One-click diagnostic capture for bad coordinates, textures, or paths.
-- Zone-specific transform/geometry regression corpus.
+0.6 implementation contract:
 
-### Phase C — loot and encounter intelligence
+- A four-step map readiness rail: Folder → Log → Zone → `/loc`.
+- A persistent Live Map destination field with current-zone suggestions, Enter support, Find path, Clear, route source/result, distance, and re-route-on-movement.
+- Route recalculation threshold of eight 3D units to prevent rebuilding for duplicate `/loc` lines.
+- Selected destination waits for the first `/loc` instead of failing or asking for the folder again.
+- Header map-mode controls remain available whenever Live Map is active, including minimal mode.
+- Last full-mode view and selected map presentation persist across window-mode changes.
+- Minimal intel rail defaults open and has a remembered collapse toggle.
+- Items default to current zone, effective classes, current era, and recommended order. Search broadens globally unless zone was explicitly pinned.
+- Slot and sort overrides plus one-click Reset.
+- Item icons in result cards and keyboard-focusable Itembox details.
+- Tier-adjusted Itembox values visually identify changes and retain base values in parentheses.
+- S3D bitmap lookup uses the WLD bitmap fragment's actual `fileName`, normalizes `.bmp`/`.dds`, supports animated frame filenames, and invalidates stale parsed-zone cache entries.
+- In-app status notices replace focus-stealing `alert()` recovery.
+- Automated release checks assert all of the above and retain coordinate, floor, con, consider, loot, encounter, and production-catalog contracts.
 
-Goal: turn observed session data into useful, honestly labeled context.
+Known 0.6 limits, stated rather than hidden:
 
-- Per-character/session history with retention controls.
-- Encounter comparison and actor breakdown.
-- Drop evidence grouped by NPC/zone and exportable as CSV/JSON.
-- Upgrade-oriented item ranking using selected classes/slots, without pretending to know a complete build.
-- Saved item/NPC watchlist.
+- Routing is still a collision-validated walkable-surface graph plus local-map fallback, not a polygonal Recast navmesh.
+- A route can only be as good as the decoded collision geometry and destination coordinate.
+- The app cannot know the player moved until a new `/loc` line is written.
+- Real game archives cannot be included in the repository, so final texture/geometry acceptance requires a tester's selected installation.
+- The unsigned installer may trigger Windows reputation warnings until a trusted Authenticode certificate is configured.
 
-### Phase D — 1.0 quality bar
+0.6 exit checklist:
 
-Goal: a stable, low-friction public release.
+1. Fresh-folder and returning-startup flows complete with the expected automatic log.
+2. Befallen coordinate fixture remains X `-961`, Y `-30`, Z `-66` and stays on the correct stacked floor.
+3. Two `/loc` samples update facing; a live destination re-routes without another selection.
+4. First/Top/Map remain available through full/minimal transitions.
+5. The exact Legends rare-creature consider line opens the bottom tray.
+6. Befallen + MNK production data opens with equipment ahead of potions.
+7. Item tier changes an open detail and changed values are visibly different from base.
+8. WLD material lookup resolves static and animated bitmap filenames after a v16 zone-cache rebuild.
+9. Clean-checkout tests, production-catalog gate, Windows build, and installer artifact all succeed.
 
-- Authenticode-signed installer and update path.
-- Keyboard-complete item/NPC details.
-- Windows scaling/accessibility validation.
-- Crash-safe state migration and backward-compatible preferences.
-- Guided diagnostics and issue-report template.
-- Performance budgets enforced in release checks where practical.
-- Polished onboarding/recovery copy and a concise in-app About/Safety surface.
+### 16.2 Version 0.7 — spatial confidence
 
-## 17. Decisions for product review
+Release thesis: paths must be predictable enough that a player will use them in a multi-floor dungeon without cross-checking every turn.
 
-Each item is independently approvable.
+Navigation architecture:
 
-1. **Remember map view across sessions — recommended.** Preserve First/Top/Map until explicitly changed; `/loc` updates re-center the chosen mode.
-2. **Search overrides current-zone item scope — recommended.** Empty query is contextual; deliberate query is global unless Current zone was manually toggled.
-3. **Auto classes are visible selections — recommended.** Detected classes appear highlighted with Auto active; manual selection overrides them until Auto is restored.
-4. **Consider tray timeout — recommended current behavior.** Sixteen seconds initially, paused while hovered/focused, eight-second grace after leaving.
-5. **Route destination survives new `/loc` — recommended for Phase B.** Recalculate only after meaningful movement/off-route distance, not on every line.
-6. **Minimal mob panel width — propose resizable in Phase B.** Remember width, enforce a useful map minimum, and offer a collapse control.
-7. **Launch destination — propose remember last full-mode destination.** Fresh installs begin on Overview; returning users resume their last full-mode destination, while minimal always resumes Live Map.
-8. **Tooltip accessibility — keyboard popover in Phase B.** Hover remains immediate; focus/click opens a dismissible detail popover using the same content.
-9. **Navigation engine — use a true navmesh when geometry quality allows it.** Keep the current geometry graph as a fallback and validate parity zone-by-zone before replacement.
+1. Decode the collision mesh using the existing read-only local-file pipeline.
+2. Build a Recast polygon mesh in a worker, never on the renderer/UI thread.
+3. Use a single documented coordinate adapter at the boundary. EQEmu demonstrates the equivalent server-side Detour bridge by passing EQ `(x, y, z)` to Detour as `(x, z, y)` and converting it back at the route boundary.
+4. Encode walk, water, lava, door/portal, and other available areas only when the local source exposes them reliably.
+5. Add directed off-mesh links for exposed downward drops and for upward transitions no greater than +6 EQ Z.
+6. Query with Detour, straighten/smooth the corridor, then validate every rendered segment against local collision.
+7. Cache by zone archive identity, parser version, movement-policy version, and navmesh-build parameters.
+8. Fall back to the 0.6 walkable graph if generation or query fails; never display an unvalidated line as a valid route.
+
+The design takes conceptual guidance from EQEmu's [Detour navmesh pathfinder](https://github.com/EQEmu/EQEmu/blob/master/zone/pathfinder_nav_mesh.cpp) and [ground/ceiling raycasts](https://github.com/EQEmu/EQEmu/blob/master/zone/map.cpp), but Eye of Zomm remains a separate read-only viewer and will not copy server movement or automation behavior.
+
+Committed 0.7 user stories:
+
+- As an explorer, I see remaining distance and a useful next-turn cue rather than only a full-route ribbon.
+- As a dungeon player, I never receive a path that silently crosses an overlapping floor or wall.
+- As a player approaching the route from a different corridor, I see subtle “updating” feedback and receive a new route without losing the destination.
+- As a tester, I can export a redacted diagnostic describing archive identity, map transform, current/destination coordinates, route engine/result, and timing.
+- As a user with a missing or poor map, I still get a clear marker and an explanation of the source limitation.
+
+0.7 route corpus:
+
+| Case | Minimum fixtures | Pass condition |
+|---|---:|---|
+| Flat outdoor | 2 zones | Shortest route is stable and does not jitter between `/loc` samples |
+| Indoor corridors | 2 zones | No wall cuts; narrow doorways remain usable |
+| Stacked floors | 2 zones including Befallen | No floor snapping or fall-through |
+| Ramps/stairs | 2 routes | Continuous legal ascent succeeds |
+| Exact +6 climb | 1 synthetic + 1 real | Accepted |
+| Greater-than-6 climb | 1 synthetic + 1 real | Rejected unless a legal ramp/link exists |
+| Long exposed drop | 1 synthetic + 1 real | Forward edge accepted; reverse climb rejected |
+| Missing destination | 2 cases | Marker/wiki recovery; no fake path |
+
+0.7 exit gate: at least 95% of the curated route corpus produces the expected path/no-path result, no displayed segment violates collision or directed elevation policy, and route work does not block input/rendering.
+
+### 16.3 Version 0.8 — decision intelligence
+
+Release thesis: current context and locally observed history should help answer “what should I do next?” without claiming knowledge the evidence cannot support.
+
+Planned user stories:
+
+- As a multi-character player, I can separate or combine session history intentionally.
+- As a combat reviewer, I can compare two encounters and expand actor/ability contributions.
+- As a loot hunter, I can group observed drops by NPC and zone and always see the numerator/denominator behind a rate.
+- As a researcher, I can export selected encounter/drop rows to CSV or JSON.
+- As a class combination, I can rank likely upgrades by slot and relevant stats without the app pretending to know my complete build.
+- As a planner, I can watch an item or NPC and see it called out when it becomes relevant in the current zone.
+
+Data rules:
+
+- History is local and opt-in beyond the current in-memory session.
+- Retention is configurable and deletion is explicit and recoverable where practical.
+- Character and filesystem identifiers are redacted from diagnostics by default.
+- “Observed” percentages never become wiki-authoritative percentages.
+- Recommendation explanations name the rules used: class, slot, stats, source, zone, era, and selected tier.
+
+0.8 exit gate: a player can choose a target from current-zone loot, complete encounters, inspect observed drops, compare results, and export evidence with no ambiguous provenance.
+
+### 16.4 Version 0.9 — public beta hardening
+
+Release thesis: unfamiliar machines and imperfect local installs must fail in understandable, recoverable ways.
+
+Scope:
+
+- Crash-safe preference/data migrations from every public 0.x version.
+- Update availability and release-note flow that never blocks launch.
+- One-click redacted diagnostics and a prefilled issue-report template.
+- Windows 10/11 validation at 100%, 125%, 150%, and 200% scaling.
+- Complete keyboard traversal, focus visibility, screen-reader names, reduced motion, and contrast review.
+- Performance measurements for startup, production-size search, log latency, zone decode, cache reopen, route generation, and memory pressure.
+- Corrupt/rotated log, missing folder, partial dataset download, stale cache, unsupported archive, and offline recovery tests.
+- First-run and first-route usability sessions with people who did not build the product.
+
+0.9 exit gate: zero known severity-1 defects, no unresolved data-loss or safety-boundary issue, all primary journeys complete at supported scale factors, and at least five unfamiliar-user sessions meet the click/error budgets.
+
+### 16.5 Version 1.0 — trusted public release
+
+1.0 is a quality designation, not another feature batch. It requires:
+
+- a trusted Authenticode certificate and signature verification for the app and installer;
+- deterministic version/tag/artifact agreement and reproducible release notes;
+- automatic update or an equally clear supported upgrade path;
+- a compatibility statement for supported Legends client/archive variants;
+- concise install, safety, troubleshooting, diagnostic, and known-limit documentation;
+- production dataset freshness/rollback procedures;
+- a maintained issue triage and release cadence;
+- no open severity-1 or severity-2 defect in setup, log following, coordinates, map rendering, navigation, or data integrity;
+- all release acceptance scenarios and performance budgets green on a clean Windows machine.
+
+Deferred beyond 1.0 unless evidence changes the priority:
+
+- any client hook, overlay injection, automated movement, or game command;
+- a full embedded web browser/wiki renderer;
+- multi-user/cloud synchronization;
+- speculative build scoring without complete, explainable inputs.
+
+## 17. Product decisions and approval points
+
+### Implemented in 0.6
+
+1. **Remember presentation.** Preserve First/Top/Map and the last full-mode view; minimal always presents Live Map without overwriting that remembered view.
+2. **Search overrides contextual item scope.** Empty query is current-zone/class; deliberate search is global unless Current zone was explicitly selected.
+3. **Make Auto visible.** Detected classes appear selected while Auto remains the explicit source of truth.
+4. **Keep the consider timeout calm.** Sixteen seconds initially, paused while hovered/focused, eight-second grace after leaving.
+5. **Keep the route destination.** Re-route after eight or more units of observed movement; duplicate `/loc` values do not rebuild.
+6. **Allow compact-map focus.** Intel rail starts visible and can be collapsed/restored from the minimal header.
+7. **Make item detail keyboard-reachable.** Hover and focus share one cached Itembox surface; Escape dismisses transient content.
+8. **Use non-modal feedback.** Routine state/recovery notices do not steal focus from the game.
+
+### Approval points for 0.7–1.0
+
+1. **Navmesh runtime — recommended:** use a maintained Recast/Detour WebAssembly implementation in a worker, subject to license/security review; do not ingest undocumented third-party prebuilt navmeshes as authoritative.
+2. **Route re-build threshold — validate:** start at eight units, then tune with recorded redacted `/loc` traces; avoid a user-facing sensitivity setting unless real tests show a need.
+3. **History retention — proposed:** current session by default; explicit opt-in for 30-day local history, with Clear history beside the setting.
+4. **Upgrade ranking — proposed:** explainable stat/slot relevance, never a single unexplained “best item” score.
+5. **Beta diagnostics — recommended:** one redacted JSON bundle plus optional screenshot added by the user; never package logs or filesystem paths by default.
+6. **Signing — required for 1.0:** continue clearly labeled unsigned 0.x builds while procurement is deferred; do not imply Windows warnings can be eliminated without trust/signing.
 
 ## 18. Definition of done for any UX change
 
@@ -707,3 +842,59 @@ A change is done only when:
 8. Version, changelog, and release artifact agree.
 9. The Windows build has a concrete manual verification script.
 10. Any known limitation is named in user-facing language rather than hidden behind a generic failure.
+
+## 19. Journey contracts
+
+This table is the compact product contract for the app's most common jobs. A journey is incomplete if its recovery state sends the user through setup that has already succeeded.
+
+| Journey | Entry condition | Default response | One primary action | Automatic continuation | Recovery without context loss |
+|---|---|---|---|---|---|
+| First launch | No saved game root | Focused folder chooser explains what is read | Choose EverQuest folder | Follow newest log, index maps, dismiss setup | Cancel keeps setup intact; no partial path is saved |
+| Returning launch | Saved root exists | Restore shell, last full view, window state, and map mode | None | Resolve the newest log and reconnect map files | Preserve preferences and ask only for a moved root |
+| Place player | Zone known, no location | Readiness stops at `/loc` and explains the in-game action | Type `/loc` in game | Place, ground, center, and later orient the player | Center control repeats the exact missing prerequisite |
+| Change map presentation | Zone loaded | Retain the last selected First, Top, or Map mode | Choose mode | Later `/loc` re-centers that same mode | An unavailable overlay leaves working 3D visible |
+| Navigate | Current zone plus destination | Mark destination and show calculating/waiting state | Find path or Path | Re-route after meaningful `/loc` movement | Retain destination; identify missing coordinate versus no valid path |
+| Consider loot | Consider log line | Bottom tray opens with identity, con, and class drops | None | Timeout pauses for hover/focus | My Class and Wiki remain available when no filtered drops exist |
+| Browse items | Items opened | Current-zone, detected-class, recommended results | None beyond opening Items | Zone/profile changes refresh scope | Search, slot, sort, class, era, and Reset are explicit overrides |
+| Inspect an item | Hover or keyboard focus | Cached Itembox detail and icon | Hover/focus | Tier changes refresh adjusted values immediately | Missing fields are omitted or labeled unknown; Wiki remains explicit |
+| Review a fight | Outgoing hostile event | Current fight becomes the primary metric | None | Quiet-period grouping produces an encounter | Gap setting rebuilds encounter grouping without losing raw events |
+| Review a drop | Loot line | Newest row records item, source, zone, time, and evidence | Open Drops | Nearby kills update observed numerator/denominator | Unknown source stays unknown; no authoritative-rate claim is invented |
+| Search the wiki | Any screen | Search EQLWiki remains globally available | Type and press Enter | System browser opens Special:Search | Empty submission does nothing; local app state is unchanged |
+| Compact the window | Any screen | Pin and Minimal remain global | Toggle Pin or Minimal | Map controls, route, fight, and consider state remain usable | Full view restores the prior full destination; taskbar presence is retained |
+
+## 20. Prioritization and risk register
+
+Severity is based on broken player trust, not implementation size. P0 issues stop a release; P1 issues require a documented owner and near-term milestone; P2 issues may enter the scored backlog.
+
+| Risk | Priority | Why it matters | Release evidence | Owner milestone |
+|---|---|---|---|---|
+| X/Y order or sign regression | P0 | A confidently wrong map is worse than no map | Parser fixture plus Befallen game-client check | Every release |
+| Wrong stacked-floor grounding | P0 | Marker/path can appear in an inaccessible room | Synthetic policy tests plus Befallen Z `-66` check | Every release |
+| Folder/log state contradicts reality | P0 | The first useful action becomes a dead end | Filesystem tests and clean-profile Windows run | Every release |
+| Consider tray does not appear | P0 | Removes the zero-click loot loop | Exact Legends line fixture and foreground-game check | Every release |
+| Search field cannot receive input | P0 | Breaks the only global research action | Static drag-region check and keyboard/mouse smoke test | Every release |
+| Texture lookup falls back to gray/white | P0 | Makes 3D navigation unreadable | WLD `fileName` contract, cache bump, visual zone check | 0.6 |
+| Route crosses wall or floor | P0 | Guidance becomes actively misleading | Collision/elevation tests; never label an unvalidated line valid | 0.6 graph, 0.7 navmesh |
+| Destination disappears after `/loc` | P1 | Repeated selection makes navigation unusable | Persistent route state and movement re-route test | 0.6 |
+| Catalog starts with generic consumables | P1 | Items looks broken despite valid data | Production pack relevance gate | Every release |
+| Tier control and detail disagree | P1 | Item comparison cannot be trusted | Unit scaling plus open-tooltip interaction test | 0.6 |
+| Large-zone decode blocks input | P1 | App appears crashed during a primary flow | Worker timing and cancellation budget | 0.7/0.9 |
+| Local observed rate looks authoritative | P1 | Misrepresents evidence and wiki truth | Numerator/denominator copy review | 0.8 |
+| Windows reputation warning | P1 before 1.0, P0 at 1.0 | Adds install friction and erodes trust | Authenticode verification in release workflow | 1.0 |
+| Preference/data migration loses state | P0 at public beta | Upgrading punishes returning users | Migration matrix from every public 0.x version | 0.9 |
+
+## 21. Uncoached usability validation
+
+Before 0.9, run at least five sessions with players who did not build Eye of Zomm. Give the goals below without telling participants which control to use.
+
+| Task | Starting state | Success | Target |
+|---|---|---|---:|
+| Get the app following the game | Fresh profile, game installed | Correct folder and newest log are active | One folder choice; under 60 seconds |
+| Find where the character is | Zone entered, no prior `/loc` | Participant understands the prompt, types `/loc`, and verifies the marker | Zero app recovery clicks |
+| Navigate to a named NPC | Player placed in a zone with a known named | Destination, route/marker state, and distance are understood | At most one app action from Map/NPC/consider context |
+| Find a useful item here | Known zone and class profile | Participant finds current-zone class gear and can broaden deliberately | No query required for the first useful result |
+| Inspect considered loot | Game foregrounded | Tray is noticed, held open, filtered, and an item is inspected | No focus theft; no prerequisite explanation |
+| Review the last pull and loot | At least two pulls separated by the configured gap | Correct encounter and observed drop evidence are found | At most two destination changes |
+| Recover a moved install folder | Saved root made unavailable | Participant identifies the failed step and restores it | One new folder choice; other preferences survive |
+
+Record task completion, app clicks, wrong turns, time to first useful result, and the participant's description of what the app currently knows. Do not add behavioral telemetry to collect this silently. A release fails the usability gate when two or more participants make the same wrong turn, cannot distinguish a missing coordinate from a failed route, or treat an observed drop percentage as an authoritative wiki rate.
