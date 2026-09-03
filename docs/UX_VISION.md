@@ -737,7 +737,7 @@ Committed user stories:
 
 Release thesis: paths must be predictable enough that a player will use them in a multi-floor dungeon without cross-checking every turn.
 
-Implementation note (0.7.1): deterministic remaining-distance, next-turn/facing/off-route cues and the redacted diagnostics export are implemented as the first spatial-confidence slice. The route corpus and worker-based Recast/Detour pathfinder remain open; the current collision-validated graph remains authoritative until those gates pass. See [implementation status](IMPLEMENTATION_STATUS.md).
+Implementation note (0.7.1): deterministic remaining-distance, next-turn/facing/off-route cues, the redacted diagnostics export, and an eight-expectation topology corpus are implemented as the first spatial-confidence slices. Shared geometry-backed corpus adapters and the worker-based Recast/Detour pathfinder remain open; the current collision-validated graph remains authoritative until those gates pass. See [implementation status](IMPLEMENTATION_STATUS.md).
 
 Navigation architecture:
 
@@ -746,7 +746,7 @@ Navigation architecture:
 3. Use a single documented coordinate adapter at the boundary. EQEmu demonstrates the equivalent server-side Detour bridge by passing EQ `(x, y, z)` to Detour as `(x, z, y)` and converting it back at the route boundary.
 4. Add directed off-mesh links for exposed downward drops and upward transitions no greater than +6 EQ Z.
 5. Query with Detour, smooth the corridor, validate every rendered segment against local collision, and fall back to the 0.7 graph if generation fails.
-6. Keep the implemented next-turn cue, remaining distance, and redacted route diagnostics covered while adding the remaining curated outdoor/indoor/stacked/ramp/door/drop corpus.
+6. Keep the implemented next-turn cue, remaining distance, redacted route diagnostics, and topology corpus covered while adding shared geometry-backed outdoor/indoor/stacked/ramp/door/drop execution for current and candidate engines.
 
 The design takes conceptual guidance from EQEmu's [Detour navmesh pathfinder](https://github.com/EQEmu/EQEmu/blob/master/zone/pathfinder_nav_mesh.cpp) and [ground/ceiling raycasts](https://github.com/EQEmu/EQEmu/blob/master/zone/map.cpp), but Eye of Zomm remains a separate read-only viewer and will not copy server movement or automation behavior.
 

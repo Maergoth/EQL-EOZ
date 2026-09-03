@@ -8,6 +8,7 @@ const manualTest = readFileSync(new URL('../docs/V0.7_MANUAL_TEST.md', import.me
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
 const handoff = readFileSync(new URL('../docs/HANDOFF.md', import.meta.url), 'utf8');
 const implementationStatus = readFileSync(new URL('../docs/IMPLEMENTATION_STATUS.md', import.meta.url), 'utf8');
+const routeCorpus = readFileSync(new URL('../app/route-corpus.js', import.meta.url), 'utf8');
 if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) throw new Error(`Invalid package version ${pkg.version}.`);
 if (lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version) {
     throw new Error('package.json and package-lock.json versions must match.');
@@ -27,6 +28,9 @@ for (const required of ['## Exact next work', 'IMPLEMENTATION_STATUS.md', 'UX_VI
 }
 for (const required of ['Code baseline:', '## Current highest-priority task', '0.8 route corpus', 'HANDOFF.md', 'UX_VISION.md']) {
     if (!implementationStatus.includes(required)) throw new Error(`Implementation status is missing: ${required}`);
+}
+for (const required of ['outdoor-open', 'indoor-corridor', 'stacked-floor-stairs', 'legal-ramp', 'closed-door', 'exposed-drop', 'illegal-ascent']) {
+    if (!routeCorpus.includes(required)) throw new Error(`Route corpus is missing: ${required}`);
 }
 
 for (const relative of ['../.github/workflows/build-windows.yml', '../.github/workflows/release.yml']) {

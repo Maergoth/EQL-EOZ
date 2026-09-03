@@ -9,7 +9,7 @@ This repository is the source of truth. A new contributor should be able to resu
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [v0.7 Windows/game-client checklist](V0.7_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.7.1**. The 0.7 replacement-map loop is implemented. The first 0.8 slice adds live remaining distance, next-turn/facing cues, and redacted support diagnostics. The collision graph remains the current pathfinder until the route corpus and reviewed Recast/Detour worker are ready.
+Current code baseline: **0.7.1**. The 0.7 replacement-map loop is implemented. The first 0.8 slices add live remaining distance, next-turn/facing cues, redacted support diagnostics, and a deterministic topology corpus with eight expected route/no-route outcomes. The collision graph remains the current pathfinder until geometry-backed corpus execution and a reviewed Recast/Detour worker are ready.
 
 ## Run and verify
 
@@ -61,10 +61,11 @@ The app is read-only with respect to EverQuest. It may consume `/loc` lines prod
 
 Continue section 16.3 of the vision in this order:
 
-1. Add a deterministic route-corpus harness with expected path/no-path and elevation outcomes for outdoor, indoor, stacked-floor, ramp, door, and directed-drop fixtures.
-2. Capture only redistributable synthetic geometry in-repo; record proprietary real-zone cases as redacted expectations in the manual matrix.
-3. Evaluate a maintained, license-compatible Recast/Detour WebAssembly implementation, document the coordinate adapter and dependency review, and run generation/query work in a worker.
-4. Keep the current collision graph as fallback and require every rendered segment to pass existing collision and directed elevation validation.
+1. Extend the topology cases in [`app/route-corpus.js`](../app/route-corpus.js) with redistributable triangle/collision geometry that both the current pathfinder adapter and a prospective Recast adapter can consume.
+2. Evaluate a maintained, license-compatible Recast/Detour WebAssembly implementation and record dependency license, provenance, maintenance, bundle size, and security review.
+3. Prototype generation/query work in a worker behind a route-engine adapter, then run the same corpus against the reference router and the prototype.
+4. Record proprietary real-zone cases only as redacted expectations in the manual matrix; never commit archives or coordinates that expose a player identity.
+5. Keep the current collision graph as fallback and require every rendered segment to pass existing collision and directed elevation validation.
 
 Do not start durable history or upgrade scoring from 0.9 until the 0.8 route corpus is in place; it is the evidence gate for changing pathfinding.
 
@@ -77,4 +78,3 @@ Do not start durable history or upgrade scoring from 0.9 until the 0.8 route cor
 - Before tagging, complete the Windows/game-client checklist. Repository tests cannot validate proprietary zone textures, stacked-floor placement, label alignment, or subjective route quality.
 
 When handing off again, update the baseline and **Exact next work** here, the matching status row in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md), and the implementation note in vision section 16.
-
