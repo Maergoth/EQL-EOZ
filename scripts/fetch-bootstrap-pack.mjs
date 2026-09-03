@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
-const OUT = resolve(ROOT, 'app/data/companion-pack.bootstrap.json');
-const MANIFEST_URL = process.env.EQL_COMPANION_MANIFEST_URL || 'https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json';
+const OUT = resolve(ROOT, 'app/data/eye-of-zomm-pack.bootstrap.json');
+const MANIFEST_URL = process.env.EQL_EOZ_MANIFEST_URL || 'https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json';
 const required = process.argv.includes('--required');
 
 function fail(message, error) {
@@ -22,7 +22,7 @@ function fail(message, error) {
 
 try {
     const manifestResponse = await fetch(MANIFEST_URL, {
-        headers: { 'User-Agent': 'EQLWiki-EyeOfZomm-build/0.3.0', 'Cache-Control': 'no-cache' },
+        headers: { 'User-Agent': 'EQLWiki-EyeOfZomm-build/0.5.0', 'Cache-Control': 'no-cache' },
         signal: AbortSignal.timeout(10_000)
     });
     if (!manifestResponse.ok) fail(`Bootstrap manifest HTTP ${manifestResponse.status}`);
@@ -31,7 +31,7 @@ try {
 
     const packUrl = new URL(String(manifest.pack), MANIFEST_URL).toString();
     const packResponse = await fetch(packUrl, {
-        headers: { 'User-Agent': 'EQLWiki-EyeOfZomm-build/0.3.0', 'Cache-Control': 'no-cache' },
+        headers: { 'User-Agent': 'EQLWiki-EyeOfZomm-build/0.5.0', 'Cache-Control': 'no-cache' },
         signal: AbortSignal.timeout(60_000)
     });
     if (!packResponse.ok) fail(`Eye of Zomm bootstrap pack HTTP ${packResponse.status}`);
@@ -45,8 +45,8 @@ try {
     }
 
     const decoded = JSON.parse(gunzipSync(compressed).toString('utf8'));
-    if (!Array.isArray(decoded?.zones) || !Array.isArray(decoded?.npcs) || !Array.isArray(decoded?.items)) {
-        fail('Eye of Zomm bootstrap pack schema is invalid');
+    if (Number(decoded?.meta?.schemaVersion) < 3 || !Array.isArray(decoded?.zones) || !Array.isArray(decoded?.npcs) || !Array.isArray(decoded?.items)) {
+        fail('Eye of Zomm bootstrap pack schema v3 or newer is required');
     }
 
     decoded.meta = { ...(decoded.meta || {}), bundledAtBuild: true, manifestVersion: String(manifest.version) };

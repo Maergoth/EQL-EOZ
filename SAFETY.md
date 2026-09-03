@@ -4,9 +4,9 @@ EQLWiki - Eye of Zomm is intentionally designed around a narrow, auditable bound
 
 ## It may read
 
-- the EverQuest text log explicitly selected by the user;
-- newer rotated text logs from the same selected character/server log family;
-- local EverQuest zone/archive files after the user explicitly selects the EverQuest folder in the embedded Zone Viewer;
+- `eqlog_*.txt` files under the EverQuest folder explicitly selected by the user;
+- the most recently modified log automatically, or a specific log explicitly chosen in Settings;
+- local EverQuest zone/archive/map files under that selected folder;
 - Eye of Zomm's own preferences/cache files;
 - the public GitHub `dataset` branch manifest and compressed EQLWiki dataset.
 
@@ -25,6 +25,6 @@ EQLWiki - Eye of Zomm is intentionally designed around a narrow, auditable bound
 
 The desktop service binds only to `127.0.0.1`. Renderer polling therefore stays on the user's own PC.
 
-The embedded Zone Viewer receives read access through the user-selected directory/file input. Its parsed/cached data is maintained by the viewer/browser runtime and is never written back into the EverQuest installation.
+The embedded Zone Viewer receives bounded, read-only access to supported zone/map files under the selected folder. Its parsed/cached data is maintained by the viewer runtime and is never written back into the EverQuest installation.
 
 Remote structured knowledge arrives from GitHub as a static gzip data pack originally generated on EQLWiki. The app verifies the published SHA-256 before replacing the previous local pack.

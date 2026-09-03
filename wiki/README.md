@@ -1,8 +1,8 @@
 # Optional wiki pop-out launcher
 
-`CommonJS_companion_launcher.txt` is an optional block for `MediaWiki:Common.js`.
+`CommonJS_eye_of_zomm_launcher.txt` is an optional block for `MediaWiki:Common.js`.
 
-It adds a **Companion** link to the wiki's personal/actions portlet and opens:
+It adds an **Eye of Zomm** link to the wiki's personal/actions portlet and opens:
 
 ```text
 eqleoz://open

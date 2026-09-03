@@ -6,8 +6,8 @@ mw.loader.using( 'mediawiki.util' ).then( function () {
     var link = mw.util.addPortletLink(
         'p-personal',
         'eqleoz://open',
-        'Companion',
-        'pt-eql-companion',
+        'Eye of Zomm',
+        'pt-eql-eye-of-zomm',
         'Open EQLWiki - Eye of Zomm'
     );
 

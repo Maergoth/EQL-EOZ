@@ -1,18 +1,20 @@
-# Validation report — v0.3.0
+# Validation report — v0.5.0
 
-Validated in the build environment on 2026-09-01 UTC.
+Validated in the build environment on 2026-09-03 UTC.
 
 ## Automated checks
 
 - `npm test` passes.
-- `tests/test.mjs` passes.
-- `node --check` passes for the desktop runtime and first-party renderer/parser/scaling modules.
+- Parser/scaling/con tests and folder/log-selection filesystem tests pass.
+- Inline Zone Viewer module validation and `node --check` pass for first-party JavaScript.
+- Static UI validation confirms the removed overview surfaces stay absent, all three map modes exist, Settings owns the EQ folder, and retired naming is absent.
+- Release validation confirms version `0.5.0`, required production data, mandatory certificate gates, and Authenticode verification in both Windows workflows.
 - Item scaling tests cover standalone DMG, static Cold DMG, Ammo +10 Range/tier, and negative-stat recovery.
-- Con-color tests cover level-dependent blue boundaries and gray/green/white/yellow cases.
-- `php -l server/BuildEyeOfZommPack.php` passes in the available PHP runtime.
+- Con-color tests cover modern blue/light-blue/green/gray boundaries plus white, +1 through +3 yellow, and +4 red.
+- Exporter checks require schema v3 and exercise two-coordinate, three-coordinate, template, and multiple-tuple location fixtures when PHP is available.
 - `bash -n` passes for the dataset refresh/publish/GitHub-sync shell scripts.
 - Bundled JSON files parse successfully.
-- The bootstrap script validates manifest shape, gzip SHA-256, decompression, and dataset schema before embedding a production snapshot.
+- The bootstrap script validates manifest shape, gzip SHA-256, decompression, and schema v3 before embedding a production snapshot.
 - Runtime dataset checks now target the GitHub `dataset` branch rather than eqlwiki.com.
 
 ## Full supplied-log parse
@@ -24,7 +26,7 @@ Observed parsed events:
 - zone transitions: 40
 - consider events: 70
 - profile/level events: 7
-- target events: 36
+- raw target lines in the source log: 36 (intentionally no longer used by the app)
 - outgoing damage events: 27,393
 - rune events: 4,185
 - healing events: 1,107
@@ -35,6 +37,6 @@ Observed parsed events:
 
 ## Desktop packaging note
 
-The current Linux tool environment does not have the Electron npm payload cached and therefore does not perform the final Windows NSIS compilation locally. The repository includes a Windows GitHub Actions build that installs the pinned Electron/Electron Builder versions, runs the test suite, obtains the GitHub-mirrored dataset when available, and emits the installer artifact.
+The final Windows NSIS compilation runs in GitHub Actions. The workflow installs the locked Electron/Electron Builder versions, runs the test suite, requires the schema-v3 GitHub dataset, requires a trusted PFX certificate, verifies both executable signatures, and only then uploads the installer.
 
-A release tag uses the same pipeline but requires a verified production dataset and attaches the resulting installer to the GitHub release.
+A release tag uses the same gates and attaches only the verified signed installer to the GitHub release.

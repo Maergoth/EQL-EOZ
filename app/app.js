@@ -17,13 +17,11 @@ let viewerReady = false;
 let pollTimer = null;
 let packRefreshTimer = null;
 let selectedEncounterId = '';
-let minimalTargetHovered = false;
-let targetExpiryTimer = null;
 let fightExpiryTimer = null;
 let viewerSyncChain = Promise.resolve();
 
 const prefs = {
-    get key(){ return 'eql-companion-prefs-v1'; },
+    get key(){ return 'eql-eye-of-zomm-prefs-v1'; },
     load() {
         try { return JSON.parse(localStorage.getItem(this.key) || '{}'); } catch { return {}; }
     },
@@ -36,7 +34,8 @@ let settings = Object.assign({
     currentZoneOnly: true,
     itemTier: 0,
     encounterGapSeconds: 15,
-    targetMyClassOnly: true
+    minimalMyClassOnly: true,
+    minimalNamedOnly: true
 }, prefs.load());
 parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
@@ -133,19 +132,25 @@ function isNamedSource(name) {
 }
 
 async function api(path, options) {
-    const response = await fetch(path, Object.assign({ cache:'no-store' }, options || {}));
+    const nextOptions = Object.assign({ cache:'no-store' }, options || {});
+    nextOptions.headers = Object.assign({ 'X-Eye-Of-Zomm-Request':'1' }, nextOptions.headers || {});
+    const response = await fetch(path, nextOptions);
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     const type = response.headers.get('content-type') || '';
     return type.includes('json') ? response.json() : response.text();
+}
+
+function mutate(path) {
+    return api(path, { method:'POST' });
 }
 
 async function loadPack() {
     // Prefer a real locally-cached/exported production pack. The bundled
     // sample remains a safe offline fallback and never causes wiki API work.
     const candidates = [
-        './data/companion-pack.json',
-        './data/companion-pack.bootstrap.json',
-        './data/companion-pack.sample.json'
+        './data/eye-of-zomm-pack.json',
+        './data/eye-of-zomm-pack.bootstrap.json',
+        './data/eye-of-zomm-pack.sample.json'
     ];
     let lastError = null;
 
@@ -154,7 +159,7 @@ async function loadPack() {
             const res = await fetch(url, { cache:'no-store' });
             if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
             const nextPack = await res.json();
-            if (!nextPack || !Array.isArray(nextPack.zones) || !Array.isArray(nextPack.npcs) || !Array.isArray(nextPack.items)) {
+            if (!nextPack || Number(nextPack.meta?.schemaVersion) < 3 || !Array.isArray(nextPack.zones) || !Array.isArray(nextPack.npcs) || !Array.isArray(nextPack.items)) {
                 throw new Error('invalid Eye of Zomm data pack');
             }
             pack = nextPack;
@@ -180,10 +185,13 @@ async function connectBridge() {
     try {
         bridgeInfo = await api('/api/info');
         parser.setCharacterFromFilename(bridgeInfo.logPath || '');
-        $('#bridge-status').textContent = 'Live log';
-        $('#bridge-status').className = 'status-pill status-ok';
+        $('#bridge-status').textContent = bridgeInfo.logExists ? 'Live log' : 'Waiting for log';
+        $('#bridge-status').className = bridgeInfo.logExists ? 'status-pill status-ok' : 'status-pill status-warn';
+        $('#settings-eq-root').textContent = bridgeInfo.eqRootPath || 'No folder selected';
         $('#settings-log-path').textContent = bridgeInfo.logPath || 'No log selected';
-        $('#settings-server').textContent = bridgeInfo.server || location.host;
+        $('#settings-log-mode').textContent = bridgeInfo.logSelection === 'manual' ? 'Specific file' : 'Newest log automatically';
+        $('#automatic-log').hidden = bridgeInfo.logSelection !== 'manual';
+        $('#setup-overlay').hidden = Boolean(bridgeInfo.eqRootExists);
         const packState = bridgeInfo.dataPack || {};
         $('#pack-update-status').textContent = packState.lastStatus || (bridgeInfo.productionPack ? 'cached' : 'sample fallback');
         applyWindowState(bridgeInfo.windowState || {});
@@ -230,6 +238,7 @@ async function pollLog() {
             parser.setCharacterFromFilename(data.logPath);
             $('#settings-log-path').textContent = data.logPath;
         }
+        if (bridgeInfo) bridgeInfo.logExists = Boolean(data.logExists);
         if (data.reset) {
             logOffset = Number(data.startOffset) || 0;
             partialLine = '';
@@ -246,8 +255,8 @@ async function pollLog() {
             changed = Boolean(incoming);
         }
         logOffset = Number(data.newOffset ?? logOffset);
-        $('#bridge-status').textContent = 'Live log';
-        $('#bridge-status').className = 'status-pill status-ok';
+        $('#bridge-status').textContent = data.logExists ? 'Live log' : 'Waiting for log';
+        $('#bridge-status').className = data.logExists ? 'status-pill status-ok' : 'status-pill status-warn';
         if (changed) renderAll();
         schedulePoll(700);
     } catch (error) {
@@ -261,10 +270,18 @@ function consumeText(text) {
     const combined = partialLine + text;
     const lines = combined.split(/\n/);
     partialLine = lines.pop() || '';
+    const viewerOperations = [];
     for (const line of lines) {
         const event = parser.parse(line);
-        if (event?.type === 'zone') queueViewerSync(() => syncZoneToViewer(false));
-        if (event?.type === 'location') queueViewerSync(() => syncLocationToViewer(false));
+        if (event?.type === 'zone') {
+            viewerOperations.length = 0;
+            viewerOperations.push({ type:'zone' });
+        }
+        if (event?.type === 'location') viewerOperations.push({ type:'location', location:{ ...event.location } });
+    }
+    for (const operation of viewerOperations) {
+        if (operation.type === 'zone') queueViewerSync(() => syncZoneToViewer(false));
+        else queueViewerSync(() => syncLocationToViewer(false, operation.location));
     }
 }
 
@@ -352,8 +369,10 @@ function renderMinimalZoneDrops(s, profile) {
         return;
     }
 
-    const myClassOnly = $('#minimal-my-class')?.checked ?? true;
-    const namedOnly = $('#minimal-named-only')?.checked ?? true;
+    const myClassOnly = Boolean(settings.minimalMyClassOnly);
+    const namedOnly = Boolean(settings.minimalNamedOnly);
+    $('#minimal-my-class').checked = myClassOnly;
+    $('#minimal-named-only').checked = namedOnly;
     const bySource = new Map();
     const addSource = name => {
         name = String(name || '').trim();
@@ -402,8 +421,9 @@ function renderMinimalZoneDrops(s, profile) {
 
 function renderHeader(s, profile) {
     $('#top-character').textContent = s.character || '—';
-    $('#top-zone').textContent = s.zone || 'Waiting for log';
+    $('#top-classes').textContent = profile.classes.length ? profile.classes.join('/') : '—';
     $('#top-level').textContent = profile.level || '—';
+    $('#top-zone').textContent = s.zone || 'Waiting for log';
     $('#hero-zone').textContent = s.zone || 'Waiting for EverQuest log…';
     const zr = zoneRecord(s.zone);
     const link = $('#zone-wiki-link');
@@ -417,8 +437,6 @@ function renderHeader(s, profile) {
 }
 
 function renderMetrics(s, profile) {
-    $('#metric-location').textContent = s.location ? `${s.location.x.toFixed(1)}, ${s.location.y.toFixed(1)}, ${s.location.z.toFixed(1)}` : '—';
-
     const fight = s.fight?.active ? s.fight : null;
     $('#metric-fight').textContent = fight ? `${formatNum(fight.dps)} DPS` : '0 DPS';
     $('#metric-fight-detail').textContent = fight ? `${fight.name} · ${formatNum(fight.damage)} damage${fight.active ? ' · active' : ''}` : 'No outgoing damage yet';
@@ -428,47 +446,6 @@ function renderMetrics(s, profile) {
     if (fight) {
         const remaining = (settings.encounterGapSeconds * 1000) - (Date.now() - Number(fight.lastAt || 0));
         fightExpiryTimer = setTimeout(renderAll, Math.max(100, remaining + 50));
-    }
-}
-
-function targetConHtml(target, profile) {
-    if (!target?.level) return 'Level unknown';
-    const con = conForLevel(target.level, profile.level);
-    const delta = con.delta === null ? '' : ` · ${con.delta >= 0 ? '+' : ''}${con.delta}`;
-    return `<span class="${conClass(con.key)}">${esc(con.label)} · Level ${target.level}${delta}</span>`;
-}
-
-function targetLootHtml(target, profile, compact = false) {
-    if (!target) return '<div class="empty-state">No target selected.</div>';
-    const npc = npcRecordForName(target.name);
-    let drops = knownDropsForNpc(npc || { name:target.name, zone:state().zone }).filter(item => eraAllowed(item.era));
-    if (settings.targetMyClassOnly) drops = drops.filter(item => itemMatchesProfile(item, profile));
-    if (!drops.length) {
-        return `<div class="empty-state">No ${settings.targetMyClassOnly && profile.classes.length ? 'class-matching ' : ''}loot is listed for this target.</div>`;
-    }
-    return `<div class="target-drop-grid">${drops.slice(0, compact ? 10 : 24).map(item => {
-        const icon = itemIconSource(item);
-        return `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${icon ? `<img src="${esc(icon)}" alt="">` : '<span class="item-icon-placeholder">◇</span>'}<span>${esc(item.name)}</span></a>`;
-    }).join('')}</div>`;
-}
-
-function renderCurrentTarget(s, profile) {
-    const target = s.target;
-    $('#target-name').textContent = target?.name || 'No target';
-    $('#target-con').innerHTML = target ? targetConHtml(target, profile) : 'Consider an NPC to see its level and loot.';
-    $('#target-loot').innerHTML = targetLootHtml(target, profile);
-    $('#target-my-class').checked = Boolean(settings.targetMyClassOnly);
-    $('#minimal-my-class').checked = Boolean(settings.targetMyClassOnly);
-
-    $('#minimal-target-name').textContent = target?.name || 'No target';
-    $('#minimal-target-con').innerHTML = target ? targetConHtml(target, profile) : '';
-    $('#minimal-target-loot').innerHTML = targetLootHtml(target, profile, true);
-    const fresh = Boolean(target && Date.now() - Number(target.at || 0) < 45000);
-    $('#minimal-target').classList.toggle('is-visible', fresh || minimalTargetHovered);
-
-    clearTimeout(targetExpiryTimer);
-    if (fresh && !minimalTargetHovered) {
-        targetExpiryTimer = setTimeout(renderAll, Math.max(100, 45050 - (Date.now() - Number(target.at || 0))));
     }
 }
 
@@ -506,7 +483,6 @@ function eventText(e) {
     if (e.type === 'damage') return `${e.source}: ${e.amount} → ${e.victim}`;
     if (e.type === 'heal') return `${e.source}: healed ${e.target}`;
     if (e.type === 'kill') return `Slain ${e.victim}`;
-    if (e.type === 'target') return `Targeted ${e.target.name}`;
     if (e.type === 'rune') return `Rune absorbed ${e.amount}`;
     if (e.type === 'loot') return `${Number(e.quantity) > 1 ? `${e.quantity}× ` : ''}${e.item} · from ${e.source || 'Unknown'}`;
     return e.type;
@@ -766,7 +742,6 @@ function renderAll() {
     const activeView = $('.nav-button.is-active')?.dataset.view || 'overview';
     renderHeader(s, profile);
     renderMetrics(s, profile);
-    renderCurrentTarget(s, profile);
     renderViewPanel(activeView, s, profile);
     if (document.body.classList.contains('minimal-mode') && activeView !== 'map') {
         renderMinimalZoneDrops(s, profile);
@@ -774,7 +749,7 @@ function renderAll() {
     $('#map-title').textContent = s.zone ? `${s.zone} · Zone Viewer` : 'Zone Viewer';
     $('#map-subtitle').textContent = s.location
         ? `${s.location.x.toFixed(1)}, ${s.location.y.toFixed(1)}, ${s.location.z.toFixed(1)}`
-        : (bridgeInfo?.eqRootPath ? `EverQuest folder: ${bridgeInfo.eqRootPath}` : 'Select your EverQuest folder once.');
+        : (bridgeInfo?.eqRootPath ? 'Waiting for a logged /location.' : 'Choose your EverQuest folder in Settings.');
     $('#manual-level').value = settings.manualLevel || '';
     $('#item-tier').value = settings.itemTier || 0;
     $('#item-tier-value').textContent = settings.itemTier || 0;
@@ -794,6 +769,7 @@ function applyWindowState(windowState = {}) {
     const pinned = Boolean(windowState.alwaysOnTop);
     const minimal = Boolean(windowState.minimalMode);
     document.body.classList.toggle('minimal-mode', minimal);
+    document.body.classList.toggle('pinned-mode', pinned);
     for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
         if (!button) continue;
         button.classList.toggle('is-active', pinned);
@@ -812,7 +788,7 @@ function applyWindowState(windowState = {}) {
 
 async function toggleAlwaysOnTop() {
     const current = Boolean(bridgeInfo?.windowState?.alwaysOnTop);
-    const result = await api(`/api/window/always-on-top?enabled=${current ? '0' : '1'}`);
+    const result = await mutate(`/api/window/always-on-top?enabled=${current ? '0' : '1'}`);
     bridgeInfo ||= {};
     bridgeInfo.windowState = { ...(bridgeInfo.windowState || {}), alwaysOnTop: Boolean(result.enabled) };
     applyWindowState(bridgeInfo.windowState);
@@ -820,7 +796,7 @@ async function toggleAlwaysOnTop() {
 
 async function toggleMinimalMode() {
     const current = Boolean(bridgeInfo?.windowState?.minimalMode);
-    const result = await api(`/api/window/minimal?enabled=${current ? '0' : '1'}`);
+    const result = await mutate(`/api/window/minimal?enabled=${current ? '0' : '1'}`);
     bridgeInfo ||= {};
     bridgeInfo.windowState = { ...(bridgeInfo.windowState || {}), minimalMode: Boolean(result.enabled) };
     applyWindowState(bridgeInfo.windowState);
@@ -829,7 +805,7 @@ async function toggleMinimalMode() {
 
 function viewerApi() {
     const frame = $('#zone-viewer');
-    return frame?.contentWindow?.eqlCompanionViewer || null;
+    return frame?.contentWindow?.eqlEyeOfZommViewer || null;
 }
 
 function queueViewerSync(operation) {
@@ -864,7 +840,7 @@ async function syncZoneToViewer(showFeedback = true) {
         const result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
         if (!result?.ok) {
             const messages = {
-                'select-eq-folder-first': 'Select your EverQuest folder inside the Zone Viewer first.',
+                'select-eq-folder-first': 'Choose your EverQuest folder in Settings first.',
                 'zone-not-found': `The Zone Viewer could not match ${s.zone} to a local zone archive.`,
                 'load-failed': result.message || `The local files for ${s.zone} could not be loaded.`
             };
@@ -882,9 +858,10 @@ async function syncZoneToViewer(showFeedback = true) {
     }
 }
 
-async function syncLocationToViewer(showFeedback = true) {
+async function syncLocationToViewer(showFeedback = true, requestedLocation = null) {
     const s = state();
-    if (!s.location) {
+    const location = requestedLocation || s.location;
+    if (!location) {
         if (showFeedback) alert('No logged /location coordinate is available yet.');
         return false;
     }
@@ -897,14 +874,31 @@ async function syncLocationToViewer(showFeedback = true) {
         const loaded = await syncZoneToViewer(showFeedback);
         if (!loaded) return false;
     }
-    const result = apiObj.syncLocation(s.location);
+    const result = apiObj.syncLocation(location);
     if (!result?.ok) {
         const message = result?.message || 'The zone is not ready for location sync yet.';
         $('#map-subtitle').textContent = message;
         if (showFeedback) alert(message);
         return false;
     }
-    $('#map-subtitle').textContent = `Synced to ${s.location.x.toFixed(1)}, ${s.location.y.toFixed(1)}, ${s.location.z.toFixed(1)} in ${s.zone}.`;
+    setActiveMapMode('first');
+    $('#map-subtitle').textContent = `Synced to ${location.x.toFixed(1)}, ${location.y.toFixed(1)}, ${location.z.toFixed(1)} in ${s.zone}.`;
+    return true;
+}
+
+function setActiveMapMode(mode) {
+    $$('[data-map-mode]').forEach(button => button.classList.toggle('is-active', button.dataset.mapMode === mode));
+}
+
+async function setMapMode(mode, showFeedback = true) {
+    const apiObj = await waitForViewerApi();
+    if (!apiObj) return false;
+    const result = await apiObj.setView(mode);
+    if (!result?.ok) {
+        if (showFeedback) alert(result?.message || 'That map view is not available for this zone.');
+        return false;
+    }
+    setActiveMapMode(result.mode || mode);
     return true;
 }
 
@@ -922,8 +916,13 @@ async function pathToNpc(name) {
     if (!loaded) return;
     const npc = npcRecordForName(name);
     setTimeout(async () => {
-        const result = await viewerApi()?.pathTo(name, npc?.loc || null);
+        const rawLocation = Array.isArray(npc?.loc) ? npc.loc.map(Number).filter(Number.isFinite) : null;
+        const location = rawLocation && rawLocation.length >= 2
+            ? rawLocation.slice(0, Number(pack.meta?.schemaVersion) >= 3 ? 3 : 2)
+            : null;
+        const result = await viewerApi()?.pathTo(name, location);
         if (!result?.ok) alert(`No baked-in map label or wiki location is available for “${name}”.`);
+        else setActiveMapMode('first');
     }, 400);
 }
 
@@ -932,6 +931,33 @@ function runWikiSearch() {
     const query = input?.value.trim() || '';
     if (!query) return;
     openExternal(wikiSearchUrl(query));
+}
+
+async function applyLogSelection(info) {
+    bridgeInfo = info;
+    logOffset = 0;
+    partialLine = '';
+    parser.character = '';
+    parser.setCharacterFromFilename(info.logPath || '');
+    $('#settings-eq-root').textContent = info.eqRootPath || 'No folder selected';
+    $('#settings-log-path').textContent = info.logPath || 'No log selected';
+    $('#settings-log-mode').textContent = info.logSelection === 'manual' ? 'Specific file' : 'Newest log automatically';
+    $('#automatic-log').hidden = info.logSelection !== 'manual';
+    $('#setup-overlay').hidden = Boolean(info.eqRootExists);
+    const apiObj = await waitForViewerApi(2500);
+    if (apiObj && info.eqRootExists) await apiObj.useConfiguredFolder?.();
+    renderAll();
+}
+
+async function chooseEqFolder() {
+    const info = await mutate('/api/select-eq-root');
+    await applyLogSelection(info);
+    if (info.eqRootExists) {
+        queueViewerSync(async () => {
+            await syncZoneToViewer(false);
+            return syncLocationToViewer(false);
+        });
+    }
 }
 
 function wireUi() {
@@ -964,24 +990,26 @@ function wireUi() {
     });
     $('#change-log').addEventListener('click', async () => {
         try {
-            const info = await api('/api/select-log');
-            bridgeInfo = info;
-            logOffset = 0;
-            partialLine = '';
-            parser.character = '';
-            parser.setCharacterFromFilename(info.logPath || '');
-            $('#settings-log-path').textContent = info.logPath || 'No log selected';
-            renderAll();
+            await applyLogSelection(await mutate('/api/select-log'));
         } catch (error) {
             alert(`Unable to change log: ${error.message}`);
         }
     });
+    $('#automatic-log').addEventListener('click', async () => {
+        try {
+            await applyLogSelection(await mutate('/api/log/automatic'));
+        } catch (error) {
+            alert(`Unable to select the newest log: ${error.message}`);
+        }
+    });
+    $('#change-eq-folder').addEventListener('click', () => chooseEqFolder().catch(error => alert(`Unable to change folder: ${error.message}`)));
+    $('#setup-choose-folder').addEventListener('click', () => chooseEqFolder().catch(error => alert(`Unable to choose folder: ${error.message}`)));
     $('#update-pack').addEventListener('click', async () => {
         const button = $('#update-pack');
         button.disabled = true;
         $('#pack-update-status').textContent = 'checking…';
         try {
-            const result = await api('/api/update-pack?force=1');
+            const result = await mutate('/api/update-pack?force=1');
             $('#pack-update-status').textContent = result.status || (result.ok ? 'current' : 'unavailable');
             if (result.productionPack) await loadPack();
             if (!result.ok && result.error) {
@@ -996,16 +1024,16 @@ function wireUi() {
     });
     $('#wiki-search-form').addEventListener('submit', e => { e.preventDefault(); runWikiSearch(); });
     $('#wiki-search-button').addEventListener('click', runWikiSearch);
-    for (const checkbox of [$('#target-my-class'), $('#minimal-my-class')]) {
-        checkbox.addEventListener('change', event => {
-            settings.targetMyClassOnly = Boolean(event.target.checked);
-            prefs.save(settings);
-            renderAll();
-        });
-    }
-    $('#minimal-named-only').addEventListener('change', renderAll);
-    $('#minimal-target').addEventListener('pointerenter', () => { minimalTargetHovered = true; renderAll(); });
-    $('#minimal-target').addEventListener('pointerleave', () => { minimalTargetHovered = false; renderAll(); });
+    $('#minimal-my-class').addEventListener('change', event => {
+        settings.minimalMyClassOnly = Boolean(event.target.checked);
+        prefs.save(settings);
+        renderAll();
+    });
+    $('#minimal-named-only').addEventListener('change', event => {
+        settings.minimalNamedOnly = Boolean(event.target.checked);
+        prefs.save(settings);
+        renderAll();
+    });
     for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
         button.addEventListener('click', () => toggleAlwaysOnTop().catch(error => alert(`Unable to change pinning: ${error.message}`)));
     }
@@ -1021,27 +1049,20 @@ function wireUi() {
         const target = event.target.closest?.('[data-item-title]');
         if (target && !target.contains(event.relatedTarget)) hideItemTooltip();
     });
-    $('#select-eq-folder').addEventListener('click', () => {
-        const apiObj = viewerApi();
-        if (!apiObj) {
-            alert('The Zone Viewer is still loading. Try again in a moment.');
-            return;
-        }
-        apiObj.selectFolder().then(result => {
-            if (result?.ok) {
-                queueViewerSync(async () => {
-                    await syncZoneToViewer(false);
-                    return syncLocationToViewer(false);
-                });
-            }
-        });
-    });
+    $$('[data-map-mode]').forEach(button => button.addEventListener('click', () => setMapMode(button.dataset.mapMode, true)));
     $('#sync-zone').addEventListener('click', () => syncZoneToViewer(true));
     $('#sync-location').addEventListener('click', () => syncLocationToViewer(true));
+    $('#window-minimize').addEventListener('click', () => window.eyeOfZommWindow?.minimize());
+    $('#window-maximize').addEventListener('click', () => window.eyeOfZommWindow?.toggleMaximize());
+    $('#window-close').addEventListener('click', () => window.eyeOfZommWindow?.close());
+    $('#desktop-titlebar').addEventListener('dblclick', event => {
+        if (!event.target.closest('button')) window.eyeOfZommWindow?.toggleMaximize();
+    });
     window.addEventListener('message', event => {
+        if (event.origin !== window.location.origin) return;
         if (event.data?.type === 'eoz-viewer-ready') {
             viewerReady = true;
-            viewerApi()?.restoreFolder?.().then(() =>
+            viewerApi()?.useConfiguredFolder?.().then(() =>
                 queueViewerSync(async () => {
                     await syncZoneToViewer(false);
                     return syncLocationToViewer(false);

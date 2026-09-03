@@ -1,5 +1,5 @@
 import { EQLogParser } from '../app/parser.js';
-import { conForLevel, blueFloorForPlayerLevel, greenFloorForPlayerLevel } from '../app/con-colors.js';
+import { conForLevel, grayCeilingForPlayerLevel, greenCeilingForPlayerLevel } from '../app/con-colors.js';
 import { scaledItemStats } from '../app/item-scaling.js';
 
 function assert(condition, message) {
@@ -22,22 +22,28 @@ const s = p.snapshot();
 assert(s.zone === 'East Freeport', 'zone');
 assert(s.level === 50, 'level');
 assert(s.classes.join('/') === 'MNK/ROG/BER', 'classes');
-assert(s.target.name === 'Guard Wytiffin' && s.target.level === 50, 'consider');
+assert(s.observed.some(npc => npc.name === 'Guard Wytiffin' && npc.level === 50), 'considered NPC');
 assert(s.totalDamage === 372, 'outgoing damage only');
 assert(s.location.x === 10.5 && s.location.y === -20.25 && s.location.z === 4, 'location');
 
-// Classic-style level-dependent con baseline, plus a lower gray/trivial band.
-assert(blueFloorForPlayerLevel(10) === 7, 'L10 blue floor');
-assert(blueFloorForPlayerLevel(30) === 22, 'L30 blue floor');
-assert(blueFloorForPlayerLevel(50) === 37, 'L50 blue floor');
-assert(greenFloorForPlayerLevel(50) === 33, 'L50 green floor');
+// Modern EQ bands: blue, light blue, green, then gray below player level.
+assert(grayCeilingForPlayerLevel(15) === 9, 'L15 gray ceiling');
+assert(grayCeilingForPlayerLevel(50) === 32, 'L50 gray ceiling');
+assert(greenCeilingForPlayerLevel(50) === 36, 'L50 green ceiling');
 assert(conForLevel(52,50).key === 'yellow', 'yellow con');
 assert(conForLevel(53,50).key === 'yellow', '+3 remains yellow');
 assert(conForLevel(54,50).key === 'red', '+4 begins red');
 assert(conForLevel(50,50).key === 'white', 'white con');
 assert(conForLevel(49,50).key === 'blue', 'blue con');
+assert(conForLevel(45,50).key === 'blue', 'L50 blue floor');
+assert(conForLevel(44,50).key === 'light-blue', 'L50 light-blue ceiling');
+assert(conForLevel(37,50).key === 'light-blue', 'L50 light-blue floor');
+assert(conForLevel(36,50).key === 'green', 'L50 green ceiling');
+assert(conForLevel(33,50).key === 'green', 'L50 green floor');
+assert(conForLevel(32,50).key === 'gray', 'L50 gray begins');
 assert(conForLevel(35,50).key === 'green', 'green con');
 assert(conForLevel(30,50).key === 'gray', 'gray con');
+assert(conForLevel(10,15).key === 'blue', 'low levels have no light-blue band');
 
 const item = {
     slots:['AMMO'],

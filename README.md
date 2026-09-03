@@ -1,6 +1,6 @@
 # EQLWiki - Eye of Zomm
 
-**Eye of Zomm** is an open-source, local-first desktop companion for **EverQuest Legends** and **EQLWiki**.
+**Eye of Zomm** is an open-source, local-first desktop app for **EverQuest Legends** and **EQLWiki**.
 
 It watches ordinary EverQuest text logs, presents zone/NPC/item information from a locally cached EQLWiki dataset, and embeds a simplified version of the EQL Zone Viewer for navigation. It never hooks the game client or modifies game files.
 
@@ -8,9 +8,9 @@ It watches ordinary EverQuest text logs, presents zone/NPC/item information from
 
 Eye of Zomm may:
 
-- read user-selected EverQuest log files;
-- follow normal rotated `eqlog_*.txt` logs;
-- read user-selected local zone/map files for the Zone Viewer;
+- read `eqlog_*.txt` files under the user-selected EverQuest folder;
+- follow the most recently modified log automatically, unless a specific file is chosen in Settings;
+- read local zone/map files under that same user-selected folder for the Zone Viewer;
 - download the static EQLWiki dataset mirror from this GitHub repository;
 - open EQLWiki pages/searches in the user's normal browser.
 
@@ -21,7 +21,7 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Detects the active character from the log filename.
 - Detects zones from normal log output.
 - Detects level/classes when `/who` output appears and follows later level-up messages.
-- Parses considers, targets, outgoing damage, DoTs, heals, runes, kills, loot, and recent activity.
+- Parses considers, outgoing damage, DoTs, heals, runes, kills, loot, and recent activity.
 - Groups combat into timestamped encounters using a configurable quiet-period threshold.
 - Records looted items and their sources, with observed drop rates derived from nearby logged kills.
 - Shows current-zone NPCs with EQ-style con labels and color-tinted cards relative to the player's level.
@@ -29,9 +29,11 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Applies EQLWiki Item Level Slider scaling locally.
 - Shows item sources and known NPC drops without requesting item/NPC pages from the wiki.
 - Embeds a deliberately simplified EQL Zone Viewer.
-- Can synchronize the viewer with logged `/location` output when a supported line is present.
-- Provides a pin-to-top window option that also hides the app from the Windows taskbar.
-- Provides a minimal map, live-fight DPS, mob list, and temporary current-target loot view.
+- Prompts for the EverQuest folder on first launch, then selects the newest log under `Logs` automatically.
+- Provides First Person 3D, Top Down 3D, and local Map Overlay views with all floors visible by default.
+- Synchronizes logged `/location` output into first person and derives facing from consecutive coordinates.
+- Provides a pin-to-top option that hides the draggable title bar while keeping the app in the Windows taskbar.
+- Provides a minimal map, live-fight DPS, and class-filtered named-mob/drop list.
 - Shows EQLWiki Itembox-inspired local-data tooltips, including embedded wiki icons when present in the pack.
 - Searches EQLWiki from the global search field and opens exact wiki links from local records.
 
@@ -106,13 +108,13 @@ This keeps Eye of Zomm useful without trying to recreate every wiki article insi
 
 Eye of Zomm reuses the existing EQL Zone Viewer parsing/rendering code, but exposes a smaller navigation-focused UI.
 
-The companion keeps:
+The app keeps:
 
-- select EverQuest folder;
+- folder-first setup and automatic log selection;
 - current-zone load/sync;
-- top-down / first-person navigation;
+- First Person 3D, Top Down 3D, and Map Overlay views;
 - grounded movement/reset;
-- floor selection;
+- all-floor display with optional floor selection;
 - logged `/location` synchronization;
 - path-to-NPC integration;
 - local map/minimap functionality needed for navigation.
@@ -127,9 +129,9 @@ Official builds are normal per-user x64 Windows installers produced by GitHub Ac
 EQLWiki-Eye-of-Zomm-Setup-<version>-x64.exe
 ```
 
-The installer creates Start Menu/Desktop shortcuts and registers the `eqleoz://` protocol so EQLWiki can launch/focus the installed companion.
+The installer creates Start Menu/Desktop shortcuts and registers the `eqleoz://` protocol so EQLWiki can launch or focus the installed app.
 
-The build and release workflows automatically Authenticode-sign and verify installers when the repository's certificate secrets are configured. See [SIGNING.md](SIGNING.md). Unsigned builds can still trigger SmartScreen.
+The Windows artifact and release workflows require a trusted Authenticode certificate, then verify both the packaged application and installer before upload. They refuse to publish unsigned output. See [SIGNING.md](SIGNING.md).
 
 ## Development
 
@@ -140,7 +142,7 @@ Requirements:
 - Windows or GitHub Actions for the production NSIS installer
 
 ```bash
-npm install
+npm ci
 npm test
 npm start
 ```

@@ -1,41 +1,22 @@
-export const CON_ORDER = ['gray', 'green', 'blue', 'white', 'yellow', 'red'];
+export const CON_ORDER = ['gray', 'green', 'light-blue', 'blue', 'white', 'yellow', 'red'];
 
 /*
- * EverQuest Legends con model.
- *
- * White / yellow / red are the classic relative-level rules:
- *   same level = white, +1 through +3 = yellow, +4+ = red.
- *
- * For lower-level NPCs, classic EQ widens the blue range as the player
- * levels. The 0.75 threshold below reproduces the documented classic blue
- * floor from level 14 onward; levels 1-13 use the documented fixed ranges.
- *
- * Legends exposes both green and gray/trivial presentation. Exact Legends
- * green->gray cutoffs are not currently present in the supplied log, so the
- * lower cutoff uses the familiar ~0.66 challenge threshold. Keeping these
- * rules isolated here makes future calibration a one-file change.
+ * Modern EverQuest consider bands, matching the server-side con-level rules:
+ * equal = white, +1..+3 = yellow, and +4 or more = red. Lower-level bands
+ * widen as the player levels and, above level 20, include light blue between
+ * blue and green.
  */
 
-function eqThresholdRound(value) {
-    // Classic /consider references describe .50 as rounding down, while
-    // values above .50 round up. Integer level products make this stable.
-    return Math.floor(Number(value) + 0.49);
+export function grayCeilingForPlayerLevel(playerLevel) {
+    const player = Math.max(1, Math.floor(Number(playerLevel) || 0));
+    if (player <= 15) return player - 6;
+    return player - Math.floor((player + 5) / 3);
 }
 
-export function blueFloorForPlayerLevel(playerLevel) {
+export function greenCeilingForPlayerLevel(playerLevel) {
     const player = Math.max(1, Math.floor(Number(playerLevel) || 0));
-    if (!player) return 0;
-    if (player <= 12) return Math.max(1, player - 3);
-    if (player === 13) return 9;
-    return Math.max(1, eqThresholdRound(player * 0.75));
-}
-
-export function greenFloorForPlayerLevel(playerLevel) {
-    const player = Math.max(1, Math.floor(Number(playerLevel) || 0));
-    if (!player) return 0;
-    const blueFloor = blueFloorForPlayerLevel(player);
-    // Keep a distinct green band immediately below blue. Below this is gray.
-    return Math.max(1, Math.min(blueFloor - 1, eqThresholdRound(player * 0.66)));
+    if (player <= 15) return grayCeilingForPlayerLevel(player);
+    return player - Math.floor((player + 7) / 4);
 }
 
 export function conForLevel(mobLevel, playerLevel) {
@@ -51,11 +32,8 @@ export function conForLevel(mobLevel, playerLevel) {
     if (delta >= 1) return { key: 'yellow', label: 'Yellow', delta };
     if (delta === 0) return { key: 'white', label: 'White', delta };
 
-    const blueFloor = blueFloorForPlayerLevel(player);
-    if (mob >= blueFloor) return { key: 'blue', label: 'Blue', delta };
-
-    const greenFloor = greenFloorForPlayerLevel(player);
-    if (mob >= greenFloor) return { key: 'green', label: 'Green', delta };
-
-    return { key: 'gray', label: 'Gray', delta };
+    if (mob <= grayCeilingForPlayerLevel(player)) return { key: 'gray', label: 'Gray', delta };
+    if (player > 15 && mob <= greenCeilingForPlayerLevel(player)) return { key: 'green', label: 'Green', delta };
+    if (player > 20 && delta <= -6) return { key: 'light-blue', label: 'Light blue', delta };
+    return { key: 'blue', label: 'Blue', delta };
 }

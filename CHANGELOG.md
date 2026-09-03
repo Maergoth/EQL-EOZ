@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 - Release UX and map overhaul
+
+- Added first-run EverQuest folder setup and automatic selection of the most recently modified `eqlog_*.txt` under `Logs`, with folder and log overrides in Settings.
+- Removed the unreliable current-target surface, last-location metric, and remaining player-card redundancy; the header now shows character, classes, level, and zone.
+- Added explicit First Person 3D, Top Down 3D, and Map Overlay modes, with all floors shown by default.
+- Corrected the EQ-to-viewer coordinate flow and made consecutive `/location` updates face the player's movement trajectory.
+- Kept route-to-NPC support map-label-first with schema-v3 EQLWiki coordinates as the fallback.
+- Changed pinned mode to hide the draggable title bar while keeping Eye of Zomm visible in the Windows taskbar.
+- Added the modern light-blue consider band and verified yellow at +1 through +3 and red at +4 or higher.
+- Reduced helper copy and removed every retired product-name reference from the app and repository.
+- Upgraded the exported dataset to schema v3 so two-coordinate locations and pages with multiple location tuples are handled safely.
+- Added loopback request/file bounds, state-changing POST guards, first-run/log-selection tests, exporter fixtures, UI checks, and release checks.
+- Made trusted Authenticode signing and verification mandatory before Windows artifacts or releases can be published.
+
 ## 0.4.0 - Map and target focus
 
 - Corrected consider colors so +1 through +3 are yellow and +4 or higher is red.
@@ -20,7 +34,7 @@
 - Dataset synchronization now checks GitHub on every application startup and on **Sync with Wiki** button press.
 - Added low-priority MediaWiki server exporter + one-commit GitHub dataset branch publishing workflow.
 - Added repository-scoped deploy-key support for weekly/manual cPanel synchronization without a personal token.
-- Kept the embedded Zone Viewer navigation-focused and removed additional nonessential viewer controls from the companion UI.
+- Kept the embedded Zone Viewer navigation-focused and removed additional nonessential viewer controls from the app UI.
 - Expanded exported NPC metadata with race, class, and description where present.
 - Retained local wiki search and explicit Open on Wiki behavior.
 - Added persistent **Pin to top** and a compact map + named-drop minimal view.

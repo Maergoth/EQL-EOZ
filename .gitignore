@@ -2,7 +2,7 @@ node_modules/
 dist/
 *.log
 .DS_Store
-app/data/companion-pack.bootstrap.json
-app/data/companion-pack.json
-companion-config.json
-companion-pack-state.json
+app/data/eye-of-zomm-pack.bootstrap.json
+app/data/eye-of-zomm-pack.json
+eye-of-zomm-config.json
+eye-of-zomm-pack-state.json

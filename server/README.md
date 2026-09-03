@@ -95,7 +95,9 @@ The refresh wrapper uses:
 - JSON validation before publication;
 - SHA-256 in the manifest.
 
-The schema-v2 exporter also reads each unique `File:Item_<lucy_img_ID>.png` from MediaWiki's local file repository and embeds it once in the compressed pack. It does not fetch icon URLs over HTTP. Clients therefore receive Itembox icons through the same GitHub dataset mirror as the rest of the wiki data.
+The schema-v3 exporter also reads each unique `File:Item_<lucy_img_ID>.png` from MediaWiki's local file repository and embeds it once in the compressed pack. It accepts two- or three-coordinate NPC locations and keeps the first complete tuple when a page lists multiple spawns. It does not fetch icon URLs over HTTP. Clients therefore receive Itembox icons through the same GitHub dataset mirror as the rest of the wiki data.
+
+Schema v3 changes only the exported JSON pack. It does not require SQL, a MediaWiki database migration, or table changes.
 
 Run the same command manually after major wiki changes whenever you want an immediate dataset update.
 

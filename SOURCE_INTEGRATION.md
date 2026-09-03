@@ -10,7 +10,7 @@ For content that does not fit the structured dataset, the app opens the appropri
 
 ## Item Level Slider
 
-`app/item-scaling.js` mirrors the companion-relevant slider rules locally. In particular:
+`app/item-scaling.js` mirrors the Eye of Zomm slider rules locally. In particular:
 
 - positive primary stats scale by +1/tier for values <= 10, otherwise ~10% per effective tier;
 - negative primary stats improve toward zero by at least one point/tier or 10%, whichever rule applies by magnitude;
@@ -27,4 +27,4 @@ The exported record carries a compact era label derived server-side from page ca
 
 The supplied Zone Viewer JS/workers remain under `app/zoneviewer/` and their notices remain under `THIRD_PARTY/ZoneViewer/`.
 
-Eye of Zomm does not rewrite the renderer/parser. The wrapper exposes only the navigation-focused controls needed by the companion and a small integration API for zone sync, logged-coordinate sync, and path-to-label requests.
+Eye of Zomm does not rewrite the renderer/parser. The wrapper exposes only the navigation-focused controls needed by the app and a small integration API for zone sync, logged-coordinate sync, and path-to-label requests.

@@ -44,7 +44,6 @@ export class EQLogParser {
         this.classes = [];
         this.zone = '';
         this.location = null;
-        this.target = null;
         this.observed = new Map();
         this.totalDamage = 0;
         this.totalHealing = 0;
@@ -231,7 +230,6 @@ export class EQLogParser {
         x = text.match(/^You have entered (.+?)\.?$/i);
         if (x) {
             this.zone = normalizeName(x[1]);
-            this.target = null;
             return this.rememberEvent({ type: 'zone', zone: this.zone });
         }
 
@@ -270,21 +268,14 @@ export class EQLogParser {
             }
         }
 
-        x = text.match(/^Targeted \((?:NPC|Player)\):\s*(.+)$/i);
-        if (x) {
-            this.target = { name: normalizeName(x[1]), level: 0, at: this.currentLineAt || Date.now() };
-            return this.rememberEvent({ type: 'target', target: { ...this.target } });
-        }
-
         // Consider lines from the supplied Legends log:
         // "Master Xalg judges you amiably -- ... (Lvl: 70)"
         x = text.match(/^(.+?)\s+(?:regards you|judges you|glares at you)\b.*?\(Lvl:\s*(\d+)\)\s*$/i);
         if (x) {
             const name = normalizeName(x[1]);
             const level = Number(x[2]);
-            this.target = { name, level, at: this.currentLineAt || Date.now() };
             this.rememberNpc(name, { level });
-            return this.rememberEvent({ type: 'consider', target: { ...this.target } });
+            return this.rememberEvent({ type: 'consider', target: { name, level, at: this.currentLineAt || Date.now() } });
         }
 
         // Outgoing spell direct damage.
@@ -382,7 +373,6 @@ export class EQLogParser {
             classes: this.classes.slice(),
             zone: this.zone,
             location: this.location ? { ...this.location } : null,
-            target: this.target ? { ...this.target } : null,
             totalDamage: this.totalDamage,
             totalHealing: this.totalHealing,
             sessionDps: sessionSeconds ? this.totalDamage / sessionSeconds : 0,

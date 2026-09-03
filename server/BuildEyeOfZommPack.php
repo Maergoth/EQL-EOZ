@@ -140,7 +140,7 @@ class BuildEyeOfZommPack extends Maintenance {
         $generated = gmdate( 'c' );
         $pack = [
             'meta' => [
-                'schemaVersion' => 2,
+                'schemaVersion' => 3,
                 'version' => 'wiki-' . gmdate( 'Ymd\THis\Z' ),
                 'generatedAt' => $generated,
                 'currentEra' => $currentEra,
@@ -730,12 +730,43 @@ class BuildEyeOfZommPack extends Maintenance {
         if ( $text === '' ) {
             return null;
         }
-        preg_match_all( '/[+\-]?\d+(?:\.\d+)?/', $text, $m );
-        $values = array_map( 'floatval', $m[0] ?? [] );
-        if ( count( $values ) < 3 ) {
+
+        $number = '[+\-]?\d+(?:\.\d+)?';
+        $normalize = function ( array $matches ): ?array {
+            $values = [];
+            foreach ( array_slice( $matches, 1, 3 ) as $value ) {
+                if ( $value !== '' && $value !== null ) {
+                    $values[] = $this->intIfWhole( (float)$value );
+                }
+            }
+            return count( $values ) >= 2 ? $values : null;
+        };
+
+        // EQLWiki commonly stores coordinates in {{loc|x|y|z}}.
+        if ( preg_match(
+            '/\{\{\s*(?:loc|location)\s*\|\s*(' . $number . ')\s*\|\s*(' . $number . ')(?:\s*\|\s*(' . $number . '))?/i',
+            $text,
+            $match
+        ) ) {
+            return $normalize( $match );
+        }
+
+        // When several spawn points are listed, take the first complete tuple
+        // instead of accidentally treating the next tuple's X as elevation.
+        if ( preg_match(
+            '/[\(\[]\s*(' . $number . ')\s*[,|]\s*(' . $number . ')(?:\s*[,|]\s*(' . $number . '))?\s*[\)\]]/',
+            $text,
+            $match
+        ) ) {
+            return $normalize( $match );
+        }
+
+        preg_match_all( '/'. $number .'/', $text, $match );
+        $values = array_slice( array_map( 'floatval', $match[0] ?? [] ), 0, 3 );
+        if ( count( $values ) < 2 ) {
             return null;
         }
-        return [ $values[0], $values[1], $values[2] ];
+        return array_map( fn ( $value ) => $this->intIfWhole( $value ), $values );
     }
 
     private function extractBalancedTemplate( string $text, string $templateName ): string {

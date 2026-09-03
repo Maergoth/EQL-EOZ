@@ -2,7 +2,7 @@
 
 ## Product objective
 
-Provide a polished EverQuest Legends companion that understands the player's ordinary log stream, current zone, level/classes, locally observed NPCs/combat, EQLWiki NPC/item knowledge, and the existing EQL Zone Viewer without becoming a new source of wiki CPU/API load.
+Provide a polished EverQuest Legends desktop app that understands the player's ordinary log stream, current zone, level/classes, locally observed NPCs/combat, EQLWiki NPC/item knowledge, and the existing EQL Zone Viewer without becoming a new source of wiki CPU/API load.
 
 ## Runtime architecture
 
@@ -69,27 +69,23 @@ Name, wiki title, era, usable classes, slots, Item Level Slider numeric stats, n
 
 ## Wiki fallback
 
-Not every useful wiki page belongs in the structured pack. The desktop app therefore has a global search:
-
-1. search the local zone/NPC/item dataset first;
-2. open a matched article directly when appropriate;
-3. otherwise open EQLWiki `Special:Search` in the normal browser.
+Not every useful wiki page belongs in the structured pack. The global search therefore opens EQLWiki `Special:Search` in the normal browser. It does not mix app records into the search behavior.
 
 This is explicit user navigation, not background API work.
 
 ## Zone Viewer scope
 
-Keep only the capabilities that directly support companion navigation:
+Keep only the capabilities that directly support Eye of Zomm navigation:
 
-- select local EQ folder;
+- select and remember the local EQ folder;
 - load/sync current zone;
-- top-down and first-person views;
+- first-person 3D, top-down 3D, and top-down map-overlay views;
 - grounded/reset;
 - floor selection;
 - location sync;
 - path-to-NPC/location.
 
-Do not expose advanced tuning, performance diagnostics, world atlas, duplicate path-search UI, cut planes, controls help, or fullscreen controls in the companion surface.
+Do not expose advanced tuning, performance diagnostics, world atlas, duplicate path-search UI, cut planes, controls help, or fullscreen controls in the app surface.
 
 ## Safety boundary
 
@@ -104,4 +100,4 @@ Disallowed: process hooks, memory inspection, injection, game-file writes, gener
 - CI tests on pushes/PRs;
 - Windows x64 NSIS installer built by GitHub Actions;
 - production release workflow refuses to ship without a verified GitHub-mirrored production dataset;
-- optional future code signing can remove SmartScreen reputation friction.
+- Windows artifacts are published only after trusted Authenticode signing and signature verification.

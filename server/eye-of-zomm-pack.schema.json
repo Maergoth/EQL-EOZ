@@ -18,7 +18,7 @@
       ],
       "properties": {
         "schemaVersion": {
-          "type": "integer"
+          "const": 3
         },
         "version": {
           "type": "string"
@@ -92,7 +92,7 @@
           },
           "loc": {
             "type": "array",
-            "minItems": 3,
+            "minItems": 2,
             "maxItems": 3,
             "items": {
               "type": "number"

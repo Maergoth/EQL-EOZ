@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "version": "sample-2026-09-01",
-  "pack": "companion-pack.sample.json",
+  "pack": "eye-of-zomm-pack.sample.json",
   "product": "EQLWiki - Eye of Zomm",
   "generatedAt": "2026-09-01T23:49:00Z",
   "sample": true

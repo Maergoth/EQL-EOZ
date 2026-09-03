@@ -10,12 +10,13 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 .eqlzv-root{height:100%;min-height:100%}
 .eqlzv-app{height:100%}
 .eqlzv-viewport{flex:1;min-height:0}
-/* Eye of Zomm mode deliberately keeps the viewer focused on navigation.
-   Advanced diagnostics/display tuning remain in the upstream ZoneViewer source
-   but are not exposed in the companion UI. */
+/* Eye of Zomm keeps the viewer focused on navigation. Advanced diagnostics
+   and display tuning remain in the upstream source but are not exposed here. */
 .eqlzv-source-label,.eqlzv-world-button,.eqlzv-goto-label,.eqlzv-slider-label,
 .eqlzv-options,.eqlzv-performance,.eqlzv-performance-panel,.eqlzv-help-panel,
 .eqlzv-control-hint{display:none!important}
+.eqlzv-toolbar>.eqlzv-primary,.eqlzv-toolbar-secondary>.eqlzv-toolbar-label:first-child,
+.eqlzv-toolbar-secondary>.eqlzv-segmented{display:none!important}
 .eqlzv-toolbar{gap:8px!important;flex-wrap:wrap}
 .eqlzv-toolbar-secondary{padding-top:6px!important}
 </style>
@@ -73,6 +74,67 @@ function viewerName(zoneName) {
     return zoneAliases.get(norm(cleaned)) || cleaned;
 }
 
+async function localApi(url, options = {}) {
+    const next = { cache:'no-store', ...options };
+    next.headers = { 'X-Eye-Of-Zomm-Request':'1', ...(next.headers || {}) };
+    const response = await fetch(url, next);
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return response;
+}
+
+class LocalFileHandle {
+    constructor(entry) {
+        this.kind = 'file';
+        this.name = entry.path.split('/').pop();
+        this.entry = entry;
+    }
+
+    async getFile() {
+        const response = await localApi(`/api/eq-file?path=${encodeURIComponent(this.entry.path)}`);
+        const bytes = await response.arrayBuffer();
+        return new File([bytes], this.name, { lastModified:Number(this.entry.lastModified) || Date.now() });
+    }
+}
+
+class LocalDirectoryHandle {
+    constructor(name) {
+        this.kind = 'directory';
+        this.name = name;
+        this.children = new Map();
+    }
+
+    async *entries() {
+        yield* this.children.entries();
+    }
+
+    async queryPermission() { return 'granted'; }
+    async requestPermission() { return 'granted'; }
+}
+
+async function configuredDirectoryHandle() {
+    const response = await localApi('/api/eq-files');
+    const manifest = await response.json();
+    if (!manifest.rootName || !Array.isArray(manifest.files)) return null;
+    const rootHandle = new LocalDirectoryHandle(manifest.rootName);
+    for (const entry of manifest.files) {
+        const parts = String(entry.path || '').split('/').filter(Boolean);
+        if (!parts.length) continue;
+        let directory = rootHandle;
+        for (const part of parts.slice(0, -1)) {
+            const existing = directory.children.get(part);
+            if (existing?.kind === 'directory') {
+                directory = existing;
+            } else {
+                const child = new LocalDirectoryHandle(part);
+                directory.children.set(part, child);
+                directory = child;
+            }
+        }
+        directory.children.set(parts.at(-1), new LocalFileHandle(entry));
+    }
+    return rootHandle;
+}
+
 const HANDLE_DB = 'eoz-zone-viewer';
 const HANDLE_STORE = 'directory-handles';
 const HANDLE_KEY = 'everquest-root';
@@ -119,15 +181,18 @@ async function connectSavedHandle(handle) {
 }
 
 async function pathToWikiLocation(label, location) {
-    if (!app?.currentZoneRecord || !Array.isArray(location) || location.length < 3) return false;
-    const [eqX, eqY, eqZ] = location.map(Number);
-    if (![eqX, eqY, eqZ].every(Number.isFinite)) return false;
+    if (!app?.currentZoneRecord || !Array.isArray(location) || location.length < 2) return false;
+    const [eqX, eqY, rawEqZ] = location.map(Number);
+    if (![eqX, eqY].every(Number.isFinite)) return false;
+    const hasTrustedElevation = Number.isFinite(rawEqZ);
+    const eqZ = hasTrustedElevation ? rawEqZ : 0;
 
     app.mapFileVisible && app.setGameMapVisible(false, false);
     const start = app.navigationStartPoint();
     if (app.mode !== 'first') app.setMode('first');
-    const point = app.perspective.position.clone().set(eqY, eqZ, -eqX);
-    const ground = app.findGroundPointAt(point.x, point.z, point.y + 35) || point.clone();
+    const point = app.eqMapToThree(eqX, eqY, eqZ);
+    const searchHeight = hasTrustedElevation ? point.y + 35 : app.currentBounds.max.y + 100;
+    const ground = app.findGroundPointAt(point.x, point.z, searchHeight) || point.clone();
     const key = `${label}:${ground.x.toFixed(2)}:${ground.y.toFixed(2)}:${ground.z.toFixed(2)}`;
     if (app.navigationTarget?.key === key) return true;
 
@@ -173,9 +238,19 @@ async function waitForZoneSelect(timeout = 15000) {
     return null;
 }
 
-window.eqlCompanionViewer = {
+let lastSyncedLocation = null;
+let loadedZoneIdentity = '';
+
+window.eqlEyeOfZommViewer = {
     async selectFolder() {
         if (!app) return { ok:false };
+        try {
+            await localApi('/api/select-eq-root', { method:'POST' });
+            const configured = await configuredDirectoryHandle();
+            if (configured && await connectSavedHandle(configured)) {
+                return { ok:true, restored:true, name:configured.name || '' };
+            }
+        } catch {}
         const saved = await loadSavedHandle().catch(() => null);
         if (saved) {
             let permission = await saved.queryPermission?.({ mode:'read' });
@@ -190,14 +265,19 @@ window.eqlCompanionViewer = {
         return { ok:Boolean(handle), restored:false, name:handle?.name || '' };
     },
 
-    async restoreFolder() {
+    async useConfiguredFolder() {
         if (!app) return { ok:false };
+        const configured = await configuredDirectoryHandle().catch(() => null);
+        if (configured) {
+            const ok = await connectSavedHandle(configured);
+            if (ok) return { ok:true, restored:true, name:configured.name || '', source:'settings' };
+        }
         const handle = await loadSavedHandle().catch(() => null);
         if (!handle) return { ok:false, reason:'no-saved-folder' };
         const permission = await handle.queryPermission?.({ mode:'read' });
         if (permission !== 'granted') return { ok:false, reason:'permission-required', name:handle.name || '' };
         const ok = await connectSavedHandle(handle);
-        return { ok, restored:ok, name:handle.name || '' };
+        return { ok, restored:ok, name:handle.name || '', source:'saved-handle' };
     },
 
     async loadZone(zoneName) {
@@ -233,6 +313,14 @@ window.eqlCompanionViewer = {
                 message:app.els?.statusText?.textContent || `Unable to load ${zoneName}.`
             };
         }
+        const zoneIdentity = `${app.currentZoneRecord.id || ''}:${app.currentZoneRecord.format || ''}`;
+        if (zoneIdentity !== loadedZoneIdentity) {
+            lastSyncedLocation = null;
+            loadedZoneIdentity = zoneIdentity;
+        }
+        app.selectedFloorIndices?.clear?.();
+        root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
+        app.applyFloorSelection?.();
         return {
             ok:true,
             viewerZone:option.textContent,
@@ -249,15 +337,28 @@ window.eqlCompanionViewer = {
             return { ok:false, reason:'load-zone-first' };
         }
 
-        // EQL Zone Viewer canonical transform:
-        // Three X = EQ Y, Three Y = EQ Z, Three Z = -EQ X.
-        const threeX = Number(location.y);
-        const threeY = Number(location.z) + (app.fp.eyeHeight || 6);
-        const threeZ = -Number(location.x);
-
+        // Use the viewer's own canonical conversion so the 3D scene and map
+        // overlay share exactly the same EQ X/Y/Z basis.
+        const eqLocation = { x:Number(location.x), y:Number(location.y), z:Number(location.z) };
+        const point = app.eqMapToThree(eqLocation.x, eqLocation.y, eqLocation.z);
+        const ground = app.findGroundPointAt(point.x, point.z, point.y + 35) || point;
+        const previousForward = app.lastFirstPersonPose?.forward?.clone?.();
         if (app.mode !== 'first') app.setMode('first');
-        app.perspective.position.set(threeX, threeY, threeZ);
+        app.setGameMapVisible?.(false);
+        app.perspective.position.copy(ground).add({ x:0, y:app.fp.eyeHeight || 6, z:0 });
         app.fp.activate(app.perspective.position);
+        let forward = null;
+        if (lastSyncedLocation) {
+            const previous = app.eqMapToThree(lastSyncedLocation.x, lastSyncedLocation.y, lastSyncedLocation.z);
+            forward = ground.clone().sub(previous).setY(0);
+            if (forward.lengthSq() < .25) forward = null;
+        }
+        forward = forward?.normalize?.() || previousForward;
+        if (forward?.lengthSq?.() > 0) {
+            app.perspective.up.set(0, 1, 0);
+            app.perspective.lookAt(app.perspective.position.clone().add(forward));
+        }
+        lastSyncedLocation = eqLocation;
         if (typeof app.captureFirstPersonPose === 'function') app.captureFirstPersonPose();
         if (typeof app.updateCoordinateHud === 'function') app.updateCoordinateHud(true);
         if (typeof app.drawMiniMap === 'function') app.drawMiniMap();
@@ -266,6 +367,21 @@ window.eqlCompanionViewer = {
         }
         app.requestRender?.();
         return { ok:true };
+    },
+
+    setView(mode) {
+        if (!app?.currentZoneRecord) return { ok:false, reason:'load-zone-first', message:'Load the current zone first.' };
+        if (mode === 'map') {
+            if (!app.mapData?.lines?.length) {
+                return { ok:false, reason:'map-not-found', message:'No matching file was found in the EverQuest Maps folder.' };
+            }
+            app.setGameMapVisible(true);
+            app.resetTopView?.();
+            return { ok:true, mode:'map' };
+        }
+        app.setGameMapVisible?.(false);
+        app.setMode(mode === 'top' ? 'top' : 'first');
+        return { ok:true, mode:mode === 'top' ? 'top' : 'first' };
     },
 
     async pathTo(label, wikiLocation = null) {
@@ -283,6 +399,8 @@ window.eqlCompanionViewer = {
             mounted: Boolean(app),
             directorySelected: Boolean(select && !select.disabled),
             zone: app?.currentZoneRecord ? (badge ? badge.textContent.trim() : app.currentZoneRecord.id) : '',
+            mode: app?.mapFileVisible ? 'map' : (app?.mode || 'top'),
+            floors: app?.selectedFloorIndices?.size ? 'filtered' : 'all',
             message:app?.els?.statusText?.textContent || ''
         };
     },
@@ -293,7 +411,7 @@ window.eqlCompanionViewer = {
     }
 };
 
-window.parent?.postMessage({ type:'eoz-viewer-ready' }, '*');
+window.parent?.postMessage({ type:'eoz-viewer-ready' }, window.location.origin);
 </script>
 </body>
 </html>

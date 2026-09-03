@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, dialog, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -8,6 +8,12 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const { URL } = require('node:url');
+const {
+    inferEqRootPath,
+    isEqLogName,
+    isPathInside,
+    resolveConfiguredLog
+} = require('./log-selection.cjs');
 
 const APP_VERSION = app.getVersion();
 const HOST = '127.0.0.1';
@@ -16,6 +22,10 @@ const INITIAL_TAIL_BYTES = 512 * 1024;
 const MAX_READ_BYTES = 2 * 1024 * 1024;
 const PACK_MANIFEST_URL = 'https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json';
 const MAX_PACK_DOWNLOAD_BYTES = 128 * 1024 * 1024;
+const MAX_API_REQUEST_BYTES = 64 * 1024;
+const MAX_EQ_FILE_BYTES = 128 * 1024 * 1024;
+const MAX_EQ_FILE_COUNT = 50000;
+const SUPPORTED_EQ_EXTENSIONS = new Set(['.s3d', '.eqg', '.txt', '.eff', '.xmi', '.emt', '.zon']);
 
 let server = null;
 let windowRef = null;
@@ -35,19 +45,19 @@ function userDataDir() {
 }
 
 function configPath() {
-    return path.join(userDataDir(), 'companion-config.json');
+    return path.join(userDataDir(), 'eye-of-zomm-config.json');
 }
 
 function packStatePath() {
-    return path.join(userDataDir(), 'companion-pack-state.json');
+    return path.join(userDataDir(), 'eye-of-zomm-pack-state.json');
 }
 
 function productionPackPath() {
-    return path.join(userDataDir(), 'data', 'companion-pack.json');
+    return path.join(userDataDir(), 'data', 'eye-of-zomm-pack.json');
 }
 
 function bundledBootstrapPath() {
-    return path.join(appRoot(), 'data', 'companion-pack.bootstrap.json');
+    return path.join(appRoot(), 'data', 'eye-of-zomm-pack.bootstrap.json');
 }
 
 async function ensureUserDirs() {
@@ -71,7 +81,9 @@ async function atomicWriteJson(filePath, value) {
 
 async function readConfig() {
     return {
+        eqRootPath: '',
         logPath: '',
+        logSelection: 'automatic',
         alwaysOnTop: false,
         minimalMode: false,
         ...(await readJson(configPath(), {}))
@@ -85,14 +97,10 @@ async function updateConfig(values) {
     return next;
 }
 
-async function saveConfig(logPath) {
-    await updateConfig({ logPath: String(logPath || '') });
-}
-
 async function setAlwaysOnTop(enabled) {
     enabled = Boolean(enabled);
-    windowRef?.setAlwaysOnTop(enabled);
-    windowRef?.setSkipTaskbar(enabled);
+    windowRef?.setAlwaysOnTop(enabled, enabled ? 'screen-saver' : 'normal');
+    windowRef?.setSkipTaskbar(false);
     await updateConfig({ alwaysOnTop: enabled });
     return enabled;
 }
@@ -115,67 +123,60 @@ async function setMinimalMode(enabled) {
     return enabled;
 }
 
-function logFamily(filePath) {
-    if (!filePath) return null;
-    const directory = path.dirname(filePath);
-    const name = path.basename(filePath);
-    const match = name.match(/^(eqlog_[^_]+_[^.]+)/i);
-    return {
-        directory,
-        prefix: match ? match[1] : path.basename(name, path.extname(name))
-    };
-}
-
-function inferEqRootPath(logPath) {
-    if (!logPath) return '';
-    const logDirectory = path.dirname(logPath);
-    return path.basename(logDirectory).toLowerCase() === 'logs'
-        ? path.dirname(logDirectory)
-        : logDirectory;
-}
-
 async function resolveLogPath() {
+    return resolveConfiguredLog(await readConfig());
+}
+
+async function selectEqRoot({ firstRun = false } = {}) {
     const config = await readConfig();
-    const configured = String(config.logPath || '');
-    if (!configured) return '';
-
-    const family = logFamily(configured);
-    if (!family) return configured;
-
-    try {
-        const entries = await fsp.readdir(family.directory, { withFileTypes: true });
-        const candidates = [];
-        for (const entry of entries) {
-            if (!entry.isFile()) continue;
-            if (!entry.name.toLowerCase().startsWith(family.prefix.toLowerCase())) continue;
-            if (path.extname(entry.name).toLowerCase() !== '.txt' && entry.name !== family.prefix) continue;
-            const full = path.join(family.directory, entry.name);
-            try {
-                const stat = await fsp.stat(full);
-                candidates.push({ full, mtimeMs: stat.mtimeMs });
-            } catch {}
-        }
-        candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
-        return candidates[0]?.full || configured;
-    } catch {
-        return configured;
-    }
+    const knownRoot = String(config.eqRootPath || inferEqRootPath(config.logPath));
+    const standardLegendsRoot = process.platform === 'win32' && fs.existsSync('C:\\EverQuest Legends')
+        ? 'C:\\EverQuest Legends'
+        : '';
+    const result = await dialog.showOpenDialog(windowRef || undefined, {
+        title: firstRun ? 'Choose your EverQuest Legends folder' : 'Change EverQuest Legends folder',
+        message: 'Choose the folder that contains Logs, Maps, and the EverQuest game files.',
+        buttonLabel: 'Use this folder',
+        defaultPath: knownRoot || standardLegendsRoot || undefined,
+        properties: ['openDirectory', 'dontAddToRecent']
+    });
+    if (result.canceled || !result.filePaths[0]) return { canceled: true, config };
+    const eqRootPath = path.resolve(inferEqRootPath(result.filePaths[0]));
+    const next = await updateConfig({ eqRootPath, logPath: '', logSelection: 'automatic' });
+    return { canceled: false, config: next, logPath: await resolveConfiguredLog(next) };
 }
 
 async function selectLogFile() {
-    const current = await resolveLogPath();
+    const config = await readConfig();
+    const current = await resolveConfiguredLog(config);
     const result = await dialog.showOpenDialog(windowRef || undefined, {
-        title: 'Select the active EverQuest log file',
-        defaultPath: current ? path.dirname(current) : undefined,
-        properties: ['openFile'],
-        filters: [
-            { name: 'EverQuest logs', extensions: ['txt'] },
-            { name: 'All files', extensions: ['*'] }
-        ]
+        title: 'Choose a specific EverQuest log',
+        buttonLabel: 'Use this log',
+        defaultPath: current ? path.dirname(current) : (config.eqRootPath || undefined),
+        properties: ['openFile', 'dontAddToRecent'],
+        filters: [{ name: 'EverQuest logs', extensions: ['txt'] }]
     });
     if (result.canceled || !result.filePaths[0]) return '';
-    await saveConfig(result.filePaths[0]);
-    return result.filePaths[0];
+    const logPath = path.resolve(result.filePaths[0]);
+    if (!isEqLogName(path.basename(logPath))) {
+        await dialog.showMessageBox(windowRef || undefined, {
+            type: 'warning',
+            title: 'Not an EverQuest log',
+            message: 'Choose a file named eqlog_*.txt.'
+        });
+        return '';
+    }
+    await updateConfig({
+        eqRootPath: inferEqRootPath(logPath),
+        logPath,
+        logSelection: 'manual'
+    });
+    return logPath;
+}
+
+async function useAutomaticLogSelection() {
+    const config = await updateConfig({ logPath: '', logSelection: 'automatic' });
+    return resolveConfiguredLog(config);
 }
 
 async function readPackState() {
@@ -211,6 +212,7 @@ async function fetchWithTimeout(url, timeoutMs) {
 function validatePack(pack) {
     return Boolean(
         pack &&
+        Number(pack.meta?.schemaVersion) >= 3 &&
         Array.isArray(pack.zones) &&
         Array.isArray(pack.npcs) &&
         Array.isArray(pack.items)
@@ -309,7 +311,7 @@ async function updateStaticDataPack(force = false) {
 async function readLogWindow(offsetValue) {
     const logPath = await resolveLogPath();
     if (!logPath || !fs.existsSync(logPath)) {
-        return { logPath, startOffset: 0, newOffset: 0, reset: true, text: '' };
+        return { logPath, logExists: false, startOffset: 0, newOffset: 0, reset: true, text: '' };
     }
 
     const handle = await fsp.open(logPath, 'r');
@@ -331,6 +333,7 @@ async function readLogWindow(offsetValue) {
 
         return {
             logPath,
+            logExists: true,
             startOffset,
             newOffset: startOffset + bytesRead,
             length,
@@ -340,6 +343,73 @@ async function readLogWindow(offsetValue) {
     } finally {
         await handle.close();
     }
+}
+
+async function eqFileManifest() {
+    const config = await readConfig();
+    const root = String(config.eqRootPath || '');
+    if (!root) return { rootName: '', files: [] };
+
+    const rootReal = await fsp.realpath(root).catch(() => '');
+    if (!rootReal) return { rootName: path.basename(root), files: [] };
+    const files = [];
+
+    async function walk(directory, relativeDirectory = '', depth = 0, insideMaps = false) {
+        if (files.length >= MAX_EQ_FILE_COUNT) return;
+        let entries;
+        try {
+            entries = await fsp.readdir(directory, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        entries.sort((a, b) => a.name.localeCompare(b.name));
+
+        for (const entry of entries) {
+            if (files.length >= MAX_EQ_FILE_COUNT) break;
+            const fullPath = path.join(directory, entry.name);
+            const relativePath = relativeDirectory ? path.join(relativeDirectory, entry.name) : entry.name;
+            if (entry.isSymbolicLink()) continue;
+            if (entry.isDirectory()) {
+                const nextInsideMaps = insideMaps || /^maps$/i.test(entry.name);
+                const allowedTopDirectory = depth === 0 && /^(resources|assets|maps)$/i.test(entry.name);
+                if ((nextInsideMaps && depth < 7) || allowedTopDirectory) {
+                    await walk(fullPath, relativePath, depth + 1, nextInsideMaps);
+                }
+                continue;
+            }
+            if (!entry.isFile() || !SUPPORTED_EQ_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
+            let stat;
+            try { stat = await fsp.stat(fullPath); } catch { continue; }
+            if (stat.size > MAX_EQ_FILE_BYTES) continue;
+            files.push({
+                path: relativePath.split(path.sep).join('/'),
+                size: stat.size,
+                lastModified: Math.floor(stat.mtimeMs)
+            });
+        }
+    }
+
+    await walk(rootReal);
+    return { rootName: path.basename(rootReal), files, truncated: files.length >= MAX_EQ_FILE_COUNT };
+}
+
+async function readEqFile(relativeValue) {
+    const config = await readConfig();
+    const root = String(config.eqRootPath || '');
+    const relative = String(relativeValue || '').replace(/\\/g, '/');
+    if (!root || !relative || path.posix.isAbsolute(relative) || relative.split('/').includes('..')) return null;
+    if (!SUPPORTED_EQ_EXTENSIONS.has(path.extname(relative).toLowerCase())) return null;
+
+    const candidate = path.resolve(root, ...relative.split('/'));
+    if (!isPathInside(root, candidate)) return null;
+    const [rootReal, candidateReal] = await Promise.all([
+        fsp.realpath(root).catch(() => ''),
+        fsp.realpath(candidate).catch(() => '')
+    ]);
+    if (!rootReal || !candidateReal || !isPathInside(rootReal, candidateReal)) return null;
+    const stat = await fsp.stat(candidateReal).catch(() => null);
+    if (!stat?.isFile() || stat.size > MAX_EQ_FILE_BYTES) return null;
+    return fsp.readFile(candidateReal);
 }
 
 function mimeType(filePath) {
@@ -362,7 +432,9 @@ function sendJson(res, status, value) {
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Length': body.length,
         'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff'
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'SAMEORIGIN',
+        'Referrer-Policy': 'no-referrer'
     });
     res.end(body);
 }
@@ -373,7 +445,9 @@ function sendBuffer(req, res, status, contentType, body, cacheControl = 'no-stor
         'Content-Length': body.length,
         'Cache-Control': cacheControl,
         'X-Content-Type-Options': 'nosniff',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+        'X-Frame-Options': 'SAMEORIGIN',
+        'Referrer-Policy': 'no-referrer',
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     });
     if (req.method === 'HEAD') res.end();
     else res.end(body);
@@ -397,7 +471,9 @@ async function apiInfo() {
         server: `${HOST}:${port}`,
         logPath,
         logExists: Boolean(logPath && fs.existsSync(logPath)),
-        eqRootPath: inferEqRootPath(logPath),
+        eqRootPath: String(config.eqRootPath || inferEqRootPath(logPath)),
+        eqRootExists: Boolean(config.eqRootPath && fs.existsSync(config.eqRootPath)),
+        logSelection: config.logSelection === 'manual' ? 'manual' : 'automatic',
         safety: 'log/local-file reads only; optional static wiki data pack',
         dataPack: state,
         productionPack: fs.existsSync(productionPackPath()),
@@ -409,19 +485,56 @@ async function apiInfo() {
     };
 }
 
+function validRequestHost(req) {
+    return String(req.headers.host || '').toLowerCase() === `${HOST}:${port}`;
+}
+
+function trustedMutation(req, pathname) {
+    if (!pathname.startsWith('/api/')) return false;
+    return req.method === 'POST' &&
+        req.headers['x-eye-of-zomm-request'] === '1' &&
+        (!req.headers.origin || req.headers.origin === `http://${HOST}:${port}`);
+}
+
 async function requestHandler(req, res) {
     try {
-        if (!['GET', 'HEAD'].includes(req.method)) {
-            return sendJson(res, 405, { error: 'Method not allowed' });
+        if (!validRequestHost(req)) return sendJson(res, 403, { error: 'Forbidden host' });
+        const contentLength = Number(req.headers['content-length'] || 0);
+        if (!Number.isFinite(contentLength) || contentLength > MAX_API_REQUEST_BYTES) {
+            return sendJson(res, 413, { error: 'Request too large' });
         }
 
         const url = new URL(req.url, `http://${HOST}:${port}`);
         const pathname = url.pathname;
+        const isMutation = [
+            '/api/select-eq-root', '/api/select-log', '/api/log/automatic',
+            '/api/window/always-on-top', '/api/window/minimal', '/api/update-pack'
+        ].includes(pathname);
+        if (isMutation && !trustedMutation(req, pathname)) {
+            return sendJson(res, req.method === 'POST' ? 403 : 405, { error: 'Trusted POST required' });
+        }
+        if (!isMutation && !['GET', 'HEAD'].includes(req.method)) {
+            return sendJson(res, 405, { error: 'Method not allowed' });
+        }
 
         if (pathname === '/api/info') return sendJson(res, 200, await apiInfo());
         if (pathname === '/api/log') return sendJson(res, 200, await readLogWindow(url.searchParams.get('offset')));
+        if (pathname === '/api/eq-files') return sendJson(res, 200, await eqFileManifest());
+        if (pathname === '/api/eq-file') {
+            const body = await readEqFile(url.searchParams.get('path'));
+            if (!body) return sendJson(res, 404, { error: 'EverQuest file not available' });
+            return sendBuffer(req, res, 200, 'application/octet-stream', body, 'no-store');
+        }
+        if (pathname === '/api/select-eq-root') {
+            await selectEqRoot();
+            return sendJson(res, 200, await apiInfo());
+        }
         if (pathname === '/api/select-log') {
             await selectLogFile();
+            return sendJson(res, 200, await apiInfo());
+        }
+        if (pathname === '/api/log/automatic') {
+            await useAutomaticLogSelection();
             return sendJson(res, 200, await apiInfo());
         }
         if (pathname === '/api/window/always-on-top') {
@@ -439,7 +552,7 @@ async function requestHandler(req, res) {
         }
 
         // The production data pack lives in Electron's writable userData folder.
-        if (pathname === '/data/companion-pack.json') {
+        if (pathname === '/data/eye-of-zomm-pack.json') {
             const target = productionPackPath();
             if (!fs.existsSync(target)) return sendJson(res, 404, { error: 'No cached production pack' });
             const body = await fsp.readFile(target);
@@ -484,20 +597,32 @@ function createWindow(config = {}) {
         minWidth: minimalMode ? 720 : 1024,
         minHeight: minimalMode ? 420 : 700,
         backgroundColor: '#08101b',
+        frame: false,
         autoHideMenuBar: true,
+        skipTaskbar: false,
         show: false,
         webPreferences: {
+            preload: path.join(__dirname, 'preload.cjs'),
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
             webSecurity: true
         }
     });
-    windowRef.setAlwaysOnTop(Boolean(config.alwaysOnTop));
-    windowRef.setSkipTaskbar(Boolean(config.alwaysOnTop));
+    windowRef.setAlwaysOnTop(Boolean(config.alwaysOnTop), config.alwaysOnTop ? 'screen-saver' : 'normal');
+    windowRef.setSkipTaskbar(false);
+
+    const openApprovedWikiUrl = url => {
+        try {
+            const target = new URL(url);
+            if (target.protocol === 'https:' && ['eqlwiki.com', 'www.eqlwiki.com'].includes(target.hostname.toLowerCase())) {
+                void shell.openExternal(target.toString());
+            }
+        } catch {}
+    };
 
     windowRef.webContents.setWindowOpenHandler(({ url }) => {
-        if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+        openApprovedWikiUrl(url);
         return { action: 'deny' };
     });
 
@@ -505,7 +630,7 @@ function createWindow(config = {}) {
         const localPrefix = `http://${HOST}:${port}/`;
         if (!url.startsWith(localPrefix)) {
             event.preventDefault();
-            if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+            openApprovedWikiUrl(url);
         }
     });
 
@@ -516,14 +641,31 @@ function createWindow(config = {}) {
 
 async function bootstrap() {
     await ensureUserDirs();
-    const config = await readConfig();
     await startServer();
+    let config = await readConfig();
+    if (!config.eqRootPath || !fs.existsSync(config.eqRootPath)) {
+        await selectEqRoot({ firstRun: true });
+        config = await readConfig();
+        if ((!config.eqRootPath || !fs.existsSync(config.eqRootPath)) && config.alwaysOnTop) {
+            config = await updateConfig({ alwaysOnTop: false });
+        }
+    }
 
     // Never delay first paint on remote data. The cached/bootstrap pack loads immediately;
     // a tiny GitHub dataset-manifest check runs in parallel on every startup.
     void updateStaticDataPack(false).catch(error => console.warn('[Eye of Zomm] data sync:', error));
     createWindow(config);
 }
+
+ipcMain.handle('eye-of-zomm:window', (_event, action) => {
+    if (!windowRef || windowRef.isDestroyed()) return false;
+    if (action === 'minimize') windowRef.minimize();
+    else if (action === 'toggle-maximize') windowRef.isMaximized() ? windowRef.unmaximize() : windowRef.maximize();
+    else if (action === 'close') windowRef.close();
+    else if (action === 'is-maximized') return windowRef.isMaximized();
+    else return false;
+    return true;
+});
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {

@@ -12,4 +12,4 @@ Please report security-sensitive findings privately to the repository owner rath
 
 EQLWiki - Eye of Zomm is designed to read ordinary EverQuest text logs and user-selected local map/archive files. It must not hook the game process, inspect process memory, inject code, modify game files, or automate gameplay input.
 
-The desktop HTTP service binds only to `127.0.0.1`. Remote wiki knowledge is delivered as a static, SHA-256-verified gzip data pack; live app use does not poll MediaWiki APIs.
+The desktop HTTP service binds only to `127.0.0.1`, rejects foreign Host headers, requires same-origin marked POST requests for state changes, bounds requests and local file reads, and serves only approved paths. Remote wiki knowledge is delivered as a static, SHA-256-verified gzip data pack; live app use does not poll MediaWiki APIs.

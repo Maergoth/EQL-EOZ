@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ROOT="${EQL_WIKI_ROOT:-$HOME/public_html}"
-PRIVATE="${EQL_COMPANION_PRIVATE:-$HOME/private-cache/mediawiki}"
+PRIVATE="${EQL_EOZ_PRIVATE:-$HOME/private-cache/mediawiki}"
 PHPBIN="${EQL_PHP_BIN:-/usr/local/bin/php}"
 BUILDER="$ROOT/maintenance/BuildEyeOfZommPack.php"
 PUBLISHER="${EQL_EOZ_PUBLISHER:-$HOME/bin/eoz-publish-dataset.sh}"
@@ -46,7 +46,7 @@ echo "[$(date -u -Is)] Building EQLWiki - Eye of Zomm dataset at low priority...
 "$PHPBIN" -r '
 $f=$argv[1];
 $j=json_decode(file_get_contents($f), true);
-if (!is_array($j) || !isset($j["zones"],$j["npcs"],$j["items"])) { fwrite(STDERR,"Invalid Eye of Zomm dataset\n"); exit(4); }
+if (!is_array($j) || ($j["meta"]["schemaVersion"] ?? null) !== 3 || !isset($j["zones"],$j["npcs"],$j["items"])) { fwrite(STDERR,"Eye of Zomm dataset schemaVersion 3 is required\n"); exit(4); }
 if (count($j["zones"]) < 1 || count($j["npcs"]) < 1 || count($j["items"]) < 1) { fwrite(STDERR,"Dataset is unexpectedly empty\n"); exit(5); }
 echo "Validated: zones=".count($j["zones"])." npcs=".count($j["npcs"])." items=".count($j["items"])."\n";
 ' "$TMP"

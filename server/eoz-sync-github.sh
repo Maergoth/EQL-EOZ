@@ -16,7 +16,7 @@ PACK="eqlwiki-eye-of-zomm-data.json.gz"
 }
 command -v git >/dev/null 2>&1 || { echo "git is not available." >&2; exit 4; }
 
-PRIVATE="${EQL_COMPANION_PRIVATE:-$HOME/private-cache/mediawiki}"
+PRIVATE="${EQL_EOZ_PRIVATE:-$HOME/private-cache/mediawiki}"
 mkdir -p "$PRIVATE"
 WORK="$(mktemp -d "$PRIVATE/eoz-git.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT INT TERM
