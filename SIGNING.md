@@ -9,9 +9,9 @@ Add these encrypted Actions secrets to the repository:
 - `WINDOWS_CERTIFICATE_PFX_BASE64`: the base64-encoded PFX certificate file.
 - `WINDOWS_CERTIFICATE_PASSWORD`: the PFX password.
 
-Both `build-windows.yml` and `release.yml` require these secrets, pass the certificate to electron-builder, and verify the packaged app executable and NSIS installer. If either secret is absent or either signature is invalid, no official artifact is uploaded and no release is published.
+When both secrets are present, `build-windows.yml` and `release.yml` pass the certificate to electron-builder and verify the packaged app executable and NSIS installer. A partial signing configuration fails immediately. If neither secret is present, the workflows publish an unsigned build with a prominent workflow warning.
 
-Local developer builds may still be unsigned, but the repository's public Windows artifact paths are intentionally hard-gated.
+Unsigned builds can trigger an Unknown publisher or SmartScreen warning. Signing can be enabled later without changing the application build.
 
 Never commit a certificate or password to the repository.
 

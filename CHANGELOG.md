@@ -12,7 +12,7 @@
 - Reduced helper copy and removed every retired product-name reference from the app and repository.
 - Upgraded the exported dataset to schema v3 so two-coordinate locations and pages with multiple location tuples are handled safely.
 - Added loopback request/file bounds, state-changing POST guards, first-run/log-selection tests, exporter fixtures, UI checks, and release checks.
-- Made trusted Authenticode signing and verification mandatory before Windows artifacts or releases can be published.
+- Added optional trusted Authenticode signing and verification while allowing clearly identified unsigned builds until a certificate is configured.
 
 ## 0.4.0 - Map and target focus
 

@@ -26,16 +26,23 @@ jobs:
       - name: Fetch production bootstrap data
         shell: bash
         run: node scripts/fetch-bootstrap-pack.mjs --required
-      - name: Require signing certificate
+      - name: Determine signing mode
+        id: signing
         shell: pwsh
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PFX_BASE64)) {
-            throw 'WINDOWS_CERTIFICATE_PFX_BASE64 is required; unsigned installers are not published.'
+          $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PFX_BASE64)
+          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)
+          if ($hasCertificate -xor $hasPassword) {
+            throw 'Configure both Windows signing secrets or neither of them.'
           }
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
-            throw 'WINDOWS_CERTIFICATE_PASSWORD is required; unsigned installers are not published.'
+          $enabled = $hasCertificate -and $hasPassword
+          "enabled=$($enabled.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          if (-not $enabled) {
+            '### Warning: unsigned Windows build' >> $env:GITHUB_STEP_SUMMARY
+            'No Authenticode certificate is configured. Windows may show an Unknown publisher or SmartScreen warning.' >> $env:GITHUB_STEP_SUMMARY
           }
       - name: Configure Authenticode certificate
+        if: steps.signing.outputs.enabled == 'true'
         shell: pwsh
         run: |
           $certificatePath = Join-Path $env:RUNNER_TEMP 'eye-of-zomm-signing.pfx'
@@ -45,6 +52,7 @@ jobs:
       - name: Build NSIS installer
         run: npm run dist:win
       - name: Verify Authenticode signature
+        if: steps.signing.outputs.enabled == 'true'
         shell: pwsh
         run: |
           $installer = Get-Item 'dist/EQLWiki-Eye-of-Zomm-Setup-*-x64.exe'

@@ -11,12 +11,10 @@ if (!changelog.includes(`## ${pkg.version} -`)) throw new Error(`CHANGELOG.md ne
 
 for (const relative of ['../.github/workflows/build-windows.yml', '../.github/workflows/release.yml']) {
     const workflow = readFileSync(new URL(relative, import.meta.url), 'utf8');
-    for (const required of ['npm ci', 'fetch-bootstrap-pack.mjs --required', 'Require signing certificate', 'Get-AuthenticodeSignature']) {
+    for (const required of ['npm ci', 'fetch-bootstrap-pack.mjs --required', 'Determine signing mode', 'Get-AuthenticodeSignature', "steps.signing.outputs.enabled == 'true'", 'unsigned Windows']) {
         if (!workflow.includes(required)) throw new Error(`${relative} is missing release gate: ${required}`);
     }
-    if (/if:\s*\$\{\{\s*env\.WINDOWS_CERTIFICATE_PFX_BASE64/.test(workflow)) {
-        throw new Error(`${relative} still permits unsigned output.`);
-    }
+    if (workflow.includes('Require signing certificate')) throw new Error(`${relative} still blocks unsigned output.`);
 }
 
-console.log('Version and signed-release workflow checks passed.');
+console.log('Version and optional-signing workflow checks passed.');

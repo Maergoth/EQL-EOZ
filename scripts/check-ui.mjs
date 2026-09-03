@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = fileURLToPath(new URL('../', import.meta.url));
 const textExtensions = new Set(['.md', '.js', '.cjs', '.mjs', '.json', '.html', '.css', '.php', '.sh', '.txt', '.yml', '.yaml']);
 const ignoredDirectories = new Set(['.git', 'dist', 'node_modules', 'THIRD_PARTY']);
 const files = [];
