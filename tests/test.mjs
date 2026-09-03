@@ -3,6 +3,8 @@ import { conForLevel, grayCeilingForPlayerLevel, greenCeilingForPlayerLevel } fr
 import { scaledItemStats } from '../app/item-scaling.js';
 import { itemHasZoneSource, scoreItemForBrowse } from '../app/item-browse.js';
 import { LocationHeadingTracker, locationPollDelay } from '../app/movement-tracking.js';
+import { routeGuidance } from '../app/route-guidance.js';
+import { buildDiagnosticSnapshot } from '../app/diagnostics.js';
 import {
     MAX_NAVIGATION_CLIMB_Z,
     canTraverseElevation,
@@ -118,6 +120,38 @@ const teleported = heading.push({ x:500, y:500, z:0 }, 500);
 assert(teleported.teleported && teleported.heading.x < -.5, 'a zone-scale jump does not invent a facing');
 assert(locationPollDelay({ mapVisible:true }) === 250, 'live map uses responsive log polling');
 assert(locationPollDelay({ routeActive:true }) === 180, 'active navigation uses the fastest log polling');
+
+const straightGuidance = routeGuidance(
+    [{ x:0, y:0, z:0 }, { x:100, y:0, z:0 }],
+    { x:25, y:0, z:0 },
+    { x:1, y:0, z:0 }
+);
+assert(straightGuidance.active && straightGuidance.remainingDistance === 75, 'route guidance reports remaining distance from the nearest projection');
+assert(straightGuidance.cueKind === 'continue', 'a straight aligned route yields a continue cue');
+const rightTurnGuidance = routeGuidance(
+    [{ x:0, y:0, z:0 }, { x:50, y:0, z:0 }, { x:50, y:0, z:50 }],
+    { x:10, y:0, z:0 },
+    { x:1, y:0, z:0 }
+);
+assert(rightTurnGuidance.turnDirection === 'right' && rightTurnGuidance.distanceToTurn === 40, 'route guidance identifies the next right turn');
+assert(routeGuidance([{ x:0, y:0, z:0 }, { x:100, y:0, z:0 }], { x:20, y:0, z:0 }, { x:-1, y:0, z:0 }).cue === 'Turn around', 'opposite facing yields a turn-around cue');
+assert(routeGuidance([{ x:0, y:0, z:0 }, { x:100, y:0, z:0 }], { x:20, y:0, z:40 }, { x:1, y:0, z:0 }).cueKind === 'off-route', 'large route deviation yields a return cue');
+assert(routeGuidance([{ x:0, y:0, z:0 }, { x:100, y:0, z:0 }], { x:95, y:0, z:0 }, { x:1, y:0, z:0 }).cueKind === 'arrival', 'near destination yields an arrival cue');
+assert(!routeGuidance([], { x:0, y:0, z:0 }, { x:1, y:0, z:0 }).active, 'missing path does not invent guidance');
+
+const diagnostic = buildDiagnosticSnapshot({
+    version:'0.7.1',
+    pack:{ meta:{ version:'2026-09-03', schemaVersion:3 } },
+    parserState:{ character:'Maergoth', zone:'Befallen', level:50, classes:['MNK'], location:{ x:-961, y:-30, z:-66 } },
+    settings:{ mapMode:'top', itemTier:4, manualClasses:['MNK'], dangerousFuturePath:'C:\\EverQuest\\Secrets' },
+    bridgeInfo:{ eqRootExists:true, logExists:true, eqRootPath:'C:\\EverQuest', logPath:'C:\\EverQuest\\Logs\\eqlog_Maergoth_server.txt', logSelection:'manual' },
+    viewerStatus:{ mounted:true, directorySelected:true, zone:'Befallen', mode:'top', floors:'all', navigation:{ ok:true, routed:true, source:'wiki-location', distance:100, guidance:straightGuidance }, message:'C:\\EverQuest\\befallen.s3d' },
+    activeRoute:{ name:'Maergoth', zone:'Befallen', status:'ready', lastRoutedLocation:{ x:-961, y:-30, z:-66 }, guidance:straightGuidance },
+    now:Date.UTC(2026, 8, 3)
+});
+const diagnosticText = JSON.stringify(diagnostic);
+assert(diagnostic.session.characterDetected && !('character' in diagnostic.session), 'diagnostics retain character detection without identity');
+for (const secret of ['Maergoth', 'C:\\\\EverQuest', 'eqlog_']) assert(!diagnosticText.includes(secret), `diagnostics redact ${secret}`);
 
 const session = new EQLogParser();
 session.setCharacterFromFilename('C:\\EverQuest\\Logs\\eqlog_Maergoth_rivervale.txt');

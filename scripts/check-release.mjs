@@ -5,6 +5,9 @@ const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta
 const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
 const uxVision = readFileSync(new URL('../docs/UX_VISION.md', import.meta.url), 'utf8');
 const manualTest = readFileSync(new URL('../docs/V0.7_MANUAL_TEST.md', import.meta.url), 'utf8');
+const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+const handoff = readFileSync(new URL('../docs/HANDOFF.md', import.meta.url), 'utf8');
+const implementationStatus = readFileSync(new URL('../docs/IMPLEMENTATION_STATUS.md', import.meta.url), 'utf8');
 if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) throw new Error(`Invalid package version ${pkg.version}.`);
 if (lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version) {
     throw new Error('package.json and package-lock.json versions must match.');
@@ -15,6 +18,15 @@ for (const required of ['## 6. Click budgets', '## 8. End-to-end UX flows', '## 
 }
 for (const required of ['X `-961`, Y `-30`, Z `-66`', '## 1. Continuous `/loc` tracking', '## 2. Rare-mob replacement map', '## 3. Minimal loot browsing', '## 4. Persistent golden path']) {
     if (!manualTest.includes(required)) throw new Error(`Windows acceptance test is missing: ${required}`);
+}
+for (const required of ['docs/UX_VISION.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/HANDOFF.md', 'VALIDATION.md']) {
+    if (!readme.includes(required)) throw new Error(`README is missing project-documentation link: ${required}`);
+}
+for (const required of ['## Exact next work', 'IMPLEMENTATION_STATUS.md', 'UX_VISION.md', 'npm test', 'npm run test:catalog']) {
+    if (!handoff.includes(required)) throw new Error(`Contributor handoff is missing: ${required}`);
+}
+for (const required of ['Code baseline:', '## Current highest-priority task', '0.8 route corpus', 'HANDOFF.md', 'UX_VISION.md']) {
+    if (!implementationStatus.includes(required)) throw new Error(`Implementation status is missing: ${required}`);
 }
 
 for (const relative of ['../.github/workflows/build-windows.yml', '../.github/workflows/release.yml']) {

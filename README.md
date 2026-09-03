@@ -16,7 +16,13 @@ Eye of Zomm may:
 
 Eye of Zomm does **not** inspect process memory, inject code, load into the game process, patch game files, automate keyboard/mouse input, or issue game commands. See [SAFETY.md](SAFETY.md).
 
-The detailed product direction, click budgets, user stories, recovery flows, acceptance scenarios, and road to v1 live in [docs/UX_VISION.md](docs/UX_VISION.md).
+## Project documentation
+
+- [Product and UX vision](docs/UX_VISION.md): approved experience, user stories, acceptance contracts, and ordered road to v1.
+- [Implementation status](docs/IMPLEMENTATION_STATUS.md): delivered features, evidence gaps, and the exact next task.
+- [Contributor handoff](docs/HANDOFF.md): setup, architecture, safety boundary, data sources, and release procedure.
+- [Validation report](VALIDATION.md) and [Windows/game-client checklist](docs/V0.7_MANUAL_TEST.md): automated and proprietary-asset release gates.
+- [Changelog](CHANGELOG.md): versioned user-facing changes.
 
 ## What it does
 
@@ -171,6 +177,7 @@ node scripts/fetch-bootstrap-pack.mjs --required
 ```text
 app/                 UI, log parser, local data/filtering, Zone Viewer wrapper
 desktop/             Electron runtime and local loopback bridge
+docs/                Product vision, implementation status, handoff, manual tests
 server/              MediaWiki exporter + GitHub dataset synchronization
 scripts/             Build/bootstrap tooling
 tests/               Parser/scaling tests

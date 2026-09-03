@@ -3,6 +3,7 @@ import { conForLevel } from './con-colors.js';
 import { scaledItemStats } from './item-scaling.js';
 import { itemHasZoneSource, scoreItemForBrowse } from './item-browse.js';
 import { locationPollDelay } from './movement-tracking.js';
+import { buildDiagnosticSnapshot } from './diagnostics.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -1159,6 +1160,25 @@ function renderMapRoutePlanner(s = state()) {
     status.textContent = activeRoute.message || `Path to ${activeRoute.name}`;
 }
 
+function applyRouteGuidance(guidance) {
+    if (!activeRoute || !guidance?.active) return false;
+    activeRoute.guidance = {
+        active:true,
+        cue:String(guidance.cue || ''),
+        cueKind:String(guidance.cueKind || ''),
+        remainingDistance:Number(guidance.remainingDistance) || 0,
+        offRouteDistance:Number(guidance.offRouteDistance) || 0,
+        distanceToTurn:Number.isFinite(Number(guidance.distanceToTurn)) ? Number(guidance.distanceToTurn) : null,
+        turnDirection:String(guidance.turnDirection || '')
+    };
+    if (activeRoute.status === 'ready') {
+        const source = activeRoute.source === 'map-label' ? 'local map label' : 'EQLWiki location';
+        activeRoute.message = `Path to ${activeRoute.name} · ${source} · ${Math.round(activeRoute.guidance.remainingDistance).toLocaleString()} units remaining · ${activeRoute.guidance.cue}.`;
+    }
+    renderMapRoutePlanner(state());
+    return true;
+}
+
 function renderMapReadiness(s = state()) {
     const states = {
         folder:Boolean(bridgeInfo?.eqRootExists),
@@ -1535,6 +1555,7 @@ async function syncLocationToViewer(showFeedback = true, requestedLocation = nul
     }
     settings.mapMode = result.mode || settings.mapMode || 'first';
     setActiveMapMode(settings.mapMode || 'first');
+    applyRouteGuidance(result.guidance);
     $('#map-subtitle').textContent = `Synced to ${location.x.toFixed(1)}, ${location.y.toFixed(1)}, ${location.z.toFixed(1)} in ${s.zone}.`;
     return true;
 }
@@ -1656,7 +1677,9 @@ async function calculateActiveRoute(options = {}) {
     } else if (result.routed) {
         const source = result.source === 'map-label' ? 'local map label' : 'EQLWiki location';
         activeRoute.status = 'ready';
+        activeRoute.source = result.source;
         activeRoute.message = `Path to ${result.label || activeRoute.name} · ${source} · ${Math.round(result.distance || 0).toLocaleString()} units · updates with /loc.`;
+        applyRouteGuidance(result.guidance);
     } else {
         const source = result.source === 'map-label' ? 'local map label' : 'EQLWiki location';
         activeRoute.status = 'marked';
@@ -1702,6 +1725,26 @@ function runWikiSearch() {
     const query = input?.value.trim() || '';
     if (!query) return;
     openExternal(wikiSearchUrl(query));
+}
+
+function exportDiagnostics() {
+    const snapshot = buildDiagnosticSnapshot({
+        version:bridgeInfo?.version,
+        pack,
+        parserState:state(),
+        settings,
+        bridgeInfo,
+        viewerStatus:viewerApi()?.status?.(),
+        activeRoute
+    });
+    const blob = new Blob([`${JSON.stringify(snapshot, null, 2)}\n`], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `eye-of-zomm-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showNotice('Redacted diagnostics exported. Character names, log contents, and filesystem paths were excluded.', { tone:'success' });
 }
 
 async function applyLogSelection(info) {
@@ -1867,6 +1910,7 @@ function wireUi() {
             button.disabled = false;
         }
     });
+    $('#export-diagnostics').addEventListener('click', exportDiagnostics);
     $('#wiki-search-form').addEventListener('submit', e => { e.preventDefault(); runWikiSearch(); });
     $('#wiki-search-button').addEventListener('click', runWikiSearch);
     $('#minimal-my-class').addEventListener('change', event => {

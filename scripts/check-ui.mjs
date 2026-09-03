@@ -26,7 +26,7 @@ for (const file of files) {
 }
 
 const html = readFileSync(join(root, 'app/index.html'), 'utf8');
-for (const required of ['id="top-classes"', 'data-map-mode="first"', 'data-map-mode="top"', 'data-map-mode="map"', 'minimal-map-mode-switch', 'id="map-source-status"', 'id="map-readiness"', 'id="map-destination"', 'id="route-status"', 'id="minimal-rare-search"', 'Named &amp; rare mobs', 'id="settings-eq-root"', 'id="settings-map-status"', 'id="item-current-zone"', 'id="item-slot"', 'id="item-sort"', 'id="item-context"', 'id="desktop-titlebar"', 'id="consider-loot-tray"', 'id="consider-my-class"', 'id="toast-region"']) {
+for (const required of ['id="top-classes"', 'data-map-mode="first"', 'data-map-mode="top"', 'data-map-mode="map"', 'minimal-map-mode-switch', 'id="map-source-status"', 'id="map-readiness"', 'id="map-destination"', 'id="route-status"', 'id="minimal-rare-search"', 'Named &amp; rare mobs', 'id="settings-eq-root"', 'id="settings-map-status"', 'id="export-diagnostics"', 'id="item-current-zone"', 'id="item-slot"', 'id="item-sort"', 'id="item-context"', 'id="desktop-titlebar"', 'id="consider-loot-tray"', 'id="consider-my-class"', 'id="toast-region"']) {
     if (!html.includes(required)) throw new Error(`Required UI element is missing: ${required}`);
 }
 for (const removed of ['CURRENT TARGET', 'Last /location', 'id="settings-server"']) {
@@ -40,12 +40,12 @@ for (const required of ['frame: false', 'skipTaskbar: false', "setSkipTaskbar(fa
 if (/setSkipTaskbar\((?:true|enabled)/.test(desktop)) throw new Error('Pinned mode must remain in the taskbar.');
 
 const viewer = readFileSync(join(root, 'app/zoneviewer/viewer.html'), 'utf8');
-for (const required of ['setView(mode)', 'const changedZone = zoneIdentity !== loadedZoneIdentity', 'selectedFloorIndices?.clear?.()', 'app.eqMapToThree', 'lastSyncedLocation', 'lastSyncedGround', 'findGroundPointAt(point.x, point.z, point.y)', 'focusTopViewAt(lastSyncedGround)', 'headingTracker.push', 'setRareMobs(records = [])', 'eoz-rare-mob-selected', 'eyeOfZommHasZoneArchives', "reason:'no-zone-archives'", 'navigationResult', 'clearPath()']) {
+for (const required of ['setView(mode)', 'const changedZone = zoneIdentity !== loadedZoneIdentity', 'selectedFloorIndices?.clear?.()', 'app.eqMapToThree', 'lastSyncedLocation', 'lastSyncedGround', 'findGroundPointAt(point.x, point.z, point.y)', 'focusTopViewAt(lastSyncedGround)', 'headingTracker.push', 'setRareMobs(records = [])', 'eoz-rare-mob-selected', 'eyeOfZommHasZoneArchives', "reason:'no-zone-archives'", 'routeGuidance', 'renderRouteGuidance', 'navigationResult', 'clearPath()']) {
     if (!viewer.includes(required)) throw new Error(`Map integration check is missing: ${required}`);
 }
 
 const application = readFileSync(join(root, 'app/app.js'), 'utf8');
-for (const required of ['showConsiderTray(event.target)', 'CONSIDER_TRAY_DURATION', 'armConsiderTrayTimeout(8000)', 'npcNameKey(sourceName)', 'ensureViewerFolderConnected', 'mapReadinessMessage', 'renderMapReadiness', 'mapDestinationNames', 'rareMobsForZone', 'rareCatalogCache', 'syncRareMobsToViewer', 'queueLatestLocationSync', 'pendingViewerLocation', 'renderLiveLocation', 'updateMinimalDistances', 'scheduleRouteRefresh', 'ROUTE_REFRESH_DISTANCE', "result.source === 'map-label' ? 'local map label' : 'EQLWiki location'", 'itemBrowsePriority', 'Tier ${tier} adjusted stats', 'showNotice']) {
+for (const required of ['showConsiderTray(event.target)', 'CONSIDER_TRAY_DURATION', 'armConsiderTrayTimeout(8000)', 'npcNameKey(sourceName)', 'ensureViewerFolderConnected', 'mapReadinessMessage', 'renderMapReadiness', 'mapDestinationNames', 'rareMobsForZone', 'rareCatalogCache', 'syncRareMobsToViewer', 'queueLatestLocationSync', 'pendingViewerLocation', 'renderLiveLocation', 'updateMinimalDistances', 'scheduleRouteRefresh', 'ROUTE_REFRESH_DISTANCE', 'applyRouteGuidance', 'buildDiagnosticSnapshot', 'exportDiagnostics', "result.source === 'map-label' ? 'local map label' : 'EQLWiki location'", 'itemBrowsePriority', 'Tier ${tier} adjusted stats', 'showNotice']) {
     if (!application.includes(required)) throw new Error(`Consider loot tray behavior is missing: ${required}`);
 }
 if (application.includes('alert(')) throw new Error('Focus-stealing browser alerts remain in the application shell.');

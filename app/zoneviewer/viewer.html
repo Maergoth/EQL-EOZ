@@ -23,6 +23,10 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 .eoz-rare-marker{position:absolute;max-width:220px;border:1px solid rgba(240,199,73,.72);border-radius:999px;background:rgba(8,14,22,.9);box-shadow:0 3px 13px rgba(0,0,0,.62);color:#f4d66e;padding:4px 8px;font:700 11px/1.2 Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:auto;cursor:pointer}
 .eoz-rare-marker:hover,.eoz-rare-marker:focus-visible,.eoz-rare-marker.is-active{border-color:#fff0a6;background:rgba(76,58,15,.95);color:#fff6c9;outline:none}
 .eoz-rare-marker small{margin-left:5px;color:#a9b4bf;font:600 8px/1.2 system-ui,sans-serif}
+.eoz-route-guidance{position:absolute;z-index:22;top:12px;left:50%;transform:translateX(-50%);min-width:220px;max-width:min(520px,calc(100% - 28px));border:1px solid rgba(240,199,73,.66);border-radius:10px;background:rgba(8,14,22,.92);box-shadow:0 5px 20px rgba(0,0,0,.55);padding:7px 12px;color:#fff6c9;text-align:center;pointer-events:none;font-family:system-ui,sans-serif}
+.eoz-route-guidance[hidden]{display:none}
+.eoz-route-guidance strong{display:block;color:#f4d66e;font:700 14px/1.25 Georgia,serif}
+.eoz-route-guidance small{display:block;margin-top:2px;color:#c0c9d2;font:600 10px/1.2 system-ui,sans-serif}
 </style>
 </head>
 <body>
@@ -31,6 +35,7 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 import { mountZoneViewer } from './ZoneViewerApp.js';
 import navigationPolicy, { configureViewerMovement } from '../navigation-policy.js';
 import { LocationHeadingTracker } from '../movement-tracking.js';
+import { routeGuidance } from '../route-guidance.js';
 
 globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
@@ -239,12 +244,31 @@ async function pathToWikiLocation(label, location) {
     }
     app.updateNavigationOverlay();
     app.requestRender();
+    renderRouteGuidance();
     return true;
+}
+
+function currentRouteGuidance() {
+    return routeGuidance(
+        Array.isArray(app?.navigationPath) ? app.navigationPath : [],
+        lastSyncedGround || app?.lastFirstPersonPose?.position,
+        app?.lastFirstPersonPose?.forward
+    );
+}
+
+function renderRouteGuidance() {
+    const guidance = currentRouteGuidance();
+    routeGuidanceLayer.hidden = !guidance.active;
+    if (!guidance.active) return guidance;
+    routeGuidanceCue.textContent = guidance.cue;
+    routeGuidanceDistance.textContent = `${Math.round(guidance.remainingDistance).toLocaleString()} units remaining`;
+    return guidance;
 }
 
 function navigationResult(label, source) {
     const path = Array.isArray(app?.navigationPath) ? app.navigationPath : [];
-    const distance = path.length >= 2
+    const guidance = renderRouteGuidance();
+    const distance = guidance.active ? guidance.remainingDistance : path.length >= 2
         ? path.slice(1).reduce((sum, point, index) => sum + point.distanceTo(path[index]), 0)
         : 0;
     return {
@@ -252,7 +276,8 @@ function navigationResult(label, source) {
         source,
         label:app?.navigationTarget?.label || label,
         routed:path.length >= 2,
-        distance
+        distance,
+        guidance
     };
 }
 
@@ -274,6 +299,14 @@ const rareLayer = document.createElement('div');
 rareLayer.className = 'eoz-rare-layer';
 rareLayer.setAttribute('aria-label', 'Named and rare mobs');
 app.els?.viewport?.append(rareLayer);
+const routeGuidanceLayer = document.createElement('div');
+routeGuidanceLayer.className = 'eoz-route-guidance';
+routeGuidanceLayer.hidden = true;
+routeGuidanceLayer.setAttribute('aria-label', 'Live route guidance');
+const routeGuidanceCue = document.createElement('strong');
+const routeGuidanceDistance = document.createElement('small');
+routeGuidanceLayer.append(routeGuidanceCue, routeGuidanceDistance);
+app.els?.viewport?.append(routeGuidanceLayer);
 let rareMobMarkers = [];
 let rareGotoEntries = [];
 let activeRareMob = '';
@@ -454,6 +487,7 @@ window.eqlEyeOfZommViewer = {
             lastSyncedGround = null;
             headingTracker.reset();
             clearRareMobs();
+            routeGuidanceLayer.hidden = true;
             loadedZoneIdentity = zoneIdentity;
             app.selectedFloorIndices?.clear?.();
             root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
@@ -527,7 +561,8 @@ window.eqlEyeOfZommViewer = {
         }
         app.requestRender?.();
         renderRareMobs();
-        return { ok:true, moved:movement.moved, heading:movement.heading, mode:resolvedMode };
+        const guidance = renderRouteGuidance();
+        return { ok:true, moved:movement.moved, heading:movement.heading, mode:resolvedMode, guidance };
     },
 
     setRareMobs(records = []) {
@@ -631,6 +666,7 @@ window.eqlEyeOfZommViewer = {
         app.updateNavigationOverlay?.();
         app.drawMiniMap?.();
         app.requestRender?.();
+        routeGuidanceLayer.hidden = true;
         return { ok:true };
     },
 

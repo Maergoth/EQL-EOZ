@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1 - Live route confidence and handoff
+
+- Added live remaining distance plus turn, facing, off-route, and arrival cues derived from the collision-valid golden path in First Person, Top Down, and Map Overlay.
+- Kept the full and minimal route status synchronized with new `/loc` samples so a moving player sees the next action without reopening route controls.
+- Added a Settings export for redacted support diagnostics using an explicit allow-list that excludes character names, log contents, log filenames, and filesystem paths.
+- Added a repository-native contributor handoff and implementation-status index, cross-linked from the README and vision with the exact next road-to-v1 task.
+- Marked the route corpus as the next 0.8 evidence gate before adopting a reviewed worker-based Recast/Detour pathfinder.
+
 ## 0.7.0 - Replacement-map navigation loop
 
 - Added dataset-backed named and rare-mob labels directly to First Person, Top Down, and Map Overlay views, prioritized by known current-class loot and routable with one click.

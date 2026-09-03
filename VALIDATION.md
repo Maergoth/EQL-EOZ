@@ -1,4 +1,4 @@
-# Validation report — v0.7.0
+# Validation report — v0.7.1
 
 Validated in the build environment on 2026-09-03 UTC.
 
@@ -22,11 +22,14 @@ Validated in the build environment on 2026-09-03 UTC.
 - Directed route-policy tests allow exactly +6 Z, reject greater climbs, allow exposed drops of any height, and reject drops through an overlapping upper floor.
 - UI checks require the four-step readiness rail, persistent destination/re-route surface, minimal-mode map controls, current-zone item scope, slot/sort overrides, keyboard Itembox access, tier-adjusted tooltip output, and player-centered Top/Map restoration.
 - Movement tracking tests cover first-sample behavior, recent-step heading, jitter/duplicate suppression, reversal, teleport rejection, and active-map/route polling cadence.
+- Route-guidance tests cover nearest-segment projection, remaining distance, right-turn detection, opposite-facing recovery, off-route recovery, arrival, and absent-path behavior.
+- Diagnostic-export tests prove the allow-list retains useful session/map/route state while excluding the character name, log filename, filesystem paths, viewer messages, and unknown future settings.
 - Inline viewer checks require dataset rare markers, marker-to-route messaging, mode-preserving location sync, and the shared heading tracker.
 - Application checks require newest-location coalescing, continuous-movement route scheduling, current-zone rare ranking, and compact mob/loot search.
 - A production-size relevance gate exercises all 11,168 embedded items and confirms Befallen/MNK defaults return useful local equipment before generic consumables.
 - The S3D parser check requires WLD bitmap `fileName` resolution, normalized BMP/DDS lookup, animated-frame filenames, and parsed-zone cache version v16.
 - The product/UX vision is release-checked for click budgets, complete flows, feature user stories, acceptance scenarios, and the release-gated road to v1.
+- README, vision, implementation status, and contributor handoff cross-link the current baseline and exact next spatial-confidence task.
 
 ## Full supplied-log parse
 
