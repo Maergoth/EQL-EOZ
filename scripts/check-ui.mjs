@@ -26,7 +26,7 @@ for (const file of files) {
 }
 
 const html = readFileSync(join(root, 'app/index.html'), 'utf8');
-for (const required of ['id="top-classes"', 'data-map-mode="first"', 'data-map-mode="top"', 'data-map-mode="map"', 'id="settings-eq-root"', 'id="desktop-titlebar"']) {
+for (const required of ['id="top-classes"', 'data-map-mode="first"', 'data-map-mode="top"', 'data-map-mode="map"', 'id="settings-eq-root"', 'id="desktop-titlebar"', 'id="consider-loot-tray"', 'id="consider-my-class"']) {
     if (!html.includes(required)) throw new Error(`Required UI element is missing: ${required}`);
 }
 for (const removed of ['CURRENT TARGET', 'Last /location', 'id="settings-server"']) {
@@ -42,6 +42,11 @@ if (/setSkipTaskbar\((?:true|enabled)/.test(desktop)) throw new Error('Pinned mo
 const viewer = readFileSync(join(root, 'app/zoneviewer/viewer.html'), 'utf8');
 for (const required of ['setView(mode)', 'selectedFloorIndices?.clear?.()', 'app.eqMapToThree', 'lastSyncedLocation']) {
     if (!viewer.includes(required)) throw new Error(`Map integration check is missing: ${required}`);
+}
+
+const application = readFileSync(join(root, 'app/app.js'), 'utf8');
+for (const required of ['showConsiderTray(event.target)', 'CONSIDER_TRAY_DURATION', 'armConsiderTrayTimeout(8000)', 'npcNameKey(sourceName)']) {
+    if (!application.includes(required)) throw new Error(`Consider loot tray behavior is missing: ${required}`);
 }
 
 console.log('UI wording and release surface checks passed.');

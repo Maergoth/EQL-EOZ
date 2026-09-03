@@ -19,6 +19,9 @@ let packRefreshTimer = null;
 let selectedEncounterId = '';
 let fightExpiryTimer = null;
 let viewerSyncChain = Promise.resolve();
+let consideredTarget = null;
+let considerTrayTimer = null;
+const CONSIDER_TRAY_DURATION = 16000;
 
 const prefs = {
     get key(){ return 'eql-eye-of-zomm-prefs-v1'; },
@@ -35,7 +38,8 @@ let settings = Object.assign({
     itemTier: 0,
     encounterGapSeconds: 15,
     minimalMyClassOnly: true,
-    minimalNamedOnly: true
+    minimalNamedOnly: true,
+    considerMyClassOnly: true
 }, prefs.load());
 parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
@@ -76,6 +80,14 @@ function zoneKey(name) {
         .replace(/\s+\d+\s+\([^)]*\)\s*$/,'')
         .replace(/^the\s+/,'')
         .replace(/\s+/g,' ')
+        .trim();
+}
+
+function npcNameKey(name) {
+    return String(name || '')
+        .toLowerCase()
+        .replace(/['’‘`]/g, '')
+        .replace(/[_\s]+/g, ' ')
         .trim();
 }
 
@@ -251,7 +263,7 @@ async function pollLog() {
                 const firstNewline = incoming.indexOf('\n');
                 incoming = firstNewline >= 0 ? incoming.slice(firstNewline + 1) : '';
             }
-            if (incoming) consumeText(incoming);
+            if (incoming) consumeText(incoming, !data.reset);
             changed = Boolean(incoming);
         }
         logOffset = Number(data.newOffset ?? logOffset);
@@ -266,7 +278,7 @@ async function pollLog() {
     }
 }
 
-function consumeText(text) {
+function consumeText(text, allowTransientUi = true) {
     const combined = partialLine + text;
     const lines = combined.split(/\n/);
     partialLine = lines.pop() || '';
@@ -278,6 +290,7 @@ function consumeText(text) {
             viewerOperations.push({ type:'zone' });
         }
         if (event?.type === 'location') viewerOperations.push({ type:'location', location:{ ...event.location } });
+        if (allowTransientUi && event?.type === 'consider') showConsiderTray(event.target);
     }
     for (const operation of viewerOperations) {
         if (operation.type === 'zone') queueViewerSync(() => syncZoneToViewer(false));
@@ -312,7 +325,7 @@ function rebuildPackIndexes() {
         for (const source of item.dropSources || []) {
             const sourceName = String(source?.name || '').trim();
             if (!sourceName) continue;
-            const nameKey = sourceName.toLowerCase();
+            const nameKey = npcNameKey(sourceName);
             const zoneNameKey = `${zoneKey(source?.zone)}|${nameKey}`;
             if (!lootByNpcName.has(nameKey)) lootByNpcName.set(nameKey, []);
             lootByNpcName.get(nameKey).push(item);
@@ -325,7 +338,7 @@ function rebuildPackIndexes() {
 }
 
 function knownDropsForNpc(npc) {
-    const nameKey = String(npc?.name || '').toLowerCase();
+    const nameKey = npcNameKey(npc?.name);
     const exact = lootByNpcZone.get(`${zoneKey(npc?.zone)}|${nameKey}`) || [];
     const fallback = lootByNpcName.get(nameKey) || [];
     const seen = new Set();
@@ -338,12 +351,71 @@ function knownDropsForNpc(npc) {
 }
 
 function npcRecordForName(name, zone = state().zone) {
-    const wanted = String(name || '').trim().toLowerCase();
+    const wanted = npcNameKey(name);
     if (!wanted) return null;
     return allNpcsForState(state()).find(npc =>
-        String(npc.name || '').trim().toLowerCase() === wanted &&
+        npcNameKey(npc.name) === wanted &&
         (!zone || !npc.zone || zoneKey(npc.zone) === zoneKey(zone))
     ) || null;
+}
+
+function hideConsiderTray() {
+    clearTimeout(considerTrayTimer);
+    considerTrayTimer = null;
+    consideredTarget = null;
+    const tray = $('#consider-loot-tray');
+    if (tray) tray.hidden = true;
+}
+
+function armConsiderTrayTimeout(delay = CONSIDER_TRAY_DURATION) {
+    clearTimeout(considerTrayTimer);
+    const tray = $('#consider-loot-tray');
+    if (!consideredTarget || tray?.matches(':hover')) return;
+    considerTrayTimer = setTimeout(hideConsiderTray, delay);
+}
+
+function renderConsiderTray() {
+    const tray = $('#consider-loot-tray');
+    if (!tray || !consideredTarget) return;
+    const s = state();
+    const profile = effectiveProfile(s);
+    const npc = npcRecordForName(consideredTarget.name, consideredTarget.zone || s.zone) || {
+        name:consideredTarget.name,
+        zone:consideredTarget.zone || s.zone,
+        avgLevel:Number(consideredTarget.level) || 0,
+        wikiTitle:consideredTarget.name,
+        observed:true
+    };
+    const allDrops = knownDropsForNpc(npc).filter(item => eraAllowed(item.era));
+    const drops = settings.considerMyClassOnly
+        ? allDrops.filter(item => itemMatchesProfile(item, profile))
+        : allDrops;
+    const con = conForLevel(Number(consideredTarget.level) || npc.avgLevel, profile.level);
+
+    tray.className = `consider-loot-tray npc-con-${con.key}`;
+    tray.hidden = false;
+    $('#consider-tray-name').textContent = consideredTarget.name;
+    $('#consider-tray-meta').textContent = `${consideredTarget.level ? `Level ${consideredTarget.level} · ` : ''}${con.label} · ${drops.length}${settings.considerMyClassOnly && allDrops.length !== drops.length ? ` of ${allDrops.length}` : ''} known drops`;
+    $('#consider-my-class').checked = Boolean(settings.considerMyClassOnly);
+    $('#consider-path').dataset.npc = consideredTarget.name;
+    $('#consider-path').hidden = !s.zone;
+
+    const host = $('#consider-tray-drops');
+    host.innerHTML = drops.length ? drops.slice(0, 16).map(item => {
+        const icon = itemIconSource(item);
+        const slot = (item.slots || []).join(' · ') || 'Item';
+        return `<a class="consider-drop-card item-hover" href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" data-item-title="${esc(item.name)}">
+            ${icon ? `<img src="${esc(icon)}" alt="">` : '<span class="consider-drop-icon">◇</span>'}
+            <span><strong>${esc(item.name)}</strong><small>${esc(slot)}</small></span>
+        </a>`;
+    }).join('') : `<div class="consider-empty">${settings.considerMyClassOnly && allDrops.length ? 'No known drops match your class. Turn off My Class to see everything.' : 'No drops are known for this NPC in the current dataset.'}</div>`;
+}
+
+function showConsiderTray(target) {
+    if (!target?.name) return;
+    consideredTarget = { ...target, zone:state().zone };
+    renderConsiderTray();
+    armConsiderTrayTimeout();
 }
 
 function allNpcsForState(s) {
@@ -353,7 +425,7 @@ function allNpcsForState(s) {
     }));
     const merged = new Map();
     for (const npc of [...pack.npcs, ...observed]) {
-        const key = `${zoneKey(npc.zone)}|${String(npc.name).toLowerCase()}`;
+        const key = `${zoneKey(npc.zone)}|${npcNameKey(npc.name)}`;
         const old = merged.get(key);
         if (!old || npc.observed) merged.set(key, Object.assign({}, old || {}, npc));
     }
@@ -746,6 +818,7 @@ function renderAll() {
     if (document.body.classList.contains('minimal-mode') && activeView !== 'map') {
         renderMinimalZoneDrops(s, profile);
     }
+    if (consideredTarget && !$('#consider-loot-tray')?.hidden) renderConsiderTray();
     $('#map-title').textContent = s.zone ? `${s.zone} · Zone Viewer` : 'Zone Viewer';
     $('#map-subtitle').textContent = s.location
         ? `${s.location.x.toFixed(1)}, ${s.location.y.toFixed(1)}, ${s.location.z.toFixed(1)}`
@@ -1033,6 +1106,23 @@ function wireUi() {
         settings.minimalNamedOnly = Boolean(event.target.checked);
         prefs.save(settings);
         renderAll();
+    });
+    $('#consider-my-class').addEventListener('change', event => {
+        settings.considerMyClassOnly = Boolean(event.target.checked);
+        prefs.save(settings);
+        renderConsiderTray();
+        armConsiderTrayTimeout();
+    });
+    $('#consider-path').addEventListener('click', event => {
+        const name = event.currentTarget.dataset.npc;
+        if (name) pathToNpc(name);
+    });
+    $('#consider-close').addEventListener('click', hideConsiderTray);
+    $('#consider-loot-tray').addEventListener('pointerenter', () => clearTimeout(considerTrayTimer));
+    $('#consider-loot-tray').addEventListener('pointerleave', () => armConsiderTrayTimeout(8000));
+    $('#consider-loot-tray').addEventListener('focusin', () => clearTimeout(considerTrayTimer));
+    $('#consider-loot-tray').addEventListener('focusout', event => {
+        if (!event.currentTarget.contains(event.relatedTarget)) armConsiderTrayTimeout(8000);
     });
     for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
         button.addEventListener('click', () => toggleAlwaysOnTop().catch(error => alert(`Unable to change pinning: ${error.message}`)));

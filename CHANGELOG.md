@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2 - Consider loot tray
+
+- Restored consider-driven loot intelligence as a temporary bottom-docked tray without bringing back the unreliable permanent Current Target card.
+- Added class filtering, item icons and Itembox hovers, wiki links, and direct pathing for the considered NPC.
+- Kept the tray open while hovered or keyboard-focused, then resumed its dismissal timer after inspection.
+- Normalized apostrophe and backtick variants when matching considered NPC names to EQLWiki drop sources.
+
 ## 0.5.1 - Map alignment and navigation
 
 - Normalized logged `/loc` output into the coordinate basis used by EverQuest map files and EQLWiki locations, fixing the swapped and inverted player marker in Befallen and other zones.
