@@ -45,7 +45,7 @@ for (const required of ['setView(mode)', 'const changedZone = zoneIdentity !== l
 }
 
 const application = readFileSync(join(root, 'app/app.js'), 'utf8');
-for (const required of ['showConsiderTray(event.target)', 'CONSIDER_TRAY_DURATION', 'armConsiderTrayTimeout(8000)', 'npcNameKey(sourceName)', 'ensureViewerFolderConnected', 'mapReadinessMessage', 'renderMapReadiness', 'mapDestinationNames', 'rareMobsForZone', 'syncRareMobsToViewer', 'queueLatestLocationSync', 'pendingViewerLocation', 'scheduleRouteRefresh', 'ROUTE_REFRESH_DISTANCE', "result.source === 'map-label' ? 'local map label' : 'EQLWiki location'", 'itemBrowsePriority', 'Tier ${tier} adjusted stats', 'showNotice']) {
+for (const required of ['showConsiderTray(event.target)', 'CONSIDER_TRAY_DURATION', 'armConsiderTrayTimeout(8000)', 'npcNameKey(sourceName)', 'ensureViewerFolderConnected', 'mapReadinessMessage', 'renderMapReadiness', 'mapDestinationNames', 'rareMobsForZone', 'rareCatalogCache', 'syncRareMobsToViewer', 'queueLatestLocationSync', 'pendingViewerLocation', 'renderLiveLocation', 'updateMinimalDistances', 'scheduleRouteRefresh', 'ROUTE_REFRESH_DISTANCE', "result.source === 'map-label' ? 'local map label' : 'EQLWiki location'", 'itemBrowsePriority', 'Tier ${tier} adjusted stats', 'showNotice']) {
     if (!application.includes(required)) throw new Error(`Consider loot tray behavior is missing: ${required}`);
 }
 if (application.includes('alert(')) throw new Error('Focus-stealing browser alerts remain in the application shell.');

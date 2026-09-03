@@ -341,6 +341,7 @@ async function pollLog() {
     try {
         const data = await api(`/api/log?offset=${encodeURIComponent(logOffset)}`);
         let changed = false;
+        let requiresFullRender = false;
         const previousLogReady = Boolean(bridgeInfo?.logExists);
         if (data.logPath && (!bridgeInfo || data.logPath !== bridgeInfo.logPath)) {
             const previousLog = bridgeInfo?.logPath || '';
@@ -349,10 +350,14 @@ async function pollLog() {
             parser.setCharacterFromFilename(data.logPath);
             $('#settings-log-path').textContent = data.logPath;
             changed = true;
+            requiresFullRender = true;
             if (previousLog) showNotice(`Now following ${data.logPath.split(/[\\/]/).pop()}.`, { tone:'success' });
         }
         if (bridgeInfo) bridgeInfo.logExists = Boolean(data.logExists);
-        if (previousLogReady !== Boolean(data.logExists)) changed = true;
+        if (previousLogReady !== Boolean(data.logExists)) {
+            changed = true;
+            requiresFullRender = true;
+        }
         if (data.reset) {
             logOffset = Number(data.startOffset) || 0;
             partialLine = '';
@@ -365,13 +370,19 @@ async function pollLog() {
                 const firstNewline = incoming.indexOf('\n');
                 incoming = firstNewline >= 0 ? incoming.slice(firstNewline + 1) : '';
             }
-            if (incoming) consumeText(incoming, !data.reset);
+            if (incoming) {
+                const outcome = consumeText(incoming, !data.reset);
+                requiresFullRender ||= outcome.requiresFullRender;
+            }
             changed = Boolean(incoming);
         }
         logOffset = Number(data.newOffset ?? logOffset);
         $('#bridge-status').textContent = data.logExists ? 'Live log' : 'Waiting for log';
         $('#bridge-status').className = data.logExists ? 'status-pill status-ok' : 'status-pill status-warn';
-        if (changed) renderAll();
+        if (changed) {
+            if (requiresFullRender) renderAll();
+            else renderLiveLocation();
+        }
         schedulePoll(locationPollDelay({
             mapVisible:document.body.classList.contains('map-active') || document.body.classList.contains('minimal-mode'),
             routeActive:Boolean(activeRoute)
@@ -389,8 +400,10 @@ function consumeText(text, allowTransientUi = true) {
     partialLine = lines.pop() || '';
     let zoneChanged = false;
     let latestLocation = null;
+    let requiresFullRender = false;
     for (const line of lines) {
         const event = parser.parse(line);
+        if (event && event.type !== 'location') requiresFullRender = true;
         if (event?.type === 'zone') {
             if (activeRoute && zoneKey(activeRoute.zone) !== zoneKey(event.zone)) clearActiveRoute({ clearViewer:false });
             zoneChanged = true;
@@ -413,6 +426,7 @@ function consumeText(text, allowTransientUi = true) {
     } else if (latestLocation) {
         queueLatestLocationSync(latestLocation);
     }
+    return { requiresFullRender, locationChanged:Boolean(latestLocation) };
 }
 
 function state() {
@@ -610,7 +624,11 @@ function rareMobsForZone(s, profile, options = {}) {
     return catalog.map(source => ({
         ...source,
         distance:source.loc?.length >= 2 && s.location
-            ? Math.hypot(source.loc[0] - s.location.x, source.loc[1] - s.location.y, (source.loc[2] || 0) - s.location.z)
+            ? Math.hypot(
+                source.loc[0] - s.location.x,
+                source.loc[1] - s.location.y,
+                ...(source.loc.length >= 3 ? [source.loc[2] - s.location.z] : [])
+            )
             : Infinity
     })).sort((left, right) =>
         right.items.length - left.items.length ||
@@ -656,6 +674,10 @@ function syncRareMobsToViewer(force = false) {
 
 function renderMinimalZoneDrops(s, profile) {
     const host = $('#minimal-zone-drops');
+    const scrollTop = host.scrollTop;
+    const openSources = new Set(Array.from(host.querySelectorAll('[data-npc-key] details[open]'))
+        .map(details => details.closest('[data-npc-key]')?.dataset.npcKey)
+        .filter(Boolean));
     $('#minimal-zone-title').textContent = s.zone || 'Waiting for zone';
     if (!s.zone) {
         host.className = 'minimal-zone-drops empty-state';
@@ -689,13 +711,18 @@ function renderMinimalZoneDrops(s, profile) {
         const countLabel = myClassOnly && source.allItems.length !== source.displayedItems.length
             ? `${source.displayedItems.length} class · ${source.allItems.length} total`
             : `${source.displayedItems.length} known`;
-        return `<div class="minimal-drop-row npc-con-${con.key}${active ? ' is-active-route' : ''}">
-        <div class="minimal-mob-heading"><div><strong>${esc(source.name)}</strong><small>${source.npc?.avgLevel ? `<span class="${conClass(con.key)}">Level ${source.npc.avgLevel} · ${esc(con.label)}</span>` : 'Level unknown'}${distance ? ` · ${distance}` : ''}</small></div><button type="button" class="text-button path-npc" data-npc="${esc(source.name)}">${active ? 'Routing' : 'Route'}</button></div>
-        <details class="minimal-loot"><summary>Loot · ${esc(countLabel)}</summary>
+        const key = npcNameKey(source.name);
+        const locAttrs = source.loc?.length >= 2
+            ? ` data-loc-x="${source.loc[0]}" data-loc-y="${source.loc[1]}"${source.loc.length >= 3 ? ` data-loc-z="${source.loc[2]}"` : ''}`
+            : '';
+        return `<div class="minimal-drop-row npc-con-${con.key}${active ? ' is-active-route' : ''}" data-npc-key="${esc(key)}"${locAttrs}>
+        <div class="minimal-mob-heading"><div><strong>${esc(source.name)}</strong><small>${source.npc?.avgLevel ? `<span class="${conClass(con.key)}">Level ${source.npc.avgLevel} · ${esc(con.label)}</span>` : 'Level unknown'}<span class="minimal-distance">${distance ? ` · ${distance}` : ''}</span></small></div><button type="button" class="text-button path-npc" data-npc="${esc(source.name)}">${active ? 'Routing' : 'Route'}</button></div>
+        <details class="minimal-loot"${openSources.has(key) ? ' open' : ''}><summary>Loot · ${esc(countLabel)}</summary>
         ${source.displayedItems.length ? source.displayedItems.slice(0, 20).map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${esc(item.name)}</a>`).join('') : '<small>No matching item drops in the current dataset.</small>'}
         </details>
     </div>`;
     }).join('');
+    host.scrollTop = scrollTop;
     bindPathButtons(host);
 }
 
@@ -1180,6 +1207,32 @@ function renderViewPanel(view, s, profile) {
     } else if (view === 'map') {
         renderMinimalZoneDrops(s, profile);
     }
+}
+
+function updateMinimalDistances(s) {
+    if (!s.location) return;
+    for (const row of $$('#minimal-zone-drops [data-loc-x][data-loc-y]')) {
+        const x = Number(row.dataset.locX);
+        const y = Number(row.dataset.locY);
+        const z = Number(row.dataset.locZ);
+        const distance = Math.hypot(
+            x - s.location.x,
+            y - s.location.y,
+            ...(Number.isFinite(z) ? [z - s.location.z] : [])
+        );
+        const label = row.querySelector('.minimal-distance');
+        if (label && Number.isFinite(distance)) label.textContent = ` · ${Math.round(distance).toLocaleString()}u away`;
+    }
+}
+
+function renderLiveLocation() {
+    const s = state();
+    const profile = effectiveProfile(s);
+    renderHeader(s, profile);
+    $('#map-subtitle').textContent = mapReadinessMessage(s);
+    renderMapReadiness(s);
+    renderMapRoutePlanner(s);
+    updateMinimalDistances(s);
 }
 
 function renderAll() {
