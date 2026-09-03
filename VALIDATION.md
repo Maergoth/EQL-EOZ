@@ -1,4 +1,4 @@
-# Validation report — v0.5.3
+# Validation report — v0.5.4
 
 Validated in the build environment on 2026-09-03 UTC.
 

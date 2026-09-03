@@ -1,7 +1,7 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction for review  
-Baseline: 0.5.3  
+Baseline: 0.5.4
 Last updated: 2026-09-03
 
 ## 1. Product promise

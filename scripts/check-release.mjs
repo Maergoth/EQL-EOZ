@@ -15,10 +15,15 @@ for (const required of ['## 6. Click budgets', '## 8. End-to-end UX flows', '## 
 
 for (const relative of ['../.github/workflows/build-windows.yml', '../.github/workflows/release.yml']) {
     const workflow = readFileSync(new URL(relative, import.meta.url), 'utf8');
-    for (const required of ['npm ci', 'fetch-bootstrap-pack.mjs --required', 'Determine signing mode', 'Get-AuthenticodeSignature', "steps.signing.outputs.enabled == 'true'", 'unsigned Windows']) {
+    for (const required of ['npm ci', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog', 'Determine signing mode', 'Get-AuthenticodeSignature', "steps.signing.outputs.enabled == 'true'", 'unsigned Windows']) {
         if (!workflow.includes(required)) throw new Error(`${relative} is missing release gate: ${required}`);
     }
     if (workflow.includes('Require signing certificate')) throw new Error(`${relative} still blocks unsigned output.`);
+}
+
+const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+for (const required of ['npm test', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog']) {
+    if (!ciWorkflow.includes(required)) throw new Error(`CI is missing production catalog gate: ${required}`);
 }
 
 console.log('Version and optional-signing workflow checks passed.');

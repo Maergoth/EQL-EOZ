@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.4 - Release pipeline reliability
+
+- Separated clean-checkout tests from the production catalog relevance gate so CI no longer expects the intentionally git-ignored bootstrap pack before it has been downloaded.
+- Added a verified production-data fetch followed by the relevance gate to CI, Windows installer, and tagged-release workflows.
+
 ## 0.5.3 - Live map and movement routing
 
 - Removed the erroneous planar sign inversion from logged `/loc` coordinates while retaining EverQuest's Y/X-to-X/Y ordering, so negative in-game map positions remain negative in the viewer.

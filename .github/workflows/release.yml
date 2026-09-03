@@ -31,6 +31,8 @@ jobs:
       - name: Fetch production bootstrap data
         shell: bash
         run: node scripts/fetch-bootstrap-pack.mjs --required
+      - name: Test production catalog relevance
+        run: npm run test:catalog
       - name: Determine signing mode
         id: signing
         shell: pwsh

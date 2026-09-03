@@ -18,3 +18,7 @@ jobs:
           node-version: '22'
       - run: npm ci --no-audit --no-fund
       - run: npm test
+      - name: Fetch production bootstrap data
+        run: node scripts/fetch-bootstrap-pack.mjs --required
+      - name: Test production catalog relevance
+        run: npm run test:catalog
