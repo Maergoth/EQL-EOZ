@@ -4,6 +4,7 @@ import { scaledItemStats } from './item-scaling.js';
 import { itemHasZoneSource, scoreItemForBrowse } from './item-browse.js';
 import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
+import { routeDistanceLabel } from './route-guidance.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -1172,8 +1173,7 @@ function applyRouteGuidance(guidance) {
         turnDirection:String(guidance.turnDirection || '')
     };
     if (activeRoute.status === 'ready') {
-        const source = activeRoute.source === 'map-label' ? 'local map label' : 'EQLWiki location';
-        activeRoute.message = `Path to ${activeRoute.name} · ${source} · ${Math.round(activeRoute.guidance.remainingDistance).toLocaleString()} units remaining · ${activeRoute.guidance.cue}.`;
+        activeRoute.message = `${activeRoute.name} · ${routeDistanceLabel(activeRoute.guidance.remainingDistance)} units remaining · ${activeRoute.guidance.cue}.`;
     }
     renderMapRoutePlanner(state());
     return true;
@@ -1675,10 +1675,9 @@ async function calculateActiveRoute(options = {}) {
             onAction:() => openExternal(wikiUrl(npc?.wikiTitle || activeRoute?.name))
         });
     } else if (result.routed) {
-        const source = result.source === 'map-label' ? 'local map label' : 'EQLWiki location';
         activeRoute.status = 'ready';
         activeRoute.source = result.source;
-        activeRoute.message = `Path to ${result.label || activeRoute.name} · ${source} · ${Math.round(result.distance || 0).toLocaleString()} units · updates with /loc.`;
+        activeRoute.message = `${result.label || activeRoute.name} · ${routeDistanceLabel(result.distance)} units remaining · following /loc.`;
         applyRouteGuidance(result.guidance);
     } else {
         const source = result.source === 'map-label' ? 'local map label' : 'EQLWiki location';

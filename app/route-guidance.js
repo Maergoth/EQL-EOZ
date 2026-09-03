@@ -35,8 +35,10 @@ function turnDirection(from, to) {
     return from.x * to.z - from.z * to.x >= 0 ? 'right' : 'left';
 }
 
-function roundedDistance(value) {
-    return Math.max(0, Math.round(value)).toLocaleString('en-US');
+export function routeDistanceLabel(value) {
+    const distance = Math.max(0, Number(value) || 0);
+    const increment = distance < 25 ? 1 : distance < 100 ? 5 : distance < 500 ? 10 : distance < 2000 ? 25 : 50;
+    return (Math.round(distance / increment) * increment).toLocaleString('en-US');
 }
 
 /**
@@ -115,7 +117,7 @@ export function routeGuidance(path, position, forward, options = {}) {
             const direction = turnDirection(incoming, outgoing);
             return {
                 ...base,
-                cue:`Turn ${direction} in ${roundedDistance(distanceToVertex)} units`,
+                cue:`Turn ${direction} in ${routeDistanceLabel(distanceToVertex)} units`,
                 cueKind:'turn',
                 turnDirection:direction,
                 distanceToTurn:distanceToVertex
@@ -126,8 +128,7 @@ export function routeGuidance(path, position, forward, options = {}) {
 
     return {
         ...base,
-        cue:`Continue for ${roundedDistance(remainingDistance)} units`,
+        cue:`Continue for ${routeDistanceLabel(remainingDistance)} units`,
         cueKind:'continue'
     };
 }
-

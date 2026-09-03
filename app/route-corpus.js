@@ -35,6 +35,90 @@ function segmentDistance(from, to) {
     return Math.hypot(Number(to.x) - Number(from.x), Number(to.y) - Number(from.y), Number(to.z) - Number(from.z));
 }
 
+function addQuad(positions, indices, corners) {
+    const base = positions.length / 3;
+    for (const corner of corners) positions.push(Number(corner.x), Number(corner.y), Number(corner.z));
+    // Winding produces an upward-facing normal in the viewer's right-handed,
+    // Y-up coordinate system expected by Recast's OpenGL-style input.
+    indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
+}
+
+/**
+ * Convert a corpus topology into redistributable triangle geometry. Every node
+ * gets a small landing. Valid non-drop connections become floor/ramp strips;
+ * closed connections stay physically separate and drops become directed links.
+ */
+export function buildFixtureGeometry(fixture, options = {}) {
+    const landingSize = Number(options.landingSize) || 2;
+    const corridorWidth = Number(options.corridorWidth) || 2;
+    const landingHalf = landingSize / 2;
+    const corridorHalf = corridorWidth / 2;
+    const nodes = nodeMap(fixture);
+    const positions = [];
+    const indices = [];
+    const offMeshConnections = [];
+
+    for (const node of nodes.values()) {
+        addQuad(positions, indices, [
+            { x:node.x - landingHalf, y:node.y, z:node.z - landingHalf },
+            { x:node.x + landingHalf, y:node.y, z:node.z - landingHalf },
+            { x:node.x + landingHalf, y:node.y, z:node.z + landingHalf },
+            { x:node.x - landingHalf, y:node.y, z:node.z + landingHalf }
+        ]);
+    }
+
+    for (const edge of fixture.edges || []) {
+        const from = nodes.get(edge.from);
+        const to = nodes.get(edge.to);
+        if (!from || !to || edge.open === false || edge.collisionValid === false) continue;
+        if (edge.exposedDrop === true) {
+            offMeshConnections.push({
+                from:{ x:Number(from.x), y:Number(from.y), z:Number(from.z) },
+                to:{ x:Number(to.x), y:Number(to.y), z:Number(to.z) },
+                radius:Number(edge.radius) || 1,
+                bidirectional:false,
+                kind:'drop'
+            });
+            continue;
+        }
+        const dx = Number(to.x) - Number(from.x);
+        const dz = Number(to.z) - Number(from.z);
+        const planarLength = Math.hypot(dx, dz);
+        if (planarLength < .0001) continue;
+        const px = -dz / planarLength * corridorHalf;
+        const pz = dx / planarLength * corridorHalf;
+        addQuad(positions, indices, [
+            { x:Number(from.x) + px, y:from.y, z:Number(from.z) + pz },
+            { x:Number(from.x) - px, y:from.y, z:Number(from.z) - pz },
+            { x:Number(to.x) - px, y:to.y, z:Number(to.z) - pz },
+            { x:Number(to.x) + px, y:to.y, z:Number(to.z) + pz }
+        ]);
+    }
+
+    return {
+        coordinateSystem:'viewer-right-handed-y-up',
+        units:'eq-units',
+        positions:new Float32Array(positions),
+        indices:new Uint32Array(indices),
+        offMeshConnections,
+        agent:{ maxClimb:MAX_NAVIGATION_CLIMB_Z }
+    };
+}
+
+export function fixtureRouteRequest(fixture, expectation) {
+    const nodes = nodeMap(fixture);
+    const start = nodes.get(expectation?.from);
+    const goal = nodes.get(expectation?.to);
+    if (!start || !goal) throw new Error(`Unknown route expectation in ${fixture?.id || 'fixture'}.`);
+    return {
+        fixtureId:String(fixture.id),
+        category:String(fixture.category || ''),
+        geometry:buildFixtureGeometry(fixture),
+        start:{ x:Number(start.x), y:Number(start.y), z:Number(start.z) },
+        goal:{ x:Number(goal.x), y:Number(goal.y), z:Number(goal.z) }
+    };
+}
+
 /** Deterministic reference router for redistributable synthetic fixtures. */
 export function findFixtureRoute(fixture, startId, goalId) {
     const { nodes, edges } = fixtureEdges(fixture);
@@ -175,4 +259,3 @@ export const ROUTE_CORPUS = Object.freeze([
         expectations:[{ from:'lower', to:'upper', path:false }]
     }
 ]);
-

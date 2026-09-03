@@ -9,6 +9,7 @@ const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
 const handoff = readFileSync(new URL('../docs/HANDOFF.md', import.meta.url), 'utf8');
 const implementationStatus = readFileSync(new URL('../docs/IMPLEMENTATION_STATUS.md', import.meta.url), 'utf8');
 const routeCorpus = readFileSync(new URL('../app/route-corpus.js', import.meta.url), 'utf8');
+const navmeshEvaluation = readFileSync(new URL('../docs/NAVMESH_EVALUATION.md', import.meta.url), 'utf8');
 if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) throw new Error(`Invalid package version ${pkg.version}.`);
 if (lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version) {
     throw new Error('package.json and package-lock.json versions must match.');
@@ -20,8 +21,11 @@ for (const required of ['## 6. Click budgets', '## 8. End-to-end UX flows', '## 
 for (const required of ['X `-961`, Y `-30`, Z `-66`', '## 1. Continuous `/loc` tracking', '## 2. Rare-mob replacement map', '## 3. Minimal loot browsing', '## 4. Persistent golden path']) {
     if (!manualTest.includes(required)) throw new Error(`Windows acceptance test is missing: ${required}`);
 }
-for (const required of ['docs/UX_VISION.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/HANDOFF.md', 'VALIDATION.md']) {
+for (const required of ['docs/UX_VISION.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/HANDOFF.md', 'docs/NAVMESH_EVALUATION.md', 'VALIDATION.md']) {
     if (!readme.includes(required)) throw new Error(`README is missing project-documentation link: ${required}`);
+}
+for (const required of ['recast-navigation` 0.43.1', '## Player-facing UX contract', 'dedicated module worker', 'current collision-validated pathfinder', 'MIT', 'Zlib']) {
+    if (!navmeshEvaluation.includes(required)) throw new Error(`Navmesh evaluation is missing: ${required}`);
 }
 for (const required of ['## Exact next work', 'IMPLEMENTATION_STATUS.md', 'UX_VISION.md', 'npm test', 'npm run test:catalog']) {
     if (!handoff.includes(required)) throw new Error(`Contributor handoff is missing: ${required}`);

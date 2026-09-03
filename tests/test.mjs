@@ -3,7 +3,7 @@ import { conForLevel, grayCeilingForPlayerLevel, greenCeilingForPlayerLevel } fr
 import { scaledItemStats } from '../app/item-scaling.js';
 import { itemHasZoneSource, scoreItemForBrowse } from '../app/item-browse.js';
 import { LocationHeadingTracker, locationPollDelay } from '../app/movement-tracking.js';
-import { routeGuidance } from '../app/route-guidance.js';
+import { routeDistanceLabel, routeGuidance } from '../app/route-guidance.js';
 import { buildDiagnosticSnapshot } from '../app/diagnostics.js';
 import {
     MAX_NAVIGATION_CLIMB_Z,
@@ -138,6 +138,9 @@ assert(routeGuidance([{ x:0, y:0, z:0 }, { x:100, y:0, z:0 }], { x:20, y:0, z:0 
 assert(routeGuidance([{ x:0, y:0, z:0 }, { x:100, y:0, z:0 }], { x:20, y:0, z:40 }, { x:1, y:0, z:0 }).cueKind === 'off-route', 'large route deviation yields a return cue');
 assert(routeGuidance([{ x:0, y:0, z:0 }, { x:100, y:0, z:0 }], { x:95, y:0, z:0 }, { x:1, y:0, z:0 }).cueKind === 'arrival', 'near destination yields an arrival cue');
 assert(!routeGuidance([], { x:0, y:0, z:0 }, { x:1, y:0, z:0 }).active, 'missing path does not invent guidance');
+assert(routeDistanceLabel(7.2) === '7', 'nearby route distance stays precise');
+assert(routeDistanceLabel(86) === '85', 'mid-range route distance is calmly quantized');
+assert(routeDistanceLabel(842) === '850', 'long route distance avoids noisy single-unit churn');
 
 const diagnostic = buildDiagnosticSnapshot({
     version:'0.7.1',

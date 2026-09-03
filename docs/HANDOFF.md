@@ -9,7 +9,7 @@ This repository is the source of truth. A new contributor should be able to resu
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [v0.7 Windows/game-client checklist](V0.7_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.7.1**. The 0.7 replacement-map loop is implemented. The first 0.8 slices add live remaining distance, next-turn/facing cues, redacted support diagnostics, and a deterministic topology corpus with eight expected route/no-route outcomes. The collision graph remains the current pathfinder until geometry-backed corpus execution and a reviewed Recast/Detour worker are ready.
+Current code baseline: **0.7.2**. The 0.7 replacement-map loop is implemented. The first 0.8 slices add live remaining distance, next-turn/facing cues, redacted support diagnostics, and a deterministic geometry-backed corpus with eight expected route/no-route outcomes. The collision graph remains the current pathfinder until the reviewed Recast/Detour worker passes the corpus and packaging gates.
 
 ## Run and verify
 
@@ -35,7 +35,7 @@ Do not commit proprietary S3D/EQG archives, player logs, exported diagnostics, o
 
 The desktop process in [`desktop/main.cjs`](../desktop/main.cjs) owns the selected EverQuest root, safe loopback file bridge, log selection, cached dataset, and Electron window. [`app/app.js`](../app/app.js) consumes that bridge, parses appended log text with [`app/parser.js`](../app/parser.js), derives the session UI, and coordinates the embedded viewer.
 
-The embedded wrapper in [`app/zoneviewer/viewer.html`](../app/zoneviewer/viewer.html) adapts `/loc`, EQLWiki coordinates, local map labels, and viewer geometry into one map basis. The upstream-derived viewer implementation stays under [`app/zoneviewer/`](../app/zoneviewer/). Movement constraints live in [`app/navigation-policy.js`](../app/navigation-policy.js); pure turn/distance behavior lives in [`app/route-guidance.js`](../app/route-guidance.js).
+The embedded wrapper in [`app/zoneviewer/viewer.html`](../app/zoneviewer/viewer.html) adapts `/loc`, EQLWiki coordinates, local map labels, and viewer geometry into one map basis. The upstream-derived viewer implementation stays under [`app/zoneviewer/`](../app/zoneviewer/). Movement constraints live in [`app/navigation-policy.js`](../app/navigation-policy.js); pure turn/distance behavior lives in [`app/route-guidance.js`](../app/route-guidance.js). The reviewed candidate and non-negotiable route-state UX live in [`NAVMESH_EVALUATION.md`](NAVMESH_EVALUATION.md).
 
 ```mermaid
 flowchart TD
@@ -61,11 +61,11 @@ The app is read-only with respect to EverQuest. It may consume `/loc` lines prod
 
 Continue section 16.3 of the vision in this order:
 
-1. Extend the topology cases in [`app/route-corpus.js`](../app/route-corpus.js) with redistributable triangle/collision geometry that both the current pathfinder adapter and a prospective Recast adapter can consume.
-2. Evaluate a maintained, license-compatible Recast/Detour WebAssembly implementation and record dependency license, provenance, maintenance, bundle size, and security review.
-3. Prototype generation/query work in a worker behind a route-engine adapter, then run the same corpus against the reference router and the prototype.
+1. Add the pinned `recast-navigation` 0.43.1 prototype selected in [`NAVMESH_EVALUATION.md`](NAVMESH_EVALUATION.md), including lockfile audit and third-party notices.
+2. Bundle generation/query into a dedicated module worker behind a route-engine adapter, then run the same shared triangle corpus against the reference router and the prototype.
+3. Prove downward-only off-mesh links and post-query segment validation before any viewer integration.
 4. Record proprietary real-zone cases only as redacted expectations in the manual matrix; never commit archives or coordinates that expose a player identity.
-5. Keep the current collision graph as fallback and require every rendered segment to pass existing collision and directed elevation validation.
+5. Keep the current collision graph as fallback and atomically retain its last valid route during candidate work or failure.
 
 Do not start durable history or upgrade scoring from 0.9 until the 0.8 route corpus is in place; it is the evidence gate for changing pathfinding.
 

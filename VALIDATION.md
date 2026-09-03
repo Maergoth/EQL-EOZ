@@ -1,4 +1,4 @@
-# Validation report — v0.7.1
+# Validation report — v0.7.2
 
 Validated in the build environment on 2026-09-03 UTC.
 
@@ -24,6 +24,8 @@ Validated in the build environment on 2026-09-03 UTC.
 - Movement tracking tests cover first-sample behavior, recent-step heading, jitter/duplicate suppression, reversal, teleport rejection, and active-map/route polling cadence.
 - Route-guidance tests cover nearest-segment projection, remaining distance, right-turn detection, opposite-facing recovery, off-route recovery, arrival, and absent-path behavior.
 - The asset-free route corpus passes 8/8 expected outcomes (100%) with zero segment-policy violations across outdoor, indoor, stacked-floor, ramp, closed-door, exposed-drop, and illegal-ascent topology fixtures.
+- Every corpus fixture emits finite typed triangle buffers with in-range indices and upward-facing winding; route requests retain their start/goal anchors, closed doors have no bridge geometry, and exposed drops emit exactly one directed off-mesh link.
+- Route-distance formatting tests retain near-target precision while quantizing medium/long distances to prevent noisy HUD churn.
 - Diagnostic-export tests prove the allow-list retains useful session/map/route state while excluding the character name, log filename, filesystem paths, viewer messages, and unknown future settings.
 - Inline viewer checks require dataset rare markers, marker-to-route messaging, mode-preserving location sync, and the shared heading tracker.
 - Application checks require newest-location coalescing, continuous-movement route scheduling, current-zone rare ranking, and compact mob/loot search.

@@ -35,7 +35,7 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 import { mountZoneViewer } from './ZoneViewerApp.js';
 import navigationPolicy, { configureViewerMovement } from '../navigation-policy.js';
 import { LocationHeadingTracker } from '../movement-tracking.js';
-import { routeGuidance } from '../route-guidance.js';
+import { routeDistanceLabel, routeGuidance } from '../route-guidance.js';
 
 globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
@@ -261,7 +261,8 @@ function renderRouteGuidance() {
     routeGuidanceLayer.hidden = !guidance.active;
     if (!guidance.active) return guidance;
     routeGuidanceCue.textContent = guidance.cue;
-    routeGuidanceDistance.textContent = `${Math.round(guidance.remainingDistance).toLocaleString()} units remaining`;
+    const destination = String(app?.navigationTarget?.label || '').trim();
+    routeGuidanceDistance.textContent = `${routeDistanceLabel(guidance.remainingDistance)} units remaining${destination ? ` · ${destination}` : ''}`;
     return guidance;
 }
 

@@ -1,7 +1,7 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.7.1
+Baseline: 0.7.2
 Last updated: 2026-09-03
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](V0.7_MANUAL_TEST.md)
@@ -737,7 +737,7 @@ Committed user stories:
 
 Release thesis: paths must be predictable enough that a player will use them in a multi-floor dungeon without cross-checking every turn.
 
-Implementation note (0.7.1): deterministic remaining-distance, next-turn/facing/off-route cues, the redacted diagnostics export, and an eight-expectation topology corpus are implemented as the first spatial-confidence slices. Shared geometry-backed corpus adapters and the worker-based Recast/Detour pathfinder remain open; the current collision-validated graph remains authoritative until those gates pass. See [implementation status](IMPLEMENTATION_STATUS.md).
+Implementation note (0.7.2): deterministic remaining-distance, next-turn/facing/off-route cues, the redacted diagnostics export, and an eight-expectation geometry-backed corpus are implemented as the first spatial-confidence slices. `recast-navigation` 0.43.1 is approved only for the isolated worker prototype described in [the navmesh evaluation](NAVMESH_EVALUATION.md); the current collision-validated graph remains authoritative until the worker/corpus gates pass. See [implementation status](IMPLEMENTATION_STATUS.md).
 
 Navigation architecture:
 
@@ -747,6 +747,8 @@ Navigation architecture:
 4. Add directed off-mesh links for exposed downward drops and upward transitions no greater than +6 EQ Z.
 5. Query with Detour, smooth the corridor, validate every rendered segment against local collision, and fall back to the 0.7 graph if generation fails.
 6. Keep the implemented next-turn cue, remaining distance, redacted route diagnostics, and topology corpus covered while adding shared geometry-backed outdoor/indoor/stacked/ramp/door/drop execution for current and candidate engines.
+
+Route-engine UX contract: preparation and queries remain background work. The current valid line stays visible until a validated replacement is ready; stale results are discarded; view/minimal choices never change; compatibility fallback is automatic; and normal UI uses “path,” “updating,” and concrete recovery language rather than navmesh/Recast terminology.
 
 The design takes conceptual guidance from EQEmu's [Detour navmesh pathfinder](https://github.com/EQEmu/EQEmu/blob/master/zone/pathfinder_nav_mesh.cpp) and [ground/ceiling raycasts](https://github.com/EQEmu/EQEmu/blob/master/zone/map.cpp), but Eye of Zomm remains a separate read-only viewer and will not copy server movement or automation behavior.
 
