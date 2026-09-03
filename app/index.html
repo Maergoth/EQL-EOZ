@@ -32,6 +32,11 @@
         </form>
         <div class="window-controls">
             <span id="minimal-zone-title" class="minimal-zone-title">Waiting for zone</span>
+            <div class="map-mode-switch minimal-map-mode-switch" role="group" aria-label="Map view">
+                <button class="map-mode-button is-active" type="button" data-map-mode="first" title="First Person 3D">First</button>
+                <button class="map-mode-button" type="button" data-map-mode="top" title="Top Down 3D">Top</button>
+                <button class="map-mode-button" type="button" data-map-mode="map" title="Map Overlay">Map</button>
+            </div>
             <button id="pin-window" class="topbar-control" type="button" aria-pressed="false">◇ Pin to top</button>
             <button id="minimal-mode" class="topbar-control" type="button" aria-pressed="false">Minimal</button>
         </div>
@@ -101,7 +106,10 @@
         <section class="view map-view" data-view-panel="map">
             <div class="map-toolbar panel">
                 <div>
-                    <h2 id="map-title">Zone Viewer</h2>
+                    <div class="map-title-row">
+                        <h2 id="map-title">Zone Viewer</h2>
+                        <span id="map-source-status" class="map-source-status is-waiting">Checking folder…</span>
+                    </div>
                     <p id="map-subtitle">Waiting for a zone.</p>
                 </div>
                 <div class="map-actions">
@@ -110,8 +118,8 @@
                         <button class="map-mode-button" type="button" data-map-mode="top">Top Down 3D</button>
                         <button class="map-mode-button" type="button" data-map-mode="map">Map Overlay</button>
                     </div>
-                    <button id="sync-zone" class="secondary-button">Sync current zone</button>
-                    <button id="sync-location" class="primary-button">Sync /location</button>
+                    <button id="sync-zone" class="secondary-button">Reload zone</button>
+                    <button id="sync-location" class="primary-button">Center on last /loc</button>
                 </div>
             </div>
             <div class="map-workspace">
@@ -169,10 +177,14 @@
                     <span class="filter-label">Selected classes</span>
                     <div id="class-chips" class="chip-row"></div>
                 </div>
-                <label class="compact-field">Era
-                    <select id="era-select"></select>
-                </label>
+                <div class="item-filter-actions">
+                    <label class="check-control"><input id="item-current-zone" type="checkbox" checked> Current zone</label>
+                    <label class="compact-field">Era
+                        <select id="era-select"></select>
+                    </label>
+                </div>
             </div>
+            <div id="item-context" class="item-context" aria-live="polite"></div>
             <div id="item-list" class="card-grid"></div>
         </section>
 
@@ -232,6 +244,7 @@
                     <div class="setting-line"><span>Game folder</span><code id="settings-eq-root">—</code></div>
                     <div class="setting-line"><span>Active log</span><code id="settings-log-path">—</code></div>
                     <div class="setting-line"><span>Log selection</span><code id="settings-log-mode">Automatic</code></div>
+                    <div class="setting-line"><span>Map files</span><code id="settings-map-status">Checking…</code></div>
                     <div class="settings-actions">
                         <button id="change-eq-folder" class="primary-button">Change folder</button>
                         <button id="change-log" class="secondary-button">Choose log</button>

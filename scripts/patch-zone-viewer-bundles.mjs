@@ -161,12 +161,15 @@ async function findNavigationPath(start, goal, token) {
     // Build a height-aware walkable graph directly from rendered collision
     // surfaces. Unlike the old line-map worker this retains floors, ramps,
     // drops, walls, and the player's configured movement limits.
-    const cell = Ie(distance / 35, 5, 14);
-    const deadline = performance.now() + Math.min(35000, af);
+    // Corridors and stairs in classic indoor zones are too narrow for the
+    // previous 14-unit cells. Keep the graph fine enough to honor a six-unit
+    // climb limit, then broaden the search area over successive passes.
+    const cell = Ie(distance / 120, 3.5, 6);
+    const deadline = performance.now() + Math.min(42000, af);
     const attempts = [
-        { cell, margin:Math.max(45, distance * .28), maxStates:18000, progressStart:.03, progressEnd:.36 },
-        { cell:Math.min(18, cell * 1.35), margin:Math.max(100, distance * .58), maxStates:42000, progressStart:.36, progressEnd:.68 },
-        { cell:Math.min(22, cell * 1.7), margin:Math.max(220, distance), maxStates:hx, progressStart:.68, progressEnd:.86 }
+        { cell, margin:Math.max(55, distance * .22), maxStates:24000, progressStart:.03, progressEnd:.36 },
+        { cell:Math.min(7, cell * 1.25), margin:Math.max(120, distance * .55), maxStates:50000, progressStart:.36, progressEnd:.68 },
+        { cell:Math.min(9, cell * 1.5), margin:Math.max(240, distance * 1.1), maxStates:hx, progressStart:.68, progressEnd:.86 }
     ];
     for (let index = 0; index < attempts.length; index++) {
         if (token !== this.navigationBuildToken || performance.now() >= deadline) return null;
@@ -194,14 +197,279 @@ async function findNavigationPath(start, goal, token) {
     return null;
 }
 
+function navigationCanTraverseElevation(fromElevation, toElevation) {
+    const policy = globalThis.EyeOfZommNavigationPolicy;
+    if (policy?.canTraverseElevation) {
+        return policy.canTraverseElevation(fromElevation, toElevation);
+    }
+    return Number(toElevation) - Number(fromElevation) <= 6.001;
+}
+
+function navigationCanUseSurface(fromElevation, candidateElevation, surfaces = []) {
+    const policy = globalThis.EyeOfZommNavigationPolicy;
+    if (policy?.canUseDropSurface) {
+        return policy.canUseDropSurface(fromElevation, candidateElevation, surfaces);
+    }
+    if (!this.navigationCanTraverseElevation(fromElevation, candidateElevation)) return false;
+    if (candidateElevation >= fromElevation - 6) return true;
+    return !surfaces.some(surface => {
+        const elevation = Number(surface?.y ?? surface);
+        return Number.isFinite(elevation) && elevation > candidateElevation + 6 &&
+            this.navigationCanTraverseElevation(fromElevation, elevation);
+    });
+}
+
+function navigationProjectedSurface(x, z, expectedElevation, previousPoint, surfaceCache, direction = null) {
+    const cacheKey = `${Math.round(x * 4) / 4}:${Math.round(z * 4) / 4}`;
+    const surfaces = this.navigationSurfacesAt(x, z, cacheKey, surfaceCache);
+    if (!surfaces.length) return null;
+
+    let best = null;
+    for (const surface of surfaces) {
+        const point = new A(surface.x, surface.y, surface.z);
+        if (previousPoint) {
+            if (!this.navigationCanUseSurface(previousPoint.y, point.y, surfaces) ||
+                this.navigationSegmentBlocked(previousPoint, point)) continue;
+        }
+        const elevationCost = Math.abs(point.y - expectedElevation) * 2.4;
+        const slopeCost = (1 - surface.normalY) * 18;
+        const reverseCost = direction && previousPoint
+            ? Math.max(0, -point.clone().sub(previousPoint).setY(0).normalize().dot(direction)) * 20
+            : 0;
+        const cost = elevationCost + slopeCost + reverseCost;
+        if (!best || cost < best.cost) best = { point, cost };
+    }
+    return best?.point || null;
+}
+
+async function findNavigationPathAttempt(start, goal, attempt, token, deadline, report, pass, passCount) {
+    const cell = attempt.cell;
+    const minX = Math.max(this.currentBounds.min.x - cell, Math.min(start.x, goal.x) - attempt.margin);
+    const maxX = Math.min(this.currentBounds.max.x + cell, Math.max(start.x, goal.x) + attempt.margin);
+    const minZ = Math.max(this.currentBounds.min.z - cell, Math.min(start.z, goal.z) - attempt.margin);
+    const maxZ = Math.min(this.currentBounds.max.z + cell, Math.max(start.z, goal.z) + attempt.margin);
+    const width = Math.max(2, Math.floor((maxX - minX) / cell) + 1);
+    const height = Math.max(2, Math.floor((maxZ - minZ) / cell) + 1);
+    if (width * height > hx) return null;
+
+    const toGrid = point => ({
+        ix:Ie(Math.round((point.x - minX) / cell), 0, width - 1),
+        iz:Ie(Math.round((point.z - minZ) / cell), 0, height - 1)
+    });
+    const gridPoint = (ix, iz) => ({ x:minX + ix * cell, z:minZ + iz * cell });
+    const elevationBucket = elevation => Math.round(elevation / Math.max(2, cell * .25));
+    const stateKey = (ix, iz, elevation) => `${ix}:${iz}:${elevationBucket(elevation)}`;
+    const segmentKey = (from, to) => {
+        const round = value => Math.round(value * .2);
+        return `${round(from.x)},${round(from.y)},${round(from.z)}>${round(to.x)},${round(to.y)},${round(to.z)}`;
+    };
+
+    const surfaceCache = new Map();
+    const segmentCache = new Map();
+    const startGrid = toGrid(start);
+    const goalGrid = toGrid(goal);
+    const goalSurfaces = this.navigationSurfacesAt(goal.x, goal.z, 'goal', surfaceCache);
+    const blocked = (from, to) => {
+        const key = segmentKey(from, to);
+        if (segmentCache.has(key)) return segmentCache.get(key);
+        const value = this.navigationSegmentBlocked(from, to);
+        if (segmentCache.size < 40000) segmentCache.set(key, value);
+        return value;
+    };
+
+    const open = new nl();
+    const scores = new Map();
+    const parents = new Map();
+    const nodes = new Map();
+    const firstKey = stateKey(startGrid.ix, startGrid.iz, start.y);
+    const first = {
+        ix:startGrid.ix,
+        iz:startGrid.iz,
+        point:new A(start.x, start.y, start.z),
+        key:firstKey,
+        score:0
+    };
+    scores.set(firstKey, 0);
+    nodes.set(firstKey, first);
+    open.push(first, 0);
+
+    const directions = [
+        [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
+        [1, 1, Math.SQRT2], [1, -1, Math.SQRT2],
+        [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]
+    ];
+    let foundKey = null;
+    let expanded = 0;
+    let lastYield = performance.now();
+    const yieldIfNeeded = async force => {
+        const now = performance.now();
+        if (!force && now - lastYield < of) return true;
+        const fraction = Math.min(1, expanded / Math.max(1, attempt.maxStates));
+        const progress = attempt.progressStart + (attempt.progressEnd - attempt.progressStart) * fraction;
+        report(progress, `Finding path · pass ${pass}/${passCount} · ${expanded.toLocaleString()} nodes checked…`);
+        await Zr();
+        lastYield = performance.now();
+        return token === this.navigationBuildToken && lastYield < deadline;
+    };
+
+    while (open.size && expanded++ < attempt.maxStates) {
+        if (token !== this.navigationBuildToken || performance.now() >= deadline || !await yieldIfNeeded(false)) return null;
+        const current = open.pop();
+        const currentScore = scores.get(current.key);
+        if (currentScore === undefined || Math.abs(currentScore - current.score) > .0001) continue;
+
+        const adjacentToGoal = Math.max(
+            Math.abs(current.ix - goalGrid.ix),
+            Math.abs(current.iz - goalGrid.iz)
+        ) <= 1;
+        const goalCandidates = goalSurfaces.length ? goalSurfaces : [{ y:goal.y }];
+        if (adjacentToGoal &&
+            this.navigationCanUseSurface(current.point.y, goal.y, goalCandidates) &&
+            !blocked(current.point, goal)) {
+            foundKey = current.key;
+            break;
+        }
+
+        for (const [dx, dz, distanceScale] of directions) {
+            const ix = current.ix + dx;
+            const iz = current.iz + dz;
+            if (ix < 0 || ix >= width || iz < 0 || iz >= height) continue;
+
+            const sample = gridPoint(ix, iz);
+            const surfaces = this.navigationSurfacesAt(sample.x, sample.z, `${ix}:${iz}`, surfaceCache);
+            if (!await yieldIfNeeded(false)) return null;
+            if (!surfaces.length) continue;
+
+            const candidates = surfaces
+                .filter(surface => this.navigationCanUseSurface(current.point.y, surface.y, surfaces))
+                .sort((left, right) => Math.abs(left.y - current.point.y) - Math.abs(right.y - current.point.y))
+                .slice(0, ux);
+
+            for (const surface of candidates) {
+                const next = new A(surface.x, surface.y, surface.z);
+                if (blocked(current.point, next)) continue;
+                if (!await yieldIfNeeded(false)) return null;
+
+                const rise = surface.y - current.point.y;
+                const key = stateKey(ix, iz, surface.y);
+                const travelDistance = Math.hypot(cell * distanceScale, rise);
+                const slopeCost = (1 - surface.normalY) * cell * 1.8;
+                const jumpCost = rise > 1.5 ? 4 + rise * .75 : 0;
+                const score = currentScore + travelDistance + slopeCost + jumpCost;
+                if (scores.has(key) && scores.get(key) <= score) continue;
+
+                const node = { ix, iz, point:next, key, score };
+                scores.set(key, score);
+                nodes.set(key, node);
+                parents.set(key, current.key);
+                const horizontal = Math.hypot(goal.x - next.x, goal.z - next.z);
+                const remainingClimb = Math.max(0, goal.y - next.y);
+                open.push(node, score + Math.hypot(horizontal, remainingClimb));
+            }
+        }
+    }
+
+    await yieldIfNeeded(true);
+    if (!foundKey) return null;
+
+    const path = [goal.clone()];
+    let key = foundKey;
+    while (key) {
+        const node = nodes.get(key);
+        if (node) path.push(node.point.clone());
+        if (key === firstKey) break;
+        key = parents.get(key);
+    }
+    path.push(start.clone());
+    path.reverse();
+    return this.simplifyNavigationPath(path);
+}
+
 const viewerPath = `${root}/app/zoneviewer/ZoneViewerApp.js`;
 let viewer = readFileSync(viewerPath, 'utf8');
 const miniMapSource = drawMiniMap.toString().replace(/^function /, '');
 const navSource = findNavigationPath.toString().replace(/^async function /, 'async ');
+const elevationSource = navigationCanTraverseElevation.toString().replace(/^function /, '');
+const surfaceSource = navigationCanUseSurface.toString().replace(/^function /, '');
+const projectedSource = navigationProjectedSurface.toString().replace(/^function /, '');
+const attemptSource = findNavigationPathAttempt.toString().replace(/^async function /, 'async ');
+// Repair the single bad boundary emitted by the first v15 patch draft before
+// applying the corrected method replacement. This is intentionally idempotent.
+viewer = viewer.replace(
+    '}simplifyNavigationPath(Ee)}simplifyNavigationPath(e){',
+    '}simplifyNavigationPath(e){'
+);
 viewer = replaceMethod(viewer, ['drawMiniMap(){', 'drawMiniMap() {'], 'clearMapLabels(){', miniMapSource);
 viewer = replaceMethod(viewer, ['async findNavigationPath(e,t,n){', 'async findNavigationPath(start, goal, token) {'], 'async findNavigationPathAttempt(', navSource);
-viewer = viewer.replace('fh="v13"', 'fh="v14"');
-if (!viewer.includes('fh="v14"')) throw new Error('Unable to bump the parsed-zone cache version.');
+viewer = replaceMethod(
+    viewer,
+    ['async findNavigationPathAttempt(e,t,n,i,s,a,o,l){', 'async findNavigationPathAttempt(start, goal, attempt, token, deadline, report, pass, passCount) {'],
+    'simplifyNavigationPath(e){',
+    attemptSource
+);
+
+if (viewer.includes('navigationCanTraverseElevation(fromElevation, toElevation) {')) {
+    viewer = replaceMethod(viewer, 'navigationCanTraverseElevation(fromElevation, toElevation) {', 'navigationCanUseSurface(', elevationSource);
+    viewer = replaceMethod(viewer, 'navigationCanUseSurface(fromElevation, candidateElevation, surfaces = []) {', 'navigationProjectedSurface(', surfaceSource);
+} else {
+    const marker = ['navigationProjectedSurface(e,t,n,i,s,a=null){', 'navigationProjectedSurface(x, z, expectedElevation, previousPoint, surfaceCache, direction = null) {']
+        .find(token => viewer.includes(token));
+    if (!marker) throw new Error('Unable to locate the navigation surface projector.');
+    viewer = viewer.replace(marker, `${elevationSource}${surfaceSource}${marker}`);
+}
+viewer = replaceMethod(
+    viewer,
+    ['navigationProjectedSurface(e,t,n,i,s,a=null){', 'navigationProjectedSurface(x, z, expectedElevation, previousPoint, surfaceCache, direction = null) {'],
+    'navigationRepairStep(',
+    projectedSource
+);
+
+const projectedRouteFinish = 'p>this.fp.jumpHeight+1.5||p<-this.fp.maxDrop-2';
+const directedRouteFinish = '!this.navigationCanTraverseElevation(m.y,n.y)';
+if (viewer.includes(projectedRouteFinish)) viewer = viewer.replace(projectedRouteFinish, directedRouteFinish);
+if (!viewer.includes(directedRouteFinish)) throw new Error('Unable to install directed movement rules in the projected route fallback.');
+
+const fastRouteStep = 'L>this.fp.jumpHeight+.75||L<-this.fp.maxDrop';
+const directedFastRouteStep = '!this.navigationCanTraverseElevation(R.y,T.y)';
+if (viewer.includes(fastRouteStep)) viewer = viewer.replace(fastRouteStep, directedFastRouteStep);
+if (!viewer.includes(directedFastRouteStep)) throw new Error('Unable to install directed movement rules in the fast route validator.');
+
+// Keep the legacy map-worker fallback on the same movement model as the
+// geometry-derived graph. configureViewerMovement normally supplies this
+// value, but the fallback must remain safe if the controller is unavailable.
+viewer = viewer.replace('jumpHeight:this.fp?.jumpHeight||10', 'jumpHeight:this.fp?.jumpHeight||6');
+if (!viewer.includes('jumpHeight:this.fp?.jumpHeight||6')) {
+    throw new Error('Unable to cap the background route worker at a six-unit climb.');
+}
+viewer = viewer.replace(
+    'Pathfinding uses the same 10-unit jump limit as Grounded mode.',
+    'Pathfinding uses the same six-unit upward step limit as Grounded mode; exposed downward drops are allowed.'
+);
+if (!viewer.includes('same six-unit upward step limit as Grounded mode')) {
+    throw new Error('Unable to update the navigation movement help.');
+}
+
+// Preserve the floor encoded by map labels. Adding 24–35 units before the
+// downward ray caused stacked dungeons (notably Befallen) to select the floor
+// above the label. findGroundPointAt already allows the configured step-up
+// tolerance, so the label elevation itself is the correct ceiling.
+viewer = viewer.replace(
+    'this.findGroundPointAt(f.x,f.z,f.y+24)||f',
+    'this.findGroundPointAt(f.x,f.z,f.y)||f'
+);
+viewer = viewer.replace(
+    'this.findGroundPointAt(o.x,o.z,o.y+35)||o.clone()',
+    'this.findGroundPointAt(o.x,o.z,o.y)||o.clone()'
+);
+for (const required of [
+    'this.findGroundPointAt(f.x,f.z,f.y)||f',
+    'this.findGroundPointAt(o.x,o.z,o.y)||o.clone()'
+]) {
+    if (!viewer.includes(required)) throw new Error(`Unable to install floor-aware map grounding: ${required}`);
+}
+
+viewer = viewer.replace(/fh="v(?:13|14)"/, 'fh="v15"');
+if (!viewer.includes('fh="v15"')) throw new Error('Unable to bump the parsed-zone cache version.');
 writeFileSync(viewerPath, viewer);
 
 const workerPath = `${root}/app/zoneviewer/zone-parser.worker.js`;
@@ -217,4 +485,4 @@ if (!worker.includes('let i=[];this.images=i;this.shaderMap={}') || !worker.incl
 }
 writeFileSync(workerPath, worker);
 
-console.log('Zone Viewer coordinate display, minimap, nav graph, and S3D texture patches applied.');
+console.log('Zone Viewer coordinate display, minimap, directed nav graph, and S3D texture patches applied.');

@@ -1,6 +1,13 @@
 import { EQLogParser } from '../app/parser.js';
 import { conForLevel, grayCeilingForPlayerLevel, greenCeilingForPlayerLevel } from '../app/con-colors.js';
 import { scaledItemStats } from '../app/item-scaling.js';
+import { itemHasZoneSource, scoreItemForBrowse } from '../app/item-browse.js';
+import {
+    MAX_NAVIGATION_CLIMB_Z,
+    canTraverseElevation,
+    canUseDropSurface,
+    configureViewerMovement
+} from '../app/navigation-policy.js';
 
 function assert(condition, message) {
     if (!condition) throw new Error(message);
@@ -24,16 +31,35 @@ assert(s.level === 50, 'level');
 assert(s.classes.join('/') === 'MNK/ROG/BER', 'classes');
 assert(s.observed.some(npc => npc.name === 'Guard Wytiffin' && npc.level === 50), 'considered NPC');
 assert(s.totalDamage === 372, 'outgoing damage only');
-assert(s.location.x === 20.25 && s.location.y === -10.5 && s.location.z === 4, 'normalized map location');
+assert(s.location.x === -20.25 && s.location.y === 10.5 && s.location.z === 4, 'normalized map location');
 assert(s.location.logX === -20.25 && s.location.logY === 10.5, 'raw /loc axes retained');
 
 const befallenLocation = new EQLogParser();
-befallenLocation.parse('[Thu Sep 03 00:00:00 2026] Your Location is 30, 957, -66');
+befallenLocation.parse('[Thu Sep 03 00:00:00 2026] Your Location is -30, -961, -66');
 const befallenState = befallenLocation.snapshot();
 assert(
-    befallenState.location.x === -957 && befallenState.location.y === -30 && befallenState.location.z === -66,
+    befallenState.location.x === -961 && befallenState.location.y === -30 && befallenState.location.z === -66,
     'Befallen /loc aligns with the EQ map coordinate display'
 );
+
+const legendsRareConsider = new EQLogParser();
+const legendsRareConsiderEvent = legendsRareConsider.parse(
+    '[Thu Sep 03 00:01:00 2026] Soldier of V Zher - a rare creature - scowls at you, ready to attack -- looks like quite a gamble. (Lvl: 26)'
+);
+assert(legendsRareConsiderEvent?.type === 'consider', 'Legends rare-creature consider line is recognized');
+assert(legendsRareConsiderEvent?.target?.name === 'Soldier of V Zher', 'consider descriptor is excluded from NPC name');
+assert(legendsRareConsiderEvent?.target?.level === 26, 'Legends consider level is retained');
+
+assert(MAX_NAVIGATION_CLIMB_Z === 6, 'navigation climb matches the Legends jump height');
+assert(canTraverseElevation(-66, -60), 'a six-unit upward move is traversable');
+assert(!canTraverseElevation(-66, -59.99), 'an upward move over six units is rejected');
+assert(canTraverseElevation(500, -5000), 'downward movement is intentionally unlimited');
+assert(canUseDropSurface(100, -100, [{ y:-100 }]), 'an exposed long drop is traversable');
+assert(!canUseDropSurface(100, -100, [{ y:100 }, { y:-100 }]), 'routing cannot fall through an overlapping upper floor');
+const movementController = { maxStepUp:8, gravity:55, jumpHeight:10, jumpVelocity:0 };
+configureViewerMovement(movementController);
+assert(movementController.maxStepUp === 6, 'viewer step height cannot exceed navigation climb height');
+assert(movementController.jumpHeight === 6, 'viewer movement and route jump heights agree');
 
 // Modern EQ bands: blue, light blue, green, then gray below player level.
 assert(grayCeilingForPlayerLevel(15) === 9, 'L15 gray ceiling');
@@ -65,6 +91,18 @@ assert(scaled.RANGE === 160, 'ammo range');
 assert(scaled.STR === -4, 'negative stat at least one point');
 assert(scaled.STA === -45, 'large negative stat improves ten percent');
 assert(scaledItemStats(item, 10).STA === 0, 'negative stat reaches zero by tier 10');
+
+const zoneGear = {
+    name:'Pristine Studded Leather Tunic', classes:['MNK'], slots:['CHEST'], stats:{ AC:25, AGI:10, WT:1.4 },
+    dropSources:[{ name:'Baron Telyx V`Zher', zone:'Befallen' }]
+};
+const globalPotion = {
+    name:'10 Dose Adrenaline Tap', classes:['ALL'], slots:[], stats:{ WT:.4 },
+    displayLines:['EXPENDABLE Charges: 10'], dropSources:[]
+};
+assert(itemHasZoneSource(zoneGear, 'Befallen'), 'current-zone item source matches');
+assert(!itemHasZoneSource(globalPotion, 'Befallen'), 'global consumable is excluded from current-zone defaults');
+assert(scoreItemForBrowse(zoneGear, { zone:'Befallen' }) > scoreItemForBrowse(globalPotion, { zone:'Befallen' }), 'equippable current-zone loot outranks generic consumables');
 
 const session = new EQLogParser();
 session.setCharacterFromFilename('C:\\EverQuest\\Logs\\eqlog_Maergoth_rivervale.txt');

@@ -100,4 +100,6 @@ Disallowed: process hooks, memory inspection, injection, game-file writes, gener
 - CI tests on pushes/PRs;
 - Windows x64 NSIS installer built by GitHub Actions;
 - production release workflow refuses to ship without a verified GitHub-mirrored production dataset;
-- Windows artifacts are published only after trusted Authenticode signing and signature verification.
+- Windows artifacts are Authenticode-signed and signature-verified when trusted certificate secrets are configured; until signing is funded/configured, workflows may publish a clearly identified unsigned installer.
+
+Detailed user stories, click budgets, recovery flows, acceptance scenarios, and the phased UX roadmap are maintained in [docs/UX_VISION.md](docs/UX_VISION.md).

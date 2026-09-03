@@ -25,6 +25,9 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 <div id="zone-root" class="eqlzv-root"></div>
 <script type="module">
 import { mountZoneViewer } from './ZoneViewerApp.js';
+import navigationPolicy, { configureViewerMovement } from '../navigation-policy.js';
+
+globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
 const root = document.getElementById('zone-root');
 const app = mountZoneViewer(root, {
@@ -33,6 +36,7 @@ const app = mountZoneViewer(root, {
     navigationWorkerUrl: './navigation.worker.js',
     height: '100%'
 });
+configureViewerMovement(app.fp);
 window.eqlZoneViewer = app;
 
 function simplifyViewerUi() {
@@ -116,6 +120,7 @@ async function configuredDirectoryHandle() {
     const manifest = await response.json();
     if (!manifest.rootName || !Array.isArray(manifest.files)) return null;
     const rootHandle = new LocalDirectoryHandle(manifest.rootName);
+    rootHandle.eyeOfZommHasZoneArchives = manifest.files.some(entry => /\.(?:s3d|eqg)$/i.test(String(entry.path || '')));
     for (const entry of manifest.files) {
         const parts = String(entry.path || '').split('/').filter(Boolean);
         if (!parts.length) continue;
@@ -191,7 +196,10 @@ async function pathToWikiLocation(label, location) {
     const start = app.navigationStartPoint();
     if (app.mode !== 'first') app.setMode('first');
     const point = app.eqMapToThree(eqX, eqY, eqZ);
-    const searchHeight = hasTrustedElevation ? point.y + 35 : app.currentBounds.max.y + 100;
+    // A trusted wiki Z identifies a floor. Starting 35 units above it can hit
+    // the next floor in stacked dungeons, so only allow the viewer's normal
+    // six-unit step tolerance above the reported elevation.
+    const searchHeight = hasTrustedElevation ? point.y : app.currentBounds.max.y + 100;
     const ground = app.findGroundPointAt(point.x, point.z, searchHeight) || point.clone();
     const key = `${label}:${ground.x.toFixed(2)}:${ground.y.toFixed(2)}:${ground.z.toFixed(2)}`;
     if (app.navigationTarget?.key === key) return true;
@@ -240,7 +248,28 @@ async function waitForZoneSelect(timeout = 15000) {
 }
 
 let lastSyncedLocation = null;
+let lastSyncedGround = null;
 let loadedZoneIdentity = '';
+
+function focusTopViewAt(point) {
+    const target = app?.orbit?.target;
+    const camera = app?.perspective;
+    if (!point?.clone || !target?.clone || !camera?.position) return false;
+    const previous = target.clone();
+    const deltaX = point.x - previous.x;
+    const deltaY = point.y - previous.y;
+    const deltaZ = point.z - previous.z;
+    camera.position.x += deltaX;
+    camera.position.y += deltaY;
+    camera.position.z += deltaZ;
+    target.copy(point);
+    app.orbit?.update?.();
+    app.lastPick = point.clone();
+    app.updateCoordinateHud?.(true);
+    app.drawMapLabels?.();
+    app.requestRender?.();
+    return true;
+}
 
 window.eqlEyeOfZommViewer = {
     async selectFolder() {
@@ -270,8 +299,18 @@ window.eqlEyeOfZommViewer = {
         if (!app) return { ok:false };
         const configured = await configuredDirectoryHandle().catch(() => null);
         if (configured) {
+            if (!configured.eyeOfZommHasZoneArchives) {
+                return { ok:false, reason:'no-zone-archives', name:configured.name || '', source:'settings' };
+            }
             const ok = await connectSavedHandle(configured);
-            if (ok) return { ok:true, restored:true, name:configured.name || '', source:'settings' };
+            if (ok) {
+                const select = app.els?.zoneSelect || await waitForZoneSelect(3000);
+                if (select && !select.disabled && select.options.length > 1) {
+                    return { ok:true, restored:true, name:configured.name || '', source:'settings' };
+                }
+                return { ok:false, reason:'no-zone-archives', name:configured.name || '', source:'settings' };
+            }
+            return { ok:false, reason:'folder-open-failed', name:configured.name || '', source:'settings' };
         }
         const handle = await loadSavedHandle().catch(() => null);
         if (!handle) return { ok:false, reason:'no-saved-folder' };
@@ -317,6 +356,7 @@ window.eqlEyeOfZommViewer = {
         const zoneIdentity = `${app.currentZoneRecord.id || ''}:${app.currentZoneRecord.format || ''}`;
         if (zoneIdentity !== loadedZoneIdentity) {
             lastSyncedLocation = null;
+            lastSyncedGround = null;
             loadedZoneIdentity = zoneIdentity;
         }
         app.selectedFloorIndices?.clear?.();
@@ -342,7 +382,12 @@ window.eqlEyeOfZommViewer = {
         // overlay share exactly the same EQ X/Y/Z basis.
         const eqLocation = { x:Number(location.x), y:Number(location.y), z:Number(location.z) };
         const point = app.eqMapToThree(eqLocation.x, eqLocation.y, eqLocation.z);
-        const ground = app.findGroundPointAt(point.x, point.z, point.y + 35) || point;
+        // /loc Z is authoritative. A large upward ray offset can snap to the
+        // ceiling or next floor (Befallen's adjacent floors are ~33 units
+        // apart), while findGroundPointAt already permits the six-unit step
+        // tolerance configured for player movement.
+        const ground = app.findGroundPointAt(point.x, point.z, point.y) || point;
+        lastSyncedGround = ground.clone();
         const previousForward = app.lastFirstPersonPose?.forward?.clone?.();
         if (app.mode !== 'first') app.setMode('first');
         app.setGameMapVisible?.(false);
@@ -378,11 +423,12 @@ window.eqlEyeOfZommViewer = {
                 return { ok:false, reason:'map-not-found', message:'No matching file was found in the EverQuest Maps folder.' };
             }
             app.setGameMapVisible(true);
-            app.resetTopView?.();
+            if (!focusTopViewAt(lastSyncedGround)) app.resetTopView?.();
             return { ok:true, mode:'map' };
         }
         app.setGameMapVisible?.(false);
         app.setMode(mode === 'top' ? 'top' : 'first');
+        if (mode === 'top') focusTopViewAt(lastSyncedGround);
         return { ok:true, mode:mode === 'top' ? 'top' : 'first' };
     },
 

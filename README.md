@@ -16,6 +16,8 @@ Eye of Zomm may:
 
 Eye of Zomm does **not** inspect process memory, inject code, load into the game process, patch game files, automate keyboard/mouse input, or issue game commands. See [SAFETY.md](SAFETY.md).
 
+The detailed product direction, click budgets, user stories, recovery flows, acceptance scenarios, and phased UX backlog live in [docs/UX_VISION.md](docs/UX_VISION.md).
+
 ## What it does
 
 - Detects the active character from the log filename.
@@ -31,7 +33,7 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Embeds a deliberately simplified EQL Zone Viewer.
 - Prompts for the EverQuest folder on first launch, then selects the newest log under `Logs` automatically.
 - Provides First Person 3D, Top Down 3D, and local Map Overlay views with all floors visible by default.
-- Synchronizes logged `/location` output into first person and derives facing from consecutive coordinates.
+- Synchronizes logged `/location` output into the selected map view and derives first-person facing from consecutive coordinates.
 - Provides a pin-to-top option that hides the draggable title bar while keeping the app in the Windows taskbar.
 - Provides a minimal map, live-fight DPS, and class-filtered named-mob/drop list.
 - Shows EQLWiki Itembox-inspired local-data tooltips, including embedded wiki icons when present in the pack.

@@ -1,4 +1,4 @@
-# Validation report — v0.5.0
+# Validation report — v0.5.3
 
 Validated in the build environment on 2026-09-03 UTC.
 
@@ -16,6 +16,13 @@ Validated in the build environment on 2026-09-03 UTC.
 - Bundled JSON files parse successfully.
 - The bootstrap script validates manifest shape, gzip SHA-256, decompression, and schema v3 before embedding a production snapshot.
 - Runtime dataset checks now target the GitHub `dataset` branch rather than eqlwiki.com.
+- Signed `/loc` normalization is covered with the reported Befallen `Y -30, X -961, Z -66` regression and retains negative map X.
+- Location and named-destination grounding are release-checked to start at the trusted Z rather than a 24–35 unit offset that could select Befallen's next floor.
+- Legends rare-creature/scowls consider wording is covered with the reported Soldier of V Zher line and clean-name assertion.
+- Directed route-policy tests allow exactly +6 Z, reject greater climbs, allow exposed drops of any height, and reject drops through an overlapping upper floor.
+- UI checks require persistent minimal-mode map controls, folder/map readiness states, current-zone item scope, tier-adjusted tooltip output, and player-centered Top/Map restoration.
+- A production-size relevance gate exercises all 11,168 embedded items and confirms Befallen/MNK defaults return useful local equipment before generic consumables.
+- The product/UX vision is release-checked for click budgets, complete flows, feature user stories, acceptance scenarios, and a phased roadmap.
 
 ## Full supplied-log parse
 

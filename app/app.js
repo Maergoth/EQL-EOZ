@@ -1,6 +1,7 @@
 import { EQLogParser } from './parser.js';
 import { conForLevel } from './con-colors.js';
 import { scaledItemStats } from './item-scaling.js';
+import { itemHasZoneSource, scoreItemForBrowse } from './item-browse.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -10,6 +11,7 @@ let pack = { meta:{}, zones:[], npcs:[], items:[] };
 let lootByNpcZone = new Map();
 let lootByNpcName = new Map();
 let itemByName = new Map();
+let normalizedZoneKeys = new Map();
 let bridgeInfo = null;
 let logOffset = 0;
 let partialLine = '';
@@ -19,8 +21,13 @@ let packRefreshTimer = null;
 let selectedEncounterId = '';
 let fightExpiryTimer = null;
 let viewerSyncChain = Promise.resolve();
+let viewerFolderPromise = null;
+let viewerFolderPath = '';
+let viewerFolderStatus = 'idle';
 let consideredTarget = null;
 let considerTrayTimer = null;
+let activeTooltipItem = null;
+let lastTooltipPointer = null;
 const CONSIDER_TRAY_DURATION = 16000;
 
 const prefs = {
@@ -39,8 +46,13 @@ let settings = Object.assign({
     encounterGapSeconds: 15,
     minimalMyClassOnly: true,
     minimalNamedOnly: true,
-    considerMyClassOnly: true
+    considerMyClassOnly: true,
+    itemCurrentZoneOnly: true,
+    itemZoneFilterExplicit: false,
+    mapMode: 'first'
 }, prefs.load());
+if (!['first', 'top', 'map'].includes(settings.mapMode)) settings.mapMode = 'first';
+let itemZoneFilterExplicit = Boolean(settings.itemZoneFilterExplicit || settings.itemCurrentZoneOnly === false);
 parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
 const $ = selector => document.querySelector(selector);
@@ -74,13 +86,17 @@ function zoneRecord(name) {
 }
 
 function zoneKey(name) {
+    const cacheKey = String(name || '');
+    if (normalizedZoneKeys.has(cacheKey)) return normalizedZoneKeys.get(cacheKey);
     const record = zoneRecord(name);
-    return String(record?.name || name || '')
+    const normalized = String(record?.name || name || '')
         .toLowerCase()
         .replace(/\s+\d+\s+\([^)]*\)\s*$/,'')
         .replace(/^the\s+/,'')
         .replace(/\s+/g,' ')
         .trim();
+    normalizedZoneKeys.set(cacheKey, normalized);
+    return normalized;
 }
 
 function npcNameKey(name) {
@@ -131,6 +147,14 @@ function itemMatchesProfile(item, profile) {
     if (!profile.classes.length) return true;
     const classes = (item.classes || []).map(c => String(c).toUpperCase());
     return !classes.length || classes.includes('ALL') || profile.classes.some(c => classes.includes(c));
+}
+
+function itemDropsInZone(item, zone) {
+    return itemHasZoneSource(item, zone, zoneKey);
+}
+
+function itemBrowsePriority(item, zone) {
+    return scoreItemForBrowse(item, { zone, normalizeZone:zoneKey, isNamedSource });
 }
 
 function isNamedSource(name) {
@@ -210,6 +234,18 @@ async function connectBridge() {
         if (!logOffset) logOffset = 0;
         schedulePoll(50);
         schedulePackRefreshCheck();
+        if (bridgeInfo.eqRootExists) {
+            queueViewerSync(async () => {
+                const connected = await ensureViewerFolderConnected(false);
+                if (!connected) return false;
+                const s = state();
+                if (s.zone) await syncZoneToViewer(false);
+                if (s.location) return syncLocationToViewer(false);
+                return true;
+            });
+        } else {
+            updateViewerFolderStatus('missing');
+        }
     } catch (error) {
         $('#bridge-status').textContent = 'Bridge offline';
         $('#bridge-status').className = 'status-pill status-bad';
@@ -318,6 +354,7 @@ function rebuildPackIndexes() {
     lootByNpcZone = new Map();
     lootByNpcName = new Map();
     itemByName = new Map();
+    normalizedZoneKeys = new Map();
     for (const item of pack.items || []) {
         for (const key of [item.name, item.wikiTitle]) {
             if (key) itemByName.set(String(key).trim().toLowerCase(), item);
@@ -561,7 +598,8 @@ function eventText(e) {
 }
 
 function renderEvents(s) {
-    const events = s.recentEvents.slice(0,12);
+    // Repeated /loc lines drive the map but should not flood the Overview.
+    const events = s.recentEvents.filter(event => event.type !== 'location').slice(0,12);
     const html = events.map(e => `<div class="event-row"><span class="event-type">${esc(e.type)}</span><span>${esc(eventText(e))}</span><span class="event-value">${e.amount ? formatNum(e.amount) : ''}</span></div>`).join('');
     $('#recent-events').className = events.length ? 'event-feed' : 'event-feed empty-state';
     $('#recent-events').innerHTML = events.length ? html : 'Waiting for log activity.';
@@ -653,12 +691,13 @@ function tooltipHtml(item) {
         .join('<br>');
     const icon = itemIconSource(item);
     const displayLines = Array.isArray(item.displayLines) ? item.displayLines.slice(0, 12) : [];
-    return `<div class="itembox-title">${esc(item.name)}</div>
+    const showScaledStats = Boolean(statHtml && (tier > 0 || !displayLines.length));
+    return `<div class="itembox-title"><span>${esc(item.name)}</span>${tier > 0 ? `<span class="itembox-tier">Tier ${tier}</span>` : ''}</div>
         <div class="itembox-body">
             <div class="itembox-summary">${icon ? `<img class="itembox-icon" src="${esc(icon)}" alt="">` : '<span class="itembox-icon item-icon-placeholder">◇</span>'}<div>
                 ${displayLines.length ? displayLines.map(line => `<div>${esc(line)}</div>`).join('') : `<div>${esc((item.slots || []).length ? `Slot: ${(item.slots || []).join(' ')}` : 'Slot: Unknown')}</div><div>Class: ${esc((item.classes || []).join(' ') || 'Unknown')}</div>`}
             </div></div>
-            ${statHtml && !displayLines.length ? `<div class="tooltip-stats">${statHtml}</div>` : ''}
+            ${showScaledStats ? `${tier > 0 ? `<div class="tooltip-scale-label">Tier ${tier} adjusted stats</div>` : ''}<div class="tooltip-stats">${statHtml}</div>` : ''}
             ${sources ? `<div class="tooltip-source"><strong>Drops from</strong><br>${sources}</div>` : ''}
             ${item.notes ? `<div class="tooltip-source">${esc(item.notes)}</div>` : ''}
         </div>`;
@@ -681,14 +720,25 @@ function showItemTooltip(target, event) {
     const item = itemRecord(target?.dataset?.itemTitle);
     const tooltip = $('#item-tooltip');
     if (!item || !tooltip) return;
+    activeTooltipItem = item;
+    lastTooltipPointer = { clientX:event.clientX, clientY:event.clientY };
     tooltip.innerHTML = tooltipHtml(item);
     tooltip.hidden = false;
     positionTooltip(event);
 }
 
+function refreshItemTooltip() {
+    const tooltip = $('#item-tooltip');
+    if (!activeTooltipItem || !tooltip || tooltip.hidden) return;
+    tooltip.innerHTML = tooltipHtml(activeTooltipItem);
+    if (lastTooltipPointer) positionTooltip(lastTooltipPointer);
+}
+
 function hideItemTooltip() {
     const tooltip = $('#item-tooltip');
     if (tooltip) tooltip.hidden = true;
+    activeTooltipItem = null;
+    lastTooltipPointer = null;
 }
 
 function renderNpcList(s, profile) {
@@ -733,17 +783,20 @@ function renderNpcList(s, profile) {
 function renderItems(s, profile) {
     const query = $('#item-search')?.value.trim().toLowerCase() || '';
     const tier = Number(settings.itemTier) || 0;
+    const currentZoneOnly = Boolean($('#item-current-zone')?.checked && s.zone);
     let items = pack.items.filter(item => eraAllowed(item.era));
     if (query) items = items.filter(i => `${i.name} ${(i.classes||[]).join(' ')} ${(i.slots||[]).join(' ')} ${(i.dropSources||[]).map(d => `${d.name} ${d.zone||''}`).join(' ')}`.toLowerCase().includes(query));
     if (profile.classes.length) {
-        items = items.filter(item => {
-            const classes = (item.classes || []).map(c => String(c).toUpperCase());
-            return classes.includes('ALL') || profile.classes.some(c => classes.includes(c));
-        });
+        items = items.filter(item => itemMatchesProfile(item, profile));
     }
-    items.sort((a,b) => String(a.name || '').localeCompare(String(b.name || '')));
+    if (currentZoneOnly) items = items.filter(item => itemDropsInZone(item, s.zone));
+    const priorities = new Map(items.map(item => [item, itemBrowsePriority(item, s.zone)]));
+    items.sort((a,b) => priorities.get(b) - priorities.get(a) || String(a.name || '').localeCompare(String(b.name || '')));
     const total = items.length;
     const visible = items.slice(0, 250);
+    const classLabel = profile.classes.length ? profile.classes.join('/') : 'all classes';
+    const scopeLabel = currentZoneOnly ? `in <strong>${esc(s.zone)}</strong>` : 'across all zones';
+    $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}.`;
     $('#item-list').innerHTML = visible.map(item => {
         const stats = scaledItemStats(item, tier);
         const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
@@ -761,7 +814,7 @@ function renderItems(s, profile) {
             ${item.notes ? `<div class="sub" style="margin-top:9px">${esc(item.notes)}</div>` : ''}
             <div class="card-actions"><a class="mini-button" href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener">Item wiki</a></div>
         </article>`;
-    }).join('') || '<div class="empty-state">No items match the selected class/era filters in the current data pack.</div>';
+    }).join('') || `<div class="empty-state">No matching items are known${currentZoneOnly ? ` in ${esc(s.zone)}` : ''}. Search or turn off Current zone to broaden the results.</div>`;
 
     if (total > visible.length) {
         $('#item-list').insertAdjacentHTML('beforeend', `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`);
@@ -772,17 +825,41 @@ function renderItems(s, profile) {
 
 function buildClassChips() {
     for (const host of [$('#class-chips'), $('#settings-class-chips')]) {
-        host.innerHTML = CLASSES.map(c => `<button class="chip ${settings.manualClasses.includes(c) ? 'is-active' : ''}" data-class="${c}">${c}</button>`).join('');
+        host.innerHTML = `<button class="chip" data-class-auto="1">Auto</button>${CLASSES.map(c => `<button class="chip" data-class="${c}">${c}</button>`).join('')}`;
+        host.querySelector('[data-class-auto]').addEventListener('click', () => {
+            settings.manualClasses = [];
+            prefs.save(settings);
+            updateClassChipState();
+            renderAll();
+        });
         host.querySelectorAll('.chip').forEach(btn => btn.addEventListener('click', () => {
             const c = btn.dataset.class;
+            if (!c) return;
             settings.manualClasses = settings.manualClasses.includes(c)
                 ? settings.manualClasses.filter(x => x !== c)
                 : [...settings.manualClasses, c];
             prefs.save(settings);
-            buildClassChips();
+            updateClassChipState();
             renderAll();
         }));
     }
+    updateClassChipState();
+}
+
+function updateClassChipState() {
+    const detected = new Set((state().classes || []).map(value => String(value).toUpperCase()));
+    const automatic = !settings.manualClasses.length;
+    $$('[data-class-auto]').forEach(button => {
+        button.classList.toggle('is-active', automatic);
+        button.title = automatic
+            ? (detected.size ? `Using ${Array.from(detected).join('/')}` : 'Classes will be read from the active log')
+            : 'Use the classes detected in the active log';
+    });
+    $$('[data-class]').forEach(button => {
+        const selected = automatic ? detected.has(button.dataset.class) : settings.manualClasses.includes(button.dataset.class);
+        button.classList.toggle('is-active', selected);
+        button.classList.toggle('is-auto', automatic && selected);
+    });
 }
 
 function buildEraSelect() {
@@ -812,6 +889,11 @@ function renderAll() {
     const s = state();
     const profile = effectiveProfile(s);
     const activeView = $('.nav-button.is-active')?.dataset.view || 'overview';
+    const itemQueryActive = Boolean($('#item-search')?.value.trim());
+    $('#item-current-zone').checked = itemZoneFilterExplicit
+        ? settings.itemCurrentZoneOnly !== false
+        : !itemQueryActive;
+    updateClassChipState();
     renderHeader(s, profile);
     renderMetrics(s, profile);
     renderViewPanel(activeView, s, profile);
@@ -820,14 +902,13 @@ function renderAll() {
     }
     if (consideredTarget && !$('#consider-loot-tray')?.hidden) renderConsiderTray();
     $('#map-title').textContent = s.zone ? `${s.zone} · Zone Viewer` : 'Zone Viewer';
-    $('#map-subtitle').textContent = s.location
-        ? `${s.location.x.toFixed(1)}, ${s.location.y.toFixed(1)}, ${s.location.z.toFixed(1)}`
-        : (bridgeInfo?.eqRootPath ? 'Waiting for a logged /location.' : 'Choose your EverQuest folder in Settings.');
+    $('#map-subtitle').textContent = mapReadinessMessage(s);
     $('#manual-level').value = settings.manualLevel || '';
     $('#item-tier').value = settings.itemTier || 0;
     $('#item-tier-value').textContent = settings.itemTier || 0;
     $('#encounter-gap').value = settings.encounterGapSeconds || 15;
     if ($('#era-select').value !== settings.era) $('#era-select').value = settings.era;
+    setActiveMapMode(settings.mapMode || 'first');
 }
 
 function setView(view) {
@@ -881,6 +962,35 @@ function viewerApi() {
     return frame?.contentWindow?.eqlEyeOfZommViewer || null;
 }
 
+function updateViewerFolderStatus(status, detail = '') {
+    viewerFolderStatus = status;
+    const labels = {
+        missing:'Folder needed',
+        connecting:'Connecting files…',
+        ready:'Game folder ready',
+        error:'Folder unavailable',
+        idle:'Checking folder…'
+    };
+    const label = detail || labels[status] || labels.idle;
+    const badge = $('#map-source-status');
+    if (badge) {
+        badge.textContent = label;
+        badge.className = `map-source-status ${status === 'ready' ? 'is-ready' : status === 'error' || status === 'missing' ? 'is-error' : 'is-waiting'}`;
+    }
+    const settingsStatus = $('#settings-map-status');
+    if (settingsStatus) settingsStatus.textContent = label;
+}
+
+function mapReadinessMessage(s = state()) {
+    if (!bridgeInfo?.eqRootExists) return 'Choose your EverQuest folder to load maps and logs.';
+    if (viewerFolderStatus === 'connecting' || viewerFolderStatus === 'idle') return 'Connecting to the Maps and game files in your selected folder…';
+    if (viewerFolderStatus === 'error') return 'The selected folder is saved, but its map files could not be opened.';
+    if (!bridgeInfo.logExists) return 'Game folder ready · waiting for an eqlog_*.txt file in Logs.';
+    if (!s.zone) return 'Game folder and log ready · waiting for the next zone line.';
+    if (!s.location) return `${s.zone} ready · type /loc in game once to place yourself on the map.`;
+    return `X ${s.location.x.toFixed(1)} · Y ${s.location.y.toFixed(1)} · Z ${s.location.z.toFixed(1)}`;
+}
+
 function queueViewerSync(operation) {
     viewerSyncChain = viewerSyncChain.catch(() => false).then(operation);
     return viewerSyncChain;
@@ -896,6 +1006,57 @@ async function waitForViewerApi(timeout = 8000) {
     return null;
 }
 
+async function ensureViewerFolderConnected(showFeedback = false, force = false) {
+    if (!bridgeInfo?.eqRootExists) {
+        updateViewerFolderStatus('missing');
+        if (showFeedback) alert('Choose your EverQuest folder in Settings first.');
+        return false;
+    }
+
+    const targetPath = String(bridgeInfo.eqRootPath || '');
+    if (viewerFolderPromise) await viewerFolderPromise.catch(() => false);
+    const apiObj = await waitForViewerApi();
+    if (!apiObj) {
+        updateViewerFolderStatus('error', 'Viewer unavailable');
+        if (showFeedback) alert('The Zone Viewer did not finish loading. Reopen Live Map and try again.');
+        return false;
+    }
+    if (!force && viewerFolderPath === targetPath && apiObj.status?.().directorySelected) {
+        updateViewerFolderStatus('ready');
+        return true;
+    }
+
+    updateViewerFolderStatus('connecting');
+    viewerFolderPromise = (async () => {
+        try {
+            const result = await apiObj.useConfiguredFolder?.();
+            const ready = result?.ok === true || (result == null && Boolean(apiObj.status?.().directorySelected));
+            if (ready) {
+                viewerFolderPath = targetPath;
+                updateViewerFolderStatus('ready');
+                return true;
+            }
+            const message = result?.reason === 'permission-required'
+                ? 'Folder permission needed'
+                : result?.reason === 'no-zone-archives'
+                    ? 'No zone archives found'
+                : 'Folder unavailable';
+            updateViewerFolderStatus('error', message);
+            if (showFeedback) alert('The selected EverQuest folder is saved, but its game/map files could not be opened. Choose the folder again in Settings.');
+            return false;
+        } catch (error) {
+            updateViewerFolderStatus('error');
+            if (showFeedback) alert(`Unable to open the selected EverQuest folder: ${error.message}`);
+            return false;
+        }
+    })();
+    try {
+        return await viewerFolderPromise;
+    } finally {
+        viewerFolderPromise = null;
+    }
+}
+
 async function syncZoneToViewer(showFeedback = true) {
     const s = state();
     if (!s.zone) {
@@ -907,13 +1068,19 @@ async function syncZoneToViewer(showFeedback = true) {
         if (showFeedback) alert('The Zone Viewer did not finish loading. Reopen Live Map and try again.');
         return false;
     }
+    if (!await ensureViewerFolderConnected(showFeedback)) return false;
     $('#map-subtitle').textContent = `Loading ${s.zone} from your local EverQuest files…`;
     try {
         const record = zoneRecord(s.zone);
-        const result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
+        let result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
+        if (result?.reason === 'select-eq-folder-first' && await ensureViewerFolderConnected(false, true)) {
+            result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
+        }
         if (!result?.ok) {
             const messages = {
-                'select-eq-folder-first': 'Choose your EverQuest folder in Settings first.',
+                'select-eq-folder-first': bridgeInfo?.eqRootExists
+                    ? 'Your folder is saved, but the Zone Viewer has not finished opening its game files. Check the Map files status in Settings.'
+                    : 'Choose your EverQuest folder in Settings first.',
                 'zone-not-found': `The Zone Viewer could not match ${s.zone} to a local zone archive.`,
                 'load-failed': result.message || `The local files for ${s.zone} could not be loaded.`
             };
@@ -935,7 +1102,13 @@ async function syncLocationToViewer(showFeedback = true, requestedLocation = nul
     const s = state();
     const location = requestedLocation || s.location;
     if (!location) {
-        if (showFeedback) alert('No logged /location coordinate is available yet.');
+        const message = !bridgeInfo?.eqRootExists
+            ? 'Choose your EverQuest folder in Settings first.'
+            : !bridgeInfo.logExists
+                ? 'The game folder is ready, but no eqlog_*.txt file was found in its Logs folder.'
+                : 'The folder and log are ready. Type /loc in EverQuest once, then Eye of Zomm will follow later /loc updates automatically.';
+        $('#map-subtitle').textContent = message;
+        if (showFeedback) alert(message);
         return false;
     }
     const apiObj = await waitForViewerApi();
@@ -954,7 +1127,15 @@ async function syncLocationToViewer(showFeedback = true, requestedLocation = nul
         if (showFeedback) alert(message);
         return false;
     }
-    setActiveMapMode('first');
+    const desiredMode = settings.mapMode || 'first';
+    if (desiredMode !== 'first') {
+        const restored = await apiObj.setView(desiredMode);
+        if (!restored?.ok) {
+            settings.mapMode = 'first';
+            prefs.save(settings);
+        }
+    }
+    setActiveMapMode(settings.mapMode || 'first');
     $('#map-subtitle').textContent = `Synced to ${location.x.toFixed(1)}, ${location.y.toFixed(1)}, ${location.z.toFixed(1)} in ${s.zone}.`;
     return true;
 }
@@ -966,12 +1147,18 @@ function setActiveMapMode(mode) {
 async function setMapMode(mode, showFeedback = true) {
     const apiObj = await waitForViewerApi();
     if (!apiObj) return false;
+    if (!apiObj.status?.().zone) {
+        const loaded = await syncZoneToViewer(showFeedback);
+        if (!loaded) return false;
+    }
     const result = await apiObj.setView(mode);
     if (!result?.ok) {
         if (showFeedback) alert(result?.message || 'That map view is not available for this zone.');
         return false;
     }
-    setActiveMapMode(result.mode || mode);
+    settings.mapMode = result.mode || mode;
+    prefs.save(settings);
+    setActiveMapMode(settings.mapMode);
     return true;
 }
 
@@ -995,7 +1182,11 @@ async function pathToNpc(name) {
             : null;
         const result = await viewerApi()?.pathTo(name, location);
         if (!result?.ok) alert(`No baked-in map label or wiki location is available for “${name}”.`);
-        else setActiveMapMode('first');
+        else {
+            const desiredMode = settings.mapMode || 'first';
+            if (desiredMode !== 'first') await viewerApi()?.setView(desiredMode);
+            setActiveMapMode(desiredMode);
+        }
     }, 400);
 }
 
@@ -1007,6 +1198,7 @@ function runWikiSearch() {
 }
 
 async function applyLogSelection(info) {
+    const previousRoot = String(bridgeInfo?.eqRootPath || '');
     bridgeInfo = info;
     logOffset = 0;
     partialLine = '';
@@ -1017,8 +1209,9 @@ async function applyLogSelection(info) {
     $('#settings-log-mode').textContent = info.logSelection === 'manual' ? 'Specific file' : 'Newest log automatically';
     $('#automatic-log').hidden = info.logSelection !== 'manual';
     $('#setup-overlay').hidden = Boolean(info.eqRootExists);
-    const apiObj = await waitForViewerApi(2500);
-    if (apiObj && info.eqRootExists) await apiObj.useConfiguredFolder?.();
+    if (previousRoot !== String(info.eqRootPath || '')) viewerFolderPath = '';
+    if (info.eqRootExists) await ensureViewerFolderConnected(false, previousRoot !== String(info.eqRootPath || ''));
+    else updateViewerFolderStatus('missing');
     renderAll();
 }
 
@@ -1027,8 +1220,10 @@ async function chooseEqFolder() {
     await applyLogSelection(info);
     if (info.eqRootExists) {
         queueViewerSync(async () => {
-            await syncZoneToViewer(false);
-            return syncLocationToViewer(false);
+            const s = state();
+            if (s.zone) await syncZoneToViewer(false);
+            if (s.location) return syncLocationToViewer(false);
+            return true;
         });
     }
 }
@@ -1038,11 +1233,24 @@ function wireUi() {
     $$('[data-go-view]').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.goView)));
     $('#npc-search').addEventListener('input', () => { const s = state(); renderNpcList(s, effectiveProfile(s)); });
     $('#npc-current-zone').addEventListener('change', () => { const s = state(); renderNpcList(s, effectiveProfile(s)); });
-    $('#item-search').addEventListener('input', () => { const s = state(); renderItems(s, effectiveProfile(s)); });
+    $('#item-search').addEventListener('input', () => {
+        if (!itemZoneFilterExplicit) $('#item-current-zone').checked = !$('#item-search').value.trim();
+        const s = state();
+        renderItems(s, effectiveProfile(s));
+    });
+    $('#item-current-zone').addEventListener('change', event => {
+        itemZoneFilterExplicit = true;
+        settings.itemCurrentZoneOnly = Boolean(event.target.checked);
+        settings.itemZoneFilterExplicit = true;
+        prefs.save(settings);
+        const s = state();
+        renderItems(s, effectiveProfile(s));
+    });
     $('#item-tier').addEventListener('input', e => {
         settings.itemTier = Number(e.target.value) || 0;
         prefs.save(settings);
         renderAll();
+        refreshItemTooltip();
     });
     $('#era-select').addEventListener('change', e => {
         settings.era = e.target.value;
@@ -1134,7 +1342,10 @@ function wireUi() {
         const target = event.target.closest?.('[data-item-title]');
         if (target) showItemTooltip(target, event);
     });
-    document.addEventListener('pointermove', positionTooltip);
+    document.addEventListener('pointermove', event => {
+        if (activeTooltipItem) lastTooltipPointer = { clientX:event.clientX, clientY:event.clientY };
+        positionTooltip(event);
+    });
     document.addEventListener('pointerout', event => {
         const target = event.target.closest?.('[data-item-title]');
         if (target && !target.contains(event.relatedTarget)) hideItemTooltip();
@@ -1152,12 +1363,14 @@ function wireUi() {
         if (event.origin !== window.location.origin) return;
         if (event.data?.type === 'eoz-viewer-ready') {
             viewerReady = true;
-            viewerApi()?.useConfiguredFolder?.().then(() =>
-                queueViewerSync(async () => {
-                    await syncZoneToViewer(false);
-                    return syncLocationToViewer(false);
-                })
-            );
+            queueViewerSync(async () => {
+                const connected = await ensureViewerFolderConnected(false);
+                if (!connected) return false;
+                const s = state();
+                if (s.zone) await syncZoneToViewer(false);
+                if (s.location) return syncLocationToViewer(false);
+                return true;
+            });
         }
     });
 }

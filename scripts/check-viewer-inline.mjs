@@ -12,12 +12,24 @@ for (const required of ['window.eqlEyeOfZommViewer', 'useConfiguredFolder()', 's
     if (!html.includes(required)) throw new Error(`Zone Viewer integration is missing ${required}.`);
 }
 
-for (const required of ['app.setMiniMapVisible(true)', 'Path to ${label} ready ·']) {
+for (const required of ['app.setMiniMapVisible(true)', 'Path to ${label} ready ·', 'configureViewerMovement(app.fp)', 'EyeOfZommNavigationPolicy']) {
     if (!html.includes(required)) throw new Error(`Zone Viewer integration is missing ${required}.`);
 }
 
 const viewer = readFileSync(new URL('../app/zoneviewer/ZoneViewerApp.js', import.meta.url), 'utf8');
-for (const required of ['Building walkable-mesh route', 'this.findNavigationPathAttempt(', 'const headingUp =', 'this.navigationPath?.length > 1']) {
+for (const required of [
+    'Building walkable-mesh route',
+    'this.findNavigationPathAttempt(',
+    'navigationCanTraverseElevation(fromElevation, toElevation)',
+    'navigationCanUseSurface(fromElevation, candidateElevation',
+    'const headingUp =',
+    'this.navigationPath?.length > 1',
+    'jumpHeight:this.fp?.jumpHeight||6',
+    'same six-unit upward step limit as Grounded mode',
+    'this.findGroundPointAt(f.x,f.z,f.y)||f',
+    'this.findGroundPointAt(o.x,o.z,o.y)||o.clone()',
+    'fh="v15"'
+]) {
     if (!viewer.includes(required)) throw new Error(`Zone Viewer bundle is missing ${required}.`);
 }
 

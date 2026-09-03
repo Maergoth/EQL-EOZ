@@ -259,14 +259,14 @@ export class EQLogParser {
         for (const pattern of locationPatterns) {
             x = text.match(pattern);
             if (x) {
-                // EverQuest writes /loc as Y, X, Z while its map files and
-                // exported EQLWiki locations use X, Y, Z with both planar
-                // axes negated. Normalize at the parser boundary so every
-                // marker, view, route, and distance calculation agrees.
+                // The client log writes /loc as Y, X, Z. EQ map files and
+                // EQLWiki locations use X, Y, Z with the same signs. Swap
+                // the planar axes once at the parser boundary; the 3D viewer
+                // performs its own Y-up scene conversion later.
                 const logY = Number(x[1]);
                 const logX = Number(x[2]);
                 this.location = {
-                    x: -logX, y: -logY, z: Number(x[3]),
+                    x: logX, y: logY, z: Number(x[3]),
                     logX, logY,
                     heading: x[4] === undefined ? null : Number(x[4]),
                     at: this.currentLineAt || Date.now()
@@ -275,9 +275,9 @@ export class EQLogParser {
             }
         }
 
-        // Consider lines from the supplied Legends log:
-        // "Master Xalg judges you amiably -- ... (Lvl: 70)"
-        x = text.match(/^(.+?)\s+(?:regards you|judges you|glares at you)\b.*?\(Lvl:\s*(\d+)\)\s*$/i);
+        // Consider lines from Legends. Named variants may insert a descriptor:
+        // "Soldier of V Zher - a rare creature - scowls at you ... (Lvl: 26)"
+        x = text.match(/^(.+?)(?:\s+-\s+[^-]+?\s+-)?\s+(?:regards you|judges you|glares at you|scowls at you)\b.*?\(Lvl:\s*(\d+)\)\s*$/i);
         if (x) {
             const name = normalizeName(x[1]);
             const level = Number(x[2]);
