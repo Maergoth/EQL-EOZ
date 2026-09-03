@@ -152,7 +152,7 @@ npm test
 npm start
 ```
 
-Before publishing a Windows build, run the real-client checks in [docs/V0.6_MANUAL_TEST.md](docs/V0.6_MANUAL_TEST.md).
+Before publishing a Windows build, run the real-client checks in [docs/V0.7_MANUAL_TEST.md](docs/V0.7_MANUAL_TEST.md).
 
 Build Windows installer:
 

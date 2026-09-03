@@ -2,6 +2,7 @@ import { EQLogParser } from '../app/parser.js';
 import { conForLevel, grayCeilingForPlayerLevel, greenCeilingForPlayerLevel } from '../app/con-colors.js';
 import { scaledItemStats } from '../app/item-scaling.js';
 import { itemHasZoneSource, scoreItemForBrowse } from '../app/item-browse.js';
+import { LocationHeadingTracker, locationPollDelay } from '../app/movement-tracking.js';
 import {
     MAX_NAVIGATION_CLIMB_Z,
     canTraverseElevation,
@@ -103,6 +104,20 @@ const globalPotion = {
 assert(itemHasZoneSource(zoneGear, 'Befallen'), 'current-zone item source matches');
 assert(!itemHasZoneSource(globalPotion, 'Befallen'), 'global consumable is excluded from current-zone defaults');
 assert(scoreItemForBrowse(zoneGear, { zone:'Befallen' }) > scoreItemForBrowse(globalPotion, { zone:'Befallen' }), 'equippable current-zone loot outranks generic consumables');
+
+const heading = new LocationHeadingTracker({ minStep:.75, teleportDistance:100, maxSamples:5 });
+assert(!heading.push({ x:0, y:0, z:0 }, 0).moved, 'first /loc establishes position without inventing a heading');
+const east = heading.push({ x:4, y:0, z:0 }, 100);
+assert(east.moved && east.heading.x > .99 && Math.abs(east.heading.y) < .01, 'movement samples establish heading');
+const duplicate = heading.push({ x:4.2, y:.1, z:0 }, 200);
+assert(!duplicate.moved && duplicate.heading.x > .99, 'sub-unit /loc jitter preserves the stable heading');
+heading.push({ x:2, y:0, z:0 }, 300);
+const west = heading.push({ x:-2, y:0, z:0 }, 400);
+assert(west.heading.x < -.5, 'recent movement changes heading promptly after a turn');
+const teleported = heading.push({ x:500, y:500, z:0 }, 500);
+assert(teleported.teleported && teleported.heading.x < -.5, 'a zone-scale jump does not invent a facing');
+assert(locationPollDelay({ mapVisible:true }) === 250, 'live map uses responsive log polling');
+assert(locationPollDelay({ routeActive:true }) === 180, 'active navigation uses the fastest log polling');
 
 const session = new EQLogParser();
 session.setCharacterFromFilename('C:\\EverQuest\\Logs\\eqlog_Maergoth_rivervale.txt');

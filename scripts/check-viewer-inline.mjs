@@ -8,11 +8,11 @@ if (!modules.length) {
     throw new Error('No inline Zone Viewer module was found to validate.');
 }
 
-for (const required of ['window.eqlEyeOfZommViewer', 'useConfiguredFolder()', 'setView(mode)', 'syncLocation(location)']) {
+for (const required of ['window.eqlEyeOfZommViewer', 'useConfiguredFolder()', 'setView(mode)', 'syncLocation(location, options = {})', 'setRareMobs(records = [])']) {
     if (!html.includes(required)) throw new Error(`Zone Viewer integration is missing ${required}.`);
 }
 
-for (const required of ['app.setMiniMapVisible(true)', 'Path to ${label} ready ·', 'configureViewerMovement(app.fp)', 'EyeOfZommNavigationPolicy']) {
+for (const required of ['app.setMiniMapVisible?.(true)', 'Path to ${label} ready ·', 'configureViewerMovement(app.fp)', 'EyeOfZommNavigationPolicy', 'LocationHeadingTracker']) {
     if (!html.includes(required)) throw new Error(`Zone Viewer integration is missing ${required}.`);
 }
 

@@ -1,4 +1,4 @@
-# Validation report — v0.6.0
+# Validation report — v0.7.0
 
 Validated in the build environment on 2026-09-03 UTC.
 
@@ -8,7 +8,7 @@ Validated in the build environment on 2026-09-03 UTC.
 - Parser/scaling/con tests and folder/log-selection filesystem tests pass.
 - Inline Zone Viewer module validation and `node --check` pass for first-party JavaScript.
 - Static UI validation confirms the removed overview surfaces stay absent, all three map modes persist across window modes, Settings owns the EQ folder, route/readiness surfaces exist, routine browser alerts are absent, and retired naming is absent.
-- Release validation confirms version `0.6.0`, required production data, optional certificate handling, and Authenticode verification whenever signing is enabled in either Windows workflow.
+- Release validation confirms version `0.7.0`, required production data, optional certificate handling, and Authenticode verification whenever signing is enabled in either Windows workflow.
 - Item scaling tests cover standalone DMG, static Cold DMG, Ammo +10 Range/tier, and negative-stat recovery.
 - Con-color tests cover modern blue/light-blue/green/gray boundaries plus white, +1 through +3 yellow, and +4 red.
 - Exporter checks require schema v3 and exercise two-coordinate, three-coordinate, template, and multiple-tuple location fixtures when PHP is available.
@@ -21,6 +21,9 @@ Validated in the build environment on 2026-09-03 UTC.
 - Legends rare-creature/scowls consider wording is covered with the reported Soldier of V Zher line and clean-name assertion.
 - Directed route-policy tests allow exactly +6 Z, reject greater climbs, allow exposed drops of any height, and reject drops through an overlapping upper floor.
 - UI checks require the four-step readiness rail, persistent destination/re-route surface, minimal-mode map controls, current-zone item scope, slot/sort overrides, keyboard Itembox access, tier-adjusted tooltip output, and player-centered Top/Map restoration.
+- Movement tracking tests cover first-sample behavior, recent-step heading, jitter/duplicate suppression, reversal, teleport rejection, and active-map/route polling cadence.
+- Inline viewer checks require dataset rare markers, marker-to-route messaging, mode-preserving location sync, and the shared heading tracker.
+- Application checks require newest-location coalescing, continuous-movement route scheduling, current-zone rare ranking, and compact mob/loot search.
 - A production-size relevance gate exercises all 11,168 embedded items and confirms Befallen/MNK defaults return useful local equipment before generic consumables.
 - The S3D parser check requires WLD bitmap `fileName` resolution, normalized BMP/DDS lookup, animated-frame filenames, and parsed-zone cache version v16.
 - The product/UX vision is release-checked for click budgets, complete flows, feature user stories, acceptance scenarios, and the release-gated road to v1.
@@ -45,7 +48,7 @@ Observed parsed events:
 
 ## Real-client checks still required
 
-The repository cannot ship or inspect a player's proprietary S3D/EQG archives. Signed coordinate placement, stacked-floor selection, S3D texture fidelity, and route quality therefore also use the Windows checklist in `docs/V0.6_MANUAL_TEST.md`. Automated tests prevent known transform and movement-policy regressions; they do not substitute for the final visual check against the game.
+The repository cannot ship or inspect a player's proprietary S3D/EQG archives. Signed coordinate placement, stacked-floor selection, S3D texture fidelity, rare-label alignment, live heading, and route quality therefore also use the Windows checklist in `docs/V0.7_MANUAL_TEST.md`. Automated tests prevent known transform and movement-policy regressions; they do not substitute for the final visual check against the game.
 
 ## Desktop packaging note
 

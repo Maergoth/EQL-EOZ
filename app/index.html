@@ -144,12 +144,14 @@
                         <small id="minimal-fight-name">No active fight</small>
                     </div>
                     <div class="panel-heading">
-                        <div><span class="eyebrow">CURRENT ZONE</span><h2>Mob list</h2></div>
+                        <div><span class="eyebrow">CURRENT ZONE</span><h2>Named &amp; rare mobs</h2></div>
                     </div>
                     <div class="minimal-filters">
                         <label class="check-control"><input id="minimal-my-class" type="checkbox" checked> My Class</label>
                         <label class="check-control"><input id="minimal-named-only" type="checkbox" checked> Named only</label>
                     </div>
+                    <input id="minimal-rare-search" class="search-input minimal-rare-search" type="search" autocomplete="off" placeholder="Find mob or loot">
+                    <p class="loc-tracking-tip">Live heading uses consecutive <code>/loc</code> updates. Bind <code>/loc</code> to your movement keys for continuous tracking.</p>
                     <div id="minimal-zone-drops" class="minimal-zone-drops empty-state">Waiting for a zone.</div>
                 </aside>
             </div>
@@ -266,6 +268,7 @@
                     <div class="setting-line"><span>Active log</span><code id="settings-log-path">—</code></div>
                     <div class="setting-line"><span>Log selection</span><code id="settings-log-mode">Automatic</code></div>
                     <div class="setting-line"><span>Map files</span><code id="settings-map-status">Checking…</code></div>
+                    <p class="settings-helper">For continuous position and heading, create EverQuest movement bindings that also emit <code>/loc</code>. Eye of Zomm only reads those log lines; it never sends game input.</p>
                     <div class="settings-actions">
                         <button id="change-eq-folder" class="primary-button">Change folder</button>
                         <button id="change-log" class="secondary-button">Choose log</button>

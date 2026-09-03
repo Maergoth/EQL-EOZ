@@ -2,6 +2,7 @@ import { EQLogParser } from './parser.js';
 import { conForLevel } from './con-colors.js';
 import { scaledItemStats } from './item-scaling.js';
 import { itemHasZoneSource, scoreItemForBrowse } from './item-browse.js';
+import { locationPollDelay } from './movement-tracking.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -21,6 +22,8 @@ let packRefreshTimer = null;
 let selectedEncounterId = '';
 let fightExpiryTimer = null;
 let viewerSyncChain = Promise.resolve();
+let latestLocationSync = null;
+let pendingViewerLocation = null;
 let viewerFolderPromise = null;
 let viewerFolderPath = '';
 let viewerFolderStatus = 'idle';
@@ -34,6 +37,8 @@ let routeRefreshTimer = null;
 let routeRequestSerial = 0;
 let renderedDestinationZone = '';
 let renderedDestinationCount = 0;
+let renderedRareViewerKey = '';
+let rareCatalogCache = new Map();
 const CONSIDER_TRAY_DURATION = 16000;
 const ROUTE_REFRESH_DISTANCE = 8;
 
@@ -367,7 +372,10 @@ async function pollLog() {
         $('#bridge-status').textContent = data.logExists ? 'Live log' : 'Waiting for log';
         $('#bridge-status').className = data.logExists ? 'status-pill status-ok' : 'status-pill status-warn';
         if (changed) renderAll();
-        schedulePoll(700);
+        schedulePoll(locationPollDelay({
+            mapVisible:document.body.classList.contains('map-active') || document.body.classList.contains('minimal-mode'),
+            routeActive:Boolean(activeRoute)
+        }));
     } catch (error) {
         $('#bridge-status').textContent = 'Reconnecting';
         $('#bridge-status').className = 'status-pill status-warn';
@@ -379,24 +387,31 @@ function consumeText(text, allowTransientUi = true) {
     const combined = partialLine + text;
     const lines = combined.split(/\n/);
     partialLine = lines.pop() || '';
-    const viewerOperations = [];
+    let zoneChanged = false;
+    let latestLocation = null;
     for (const line of lines) {
         const event = parser.parse(line);
         if (event?.type === 'zone') {
             if (activeRoute && zoneKey(activeRoute.zone) !== zoneKey(event.zone)) clearActiveRoute({ clearViewer:false });
-            viewerOperations.length = 0;
-            viewerOperations.push({ type:'zone' });
+            zoneChanged = true;
+            latestLocation = null;
         }
-        if (event?.type === 'location') viewerOperations.push({ type:'location', location:{ ...event.location } });
+        if (event?.type === 'location') latestLocation = { ...event.location };
         if (allowTransientUi && event?.type === 'consider') showConsiderTray(event.target);
     }
-    for (const operation of viewerOperations) {
-        if (operation.type === 'zone') queueViewerSync(() => syncZoneToViewer(false));
-        else queueViewerSync(async () => {
-            const synced = await syncLocationToViewer(false, operation.location);
-            if (synced) scheduleRouteRefresh(operation.location);
-            return synced;
+    if (zoneChanged) {
+        pendingViewerLocation = null;
+        queueViewerSync(async () => {
+            const loaded = await syncZoneToViewer(false);
+            if (loaded && latestLocation) {
+                const synced = await syncLocationToViewer(false, latestLocation);
+                if (synced) scheduleRouteRefresh(latestLocation);
+                return synced;
+            }
+            return loaded;
         });
+    } else if (latestLocation) {
+        queueLatestLocationSync(latestLocation);
     }
 }
 
@@ -423,6 +438,8 @@ function rebuildPackIndexes() {
     normalizedZoneKeys = new Map();
     renderedDestinationZone = '';
     renderedDestinationCount = 0;
+    renderedRareViewerKey = '';
+    rareCatalogCache = new Map();
     for (const item of pack.items || []) {
         for (const key of [item.name, item.wikiTitle]) {
             if (key) itemByName.set(String(key).trim().toLowerCase(), item);
@@ -537,6 +554,106 @@ function allNpcsForState(s) {
     return Array.from(merged.values());
 }
 
+function rareMobsForZone(s, profile, options = {}) {
+    if (!s.zone) return [];
+    const includeGeneric = Boolean(options.includeGeneric);
+    const cacheKey = JSON.stringify([
+        zoneKey(s.zone),
+        settings.era,
+        profile.classes.slice().sort(),
+        includeGeneric,
+        pack.meta?.manifestVersion || pack.meta?.version || ''
+    ]);
+    let catalog = rareCatalogCache.get(cacheKey);
+    if (!catalog) {
+        const sources = new Map();
+        const addSource = name => {
+            name = String(name || '').trim();
+            if (!name || (!includeGeneric && !isNamedSource(name))) return null;
+            const key = npcNameKey(name);
+            if (!sources.has(key)) sources.set(key, { name, npc:null, allItems:[], items:[] });
+            return sources.get(key);
+        };
+
+        for (const npc of pack.npcs || []) {
+            if (zoneKey(npc.zone) !== zoneKey(s.zone)) continue;
+            const source = addSource(npc.name);
+            if (source) source.npc = npc;
+        }
+        for (const item of pack.items || []) {
+            if (!eraAllowed(item.era)) continue;
+            for (const drop of item.dropSources || []) {
+                if (zoneKey(drop.zone) !== zoneKey(s.zone)) continue;
+                const source = addSource(drop.name);
+                if (source) source.allItems.push(item);
+            }
+        }
+
+        for (const source of sources.values()) {
+            const seen = new Set();
+            source.allItems = source.allItems.filter(item => {
+                const key = String(item.wikiTitle || item.name || '').toLowerCase();
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+            source.items = source.allItems.filter(item => itemMatchesProfile(item, profile));
+            const rawLoc = Array.isArray(source.npc?.loc) ? source.npc.loc.slice(0, 3).map(Number) : null;
+            source.loc = rawLoc && rawLoc.slice(0, 2).every(Number.isFinite)
+                ? rawLoc.filter((value, index) => index < 2 || Number.isFinite(value))
+                : null;
+        }
+        catalog = Array.from(sources.values());
+        rareCatalogCache.set(cacheKey, catalog);
+    }
+
+    return catalog.map(source => ({
+        ...source,
+        distance:source.loc?.length >= 2 && s.location
+            ? Math.hypot(source.loc[0] - s.location.x, source.loc[1] - s.location.y, (source.loc[2] || 0) - s.location.z)
+            : Infinity
+    })).sort((left, right) =>
+        right.items.length - left.items.length ||
+        Number(Boolean(right.loc?.length >= 2)) - Number(Boolean(left.loc?.length >= 2)) ||
+        left.distance - right.distance ||
+        left.name.localeCompare(right.name)
+    );
+}
+
+function syncRareMobsToViewer(force = false) {
+    const s = state();
+    const apiObj = viewerApi();
+    if (!apiObj?.setRareMobs || !apiObj.status?.().zone || !s.zone) return false;
+    const profile = effectiveProfile(s);
+    const sources = rareMobsForZone(s, profile)
+        .filter(source => source.loc?.length >= 2)
+        .sort((left, right) =>
+            right.items.length - left.items.length ||
+            right.allItems.length - left.allItems.length ||
+            left.name.localeCompare(right.name)
+        )
+        .slice(0, 180);
+    const payload = sources.map(source => ({
+        name:source.name,
+        wikiTitle:source.npc?.wikiTitle || source.name,
+        loc:source.loc,
+        level:Number(source.npc?.avgLevel) || 0,
+        dropCount:source.allItems.length,
+        classDropCount:source.items.length
+    }));
+    const key = JSON.stringify([
+        zoneKey(s.zone),
+        pack.meta?.manifestVersion || pack.meta?.version || '',
+        profile.classes.slice().sort(),
+        payload.map(entry => [entry.name, entry.loc, entry.dropCount, entry.classDropCount])
+    ]);
+    if (!force && key === renderedRareViewerKey) return true;
+    renderedRareViewerKey = key;
+    apiObj.setRareMobs(payload);
+    apiObj.setActiveRareMob?.(activeRoute?.name || '');
+    return true;
+}
+
 function renderMinimalZoneDrops(s, profile) {
     const host = $('#minimal-zone-drops');
     $('#minimal-zone-title').textContent = s.zone || 'Waiting for zone';
@@ -550,32 +667,11 @@ function renderMinimalZoneDrops(s, profile) {
     const namedOnly = Boolean(settings.minimalNamedOnly);
     $('#minimal-my-class').checked = myClassOnly;
     $('#minimal-named-only').checked = namedOnly;
-    const bySource = new Map();
-    const addSource = name => {
-        name = String(name || '').trim();
-        if (!name || (namedOnly && !isNamedSource(name))) return null;
-        const key = name.toLowerCase();
-        if (!bySource.has(key)) bySource.set(key, { name, items: [], npc:null });
-        return bySource.get(key);
-    };
-
-    for (const npc of pack.npcs || []) {
-        if (zoneKey(npc.zone) === zoneKey(s.zone) && (!namedOnly || isNamedSource(npc.name))) {
-            const source = addSource(npc.name);
-            if (source) source.npc = npc;
-        }
-    }
-    for (const item of pack.items || []) {
-        if (!eraAllowed(item.era) || (myClassOnly && !itemMatchesProfile(item, profile))) continue;
-        for (const source of item.dropSources || []) {
-            if (zoneKey(source.zone) !== zoneKey(s.zone)) continue;
-            addSource(source.name)?.items.push(item);
-        }
-    }
-
-    const sources = Array.from(bySource.values())
-        .filter(source => source.items.length || namedOnly)
-        .sort((a, b) => a.name.localeCompare(b.name))
+    const query = String($('#minimal-rare-search')?.value || '').trim().toLowerCase();
+    const sources = rareMobsForZone(s, profile, { includeGeneric:!namedOnly })
+        .map(source => ({ ...source, displayedItems:myClassOnly ? source.items : source.allItems }))
+        .filter(source => source.displayedItems.length || namedOnly)
+        .filter(source => !query || source.name.toLowerCase().includes(query) || source.allItems.some(item => String(item.name || '').toLowerCase().includes(query)))
         .slice(0, 120);
     if (!sources.length) {
         host.className = 'minimal-zone-drops empty-state';
@@ -588,9 +684,16 @@ function renderMinimalZoneDrops(s, profile) {
     host.className = 'minimal-zone-drops';
     host.innerHTML = sources.map(source => {
         const con = conForLevel(source.npc?.avgLevel, profile.level);
-        return `<div class="minimal-drop-row npc-con-${con.key}">
-        <div class="minimal-mob-heading"><div><strong>${esc(source.name)}</strong>${source.npc?.avgLevel ? `<small class="${conClass(con.key)}">Level ${source.npc.avgLevel} · ${esc(con.label)}</small>` : ''}</div><button type="button" class="text-button path-npc" data-npc="${esc(source.name)}">Path</button></div>
-        ${source.items.length ? source.items.slice(0, 12).map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${esc(item.name)}</a>`).join('') : '<small>No known item drops in the current dataset.</small>'}
+        const active = activeRoute && npcNameKey(activeRoute.name) === npcNameKey(source.name);
+        const distance = Number.isFinite(source.distance) ? `${Math.round(source.distance).toLocaleString()}u away` : '';
+        const countLabel = myClassOnly && source.allItems.length !== source.displayedItems.length
+            ? `${source.displayedItems.length} class · ${source.allItems.length} total`
+            : `${source.displayedItems.length} known`;
+        return `<div class="minimal-drop-row npc-con-${con.key}${active ? ' is-active-route' : ''}">
+        <div class="minimal-mob-heading"><div><strong>${esc(source.name)}</strong><small>${source.npc?.avgLevel ? `<span class="${conClass(con.key)}">Level ${source.npc.avgLevel} · ${esc(con.label)}</span>` : 'Level unknown'}${distance ? ` · ${distance}` : ''}</small></div><button type="button" class="text-button path-npc" data-npc="${esc(source.name)}">${active ? 'Routing' : 'Route'}</button></div>
+        <details class="minimal-loot"><summary>Loot · ${esc(countLabel)}</summary>
+        ${source.displayedItems.length ? source.displayedItems.slice(0, 20).map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${esc(item.name)}</a>`).join('') : '<small>No matching item drops in the current dataset.</small>'}
+        </details>
     </div>`;
     }).join('');
     bindPathButtons(host);
@@ -1108,6 +1211,7 @@ function renderAll() {
     renderMapReadiness(s);
     renderMapRoutePlanner(s);
     applyMinimalIntelState();
+    syncRareMobsToViewer(false);
 }
 
 function setView(view, options = {}) {
@@ -1218,6 +1322,25 @@ function queueViewerSync(operation) {
     return viewerSyncChain;
 }
 
+function queueLatestLocationSync(location) {
+    pendingViewerLocation = { ...location };
+    if (latestLocationSync) return latestLocationSync;
+    latestLocationSync = queueViewerSync(async () => {
+        let result = false;
+        while (pendingViewerLocation) {
+            const newest = pendingViewerLocation;
+            pendingViewerLocation = null;
+            result = await syncLocationToViewer(false, newest);
+            if (result) scheduleRouteRefresh(newest);
+        }
+        return result;
+    }).finally(() => {
+        latestLocationSync = null;
+        if (pendingViewerLocation) queueLatestLocationSync(pendingViewerLocation);
+    });
+    return latestLocationSync;
+}
+
 async function waitForViewerApi(timeout = 8000) {
     const started = Date.now();
     while (Date.now() - started < timeout) {
@@ -1311,6 +1434,8 @@ async function syncZoneToViewer(showFeedback = true) {
             if (showFeedback) showNotice(message, { tone:'error' });
             return false;
         }
+        renderedRareViewerKey = '';
+        syncRareMobsToViewer(true);
         $('#map-subtitle').textContent = `${s.zone} loaded · ${result.status || 'ready for location sync'}`;
         return true;
     } catch (error) {
@@ -1348,21 +1473,14 @@ async function syncLocationToViewer(showFeedback = true, requestedLocation = nul
         const loaded = await syncZoneToViewer(showFeedback);
         if (!loaded) return false;
     }
-    const result = apiObj.syncLocation(location);
+    const result = apiObj.syncLocation(location, { mode:settings.mapMode || 'first', timestamp:Date.now() });
     if (!result?.ok) {
         const message = result?.message || 'The zone is not ready for location sync yet.';
         $('#map-subtitle').textContent = message;
         if (showFeedback) showNotice(message, { tone:'warning' });
         return false;
     }
-    const desiredMode = settings.mapMode || 'first';
-    if (desiredMode !== 'first') {
-        const restored = await apiObj.setView(desiredMode);
-        if (!restored?.ok) {
-            settings.mapMode = 'first';
-            prefs.save(settings);
-        }
-    }
+    settings.mapMode = result.mode || settings.mapMode || 'first';
     setActiveMapMode(settings.mapMode || 'first');
     $('#map-subtitle').textContent = `Synced to ${location.x.toFixed(1)}, ${location.y.toFixed(1)}, ${location.z.toFixed(1)} in ${s.zone}.`;
     return true;
@@ -1408,6 +1526,7 @@ function clearActiveRoute(options = {}) {
     routeRefreshTimer = null;
     routeRequestSerial += 1;
     activeRoute = null;
+    viewerApi()?.setActiveRareMob?.('');
     const input = $('#map-destination');
     if (input && options.keepInput !== true) input.value = '';
     if (options.clearViewer !== false) viewerApi()?.clearPath?.();
@@ -1416,8 +1535,8 @@ function clearActiveRoute(options = {}) {
 
 function scheduleRouteRefresh(location) {
     if (!activeRoute || zoneKey(activeRoute.zone) !== zoneKey(state().zone)) return;
+    if (activeRoute.status === 'working' || routeRefreshTimer) return;
     if (locationDistance(location, activeRoute.lastRoutedLocation) < ROUTE_REFRESH_DISTANCE) return;
-    clearTimeout(routeRefreshTimer);
     routeRefreshTimer = setTimeout(() => calculateActiveRoute({ automatic:true }), 280);
 }
 
@@ -1496,6 +1615,7 @@ async function calculateActiveRoute(options = {}) {
     if (desiredMode !== 'first') await apiObj.setView(desiredMode);
     setActiveMapMode(desiredMode);
     renderMapRoutePlanner(state());
+    scheduleRouteRefresh(state().location);
     return Boolean(result?.ok);
 }
 
@@ -1518,6 +1638,7 @@ async function pathToNpc(name) {
         status:s.location ? 'working' : 'waiting',
         message:s.location ? `Preparing path to ${name}…` : `Destination saved · waiting for /loc.`
     };
+    viewerApi()?.setActiveRareMob?.(name);
     $('#map-destination').value = name;
     renderMapRoutePlanner(s);
     return calculateActiveRoute({ automatic:false });
@@ -1705,6 +1826,10 @@ function wireUi() {
         prefs.save(settings);
         renderAll();
     });
+    $('#minimal-rare-search').addEventListener('input', () => {
+        const s = state();
+        renderMinimalZoneDrops(s, effectiveProfile(s));
+    });
     $('#consider-my-class').addEventListener('change', event => {
         settings.considerMyClassOnly = Boolean(event.target.checked);
         prefs.save(settings);
@@ -1800,6 +1925,8 @@ function wireUi() {
                 if (s.location) return syncLocationToViewer(false);
                 return true;
             });
+        } else if (event.data?.type === 'eoz-rare-mob-selected' && event.data.name) {
+            pathToNpc(event.data.name);
         }
     });
 }

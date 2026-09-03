@@ -4,7 +4,7 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
 const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
 const uxVision = readFileSync(new URL('../docs/UX_VISION.md', import.meta.url), 'utf8');
-const manualTest = readFileSync(new URL('../docs/V0.6_MANUAL_TEST.md', import.meta.url), 'utf8');
+const manualTest = readFileSync(new URL('../docs/V0.7_MANUAL_TEST.md', import.meta.url), 'utf8');
 if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) throw new Error(`Invalid package version ${pkg.version}.`);
 if (lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version) {
     throw new Error('package.json and package-lock.json versions must match.');
@@ -13,7 +13,7 @@ if (!changelog.includes(`## ${pkg.version} -`)) throw new Error(`CHANGELOG.md ne
 for (const required of ['## 6. Click budgets', '## 8. End-to-end UX flows', '## 9. Feature specifications and user stories', '## 15. Acceptance scenarios for release candidates', '## 16. Road to v1']) {
     if (!uxVision.includes(required)) throw new Error(`UX vision is missing required section: ${required}`);
 }
-for (const required of ['X `-961`, Y `-30`, Z `-66`', '## 3. Zone textures', '## 4. Persistent navigation', '## 5. Consider loot tray']) {
+for (const required of ['X `-961`, Y `-30`, Z `-66`', '## 1. Continuous `/loc` tracking', '## 2. Rare-mob replacement map', '## 3. Minimal loot browsing', '## 4. Persistent golden path']) {
     if (!manualTest.includes(required)) throw new Error(`Windows acceptance test is missing: ${required}`);
 }
 

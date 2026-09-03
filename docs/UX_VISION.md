@@ -1,7 +1,7 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.6.0
+Baseline: 0.7.0
 Last updated: 2026-09-03
 
 ## 1. Product promise
@@ -649,9 +649,9 @@ The route to 1.0 is organized around user confidence, not the number of features
 |---|---|---|---|
 | 0.5 — foundation | “Can the app read the right things safely?” | Folder/log selection, coordinate contract, three map modes, consider tray, encounters, drops, production data | Automated contracts pass and the app installs with a real dataset |
 | 0.6 — usable loop | “Can I understand state and get somewhere without fighting the UI?” | Explicit readiness, persistent destination routing, item relevance, texture correction, keyboard details, non-modal recovery | Complete explorer and loot-planner journeys work with no dead-end or generic Sync error |
-| 0.7 — spatial confidence | “Can I trust this path in difficult zones?” | Formal navmesh, directed movement links, route guidance, transform/texture diagnostics, zone corpus | Route matrix passes on outdoor, indoor, stacked-floor, ramp, door, and drop cases |
-| 0.8 — decision intelligence | “What is worth doing and how did it perform?” | Durable sessions, encounter analysis, observed-loot evidence, upgrade ranking, watchlists, export | A user can plan, play, and review a session without reconstructing it manually |
-| 0.9 — public beta | “Will this recover gracefully on someone else’s PC?” | Migration, updater, diagnostics, scaling, accessibility, performance, beta feedback | No open release-blocking defects across supported Windows and scale-factor matrix |
+| 0.7 — replacement map | “Can this replace the in-game map during normal play?” | Rare-mob labels, compact loot browsing, continuous `/loc` heading, mode-safe recentering, route continuity | A player can orient, choose a worthwhile target, inspect loot, and follow a route in every map mode |
+| 0.8 — spatial confidence | “Can I trust this path in difficult zones?” | Formal navmesh, directed movement links, next-turn guidance, diagnostics, route corpus | Route matrix passes on outdoor, indoor, stacked-floor, ramp, door, and drop cases |
+| 0.9 — decision intelligence beta | “What is worth doing, and will this recover on another PC?” | Durable sessions, encounter/loot evidence, upgrade ranking, export, migration, updater, accessibility, beta feedback | A user can plan/play/review and no release blockers remain across the Windows test matrix |
 | 1.0 — trusted release | “Can we support this as a stable public product?” | Signed distribution, support docs, compatibility policy, final polish | Signed reproducible installer, green release gates, documented known limits, support path |
 
 ### 16.1 Version 0.6 — usable loop
@@ -705,7 +705,33 @@ Known 0.6 limits, stated rather than hidden:
 8. WLD material lookup resolves static and animated bitmap filenames after a v16 zone-cache rebuild.
 9. Clean-checkout tests, production-catalog gate, Windows build, and installer artifact all succeed.
 
-### 16.2 Version 0.7 — spatial confidence
+### 16.2 Version 0.7 — replacement map
+
+Release thesis: during ordinary exploration, the player should not need the in-game map to know where they are, what named targets matter, what those targets drop, or which direction to travel.
+
+Committed user stories:
+
+- As an explorer, I see named and rare mobs anchored in First Person, Top Down, and Map Overlay and can make one my destination with one click.
+- As a class combination, I see targets with relevant loot before targets with no known upgrade, without losing the ability to inspect all known drops.
+- As a minimal-mode player, I can search a mob or item, expand loot, read Itembox details, select a route, and switch map presentation without returning to the full app.
+- As a player who binds `/loc` to movement, repeated lines follow my latest position without queuing stale camera moves or spinning on coordinate jitter.
+- As a player who explicitly chose Top or Map, live location updates preserve that choice instead of flashing through First Person.
+- As a route follower, the golden line remains usable in every presentation and continuous movement cannot indefinitely postpone re-routing.
+
+0.7 implementation contract:
+
+1. EQLWiki current-zone NPC coordinates are projected into the same canonical map basis as local map geometry and `/loc`.
+2. Rare labels remain screen-anchored while moving/zooming, honor selected floors, cap density, and favor current-class loot relevance.
+3. A label click selects a persistent route. The compact rail supplies expandable class-filtered/all-loot browsing and Itembox details.
+4. The log reader uses an active-map cadence and retains only the newest unrendered location when movement bindings produce bursts.
+5. Heading derives from a short recency-weighted movement window. Sub-unit jitter is ignored, duplicate samples preserve facing, and zone-scale jumps do not invent a direction.
+6. Location placement updates the retained First Person pose and player arrow without using a visible intermediate mode.
+7. Route refresh uses an eight-unit movement threshold but cannot have its timer continuously reset by new samples; expensive path work never blocks the newest player marker.
+8. The product remains read-only: the player creates the `/loc` bindings in EverQuest and Eye of Zomm only consumes the resulting log lines.
+
+0.7 exit gate: the Windows script passes continuous movement in First/Top/Map, rare labels stay aligned and routable, minimal mode supports complete loot browsing, and no continuous `/loc` stream can starve position or route updates.
+
+### 16.3 Version 0.8 — spatial confidence
 
 Release thesis: paths must be predictable enough that a player will use them in a multi-floor dungeon without cross-checking every turn.
 
@@ -714,38 +740,15 @@ Navigation architecture:
 1. Decode the collision mesh using the existing read-only local-file pipeline.
 2. Build a Recast polygon mesh in a worker, never on the renderer/UI thread.
 3. Use a single documented coordinate adapter at the boundary. EQEmu demonstrates the equivalent server-side Detour bridge by passing EQ `(x, y, z)` to Detour as `(x, z, y)` and converting it back at the route boundary.
-4. Encode walk, water, lava, door/portal, and other available areas only when the local source exposes them reliably.
-5. Add directed off-mesh links for exposed downward drops and for upward transitions no greater than +6 EQ Z.
-6. Query with Detour, straighten/smooth the corridor, then validate every rendered segment against local collision.
-7. Cache by zone archive identity, parser version, movement-policy version, and navmesh-build parameters.
-8. Fall back to the 0.6 walkable graph if generation or query fails; never display an unvalidated line as a valid route.
+4. Add directed off-mesh links for exposed downward drops and upward transitions no greater than +6 EQ Z.
+5. Query with Detour, smooth the corridor, validate every rendered segment against local collision, and fall back to the 0.7 graph if generation fails.
+6. Add a next-turn cue, remaining distance, redacted route diagnostics, and a curated outdoor/indoor/stacked/ramp/door/drop corpus.
 
 The design takes conceptual guidance from EQEmu's [Detour navmesh pathfinder](https://github.com/EQEmu/EQEmu/blob/master/zone/pathfinder_nav_mesh.cpp) and [ground/ceiling raycasts](https://github.com/EQEmu/EQEmu/blob/master/zone/map.cpp), but Eye of Zomm remains a separate read-only viewer and will not copy server movement or automation behavior.
 
-Committed 0.7 user stories:
+0.8 exit gate: at least 95% of the curated route corpus produces the expected path/no-path result, no displayed segment violates collision or directed elevation policy, and route work does not block input/rendering.
 
-- As an explorer, I see remaining distance and a useful next-turn cue rather than only a full-route ribbon.
-- As a dungeon player, I never receive a path that silently crosses an overlapping floor or wall.
-- As a player approaching the route from a different corridor, I see subtle “updating” feedback and receive a new route without losing the destination.
-- As a tester, I can export a redacted diagnostic describing archive identity, map transform, current/destination coordinates, route engine/result, and timing.
-- As a user with a missing or poor map, I still get a clear marker and an explanation of the source limitation.
-
-0.7 route corpus:
-
-| Case | Minimum fixtures | Pass condition |
-|---|---:|---|
-| Flat outdoor | 2 zones | Shortest route is stable and does not jitter between `/loc` samples |
-| Indoor corridors | 2 zones | No wall cuts; narrow doorways remain usable |
-| Stacked floors | 2 zones including Befallen | No floor snapping or fall-through |
-| Ramps/stairs | 2 routes | Continuous legal ascent succeeds |
-| Exact +6 climb | 1 synthetic + 1 real | Accepted |
-| Greater-than-6 climb | 1 synthetic + 1 real | Rejected unless a legal ramp/link exists |
-| Long exposed drop | 1 synthetic + 1 real | Forward edge accepted; reverse climb rejected |
-| Missing destination | 2 cases | Marker/wiki recovery; no fake path |
-
-0.7 exit gate: at least 95% of the curated route corpus produces the expected path/no-path result, no displayed segment violates collision or directed elevation policy, and route work does not block input/rendering.
-
-### 16.3 Version 0.8 — decision intelligence
+### 16.4 Version 0.9 — decision intelligence and public beta
 
 Release thesis: current context and locally observed history should help answer “what should I do next?” without claiming knowledge the evidence cannot support.
 
@@ -766,9 +769,9 @@ Data rules:
 - “Observed” percentages never become wiki-authoritative percentages.
 - Recommendation explanations name the rules used: class, slot, stats, source, zone, era, and selected tier.
 
-0.8 exit gate: a player can choose a target from current-zone loot, complete encounters, inspect observed drops, compare results, and export evidence with no ambiguous provenance.
+0.9 exit gate: a player can choose a target from current-zone loot, complete encounters, inspect observed drops, compare results, and export evidence with no ambiguous provenance, with no open release blocker across supported Windows and scale-factor tests.
 
-### 16.4 Version 0.9 — public beta hardening
+#### Public beta hardening within 0.9
 
 Release thesis: unfamiliar machines and imperfect local installs must fail in understandable, recoverable ways.
 
@@ -808,7 +811,7 @@ Deferred beyond 1.0 unless evidence changes the priority:
 
 ## 17. Product decisions and approval points
 
-### Implemented in 0.6
+### Implemented through 0.7
 
 1. **Remember presentation.** Preserve First/Top/Map and the last full-mode view; minimal always presents Live Map without overwriting that remembered view.
 2. **Search overrides contextual item scope.** Empty query is current-zone/class; deliberate search is global unless Current zone was explicitly selected.
@@ -818,8 +821,11 @@ Deferred beyond 1.0 unless evidence changes the priority:
 6. **Allow compact-map focus.** Intel rail starts visible and can be collapsed/restored from the minimal header.
 7. **Make item detail keyboard-reachable.** Hover and focus share one cached Itembox surface; Escape dismisses transient content.
 8. **Use non-modal feedback.** Routine state/recovery notices do not steal focus from the game.
+9. **Treat movement bindings as a stream.** Coalesce `/loc` bursts to the newest sample and preserve stable facing through duplicates and jitter.
+10. **Put destinations on the map.** Project current-zone rare/named data into all three presentations and let a marker start navigation.
+11. **Keep compact mode complete.** Search targets and loot, expand class-aware drops, and retain route/map controls beside the game.
 
-### Approval points for 0.7–1.0
+### Approval points for 0.8–1.0
 
 1. **Navmesh runtime — recommended:** use a maintained Recast/Detour WebAssembly implementation in a worker, subject to license/security review; do not ingest undocumented third-party prebuilt navmeshes as authoritative.
 2. **Route re-build threshold — validate:** start at eight units, then tune with recorded redacted `/loc` traces; avoid a user-facing sensitivity setting unless real tests show a need.

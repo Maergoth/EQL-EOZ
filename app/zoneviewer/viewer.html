@@ -19,6 +19,10 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 .eqlzv-toolbar-secondary>.eqlzv-segmented{display:none!important}
 .eqlzv-toolbar{gap:8px!important;flex-wrap:wrap}
 .eqlzv-toolbar-secondary{padding-top:6px!important}
+.eoz-rare-layer{position:absolute;inset:0;z-index:18;overflow:hidden;pointer-events:none}
+.eoz-rare-marker{position:absolute;max-width:220px;border:1px solid rgba(240,199,73,.72);border-radius:999px;background:rgba(8,14,22,.9);box-shadow:0 3px 13px rgba(0,0,0,.62);color:#f4d66e;padding:4px 8px;font:700 11px/1.2 Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:auto;cursor:pointer}
+.eoz-rare-marker:hover,.eoz-rare-marker:focus-visible,.eoz-rare-marker.is-active{border-color:#fff0a6;background:rgba(76,58,15,.95);color:#fff6c9;outline:none}
+.eoz-rare-marker small{margin-left:5px;color:#a9b4bf;font:600 8px/1.2 system-ui,sans-serif}
 </style>
 </head>
 <body>
@@ -26,6 +30,7 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 <script type="module">
 import { mountZoneViewer } from './ZoneViewerApp.js';
 import navigationPolicy, { configureViewerMovement } from '../navigation-policy.js';
+import { LocationHeadingTracker } from '../movement-tracking.js';
 
 globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
@@ -264,6 +269,80 @@ async function waitForZoneSelect(timeout = 15000) {
 let lastSyncedLocation = null;
 let lastSyncedGround = null;
 let loadedZoneIdentity = '';
+const headingTracker = new LocationHeadingTracker();
+const rareLayer = document.createElement('div');
+rareLayer.className = 'eoz-rare-layer';
+rareLayer.setAttribute('aria-label', 'Named and rare mobs');
+app.els?.viewport?.append(rareLayer);
+let rareMobMarkers = [];
+let rareGotoEntries = [];
+let activeRareMob = '';
+
+function normalizedNpcName(value) {
+    return String(value || '').trim().toLowerCase().replace(/['’‘`]/g, '').replace(/[_\s]+/g, ' ');
+}
+
+function clearRareMobs() {
+    const oldEntries = new Set(rareGotoEntries);
+    app.gotoNpcEntries = (app.gotoNpcEntries || []).filter(entry => !oldEntries.has(entry));
+    rareGotoEntries = [];
+    rareMobMarkers = [];
+    rareLayer.replaceChildren();
+}
+
+function renderRareMobs() {
+    if (!rareMobMarkers.length) return;
+    const visible = Boolean(app?.currentZoneRecord && !app.worldMapVisible);
+    const firstPerson = app.mode === 'first' && !app.mapFileVisible;
+    const width = Math.max(1, app.els?.viewport?.clientWidth || 1);
+    const height = Math.max(1, app.els?.viewport?.clientHeight || 1);
+    const cameraPosition = app.camera?.position;
+    const candidates = [];
+    for (const marker of rareMobMarkers) {
+        const distance = cameraPosition?.distanceTo?.(marker.position) ?? 0;
+        const projected = marker.position.clone().project(app.camera);
+        const onScreen = projected.z >= -1 && projected.z <= 1 && projected.x >= -1.08 && projected.x <= 1.08 && projected.y >= -1.08 && projected.y <= 1.08;
+        const correctFloor = !app.floorSelectionContainsY || app.floorSelectionContainsY(marker.eqZ);
+        if (!visible || !onScreen || !correctFloor || (firstPerson && distance > 1800)) {
+            marker.element.hidden = true;
+            continue;
+        }
+        const x = (projected.x * .5 + .5) * width;
+        const y = (-projected.y * .5 + .5) * height;
+        candidates.push({ marker, x, y, distance, center:Math.hypot(x - width / 2, y - height / 2) });
+    }
+    candidates.sort((left, right) =>
+        Number(right.marker.active) - Number(left.marker.active) ||
+        right.marker.priority - left.marker.priority ||
+        (firstPerson ? left.center - right.center : left.distance - right.distance)
+    );
+    const occupied = [];
+    const limit = firstPerson ? 28 : 70;
+    let shown = 0;
+    for (const candidate of candidates) {
+        const markerWidth = Math.min(220, 64 + candidate.marker.name.length * 7);
+        const box = { left:candidate.x - markerWidth / 2, right:candidate.x + markerWidth / 2, top:candidate.y - 28, bottom:candidate.y + 3 };
+        const overlaps = occupied.some(other => !(box.right < other.left || box.left > other.right || box.bottom < other.top || box.top > other.bottom));
+        if (shown >= limit || (overlaps && !candidate.marker.active)) {
+            candidate.marker.element.hidden = true;
+            continue;
+        }
+        occupied.push(box);
+        shown += 1;
+        candidate.marker.element.hidden = false;
+        candidate.marker.element.style.transform = `translate(-50%, -100%) translate(${candidate.x.toFixed(1)}px, ${candidate.y.toFixed(1)}px)`;
+        candidate.marker.element.style.opacity = firstPerson ? String(Math.max(.46, 1.08 - candidate.distance / 1800)) : '1';
+    }
+}
+
+const originalRenderFrame = app.renderFrame?.bind(app);
+if (originalRenderFrame) {
+    app.renderFrame = (...args) => {
+        const result = originalRenderFrame(...args);
+        renderRareMobs();
+        return result;
+    };
+}
 
 function focusTopViewAt(point) {
     const target = app?.orbit?.target;
@@ -350,6 +429,7 @@ window.eqlEyeOfZommViewer = {
         if (!option) return { ok:false, reason:'zone-not-found', zone:zoneName };
 
         if (select.value !== option.value) {
+            clearRareMobs();
             select.value = option.value;
             select.dispatchEvent(new Event('change', { bubbles:true }));
         }
@@ -372,6 +452,8 @@ window.eqlEyeOfZommViewer = {
         if (changedZone) {
             lastSyncedLocation = null;
             lastSyncedGround = null;
+            headingTracker.reset();
+            clearRareMobs();
             loadedZoneIdentity = zoneIdentity;
             app.selectedFloorIndices?.clear?.();
             root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
@@ -384,7 +466,7 @@ window.eqlEyeOfZommViewer = {
         };
     },
 
-    syncLocation(location) {
+    syncLocation(location, options = {}) {
         if (!app || !location || !Number.isFinite(Number(location.x)) ||
             !Number.isFinite(Number(location.y)) || !Number.isFinite(Number(location.z))) {
             return { ok:false, reason:'no-location' };
@@ -403,31 +485,115 @@ window.eqlEyeOfZommViewer = {
         // tolerance configured for player movement.
         const ground = app.findGroundPointAt(point.x, point.z, point.y) || point;
         lastSyncedGround = ground.clone();
+        const movement = headingTracker.push(eqLocation, Number(options.timestamp) || Date.now());
         const previousForward = app.lastFirstPersonPose?.forward?.clone?.();
-        if (app.mode !== 'first') app.setMode('first');
-        app.setGameMapVisible?.(false);
-        app.perspective.position.copy(ground).add({ x:0, y:app.fp.eyeHeight || 6, z:0 });
-        app.fp.activate(app.perspective.position);
-        let forward = null;
-        if (lastSyncedLocation) {
-            const previous = app.eqMapToThree(lastSyncedLocation.x, lastSyncedLocation.y, lastSyncedLocation.z);
-            forward = ground.clone().sub(previous).setY(0);
-            if (forward.lengthSq() < .25) forward = null;
+        let forward = previousForward;
+        if (movement.heading) {
+            const headingPoint = app.eqMapToThree(
+                eqLocation.x + movement.heading.x,
+                eqLocation.y + movement.heading.y,
+                eqLocation.z
+            );
+            const mappedHeading = headingPoint.clone().sub(point).setY(0);
+            if (mappedHeading.lengthSq() > .0001) forward = mappedHeading.normalize();
         }
-        forward = forward?.normalize?.() || previousForward;
-        if (forward?.lengthSq?.() > 0) {
+        if (!forward?.lengthSq?.()) forward = ground.clone().set(0, 0, -1);
+
+        const requestedMode = ['first', 'top', 'map'].includes(options.mode) ? options.mode : (app.mapFileVisible ? 'map' : app.mode);
+        const resolvedMode = requestedMode === 'map' && !app.mapData?.lines?.length ? 'top' : requestedMode;
+        if (resolvedMode === 'map') {
+            if (!app.mapFileVisible) app.setGameMapVisible(true);
+        } else {
+            if (app.mapFileVisible) app.setGameMapVisible(false);
+            if (app.mode !== resolvedMode) app.setMode(resolvedMode === 'top' ? 'top' : 'first');
+        }
+
+        app.lastFirstPersonPose = { position:ground.clone(), forward:forward.clone() };
+        if (resolvedMode === 'first') {
+            app.perspective.position.copy(ground).add({ x:0, y:app.fp.eyeHeight || 6, z:0 });
             app.perspective.up.set(0, 1, 0);
             app.perspective.lookAt(app.perspective.position.clone().add(forward));
+            app.fp.activate(app.perspective.position);
+            app.captureFirstPersonPose?.();
+            app.setMiniMapVisible?.(true);
+        } else {
+            focusTopViewAt(ground);
         }
         lastSyncedLocation = eqLocation;
-        if (typeof app.captureFirstPersonPose === 'function') app.captureFirstPersonPose();
         if (typeof app.updateCoordinateHud === 'function') app.updateCoordinateHud(true);
-        if (typeof app.setMiniMapVisible === 'function') app.setMiniMapVisible(true);
-        else if (typeof app.drawMiniMap === 'function') app.drawMiniMap();
+        if (resolvedMode !== 'first' && typeof app.drawMiniMap === 'function') app.drawMiniMap();
         if (typeof app.setStatus === 'function') {
             app.setStatus(`Synced to map location X ${Number(location.x).toFixed(1)} Y ${Number(location.y).toFixed(1)} Z ${Number(location.z).toFixed(1)}.`);
         }
         app.requestRender?.();
+        renderRareMobs();
+        return { ok:true, moved:movement.moved, heading:movement.heading, mode:resolvedMode };
+    },
+
+    setRareMobs(records = []) {
+        clearRareMobs();
+        if (!app?.currentZoneRecord || !Array.isArray(records)) return { ok:false, count:0 };
+        if (app.els?.namedMobs) app.els.namedMobs.checked = false;
+        app.updateNamedMobLabels?.();
+        const seen = new Set();
+        for (const record of records) {
+            const name = String(record?.name || '').trim();
+            const location = Array.isArray(record?.loc) ? record.loc.map(Number) : [];
+            if (!name || location.length < 2 || !location.slice(0, 2).every(Number.isFinite)) continue;
+            const key = normalizedNpcName(name);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const hasZ = Number.isFinite(location[2]);
+            const eqZ = hasZ ? location[2] : 0;
+            const point = app.eqMapToThree(location[0], location[1], eqZ);
+            const ground = app.findGroundPointAt(point.x, point.z, hasZ ? point.y : app.currentBounds.max.y + 100) || point;
+            const resolvedEqZ = hasZ ? eqZ : Number(app.threeToEq?.(ground)?.z) || 0;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'eoz-rare-marker';
+            button.title = `Navigate to ${name}${record.dropCount ? ` · ${record.dropCount} known drops` : ''}`;
+            button.dataset.npc = name;
+            button.append(document.createTextNode(name));
+            if (record.classDropCount || record.dropCount) {
+                const count = document.createElement('small');
+                count.textContent = `${Number(record.classDropCount) || Number(record.dropCount)} loot`;
+                button.append(count);
+            }
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                window.parent?.postMessage({ type:'eoz-rare-mob-selected', name }, window.location.origin);
+            });
+            rareLayer.append(button);
+            const marker = {
+                element:button,
+                name,
+                eqZ:resolvedEqZ,
+                position:ground.clone().add({ x:0, y:8, z:0 }),
+                priority:(Number(record.classDropCount) || 0) * 20 + (Number(record.dropCount) || 0),
+                active:normalizedNpcName(name) === normalizedNpcName(activeRareMob)
+            };
+            rareMobMarkers.push(marker);
+            const gotoEntry = {
+                label:name,
+                rawLabel:name,
+                search:name.toLowerCase(),
+                point:{ x:location[0], y:location[1], z:resolvedEqZ, label:name, size:2 }
+            };
+            app.gotoNpcEntries.push(gotoEntry);
+            rareGotoEntries.push(gotoEntry);
+        }
+        renderRareMobs();
+        app.requestRender?.();
+        return { ok:true, count:rareMobMarkers.length };
+    },
+
+    setActiveRareMob(name = '') {
+        activeRareMob = String(name || '');
+        for (const marker of rareMobMarkers) {
+            marker.active = normalizedNpcName(marker.name) === normalizedNpcName(activeRareMob);
+            marker.element.classList.toggle('is-active', marker.active);
+        }
+        renderRareMobs();
         return { ok:true };
     },
 
@@ -449,8 +615,12 @@ window.eqlEyeOfZommViewer = {
 
     async pathTo(label, wikiLocation = null) {
         if (!app || !label) return { ok:false };
+        const wanted = normalizedNpcName(label);
+        const hasLocalMapLabel = (app.gotoNpcEntries || []).some(entry =>
+            !rareGotoEntries.includes(entry) && normalizedNpcName(entry.label) === wanted
+        );
         const ok = await app.gotoNpcLabel(String(label), { teleport:false });
-        if (ok) return navigationResult(String(label), 'map-label');
+        if (ok) return navigationResult(String(label), hasLocalMapLabel ? 'map-label' : 'wiki-location');
         const wikiOk = await pathToWikiLocation(String(label), wikiLocation);
         return wikiOk ? navigationResult(String(label), 'wiki-location') : { ok:false, source:'' };
     },
