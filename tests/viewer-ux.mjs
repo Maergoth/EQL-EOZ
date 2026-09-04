@@ -34,6 +34,10 @@ if (!integration.includes("type:'eoz-route-cancelled'") ||
     !app.includes('clearActiveRoute({ clearViewer:false })')) {
     throw new Error('Cancel Path does not clear the owner state that drives automatic rerouting.');
 }
+if (!integration.includes('.eqlzv-toolbar>.eqlzv-toolbar-label') ||
+    !integration.includes("root.querySelectorAll('.eqlzv-toolbar .eqlzv-button')")) {
+    throw new Error('Merged toolbar exposes duplicate view, help, or fullscreen controls.');
+}
 
 if (!css.includes('.eqlzv-z-slicer:not([open])') || !css.includes('.eqlzv-fps-enter { display: none !important; }')) {
     throw new Error('Compact Z popover or prompt-removal CSS is missing.');

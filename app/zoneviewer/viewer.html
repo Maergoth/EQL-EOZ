@@ -15,8 +15,8 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 .eqlzv-source-label,.eqlzv-world-button,.eqlzv-goto-label,.eqlzv-slider-label,
 .eqlzv-options,.eqlzv-performance,.eqlzv-performance-panel,.eqlzv-help-panel,
 .eqlzv-control-hint{display:none!important}
-.eqlzv-toolbar>.eqlzv-primary,.eqlzv-toolbar-secondary>.eqlzv-toolbar-label:first-child,
-.eqlzv-toolbar-secondary>.eqlzv-segmented{display:none!important}
+.eqlzv-toolbar>.eqlzv-primary,.eqlzv-toolbar>.eqlzv-toolbar-label,
+.eqlzv-toolbar>.eqlzv-segmented{display:none!important}
 .eqlzv-toolbar{gap:8px!important;flex-wrap:wrap}
 .eqlzv-toolbar-secondary{padding-top:6px!important}
 .eoz-rare-layer{position:absolute;inset:0;z-index:18;overflow:hidden;pointer-events:none}
@@ -52,7 +52,7 @@ app.fp?.setFly?.(true);
 window.eqlZoneViewer = app;
 
 function simplifyViewerUi() {
-    root.querySelectorAll('.eqlzv-toolbar-secondary .eqlzv-button').forEach(button => {
+    root.querySelectorAll('.eqlzv-toolbar .eqlzv-button').forEach(button => {
         const text = String(button.textContent || '').trim();
         if (text === 'Controls' || text === 'Full Screen') button.remove();
     });
