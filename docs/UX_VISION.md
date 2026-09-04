@@ -513,9 +513,9 @@ Requirements:
 | No folder | Choose your EverQuest folder to load maps and logs. | Choose folder |
 | Folder indexing | Connecting to Maps and game files… | Wait; allow cancel only if genuinely cancellable |
 | Folder ready, no log | Game folder ready · waiting for an `eqlog_*.txt` in Logs. | Open Settings |
-| Log ready, no zone | Game folder and log ready · waiting for the next zone line. | None |
+| Log ready, no zone | Game folder and log ready · waiting for a zoning or `/who` zone signal. | None |
 | Zone ready, no `/loc` | Zone ready · type `/loc` in game once. | Type `/loc` in game |
-| Location ready | X … · Y … · Z … | None |
+| Location ready | Map X … · Y … · Z … | None |
 | Missing zone archive | No local archive matched this zone. | Show expected filename; Change folder |
 | Missing map overlay | 3D is ready, but no matching map `.txt` was found. | Stay in 3D; show Maps path |
 | No NPC coordinate | NPC is known, but no map label or wiki location is available. | Open Wiki |
@@ -704,7 +704,7 @@ Known 0.6 limits, stated rather than hidden:
 
 1. Fresh-folder and returning-startup flows complete with the expected automatic log.
 2. Befallen `/loc -30, -961, -66` normalizes to world X `-961`, Y `-30`, Z `-66`, projects to client-map X `961`, Y `30`, Z `-66`, and both paths meet on the same stacked-floor viewer anchor.
-3. Mistmoore `/loc -330, 120, -178.13` projects to the real map's Succor anchor near X `-120`, Y `330`, Z `-180` through the shared `(-world X,-world Y,Z)` transform, while every player-facing readout remains `/loc -330.00, 120.00, -178.13`; world and client-map axes never appear as alternate locations.
+3. Mistmoore `/loc -330, 120, -178.13` projects to the real map's Succor anchor near X `-120`, Y `330`, Z `-180` through the shared `(-world X,-world Y,Z)` transform. The viewer HUD/footer use the in-game Map window's explicit `X -330.00, Y 120.00, Z -178.13` labels; canonical world and client-map-file axes never appear as competing player locations.
 4. Two `/loc` samples update facing; a live destination re-routes without another selection.
 5. First/Top/Map remain available through full/minimal transitions.
 6. The exact Legends rare-creature consider line opens the bottom tray.
@@ -736,6 +736,8 @@ Committed user stories:
 6. Location placement updates the retained First Person pose and player arrow without using a visible intermediate mode.
 7. Route refresh uses an eight-unit movement threshold but cannot have its timer continuously reset by new samples; expensive path work never blocks the newest player marker.
 8. The product remains read-only: the player creates the `/loc` bindings in EverQuest and Eye of Zomm only consumes the resulting log lines.
+9. The current character's Legends `/who` row is an authoritative zone signal: other player rows are ignored, the volatile instance number is removed, the stable short name resolves the catalog/archive, and a duplicate row does not reload the zone.
+10. The running version is always visible, and Windows workflows inspect the packaged ASAR before uploading an installer so stale or source-divergent builds are diagnosable.
 
 0.7 exit gate: the Windows script passes continuous movement in First/Top/Map, rare labels stay aligned and routable, minimal mode supports complete loot browsing, and no continuous `/loc` stream can starve position or route updates.
 
@@ -743,7 +745,7 @@ Committed user stories:
 
 Release thesis: paths must be predictable enough that a player will use them in a multi-floor dungeon without cross-checking every turn.
 
-Implementation note (0.7.3): deterministic remaining-distance, next-turn/facing/off-route cues, redacted diagnostics, and the eight-expectation geometry corpus are implemented. The pinned `recast-navigation` 0.43.1 module worker now passes 8/8 shared outcomes, rejects partial/ungrounded/reversed-drop results, and exposes latest-request-wins timeout/fallback states. It remains dormant until decoded real-zone integration and the Windows matrix pass; the current collision-validated graph is still authoritative. See [the navmesh evaluation](NAVMESH_EVALUATION.md) and [implementation status](IMPLEMENTATION_STATUS.md).
+Implementation note (updated for 0.7.7): deterministic remaining-distance, next-turn/facing/off-route cues, redacted diagnostics, and the eight-expectation geometry corpus are implemented. The pinned `recast-navigation` 0.43.1 module worker passes 8/8 shared synthetic outcomes, rejects partial/ungrounded/reversed-drop results, and exposes latest-request-wins timeout/fallback states. The exact next task is decoded viewer collision export and real-zone worker integration; the candidate remains dormant until that integration and the Windows matrix pass, so the current collision-validated graph is still authoritative. See [the navmesh evaluation](NAVMESH_EVALUATION.md), [implementation status](IMPLEMENTATION_STATUS.md), and [contributor handoff](HANDOFF.md#exact-next-work).
 
 Navigation architecture:
 
@@ -752,13 +754,13 @@ Navigation architecture:
 3. Use a single documented coordinate adapter at the boundary. EQEmu demonstrates the equivalent server-side Detour bridge by passing EQ `(x, y, z)` to Detour as `(x, z, y)` and converting it back at the route boundary.
 4. Add directed off-mesh links for exposed downward drops and upward transitions no greater than +6 EQ Z.
 5. Query with Detour, smooth the corridor, validate every rendered segment against local collision, and fall back to the 0.7 graph if generation fails.
-6. Keep the implemented next-turn cue, remaining distance, redacted route diagnostics, and topology corpus covered while adding shared geometry-backed outdoor/indoor/stacked/ramp/door/drop execution for current and candidate engines.
+6. Retain the implemented next-turn cue, remaining distance, redacted route diagnostics, and 8/8 shared synthetic geometry outcomes while connecting decoded proprietary viewer geometry to the candidate boundary and running the outdoor/indoor/stacked/ramp/door/drop Windows matrix.
 
 Route-engine UX contract: preparation and queries remain background work. The current valid line stays visible until a validated replacement is ready; stale results are discarded; view/minimal choices never change; compatibility fallback is automatic; and normal UI uses “path,” “updating,” and concrete recovery language rather than navmesh/Recast terminology.
 
 The design takes conceptual guidance from EQEmu's [Detour navmesh pathfinder](https://github.com/EQEmu/EQEmu/blob/master/zone/pathfinder_nav_mesh.cpp) and [ground/ceiling raycasts](https://github.com/EQEmu/EQEmu/blob/master/zone/map.cpp), but Eye of Zomm remains a separate read-only viewer and will not copy server movement or automation behavior.
 
-0.8 exit gate: at least 95% of the curated route corpus produces the expected path/no-path result, no displayed segment violates collision or directed elevation policy, and route work does not block input/rendering.
+0.8 exit gate: the synthetic corpus remains at or above 95%, the decoded real-zone Windows matrix passes its outdoor/indoor/stacked/ramp/door/drop expectations, no displayed segment violates collision or directed elevation policy, fallback is automatic, and candidate route work does not block input/rendering.
 
 ### 16.4 Version 0.9 — decision intelligence and public beta
 

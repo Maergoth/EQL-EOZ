@@ -19,7 +19,7 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 
 ## Current highest-priority task
 
-Connect the proven Recast/Detour worker boundary to decoded viewer collision geometry without changing the visible navigation flow. Production viewer integration remains blocked on a single coordinate export, independent validation, request identity, and the real-zone Windows matrix.
+Connect the proven Recast/Detour worker boundary to decoded viewer collision geometry without changing the visible navigation flow. The synthetic corpus is complete. Production viewer integration remains blocked on a single coordinate export, independent validation, request identity, and the real-zone Windows matrix; those four items—not additional synthetic corpus design—are the next slice.
 
 Acceptance for the completed topology slice:
 

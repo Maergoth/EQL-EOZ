@@ -28,8 +28,8 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 ## What it does
 
 - Detects the active character from the log filename.
-- Detects zones from normal log output.
-- Detects level/classes when `/who` output appears and follows later level-up messages.
+- Detects zones from normal zoning output or the current character's Legends `/who` row, using its stable parenthesized short name rather than the changing instance number.
+- Detects level/classes from that same `/who` row and follows later level-up messages while ignoring other listed players.
 - Parses considers, outgoing damage, DoTs, heals, runes, kills, loot, and recent activity.
 - Groups combat into timestamped encounters using a configurable quiet-period threshold.
 - Records looted items and their sources, with observed drop rates derived from nearby logged kills.

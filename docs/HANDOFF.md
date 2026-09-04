@@ -71,7 +71,7 @@ Continue section 16.3 of the vision in this order:
 4. Add redacted real-zone timing/outcome fields to diagnostics and cover stacked floor, ramp, closed door, and drop cases in the Windows checklist. Never commit archives, raw logs, or identity-bearing coordinates.
 5. If the real-zone matrix passes, make the worker the preferred engine with automatic graph fallback. Otherwise keep it dormant and record the failing fixture category.
 
-Do not start durable history or upgrade scoring from 0.9 until the 0.8 route corpus is in place; it is the evidence gate for changing pathfinding.
+Do not start durable history or upgrade scoring from 0.9 until the decoded real-zone integration above passes the 0.8 Windows matrix. The synthetic route corpus is already in place; real-zone collision export, candidate validation, responsiveness, and fallback evidence are the remaining pathfinding gate.
 
 ## Release path
 
