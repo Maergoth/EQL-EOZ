@@ -1,23 +1,31 @@
 {
   "name": "eqlwiki-eye-of-zomm",
   "productName": "EQLWiki - Eye of Zomm",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "Local-first EQLWiki desktop app for EverQuest Legends logs, maps, NPCs, items, and wiki intelligence.",
   "author": "Maergoth",
   "license": "MIT",
   "main": "desktop/main.cjs",
   "type": "module",
   "scripts": {
+    "build:workers": "node scripts/build-navmesh-worker.mjs",
+    "audit:deps": "npm audit --audit-level=high",
+    "prestart": "npm run build:workers",
     "start": "electron .",
-    "test": "node tests/test.mjs && node tests/route-corpus.mjs && node tests/log-selection.mjs && node scripts/check-viewer-inline.mjs && node scripts/check-exporter.mjs && node scripts/check-ui.mjs && node scripts/check-release.mjs && node --check scripts/fetch-bootstrap-pack.mjs && node --check desktop/main.cjs && node --check desktop/log-selection.cjs && node --check desktop/preload.cjs && node --check app/app.js && node --check app/parser.js && node --check app/item-scaling.js && node --check app/item-browse.js && node --check app/con-colors.js && node --check app/movement-tracking.js && node --check app/route-guidance.js && node --check app/route-corpus.js && node --check app/diagnostics.js",
+    "pretest": "npm run build:workers",
+    "test": "node tests/test.mjs && node tests/route-corpus.mjs && node tests/recast-corpus.mjs && node tests/recast-route-client.mjs && node tests/log-selection.mjs && node scripts/check-navmesh-worker.mjs && node scripts/check-viewer-inline.mjs && node scripts/check-exporter.mjs && node scripts/check-ui.mjs && node scripts/check-release.mjs && node --check scripts/fetch-bootstrap-pack.mjs && node --check desktop/main.cjs && node --check desktop/log-selection.cjs && node --check desktop/preload.cjs && node --check app/app.js && node --check app/parser.js && node --check app/item-scaling.js && node --check app/item-browse.js && node --check app/con-colors.js && node --check app/movement-tracking.js && node --check app/route-guidance.js && node --check app/route-corpus.js && node --check app/route-validation.js && node --check app/recast-route-client.js && node --check app/recast-route-engine.js && node --check app/diagnostics.js",
     "test:catalog": "node scripts/check-catalog-relevance.mjs",
     "fetch:bootstrap": "node scripts/fetch-bootstrap-pack.mjs",
+    "predist:win": "npm run build:workers",
     "dist:win": "electron-builder --win nsis --x64 --publish never",
+    "predist:dir": "npm run build:workers",
     "dist:dir": "electron-builder --dir"
   },
   "devDependencies": {
     "electron": "43.4.0",
-    "electron-builder": "26.15.3"
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "recast-navigation": "0.43.1"
   },
   "build": {
     "appId": "com.eqlwiki.eyeofzomm",

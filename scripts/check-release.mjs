@@ -10,6 +10,7 @@ const handoff = readFileSync(new URL('../docs/HANDOFF.md', import.meta.url), 'ut
 const implementationStatus = readFileSync(new URL('../docs/IMPLEMENTATION_STATUS.md', import.meta.url), 'utf8');
 const routeCorpus = readFileSync(new URL('../app/route-corpus.js', import.meta.url), 'utf8');
 const navmeshEvaluation = readFileSync(new URL('../docs/NAVMESH_EVALUATION.md', import.meta.url), 'utf8');
+const recastNotices = readFileSync(new URL('../THIRD_PARTY/RecastNavigation/THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8');
 if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) throw new Error(`Invalid package version ${pkg.version}.`);
 if (lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version) {
     throw new Error('package.json and package-lock.json versions must match.');
@@ -27,6 +28,9 @@ for (const required of ['docs/UX_VISION.md', 'docs/IMPLEMENTATION_STATUS.md', 'd
 for (const required of ['recast-navigation` 0.43.1', '## Player-facing UX contract', 'dedicated module worker', 'current collision-validated pathfinder', 'MIT', 'Zlib']) {
     if (!navmeshEvaluation.includes(required)) throw new Error(`Navmesh evaluation is missing: ${required}`);
 }
+for (const required of ['recast-navigation-js 0.43.1', 'Recast Navigation / Detour', 'MIT', 'Zlib']) {
+    if (!recastNotices.includes(required)) throw new Error(`Recast notice is missing: ${required}`);
+}
 for (const required of ['## Exact next work', 'IMPLEMENTATION_STATUS.md', 'UX_VISION.md', 'npm test', 'npm run test:catalog']) {
     if (!handoff.includes(required)) throw new Error(`Contributor handoff is missing: ${required}`);
 }
@@ -39,14 +43,14 @@ for (const required of ['outdoor-open', 'indoor-corridor', 'stacked-floor-stairs
 
 for (const relative of ['../.github/workflows/build-windows.yml', '../.github/workflows/release.yml']) {
     const workflow = readFileSync(new URL(relative, import.meta.url), 'utf8');
-    for (const required of ['npm ci', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog', 'Determine signing mode', 'Get-AuthenticodeSignature', "steps.signing.outputs.enabled == 'true'", 'unsigned Windows']) {
+    for (const required of ['npm ci', 'npm run audit:deps', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog', 'Determine signing mode', 'Get-AuthenticodeSignature', "steps.signing.outputs.enabled == 'true'", 'unsigned Windows']) {
         if (!workflow.includes(required)) throw new Error(`${relative} is missing release gate: ${required}`);
     }
     if (workflow.includes('Require signing certificate')) throw new Error(`${relative} still blocks unsigned output.`);
 }
 
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-for (const required of ['npm test', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog']) {
+for (const required of ['npm run audit:deps', 'npm test', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog']) {
     if (!ciWorkflow.includes(required)) throw new Error(`CI is missing production catalog gate: ${required}`);
 }
 

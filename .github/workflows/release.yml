@@ -26,6 +26,8 @@ jobs:
           test "$GITHUB_REF_NAME" = "$expected" || { echo "Tag $GITHUB_REF_NAME must match package version $expected"; exit 1; }
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Audit dependencies
+        run: npm run audit:deps
       - name: Test
         run: npm test
       - name: Fetch production bootstrap data

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.3 - Isolated navmesh worker proof
+
+- Added a pinned, deterministic 747 KiB `recast-navigation` 0.43.1 module-worker bundle with transferable geometry buffers and build/package checks.
+- Ran both the reference topology router and candidate Recast/Detour engine against the same eight redistributable fixtures; all expected path/no-path outcomes pass.
+- Rejected Detour partial paths, projected sparse funnel results back onto collision surfaces, and added independent post-query guards for walkable support and downward-only drop links.
+- Added a latest-request-wins worker client with calm Finding/Updating/fallback states, stale-result suppression, timeouts, worker restart, and an explicit contract that callers retain the last valid route.
+- Retained the current viewer pathfinder as production authority; the candidate worker is bundled but dormant until real zone geometry and Windows/game-client gates pass.
+- Added exact MIT/Zlib notices, pinned lockfile integrity, dependency-tree validation, and high-severity audit gates to CI and Windows release workflows.
+
 ## 0.7.2 - Geometry-backed spatial contract
 
 - Extended every asset-free route fixture into shared typed triangle geometry with one right-handed Y-up coordinate contract, upward winding, start/goal anchors, and agent constraints.

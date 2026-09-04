@@ -41,6 +41,7 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Prompts for the EverQuest folder on first launch, then selects the newest log under `Logs` automatically.
 - Provides First Person 3D, Top Down 3D, and local Map Overlay views with all floors visible by default.
 - Synchronizes logged `/location` output into the selected map view and derives first-person facing from consecutive coordinates.
+- Includes a dormant, worker-isolated Recast/Detour route prototype that passes the redistributable route corpus; the existing pathfinder remains authoritative until real-zone validation passes.
 - Shows Folder, Log, Zone, and `/loc` readiness separately instead of collapsing setup and live-state problems into one Sync error.
 - Keeps one named destination active, reports path/marker/error state and routed distance, and re-routes from later `/loc` samples.
 - Provides a pin-to-top option that hides the draggable title bar while keeping the app in the Windows taskbar.
@@ -183,10 +184,10 @@ server/              MediaWiki exporter + GitHub dataset synchronization
 scripts/             Build/bootstrap tooling
 tests/               Parser/scaling tests
 wiki/                Optional EQLWiki launcher integration
-THIRD_PARTY/         Zone Viewer notices/license
+THIRD_PARTY/         Zone Viewer and navigation-engine notices/licenses
 .github/workflows/   CI and Windows installer/release builds
 ```
 
 ## Open source
 
-Eye of Zomm is released under the [MIT License](LICENSE). Third-party notices for the Zone Viewer are retained under `THIRD_PARTY/`.
+Eye of Zomm is released under the [MIT License](LICENSE). Third-party notices for the Zone Viewer and Recast/Detour worker are retained under `THIRD_PARTY/`.

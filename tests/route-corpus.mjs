@@ -13,8 +13,8 @@ for (const category of ['outdoor', 'indoor', 'stacked-floor', 'ramp', 'door', 'd
 
 for (const fixture of ROUTE_CORPUS) {
     const geometry = buildFixtureGeometry(fixture);
-    if (!(geometry.positions instanceof Float32Array) || geometry.positions.length < fixture.nodes.length * 12) {
-        throw new Error(`${fixture.id} does not expose triangle positions for every landing.`);
+    if (!(geometry.positions instanceof Float32Array) || geometry.positions.length < 12) {
+        throw new Error(`${fixture.id} does not expose triangle positions for its walkable surfaces.`);
     }
     if (!(geometry.indices instanceof Uint32Array) || geometry.indices.length % 3 !== 0) {
         throw new Error(`${fixture.id} does not expose valid triangle indices.`);

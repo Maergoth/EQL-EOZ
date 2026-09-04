@@ -44,9 +44,9 @@ function addQuad(positions, indices, corners) {
 }
 
 /**
- * Convert a corpus topology into redistributable triangle geometry. Every node
- * gets a small landing. Valid non-drop connections become floor/ramp strips;
- * closed connections stay physically separate and drops become directed links.
+ * Convert a corpus topology into redistributable triangle geometry. Valid
+ * non-drop connections become floor/ramp strips; isolated endpoints get small
+ * landings, closed connections stay separate, and drops become directed links.
  */
 export function buildFixtureGeometry(fixture, options = {}) {
     const landingSize = Number(options.landingSize) || 2;
@@ -57,15 +57,8 @@ export function buildFixtureGeometry(fixture, options = {}) {
     const positions = [];
     const indices = [];
     const offMeshConnections = [];
-
-    for (const node of nodes.values()) {
-        addQuad(positions, indices, [
-            { x:node.x - landingHalf, y:node.y, z:node.z - landingHalf },
-            { x:node.x + landingHalf, y:node.y, z:node.z - landingHalf },
-            { x:node.x + landingHalf, y:node.y, z:node.z + landingHalf },
-            { x:node.x - landingHalf, y:node.y, z:node.z + landingHalf }
-        ]);
-    }
+    const corridorEdges = [];
+    const corridorNodes = new Set();
 
     for (const edge of fixture.edges || []) {
         const from = nodes.get(edge.from);
@@ -81,6 +74,26 @@ export function buildFixtureGeometry(fixture, options = {}) {
             });
             continue;
         }
+        if (!traversableEdge(edge, from, to)) continue;
+        corridorEdges.push({ edge, from, to });
+        corridorNodes.add(edge.from);
+        corridorNodes.add(edge.to);
+    }
+
+    // Corridor strips already cover their endpoints. Adding coplanar landing
+    // quads there creates overlapping raster spans and artificial seams in the
+    // generated navmesh, especially where a ramp meets a floor.
+    for (const node of nodes.values()) {
+        if (corridorNodes.has(node.id)) continue;
+        addQuad(positions, indices, [
+            { x:node.x - landingHalf, y:node.y, z:node.z - landingHalf },
+            { x:node.x + landingHalf, y:node.y, z:node.z - landingHalf },
+            { x:node.x + landingHalf, y:node.y, z:node.z + landingHalf },
+            { x:node.x - landingHalf, y:node.y, z:node.z + landingHalf }
+        ]);
+    }
+
+    for (const { from, to } of corridorEdges) {
         const dx = Number(to.x) - Number(from.x);
         const dz = Number(to.z) - Number(from.z);
         const planarLength = Math.hypot(dx, dz);
@@ -230,7 +243,7 @@ export const ROUTE_CORPUS = Object.freeze([
     },
     {
         id:'stacked-floor-stairs', category:'stacked-floor',
-        nodes:[{ id:'low', x:0, y:0, z:0 }, { id:'low-hall', x:20, y:0, z:0 }, { id:'stair-a', x:25, y:5, z:0 }, { id:'stair-b', x:30, y:10, z:0 }, { id:'high-hall', x:20, y:10, z:0 }, { id:'high', x:0, y:10, z:0 }],
+        nodes:[{ id:'low', x:0, y:0, z:0 }, { id:'low-hall', x:20, y:0, z:0 }, { id:'stair-a', x:30, y:5, z:0 }, { id:'stair-b', x:30, y:10, z:10 }, { id:'high-hall', x:20, y:10, z:10 }, { id:'high', x:0, y:10, z:0 }],
         edges:[{ from:'low', to:'low-hall' }, { from:'low-hall', to:'stair-a' }, { from:'stair-a', to:'stair-b' }, { from:'stair-b', to:'high-hall' }, { from:'high-hall', to:'high' }],
         expectations:[{ from:'low', to:'high', path:true }]
     },

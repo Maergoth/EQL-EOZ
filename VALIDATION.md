@@ -1,6 +1,6 @@
-# Validation report — v0.7.2
+# Validation report — v0.7.3
 
-Validated in the build environment on 2026-09-03 UTC.
+Validated in the build environment on 2026-09-04 UTC.
 
 ## Automated checks
 
@@ -25,6 +25,11 @@ Validated in the build environment on 2026-09-03 UTC.
 - Route-guidance tests cover nearest-segment projection, remaining distance, right-turn detection, opposite-facing recovery, off-route recovery, arrival, and absent-path behavior.
 - The asset-free route corpus passes 8/8 expected outcomes (100%) with zero segment-policy violations across outdoor, indoor, stacked-floor, ramp, closed-door, exposed-drop, and illegal-ascent topology fixtures.
 - Every corpus fixture emits finite typed triangle buffers with in-range indices and upward-facing winding; route requests retain their start/goal anchors, closed doors have no bridge geometry, and exposed drops emit exactly one directed off-mesh link.
+- Pinned `recast-navigation` 0.43.1 passes the same 8/8 shared geometry outcomes; Detour partial paths are treated as no-path rather than displayed.
+- Sparse candidate paths are projected back to supplied collision surfaces, then independently sampled; routes that leave the surface or reverse a directed drop fail closed.
+- The deterministic module worker builds to 747 KiB, contains no build-machine/Node filesystem references, and is covered by transferable-buffer, timeout, stale-result, fallback, and worker-restart contracts.
+- A local unpacked Electron build completes, and its ASAR contains the generated worker, route engine/validator, and both Recast third-party license files.
+- MIT and Zlib notices are retained. `npm ls --all` validates the pinned dependency tree; GitHub CI and Windows workflows enforce `npm audit --audit-level=high` because the local restricted environment could not reach the advisory service before timeout.
 - Route-distance formatting tests retain near-target precision while quantizing medium/long distances to prevent noisy HUD churn.
 - Diagnostic-export tests prove the allow-list retains useful session/map/route state while excluding the character name, log filename, filesystem paths, viewer messages, and unknown future settings.
 - Inline viewer checks require dataset rare markers, marker-to-route messaging, mode-preserving location sync, and the shared heading tracker.

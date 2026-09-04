@@ -1,12 +1,14 @@
 # Navmesh dependency and UX evaluation
 
-Status: approved for an isolated corpus prototype; not yet approved as the production route engine  
-Reviewed: 2026-09-03  
+Status: isolated corpus prototype passed; real-zone production integration not yet approved
+
+Reviewed: 2026-09-04
+
 Candidate: [`recast-navigation` 0.43.1](https://github.com/isaac-mason/recast-navigation-js)
 
 ## Decision
 
-Use pinned `recast-navigation` 0.43.1 for the first worker/corpus prototype. Do not replace the current collision-validated pathfinder, add a player-facing engine toggle, or ship the dependency in the installer until the geometry corpus reaches the 0.8 exit gate.
+The pinned `recast-navigation` 0.43.1 worker passed the shared geometry corpus and is approved for real-zone integration testing. Do not replace the current collision-validated pathfinder or add a player-facing engine toggle until proprietary-zone and responsiveness gates pass. The dormant local bundle may ship in 0.7.3 so packaging can be tested without activating it.
 
 Why it is the preferred prototype:
 
@@ -31,6 +33,8 @@ Why it is the preferred prototype:
 Directly compiling upstream Recast/Detour with Emscripten remains the control-heavy fallback if the wrapper cannot support directed links or stable worker packaging. It is not preferred for the first prototype because Eye of Zomm would own the bindings and build toolchain.
 
 ## Route-engine boundary
+
+The implemented prototype lives behind `app/recast-route-client.js`. It transfers cloned typed buffers to a generated local module worker, applies a 12-second timeout, ignores stale responses, and restarts after worker-level failure. `app/recast-route-engine.js` rejects Detour partial results; `app/route-validation.js` grounds sparse funnel points and independently rejects paths that leave the supplied surface or reverse an exposed drop.
 
 The shared corpus emits:
 
@@ -67,6 +71,8 @@ Normal use gets no engine selector, navmesh settings, Recast terminology, blocki
 4. Slow or failed candidate work leaves the existing path and input responsiveness intact.
 5. The packaged Windows build contains only pinned local worker/WASM assets and required MIT/Zlib notices.
 6. Real-client tests confirm stacked floors, ramps, doors, and drops without adding engine-specific controls to the UI.
+
+Items 1–5 pass in 0.7.3: 8/8 shared outcomes, zero accepted validation violations, a deterministic 747 KiB worker artifact, and retained MIT/Zlib notices. Item 6 and decoded real-zone performance remain the activation gate. `npm audit --audit-level=high` is enforced in GitHub CI/build/release; the restricted local environment timed out contacting the advisory service, while `npm ls --all` confirmed a complete pinned dependency tree.
 
 ## Sources reviewed
 

@@ -737,7 +737,7 @@ Committed user stories:
 
 Release thesis: paths must be predictable enough that a player will use them in a multi-floor dungeon without cross-checking every turn.
 
-Implementation note (0.7.2): deterministic remaining-distance, next-turn/facing/off-route cues, the redacted diagnostics export, and an eight-expectation geometry-backed corpus are implemented as the first spatial-confidence slices. `recast-navigation` 0.43.1 is approved only for the isolated worker prototype described in [the navmesh evaluation](NAVMESH_EVALUATION.md); the current collision-validated graph remains authoritative until the worker/corpus gates pass. See [implementation status](IMPLEMENTATION_STATUS.md).
+Implementation note (0.7.3): deterministic remaining-distance, next-turn/facing/off-route cues, redacted diagnostics, and the eight-expectation geometry corpus are implemented. The pinned `recast-navigation` 0.43.1 module worker now passes 8/8 shared outcomes, rejects partial/ungrounded/reversed-drop results, and exposes latest-request-wins timeout/fallback states. It remains dormant until decoded real-zone integration and the Windows matrix pass; the current collision-validated graph is still authoritative. See [the navmesh evaluation](NAVMESH_EVALUATION.md) and [implementation status](IMPLEMENTATION_STATUS.md).
 
 Navigation architecture:
 
