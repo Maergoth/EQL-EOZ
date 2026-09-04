@@ -49,6 +49,16 @@ for (const relative of ['../.github/workflows/build-windows.yml', '../.github/wo
     if (workflow.includes('Require signing certificate')) throw new Error(`${relative} still blocks unsigned output.`);
 }
 
+const windowsWorkflow = readFileSync(new URL('../.github/workflows/build-windows.yml', import.meta.url), 'utf8');
+for (const required of ['contents: write', 'cancel-in-progress: true', 'Determine beta release', '$global:LASTEXITCODE = 0', "steps.beta.outputs.publish == 'true'", 'Publish beta GitHub release', 'prerelease: true', 'make_latest: false']) {
+    if (!windowsWorkflow.includes(required)) throw new Error(`Windows workflow is missing beta release behavior: ${required}`);
+}
+
+const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
+for (const required of ['Determine release channel', 'steps.channel.outputs.prerelease', "steps.channel.outputs.prerelease == 'false'"]) {
+    if (!releaseWorkflow.includes(required)) throw new Error(`Release workflow is missing prerelease classification: ${required}`);
+}
+
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 for (const required of ['npm run audit:deps', 'npm test', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog']) {
     if (!ciWorkflow.includes(required)) throw new Error(`CI is missing production catalog gate: ${required}`);

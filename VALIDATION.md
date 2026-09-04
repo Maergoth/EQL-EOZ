@@ -9,6 +9,7 @@ Validated in the build environment on 2026-09-04 UTC.
 - Inline Zone Viewer module validation and `node --check` pass for first-party JavaScript.
 - Static UI validation confirms the removed overview surfaces stay absent, all three map modes persist across window modes, Settings owns the EQ folder, route/readiness surfaces exist, routine browser alerts are absent, and retired naming is absent.
 - Release validation confirms the current package/lock/changelog version, required production data, optional certificate handling, and Authenticode verification whenever signing is enabled in either Windows workflow.
+- Release validation requires the first successful `main` build of a new `0.x` version to publish one immutable-tagged GitHub prerelease, while repeat builds at the same version preserve that release and explicit `0.x` tags remain classified as prerelease.
 - Item scaling tests cover standalone DMG, static Cold DMG, Ammo +10 Range/tier, and negative-stat recovery.
 - Con-color tests cover modern blue/light-blue/green/gray boundaries plus white, +1 through +3 yellow, and +4 red.
 - Exporter checks require schema v3 and exercise two-coordinate, three-coordinate, template, and multiple-tuple location fixtures when PHP is available.

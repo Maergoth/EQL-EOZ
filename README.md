@@ -146,7 +146,7 @@ EQLWiki-Eye-of-Zomm-Setup-<version>-x64.exe
 
 The installer creates Start Menu/Desktop shortcuts and registers the `eqleoz://` protocol so EQLWiki can launch or focus the installed app.
 
-The Windows artifact and release workflows use and verify a trusted Authenticode certificate when configured. Until then they can publish an unsigned installer and clearly warn about the resulting Windows publisher/SmartScreen prompt. See [SIGNING.md](SIGNING.md).
+The Windows artifact and release workflows use and verify a trusted Authenticode certificate when configured. The first fully verified `main` build for each new `0.x` package version is also published as a versioned GitHub prerelease; later commits at that same version preserve the existing tag and only refresh the temporary Actions artifact. Until signing is configured, beta installers are unsigned and may show a Windows publisher/SmartScreen prompt. See [SIGNING.md](SIGNING.md).
 
 ## Development
 

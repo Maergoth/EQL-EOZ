@@ -6,7 +6,11 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -74,3 +78,34 @@ jobs:
           name: EQLWiki-Eye-of-Zomm-Windows-x64
           path: dist/EQLWiki-Eye-of-Zomm-Setup-*-x64.exe
           if-no-files-found: error
+      - name: Determine beta release
+        id: beta
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" | Out-Null
+          $tagExists = $LASTEXITCODE -eq 0
+          $global:LASTEXITCODE = 0
+          $isBeta = $version.StartsWith('0.')
+          $publish = $isBeta -and -not $tagExists
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "publish=$($publish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          if ($tagExists) {
+            "GitHub prerelease $tag already exists; preserving its tagged provenance." >> $env:GITHUB_STEP_SUMMARY
+          } elseif ($isBeta) {
+            "Publishing verified $tag as a GitHub prerelease." >> $env:GITHUB_STEP_SUMMARY
+          }
+      - name: Publish beta GitHub release
+        if: steps.beta.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.beta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Eye of Zomm ${{ steps.beta.outputs.tag }} Beta
+          generate_release_notes: true
+          prerelease: true
+          make_latest: false
+          files: |
+            dist/EQLWiki-Eye-of-Zomm-Setup-*-x64.exe

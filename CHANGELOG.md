@@ -7,6 +7,7 @@
 - Added the running app version to the always-visible desktop title bar and browser/taskbar title so a surviving or duplicate older installation is immediately identifiable.
 - Added a post-build ASAR integrity gate to both Windows workflows. The uploaded installer must contain the current package version, title-bar version binding, coordinate formatter, viewer transform, and Map HUD before it can be published.
 - Added Legends `/who` zone detection from the current character's row, including instance-number removal and stable short-name matching, so the map can recover without waiting for a separate zoning line.
+- Added automatic versioned GitHub prereleases for the first verified `main` build of each `0.x` version; repeat builds preserve the existing tag, and explicit `0.x` tags are also marked prerelease.
 
 ## 0.7.6 - Player-facing coordinate clarity
 

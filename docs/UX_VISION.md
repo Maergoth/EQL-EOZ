@@ -861,7 +861,7 @@ A change is done only when:
 5. Keyboard and non-color signals are considered.
 6. Production-size data has been exercised.
 7. Parser/transform/business rules have regression coverage.
-8. Version, changelog, and release artifact agree, and the running version is always visible without opening Settings.
+8. Version, changelog, and release artifact agree, the running version is always visible without opening Settings, and verified `0.x` distribution is labeled as a GitHub prerelease rather than stable software.
 9. The Windows build has a concrete manual verification script.
 10. Any known limitation is named in user-facing language rather than hidden behind a generic failure.
 
