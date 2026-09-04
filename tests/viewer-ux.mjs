@@ -18,6 +18,13 @@ for (const marker of [
 ]) {
     if (!viewer.includes(marker)) throw new Error(`Viewer UX contract is missing: ${marker}`);
 }
+for (const marker of [
+    't.filter(a=>Object.prototype.hasOwnProperty.call(ls,a.id))',
+    'l.eyeOfZommReadFile?await l.eyeOfZommReadFile():l'
+]) {
+    if (!viewer.includes(marker)) throw new Error(`Lazy archive contract is missing: ${marker}`);
+}
+if (!integration.includes('eyeOfZommReadFile:() => handle.readFile()')) throw new Error('Desktop directory integration eagerly loads archive bytes.');
 
 if (viewer.includes('G.append(te,he,ae,He,qe,Le,Ue,ne,ye,$,z,ie)')) {
     throw new Error('The click-to-enter prompt is still mounted over the map.');

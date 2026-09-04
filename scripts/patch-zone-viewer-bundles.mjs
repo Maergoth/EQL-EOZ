@@ -722,8 +722,27 @@ for (const required of [
     if (!viewer.includes(required)) throw new Error(`Unable to install floor-aware map grounding: ${required}`);
 }
 
-viewer = viewer.replace(/fh="v(?:13|14|15|16)"/, 'fh="v17"');
-if (!viewer.includes('fh="v17"')) throw new Error('Unable to bump the parsed-zone cache version.');
+// Desktop directory entries are metadata-backed lazy files. The upstream
+// browser viewer eagerly reads every archive while identifying zones, which
+// makes a normal EQ installation look frozen at the permission message. The
+// desktop app already has a trusted zone catalog, so list known archive names
+// immediately and hydrate only the files selected for the current zone.
+viewer = viewer.replace(
+    'let n=await this.scanZoneArchives(t),i=new Set(n.map(a=>`${a.format}:${a.id}`))',
+    'let n=t.filter(a=>Object.prototype.hasOwnProperty.call(ls,a.id)).map(a=>({...a,scanFallback:!0})),i=new Set(n.map(a=>`${a.format}:${a.id}`))'
+);
+viewer = viewer.replace(
+    'return s(this.files.get("mp3index.txt")),[...i.values()]',
+    's(this.files.get("mp3index.txt"));let o=[...i.values()];return Promise.all(o.map(async l=>l.eyeOfZommReadFile?await l.eyeOfZommReadFile():l))'
+);
+viewer = viewer.replaceAll('Waiting for directory permission…', 'Indexing local zone files…');
+if (!viewer.includes('l.eyeOfZommReadFile?await l.eyeOfZommReadFile():l') ||
+    !viewer.includes('t.filter(a=>Object.prototype.hasOwnProperty.call(ls,a.id))')) {
+    throw new Error('Unable to install lazy desktop archive loading.');
+}
+
+viewer = viewer.replace(/fh="v(?:13|14|15|16|17)"/, 'fh="v18"');
+if (!viewer.includes('fh="v18"')) throw new Error('Unable to bump the parsed-zone cache version.');
 writeFileSync(viewerPath, viewer);
 
 const workerPath = `${root}/app/zoneviewer/zone-parser.worker.js`;
@@ -745,10 +764,22 @@ if (worker.includes(animatedName)) worker = worker.replace(animatedName, normali
 const imageLookup = 'A.name?.replace(".dds","")?.replace(".bmp","")?.toLowerCase()===a.toLowerCase()';
 const normalizedImageLookup = 'A.name?.toLowerCase().replace(/\\.(?:dds|bmp)$/i,"")===a.toLowerCase().replace(/\\.(?:dds|bmp)$/i,"")';
 if (worker.includes(imageLookup)) worker = worker.replace(imageLookup, normalizedImageLookup);
+// WLD material groups partition one sequential polygon array. Skipping an
+// invalid/unresolved material without consuming its polygonCount offsets every
+// later group and assigns otherwise-valid textures to the wrong faces.
+worker = worker.replace(
+    'if(!d.materialList.materialList[T.materialIndex])continue;',
+    'if(!d.materialList.materialList[T.materialIndex]){p+=T.polygonCount;continue}'
+);
+worker = worker.replace(
+    'if(!_){console.warn(`S3D model had no material link ${y}`);continue}',
+    'if(!_){console.warn(`S3D model had no material link ${y}`);p+=T.polygonCount;continue}'
+);
 if (!worker.includes('let i=[];this.images=i;this.shaderMap={}') ||
     !worker.includes(normalizedMaterialName) ||
     !worker.includes(normalizedAnimatedName) ||
-    !worker.includes(normalizedImageLookup)) {
+    !worker.includes(normalizedImageLookup) ||
+    !worker.includes('p+=T.polygonCount;continue')) {
     throw new Error('Unable to install the S3D texture fixes.');
 }
 writeFileSync(workerPath, worker);

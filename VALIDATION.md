@@ -1,4 +1,4 @@
-# Validation report — v0.7.8
+# Validation report — v0.7.9
 
 Validated in the build environment on 2026-09-04 UTC.
 
@@ -7,7 +7,7 @@ Validated in the build environment on 2026-09-04 UTC.
 - `npm test` passes.
 - Parser/scaling/con tests and folder/log-selection filesystem tests pass.
 - Inline Zone Viewer module validation and `node --check` pass for first-party JavaScript.
-- A focused viewer contract proves one-row chrome, detached first-person prompt, fly initialization, Succor reset, compact Z clipping, worker-first route search, owner-state cancellation, and repeating texture sampling remain installed in the generated bundle.
+- Focused contracts prove intel-first minimal defaults, optional map/routing controls, class-stat loot eligibility, lazy current-zone archive hydration, WLD material-group cursor alignment, one-row viewer chrome, fly initialization, Succor reset, worker-first routing, persistent cancellation, and repeating texture sampling.
 - Static UI validation confirms the removed overview surfaces stay absent, all three map modes persist across window modes, Settings owns the EQ folder, route/readiness surfaces exist, routine browser alerts are absent, and retired naming is absent.
 - Release validation confirms the current package/lock/changelog version, required production data, optional certificate handling, and Authenticode verification whenever signing is enabled in either Windows workflow.
 - Release validation requires the first successful `main` build of a new `0.x` version to publish one immutable-tagged GitHub prerelease, while repeat builds at the same version preserve that release and explicit `0.x` tags remain classified as prerelease.
@@ -40,7 +40,7 @@ Validated in the build environment on 2026-09-04 UTC.
 - Inline viewer checks require both local-label and wiki-coordinate route starts to preserve the active First/Top/Map presentation while retaining the route-progress message.
 - Application checks require newest-location coalescing, continuous-movement route scheduling, current-zone rare ranking, and compact mob/loot search.
 - A production-size relevance gate exercises all 11,168 embedded items and confirms Befallen/MNK defaults return useful local equipment before generic consumables.
-- The S3D parser check requires WLD bitmap `fileName` resolution, expanded BMP/DDS/material aliases, animated-frame filenames, repeat wrapping for out-of-range WLD UVs, parsed-zone cache version v17, and a resolved-local-texture marker exposed only as aggregate redacted diagnostics. Map Overlay remains `.txt` line art; First/Top are the texture acceptance surfaces.
+- The S3D parser check requires WLD bitmap `fileName` resolution, expanded BMP/DDS/material aliases, animated-frame filenames, repeat wrapping for out-of-range WLD UVs, skipped-group polygon cursor advancement, parsed-zone cache version v18, and a resolved-local-texture marker exposed only as aggregate redacted diagnostics. Map Overlay remains `.txt` line art; First/Top are the texture acceptance surfaces.
 - The product/UX vision is release-checked for click budgets, complete flows, feature user stories, acceptance scenarios, and the release-gated road to v1.
 - README, vision, implementation status, and contributor handoff cross-link the current baseline and exact next spatial-confidence task.
 

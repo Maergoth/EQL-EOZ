@@ -1,7 +1,7 @@
 {
   "name": "eqlwiki-eye-of-zomm",
   "productName": "EQLWiki - Eye of Zomm",
-  "version": "0.7.8",
+  "version": "0.7.9",
   "description": "Local-first EQLWiki desktop app for EverQuest Legends logs, maps, NPCs, items, and wiki intelligence.",
   "author": "Maergoth",
   "license": "MIT",

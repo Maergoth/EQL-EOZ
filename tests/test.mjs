@@ -1,6 +1,7 @@
 import { EQLogParser } from '../app/parser.js';
 import { conForLevel, grayCeilingForPlayerLevel, greenCeilingForPlayerLevel } from '../app/con-colors.js';
 import { scaledItemStats } from '../app/item-scaling.js';
+import { itemHasClassStats } from '../app/item-browse.js';
 import { itemHasZoneSource, scoreItemForBrowse } from '../app/item-browse.js';
 import { LocationHeadingTracker, locationPollDelay } from '../app/movement-tracking.js';
 import { routeDistanceLabel, routeGuidance } from '../app/route-guidance.js';
@@ -194,6 +195,9 @@ assert(scaled.RANGE === 160, 'ammo range');
 assert(scaled.STR === -4, 'negative stat at least one point');
 assert(scaled.STA === -45, 'large negative stat improves ten percent');
 assert(scaledItemStats(item, 10).STA === 0, 'negative stat reaches zero by tier 10');
+assert(itemHasClassStats({ stats:{ AC:5, WT:1 } }), 'class loot accepts an item with gameplay stats');
+assert(!itemHasClassStats({ stats:{ WT:1 } }), 'class loot rejects weight-only items');
+assert(!itemHasClassStats({ stats:{} }), 'class loot rejects statless items');
 
 const zoneGear = {
     name:'Pristine Studded Leather Tunic', classes:['MNK'], slots:['CHEST'], stats:{ AC:25, AGI:10, WT:1.4 },

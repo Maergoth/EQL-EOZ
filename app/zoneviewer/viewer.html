@@ -116,10 +116,22 @@ class LocalFileHandle {
         this.entry = entry;
     }
 
-    async getFile() {
+    async readFile() {
         const response = await localApi(`/api/eq-file?path=${encodeURIComponent(this.entry.path)}`);
         const bytes = await response.arrayBuffer();
         return new File([bytes], this.name, { lastModified:Number(this.entry.lastModified) || Date.now() });
+    }
+
+    async getFile() {
+        const handle = this;
+        return {
+            name:this.name,
+            size:Number(this.entry.size) || 0,
+            lastModified:Number(this.entry.lastModified) || 0,
+            eyeOfZommReadFile:() => handle.readFile(),
+            async arrayBuffer(){ return (await handle.readFile()).arrayBuffer(); },
+            async text(){ return (await handle.readFile()).text(); }
+        };
     }
 }
 

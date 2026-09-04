@@ -1,7 +1,7 @@
 import { EQLogParser } from './parser.js';
 import { conForLevel } from './con-colors.js';
 import { scaledItemStats } from './item-scaling.js';
-import { itemHasZoneSource, scoreItemForBrowse } from './item-browse.js';
+import { itemHasClassStats, itemHasZoneSource, scoreItemForBrowse } from './item-browse.js';
 import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
 import { routeDistanceLabel } from './route-guidance.js';
@@ -68,7 +68,9 @@ let settings = Object.assign({
     itemSort: 'recommended',
     mapMode: 'first',
     lastView: 'overview',
-    minimalIntelVisible: true
+    minimalIntelVisible: true,
+    minimalMapVisible: false,
+    minimalRoutingVisible: false
 }, prefs.load());
 if (!['first', 'top', 'map'].includes(settings.mapMode)) settings.mapMode = 'first';
 if (!['recommended', 'name'].includes(settings.itemSort)) settings.itemSort = 'recommended';
@@ -580,7 +582,7 @@ function renderConsiderTray() {
     };
     const allDrops = knownDropsForNpc(npc).filter(item => eraAllowed(item.era));
     const drops = settings.considerMyClassOnly
-        ? allDrops.filter(item => itemMatchesProfile(item, profile))
+        ? allDrops.filter(item => itemMatchesProfile(item, profile) && itemHasClassStats(item))
         : allDrops;
     const con = conForLevel(Number(consideredTarget.level) || npc.avgLevel, profile.level);
 
@@ -667,7 +669,7 @@ function rareMobsForZone(s, profile, options = {}) {
                 seen.add(key);
                 return true;
             });
-            source.items = source.allItems.filter(item => itemMatchesProfile(item, profile));
+            source.items = source.allItems.filter(item => itemMatchesProfile(item, profile) && itemHasClassStats(item));
             source.loc = wikiLocationToWorld(source.npc?.loc);
         }
         catalog = Array.from(sources.values());
@@ -1188,7 +1190,7 @@ function routeDestinationInputs() {
 
 function preferredRouteDestinationInput() {
     return document.body.classList.contains('minimal-mode')
-        ? $('#minimal-map-destination')
+        ? $('#minimal-rare-search')
         : $('#map-destination');
 }
 
@@ -1380,6 +1382,20 @@ function applyMinimalIntelState() {
     }
 }
 
+function applyMinimalContentState() {
+    const mapVisible = Boolean(settings.minimalMapVisible);
+    const routingVisible = mapVisible && Boolean(settings.minimalRoutingVisible);
+    document.body.classList.toggle('minimal-map-hidden', !mapVisible);
+    document.body.classList.toggle('minimal-routing-hidden', !routingVisible);
+    const mapToggle = $('#settings-minimal-map');
+    const routingToggle = $('#settings-minimal-routing');
+    if (mapToggle) mapToggle.checked = mapVisible;
+    if (routingToggle) {
+        routingToggle.checked = Boolean(settings.minimalRoutingVisible);
+        routingToggle.disabled = !mapVisible;
+    }
+}
+
 function applyWindowState(windowState = {}) {
     const pinned = Boolean(windowState.alwaysOnTop);
     const minimal = Boolean(windowState.minimalMode);
@@ -1401,6 +1417,7 @@ function applyWindowState(windowState = {}) {
     if (minimal && !wasMinimal) setView('map', { remember:false });
     else if (!minimal && wasMinimal) setView(settings.lastView || 'overview', { remember:false });
     applyMinimalIntelState();
+    applyMinimalContentState();
     setTimeout(() => viewerApi()?.resize?.(), 80);
 }
 
@@ -2060,10 +2077,6 @@ function wireUi() {
     $('#sync-zone').addEventListener('click', () => syncZoneToViewer(true));
     $('#sync-location').addEventListener('click', () => handleMapPrimaryAction().catch(error => showNotice(error.message, { tone:'error' })));
     $('#start-route').addEventListener('click', () => pathToNpc($('#map-destination').value));
-    $('#minimal-route-form').addEventListener('submit', event => {
-        event.preventDefault();
-        pathToNpc($('#minimal-map-destination').value);
-    });
     for (const input of routeDestinationInputs()) {
         input.addEventListener('keydown', event => {
             if (event.key === 'Enter' && event.currentTarget.id !== 'minimal-map-destination') {
@@ -2076,7 +2089,19 @@ function wireUi() {
             if (activeRoute && npcNameKey(event.currentTarget.value) !== npcNameKey(activeRoute.name)) clearActiveRoute({ keepInput:true });
         });
     }
-    for (const button of [$('#clear-route'), $('#minimal-clear-route')]) button.addEventListener('click', () => clearActiveRoute());
+    for (const button of [$('#clear-route'), $('#minimal-clear-route')].filter(Boolean)) button.addEventListener('click', () => clearActiveRoute());
+
+    $('#settings-minimal-map').addEventListener('change', event => {
+        settings.minimalMapVisible = Boolean(event.target.checked);
+        prefs.save(settings);
+        applyMinimalContentState();
+        setTimeout(() => viewerApi()?.resize?.(), 50);
+    });
+    $('#settings-minimal-routing').addEventListener('change', event => {
+        settings.minimalRoutingVisible = Boolean(event.target.checked);
+        prefs.save(settings);
+        applyMinimalContentState();
+    });
     $('#window-minimize').addEventListener('click', () => window.eyeOfZommWindow?.minimize());
     $('#window-maximize').addEventListener('click', () => window.eyeOfZommWindow?.toggleMaximize());
     $('#window-close').addEventListener('click', () => window.eyeOfZommWindow?.close());

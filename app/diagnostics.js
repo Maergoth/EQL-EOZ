@@ -56,6 +56,8 @@ export function buildDiagnosticSnapshot({ version, pack, parserState, settings, 
             manualClasses:Array.isArray(settings?.manualClasses) ? settings.manualClasses.map(String) : [],
             minimalMyClassOnly:Boolean(settings?.minimalMyClassOnly),
             minimalNamedOnly:Boolean(settings?.minimalNamedOnly),
+            minimalMapVisible:Boolean(settings?.minimalMapVisible),
+            minimalRoutingVisible:Boolean(settings?.minimalRoutingVisible),
             itemCurrentZoneOnly:Boolean(settings?.itemCurrentZoneOnly)
         },
         bridge:{

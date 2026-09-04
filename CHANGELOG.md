@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.9 - Intel-first minimal view and WLD material repair
+
+- Made Minimal view default to the named-and-rare-mob intel panel, with the 3D map hidden unless explicitly enabled in Settings.
+- Added independent **Show map** and **Show path controls** preferences. Waypoint copying, consider detection, and loot remain available when both are off.
+- Removed the minimal-header destination search; routing, when enabled, starts from the mob list rather than duplicating a search surface.
+- Changed **My Class** loot in both Minimal view and the consider tray to exclude statless and weight-only items.
+- Replaced eager desktop archive reads with metadata indexing and current-zone hydration, and corrected the false permission status.
+- Fixed WLD material-group cursor drift so skipped groups consume their polygon counts instead of shifting every later texture onto the wrong faces.
+- Added release checks for lazy reads, material-group alignment, minimal defaults, and class-loot eligibility.
+
 ## 0.7.8 - Compact fly-first map controls
 
 - Collapsed the embedded map viewer to one control bar: zone load, Succor reset, a compact pop-out Z-depth slicer, and view controls now share the same row; the Grounded and Floors controls are no longer exposed.

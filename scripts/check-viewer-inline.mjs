@@ -47,7 +47,7 @@ for (const required of [
     'findSuccorPoint() {',
     'Reset to this zone\\u2019s Succor point.',
     'eqlzv-z-slicer',
-    'fh="v17"'
+    'fh="v18"'
 ]) {
     if (!viewer.includes(required)) throw new Error(`Zone Viewer bundle is missing ${required}.`);
 }
@@ -67,7 +67,9 @@ for (const required of [
     'this.images=i',
     'bitmapNames?.[0]?.fileName',
     'x.fileName.toLowerCase()',
-    'A.name?.toLowerCase().replace(/\\.(?:dds|bmp)$/i,"")'
+    'A.name?.toLowerCase().replace(/\\.(?:dds|bmp)$/i,"")',
+    'if(!d.materialList.materialList[T.materialIndex]){p+=T.polygonCount;continue}',
+    'console.warn(`S3D model had no material link ${y}`);p+=T.polygonCount;continue'
 ]) {
     if (!worker.includes(required)) throw new Error(`Zone parser texture patch is missing ${required}.`);
 }

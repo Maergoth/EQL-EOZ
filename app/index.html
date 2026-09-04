@@ -30,11 +30,6 @@
                 <button id="wiki-search-button" type="button" aria-label="Search EQLWiki" title="Search EQLWiki">↗</button>
             </div>
         </form>
-        <form id="minimal-route-form" class="minimal-route-search" role="search">
-            <input id="minimal-map-destination" type="search" list="map-destinations" autocomplete="off" placeholder="Named mob or map label" aria-label="Navigate to a named mob or map label">
-            <button id="minimal-start-route" type="submit">Path</button>
-            <button id="minimal-clear-route" class="minimal-route-clear" type="button" title="Clear route" aria-label="Clear route" hidden>×</button>
-        </form>
         <datalist id="map-destinations"></datalist>
         <div class="window-controls">
             <span id="minimal-zone-title" class="minimal-zone-title">Waiting for zone</span>
@@ -291,6 +286,12 @@
                     <div class="settings-actions">
                         <button id="settings-pin-window" class="secondary-button" type="button">Pin to top</button>
                         <button id="settings-minimal-mode" class="secondary-button" type="button">Minimal view</button>
+                    </div>
+                    <div class="minimal-content-settings">
+                        <span class="filter-label">Minimal view content</span>
+                        <label class="check-control"><input id="settings-minimal-map" type="checkbox"> Show map</label>
+                        <label class="check-control"><input id="settings-minimal-routing" type="checkbox"> Show path controls</label>
+                        <p class="settings-helper">Named and rare mobs are always shown. Waypoint copying, consider detection, and loot remain available without the map.</p>
                     </div>
                 </article>
                 <article class="panel">

@@ -17,6 +17,10 @@ export function itemHasZoneSource(item, zone, normalizeZone = defaultZoneKey) {
     return (item?.dropSources || []).some(source => normalizeZone(source?.zone) === wanted);
 }
 
+export function itemHasClassStats(item) {
+    return Object.keys(item?.stats || {}).some(stat => String(stat).toUpperCase() !== 'WT');
+}
+
 export function scoreItemForBrowse(item, options = {}) {
     const zone = options.zone || '';
     const normalizeZone = options.normalizeZone || defaultZoneKey;

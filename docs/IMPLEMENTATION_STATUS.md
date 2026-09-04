@@ -2,14 +2,14 @@
 
 Last updated: 2026-09-04
 
-Code baseline: 0.7.8
+Code baseline: 0.7.9
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
 | Vision area | Status | Evidence | Next condition |
 |---|---|---|---|
 | 0.6 usable loop | Implemented | Folder/log/zone/`/loc` readiness, persistent mode/destination, relevant item defaults, live tier details, non-modal recovery; `npm test` | Retain all [v0.7 manual gates](V0.7_MANUAL_TEST.md) |
-| 0.7 replacement map | Implemented; real-client gate required | Explicit coordinate adapters, dataset rare labels, minimal header routing, NPC waypoint copy, fly-first one-row viewer controls, Succor reset, Z-depth slicer, worker-first production routes, persistent cancel, texture alias/repeat fixes | Pass sections 1–5 and the 0.7.8 UI/texture checks on the release installer |
+| 0.7 replacement map | Implemented; real-client gate required | Explicit coordinate adapters, intel-first minimal defaults, optional map/routing, NPC waypoint copy, fly-first controls, Succor reset, Z slicer, worker-first routes, persistent cancel, lazy archive hydration, WLD material-group alignment | Pass sections 1–5 and the 0.7.9 UI/texture checks on the release installer |
 | 0.8 live route guidance | Implemented in 0.7.1; real-client gate required | Pure projection/remaining-distance/turn/facing/off-route tests; cue HUD in First/Top/Map; route summary updates from `/loc` | Verify cue direction and readability while moving in all three modes |
 | 0.8 redacted diagnostics | Implemented in 0.7.1 | Allow-list snapshot and regression test proving character, log name, paths, and future unknown settings are absent | Attach one exported JSON to a test issue after manually inspecting it |
 | 0.8 route corpus contract | Implemented in 0.7.3 | Reference and candidate both pass 8/8 shared triangle expectations; invalid surface exits and reversed drops are rejected | Extend the same boundary to decoded proprietary real-zone geometry |
@@ -19,7 +19,7 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 
 ## Current highest-priority task
 
-First, validate the 0.7.8 texture repeat/alias correction in Mistmoore and one outdoor S3D zone and capture the redacted available/material/resolved counts if any surfaces remain flat. Then connect the proven Recast/Detour worker boundary to decoded viewer collision geometry without changing the visible navigation flow. The production line-map graph is already worker-first, so no renderer-thread collision-graph fallback should be reintroduced.
+First, validate the 0.7.9 WLD material-group alignment correction in Mistmoore and one outdoor S3D zone and capture the redacted available/material/resolved counts if any surfaces remain flat. Then connect the proven Recast/Detour worker boundary to decoded viewer collision geometry without changing the visible navigation flow. The production line-map graph is already worker-first, so no renderer-thread collision-graph fallback should be reintroduced.
 
 Acceptance for the completed topology slice:
 
