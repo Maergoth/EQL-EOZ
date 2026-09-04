@@ -117,7 +117,7 @@ Show “Folder ready · type `/loc` in game” before the user clicks Sync. Dist
 
 ### 4.7 Spatial truth is a contract
 
-Coordinate conversion, player marker, camera focus, labels, and paths must share one canonical world basis. Boundaries are named and tested: logs/wiki display `(Y, X, Z)`, runtime world uses `(X, Y, Z)`, client `.txt` maps use `(-Y, -X, Z)`, and viewer geometry uses `(Y, Z, X)`. No screen or route engine may invent another axis swap or sign inversion.
+Coordinate conversion, player marker, camera focus, labels, and paths must share one canonical world basis. Boundaries are named and tested: logs/wiki display `(Y, X, Z)`, runtime world uses `(X, Y, Z)`, client `.txt` maps use `(-X, -Y, Z)`, and decoded viewer geometry uses `(-Y, Z, X)`. No screen or route engine may invent another axis swap or sign inversion.
 
 ### 4.8 Color is reinforcement, not the only signal
 
@@ -377,7 +377,7 @@ Requirements:
 
 - Parent and embedded viewer expose the same three named modes.
 - Selected mode persists and survives `/loc` updates and window-mode changes.
-- All floors are visible unless the user explicitly filters them.
+- All geometry is visible by default; the compact Z slicer can hide geometry above a chosen elevation without requiring discrete floor detection.
 - Folder badge conveys needed, connecting, ready, or unavailable.
 - Folder, log, zone, and `/loc` readiness are separate visible steps; an already valid folder is never described as missing.
 - Manual Sync actions are available as recovery, but automatic log events are primary.
@@ -745,7 +745,7 @@ Committed user stories:
 
 Release thesis: paths must be predictable enough that a player will use them in a multi-floor dungeon without cross-checking every turn.
 
-Implementation note (updated for 0.7.7): deterministic remaining-distance, next-turn/facing/off-route cues, redacted diagnostics, and the eight-expectation geometry corpus are implemented. The pinned `recast-navigation` 0.43.1 module worker passes 8/8 shared synthetic outcomes, rejects partial/ungrounded/reversed-drop results, and exposes latest-request-wins timeout/fallback states. The exact next task is decoded viewer collision export and real-zone worker integration; the candidate remains dormant until that integration and the Windows matrix pass, so the current collision-validated graph is still authoritative. See [the navmesh evaluation](NAVMESH_EVALUATION.md), [implementation status](IMPLEMENTATION_STATUS.md), and [contributor handoff](HANDOFF.md#exact-next-work).
+Implementation note (updated for 0.7.8): deterministic route cues, redacted diagnostics, and the eight-expectation geometry corpus are implemented. The production line-map graph now runs in a Web Worker first, then projects and collision-validates its small candidate on the renderer in yielding chunks; the old tens-of-thousands-of-raycasts UI-thread graph has been removed from the active flow. Cancel clears both the calculation and its persistent destination. The pinned `recast-navigation` 0.43.1 worker still passes 8/8 synthetic outcomes but remains gated on decoded real-zone collision export. See [the navmesh evaluation](NAVMESH_EVALUATION.md), [implementation status](IMPLEMENTATION_STATUS.md), and [contributor handoff](HANDOFF.md#exact-next-work).
 
 Navigation architecture:
 

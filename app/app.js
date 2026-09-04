@@ -1746,7 +1746,7 @@ async function calculateActiveRoute(options = {}) {
     } else {
         const source = result.source === 'map-label' ? 'local map label' : 'EQLWiki location';
         activeRoute.status = 'marked';
-        activeRoute.message = `${result.label || activeRoute.name} marked from ${source}; no collision-valid grounded route was found.`;
+        activeRoute.message = `${result.label || activeRoute.name} marked from ${source}; no collision-valid route was found.`;
         if (!automatic) showNotice(activeRoute.message, { tone:'warning' });
     }
 
@@ -2097,6 +2097,8 @@ function wireUi() {
             });
         } else if (event.data?.type === 'eoz-rare-mob-selected' && event.data.name) {
             pathToNpc(event.data.name);
+        } else if (event.data?.type === 'eoz-route-cancelled') {
+            clearActiveRoute({ clearViewer:false });
         }
     });
 }

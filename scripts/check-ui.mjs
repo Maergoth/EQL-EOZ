@@ -43,8 +43,12 @@ const viewer = readFileSync(join(root, 'app/zoneviewer/viewer.html'), 'utf8');
 for (const required of ['setView(mode)', 'const changedZone = zoneIdentity !== loadedZoneIdentity', 'selectedFloorIndices?.clear?.()', 'app.eqWorldToThree', 'lastSyncedLocation', 'lastSyncedGround', 'findGroundPointAt(point.x, point.z, point.y)', 'focusTopViewAt(lastSyncedGround)', 'headingTracker.push', 'setRareMobs(records = [])', 'eoz-rare-mob-selected', 'eyeOfZommHasZoneArchives', "reason:'no-zone-archives'", 'routeGuidance', 'renderRouteGuidance', 'navigationResult', 'clearPath()']) {
     if (!viewer.includes(required)) throw new Error(`Map integration check is missing: ${required}`);
 }
+if (!viewer.includes("type:'eoz-route-cancelled'")) throw new Error('Viewer cancel does not notify the route owner.');
 
 const application = readFileSync(join(root, 'app/app.js'), 'utf8');
+if (!application.includes("event.data?.type === 'eoz-route-cancelled'") || !application.includes('clearActiveRoute({ clearViewer:false })')) {
+    throw new Error('Route cancellation can still be restarted by automatic rerouting.');
+}
 for (const required of ['showConsiderTray(event.target)', 'CONSIDER_TRAY_DURATION', 'armConsiderTrayTimeout(8000)', 'npcNameKey(sourceName)', 'ensureViewerFolderConnected', 'mapReadinessMessage', 'renderMapReadiness', 'mapDestinationNames', 'rareMobsForZone', 'rareCatalogCache', 'syncRareMobsToViewer', 'queueLatestLocationSync', 'pendingViewerLocation', 'renderLiveLocation', 'updateMinimalDistances', 'scheduleRouteRefresh', 'ROUTE_REFRESH_DISTANCE', 'applyRouteGuidance', 'buildDiagnosticSnapshot', 'exportDiagnostics', "result.source === 'map-label' ? 'local map label' : 'EQLWiki location'", 'itemBrowsePriority', 'Tier ${tier} adjusted stats', 'showNotice', 'waypointCommandForWorldLocation', 'bindWaypointButtons', 'writeClipboardText', 'routeDestinationInputs', 'preferredRouteDestinationInput', 'event.zoneShortName || event.zone', 'zoneRecord(parser.zoneShortName)?.name', "$('#titlebar-version').textContent", 'document.title']) {
     if (!application.includes(required)) throw new Error(`Consider loot tray behavior is missing: ${required}`);
 }

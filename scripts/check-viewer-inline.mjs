@@ -27,14 +27,13 @@ if (html.includes("if (app.mode !== 'first') app.setMode('first')")) {
 
 const viewer = readFileSync(new URL('../app/zoneviewer/ZoneViewerApp.js', import.meta.url), 'utf8');
 for (const required of [
-    'Building walkable-mesh route',
-    'this.findNavigationPathAttempt(',
+    'Mapping route in the background',
     'navigationCanTraverseElevation(fromElevation, toElevation)',
     'navigationCanUseSurface(fromElevation, candidateElevation',
     'const headingUp =',
     'this.navigationPath?.length > 1',
     'jumpHeight:this.fp?.jumpHeight||6',
-    'same six-unit upward step limit as Grounded mode',
+    'Pathfinding enforces a six-unit upward step limit',
     'this.findGroundPointAt(f.x,f.z,f.y)||f',
     'this.findGroundPointAt(o.x,o.z,o.y)||o.clone()',
     'xt=Object.freeze({swap:!0,sx:1,sz:-1})',
@@ -44,9 +43,20 @@ for (const required of [
     'threeToEq(e){return this.threeToWorld(e)}',
     'this.els.coord.textContent=`Map X ${i.y.toFixed(2)}   Y ${i.x.toFixed(2)}   Z ${i.z.toFixed(2)}`',
     'e.userData.eqlLocalTexturePath=t.path',
-    'fh="v16"'
+    'texture.wrapS = 1000',
+    'findSuccorPoint() {',
+    'Reset to this zone\\u2019s Succor point.',
+    'eqlzv-z-slicer',
+    'fh="v17"'
 ]) {
     if (!viewer.includes(required)) throw new Error(`Zone Viewer bundle is missing ${required}.`);
+}
+const routeMethod = viewer.slice(viewer.indexOf('async findNavigationPath(start, goal, token) {'), viewer.indexOf('async findNavigationPathAttempt('));
+if (!routeMethod.includes('prepareNavigationWorkerMap') || routeMethod.includes('this.findNavigationPathAttempt(')) {
+    throw new Error('Pathfinding must use the worker before renderer-thread collision validation.');
+}
+if (!viewer.includes('e.append(t,G,ue)') || viewer.includes('e.append(t,c,G,ue)')) {
+    throw new Error('Zone Viewer still mounts a second toolbar row.');
 }
 if (!html.includes('Synced to in-game map ${formatWorldLocationForGameMap(worldLocation)} · ${playerMapSetLabel(app.mapData?.sourceLabel)}.')) {
     throw new Error('Zone Viewer sync status does not use the in-game Map-window convention.');

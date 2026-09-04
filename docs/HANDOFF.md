@@ -9,7 +9,7 @@ This repository is the source of truth. A new contributor should be able to resu
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [v0.7 Windows/game-client checklist](V0.7_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.7.7**. The 0.7 replacement-map loop is implemented, including presentation-safe route starts, a minimal header destination control, and NPC-name `/waypoint` copying. The Befallen/Mistmoore alignment incidents are covered through explicit logged/wiki, world, client-map-file, in-game-Map-readout, and viewer adapters in `app/coordinate-system.js`; do not collapse them into one generic map transform. Client map files use `(-world X,-world Y,Z)` without an X/Y swap. The viewer HUD uses the exact `X / Y / Z` labels shown by the in-game Map window. Map presentation is intentionally `.txt` line art, while First/Top are the S3D texture acceptance surfaces. The first 0.8 slices add live route cues, redacted diagnostics, and a deterministic geometry-backed corpus. The pinned Recast/Detour worker remains dormant until real-zone checks pass.
+Current code baseline: **0.7.8**. The replacement-map loop now uses one fly-first viewer control row, a pop-out Z slicer, reset-to-Succor, worker-first production route searches, and cancellation that clears the owning route state. NPC-name `/waypoint` copying and presentation-safe route starts remain intact. The Befallen/Mistmoore alignment incidents are covered through explicit logged/wiki, world, client-map-file, in-game-Map-readout, and viewer adapters in `app/coordinate-system.js`; do not collapse them into one generic map transform. Client map files use `(-world X,-world Y,Z)` without an X/Y swap. Map is intentionally `.txt` line art, while First/Top are the S3D texture acceptance surfaces. The 0.7.8 parser broadens material aliases and forces repeating WLD texture sampling; it still requires proprietary-zone visual confirmation. The pinned Recast/Detour worker remains dormant until real-zone collision export passes.
 
 The parser also treats the current character's Legends `/who` row as an authoritative zone signal. It strips the volatile instance number, retains the parenthesized short name for catalog/archive matching, ignores other players, and suppresses repeat-zone reloads. Keep the exact capture in `tests/test.mjs` when extending this grammar.
 
@@ -65,11 +65,12 @@ The app is read-only with respect to EverQuest. It may consume `/loc` lines prod
 
 Continue section 16.3 of the vision in this order:
 
-1. Export the decoded viewer collision triangles through the existing single EQ-to-viewer coordinate boundary; do not add a second transform inside the route engine.
-2. Feed that real-zone geometry to the existing worker client without blocking zone rendering, and key requests by zone/destination/location so stale results cannot replace newer guidance.
-3. Keep the current collision graph immediate and visible; swap in a candidate result only after `route-validation.js` approves it, without changing First/Top/Map, floor, zoom, or minimal/full choices.
-4. Add redacted real-zone timing/outcome fields to diagnostics and cover stacked floor, ramp, closed door, and drop cases in the Windows checklist. Never commit archives, raw logs, or identity-bearing coordinates.
-5. If the real-zone matrix passes, make the worker the preferred engine with automatic graph fallback. Otherwise keep it dormant and record the failing fixture category.
+1. Run the 0.7.8 S3D check in Mistmoore plus one outdoor zone. Confirm materials tile rather than stretch and compare the redacted available/material/resolved counts. If it still fails, preserve the screenshot, zone short name, counts, and material names—never game archives.
+2. Export the decoded viewer collision triangles through the existing single EQ-to-viewer coordinate boundary; do not add a second transform inside the route engine.
+3. Feed that real-zone geometry to the Recast worker client without blocking zone rendering, and key requests by zone/destination/location so stale results cannot replace newer guidance.
+4. Keep the worker-first, collision-projected production route visible; swap in a candidate result only after `route-validation.js` approves it, without changing First/Top/Map, Z slice, zoom, or minimal/full choices.
+5. Add redacted real-zone timing/outcome fields to diagnostics and cover stacked floor, ramp, closed door, and drop cases in the Windows checklist. Never commit archives, raw logs, or identity-bearing coordinates.
+6. If the real-zone matrix passes, make Recast the preferred engine with automatic worker-line fallback. Otherwise keep it dormant and record the failing fixture category.
 
 Do not start durable history or upgrade scoring from 0.9 until the decoded real-zone integration above passes the 0.8 Windows matrix. The synthetic route corpus is already in place; real-zone collision export, candidate validation, responsiveness, and fallback evidence are the remaining pathfinding gate.
 

@@ -158,32 +158,13 @@ async function findNavigationPath(start, goal, token) {
     };
     if (distance < .01) return [start.clone(), goal.clone()];
 
-    // Build a height-aware walkable graph directly from rendered collision
-    // surfaces. Unlike the old line-map worker this retains floors, ramps,
-    // drops, walls, and the player's configured movement limits.
-    // Corridors and stairs in classic indoor zones are too narrow for the
-    // previous 14-unit cells. Keep the graph fine enough to honor a six-unit
-    // climb limit, then broaden the search area over successive passes.
-    const cell = Ie(distance / 120, 3.5, 6);
-    const deadline = performance.now() + Math.min(42000, af);
-    const attempts = [
-        { cell, margin:Math.max(55, distance * .22), maxStates:24000, progressStart:.03, progressEnd:.36 },
-        { cell:Math.min(7, cell * 1.25), margin:Math.max(120, distance * .55), maxStates:50000, progressStart:.36, progressEnd:.68 },
-        { cell:Math.min(9, cell * 1.5), margin:Math.max(240, distance * 1.1), maxStates:hx, progressStart:.68, progressEnd:.86 }
-    ];
-    for (let index = 0; index < attempts.length; index++) {
-        if (token !== this.navigationBuildToken || performance.now() >= deadline) return null;
-        report(attempts[index].progressStart, `Building walkable-mesh route · pass ${index + 1}/${attempts.length}…`);
-        const route = await this.findNavigationPathAttempt(
-            start, goal, attempts[index], token, deadline, report, index + 1, attempts.length
-        );
-        if (route?.length) return route;
-    }
-
-    // Retain the inexpensive 2D map-line planner as a last-resort hint, then
-    // project and validate every waypoint against actual zone geometry.
+    // The map-line planner owns the expensive graph search and runs in a Web
+    // Worker. Only its small candidate polyline returns to the renderer for
+    // height projection and collision validation. The previous order ran as
+    // many as 98,000 raycast-heavy states on the UI thread before consulting
+    // this worker, which made the desktop window appear frozen.
     try {
-        report(.87, 'Trying local-map route fallback…');
+        report(.04, 'Mapping route in the background…');
         if (await this.prepareNavigationWorkerMap(token) && token === this.navigationBuildToken) {
             const candidate = await this.requestNavigationWorkerRoute(start, goal, token);
             if (candidate && token === this.navigationBuildToken) {
@@ -192,9 +173,136 @@ async function findNavigationPath(start, goal, token) {
             }
         }
     } catch (error) {
-        console.warn('[EQLZoneViewer] Local-map route fallback failed.', error);
+        console.warn('[EQLZoneViewer] Background route failed.', error);
     }
     return null;
+}
+
+function findSuccorPoint() {
+    const labels = this.mapData?.points || [];
+    const succor = labels.find(point => /(?:^|\b)(?:succor|safe\s*point)(?:\b|$)/i.test(String(point?.label || '')));
+    const candidates = [];
+    if (succor) candidates.push(this.eqMapToThree(succor.x, succor.y, succor.z));
+    // Classic zones conventionally place their safe point at world origin
+    // when the map file does not carry an explicit Succor label.
+    candidates.push(dh(0, 0, 0));
+    for (const candidate of candidates) {
+        const ground = this.findGroundPointAt(candidate.x, candidate.z, candidate.y + this.fp.maxStepUp);
+        if (ground) return ground;
+    }
+    return candidates[0] || this.currentBounds.getCenter(new A());
+}
+
+function resetView() {
+    if (this.worldMapVisible) {
+        this.resetWorldMapView();
+        return;
+    }
+    const ground = this.findSuccorPoint();
+    this.lastPick = null;
+    if (this.mode === 'first' && !this.mapFileVisible) {
+        const eye = ground.clone().add(new A(0, this.fp.eyeHeight, 0));
+        this.camera.position.copy(eye);
+        this.camera.up.set(0, 1, 0);
+        this.fp.setFly(true);
+        this.fp.activate(eye);
+        this.captureFirstPersonPose();
+    } else {
+        this.resetTopView();
+        if (this.orbit?.target) {
+            const offset = this.camera.position.clone().sub(this.orbit.target);
+            this.orbit.target.copy(ground);
+            this.camera.position.copy(ground).add(offset);
+            this.orbit.update();
+        }
+        if (this.mapFileVisible) this.drawMapLabels();
+    }
+    this.updateCoordinateHud(true);
+    this.updateNamedMobLabels();
+    this.drawMiniMap();
+    this.requestRender();
+    this.setStatus('Reset to this zone\u2019s Succor point.', 0);
+}
+
+function cancelNavigationPathBuild(message = 'Routing cancelled.') {
+    this.clearNavigationGuide();
+    this.els.gotoNpc.value = '';
+    this.setStatus(message, 0);
+    this.updateNavigationOverlay();
+    this.drawMiniMap();
+    this.requestRender();
+}
+
+function indexRawTextures(files) {
+    const index = new Map();
+    const aliases = value => {
+        const path = Ln(value);
+        const base = as(path);
+        return [...new Set([
+            path,
+            base,
+            base.replace(/_mdf.*$/i, ''),
+            base.replace(/_[0-9]+$/i, ''),
+            base.replace(/_mdf.*$/i, '').replace(/_[0-9]+$/i, '')
+        ].filter(Boolean))];
+    };
+    for (const [path, buffer] of Object.entries(files || {})) {
+        const record = { path, buffer };
+        for (const alias of aliases(path)) if (!index.has(alias)) index.set(alias, record);
+    }
+    return index;
+}
+
+function textureCandidates(material) {
+    const values = [
+        material?.map?.name,
+        material?.name,
+        material?.userData?.name,
+        material?.map?.userData?.name,
+        material?.map?.userData?.uri
+    ];
+    const candidates = [];
+    for (const value of values) {
+        if (!value) continue;
+        const path = Ln(value).replace(/^\/eq\/textures\//, '');
+        const base = as(path);
+        candidates.push(
+            path,
+            base,
+            base.replace(/_mdf.*$/i, ''),
+            base.replace(/_[0-9]+$/i, ''),
+            base.replace(/_mdf.*$/i, '').replace(/_[0-9]+$/i, '')
+        );
+    }
+    return [...new Set(candidates.filter(Boolean))];
+}
+
+function copyTextureSampling(source, texture) {
+    if (!texture) return texture;
+    if (source) {
+        texture.mapping = source.mapping;
+        texture.channel = source.channel;
+        texture.magFilter = source.magFilter;
+        if (!texture.isCompressedTexture || texture.mipmaps?.length > 1) texture.minFilter = source.minFilter;
+        texture.anisotropy = source.anisotropy;
+        texture.flipY = source.flipY;
+        texture.premultiplyAlpha = source.premultiplyAlpha;
+        texture.unpackAlignment = source.unpackAlignment;
+        texture.colorSpace = source.colorSpace || mt;
+        texture.offset.copy(source.offset);
+        texture.repeat.copy(source.repeat);
+        texture.center.copy(source.center);
+        texture.rotation = source.rotation;
+        texture.matrixAutoUpdate = source.matrixAutoUpdate;
+        if (!source.matrixAutoUpdate) texture.matrix.copy(source.matrix);
+    }
+    // WLD UV coordinates intentionally extend outside 0..1. GLTF placeholder
+    // samplers can arrive clamped when their URI failed to resolve, stretching
+    // one edge pixel across the large gray/black faces seen in the report.
+    texture.wrapS = 1000;
+    texture.wrapT = 1000;
+    texture.needsUpdate = true;
+    return texture;
 }
 
 function navigationCanTraverseElevation(fromElevation, toElevation) {
@@ -473,6 +581,12 @@ if (!viewer.includes('e.userData.eqlLocalTexturePath=t.path')) {
 }
 const miniMapSource = drawMiniMap.toString().replace(/^function /, '');
 const navSource = findNavigationPath.toString().replace(/^async function /, 'async ');
+const succorSource = findSuccorPoint.toString().replace(/^function /, '');
+const resetSource = resetView.toString().replace(/^function /, '');
+const cancelSource = cancelNavigationPathBuild.toString().replace(/^function /, '');
+const textureIndexSource = indexRawTextures.toString().replace(/^function /, '');
+const textureCandidatesSource = textureCandidates.toString().replace(/^function /, '');
+const textureSamplingSource = copyTextureSampling.toString().replace(/^function /, '');
 const elevationSource = navigationCanTraverseElevation.toString().replace(/^function /, '');
 const surfaceSource = navigationCanUseSurface.toString().replace(/^function /, '');
 const projectedSource = navigationProjectedSurface.toString().replace(/^function /, '');
@@ -485,6 +599,23 @@ viewer = viewer.replace(
 );
 viewer = replaceMethod(viewer, ['drawMiniMap(){', 'drawMiniMap() {'], 'clearMapLabels(){', miniMapSource);
 viewer = replaceMethod(viewer, ['async findNavigationPath(e,t,n){', 'async findNavigationPath(start, goal, token) {'], 'async findNavigationPathAttempt(', navSource);
+if (viewer.includes('findSuccorPoint() {')) {
+    viewer = replaceMethod(viewer, 'findSuccorPoint() {', 'resetView(', succorSource);
+} else {
+    const resetMarker = ['resetView(){', 'resetView() {'].find(token => viewer.includes(token));
+    if (!resetMarker) throw new Error('Unable to locate resetView for Succor reset support.');
+    viewer = viewer.replace(resetMarker, `${succorSource}${resetMarker}`);
+}
+viewer = replaceMethod(viewer, ['resetView(){', 'resetView() {'], 'fitMapView(){', resetSource);
+viewer = replaceMethod(
+    viewer,
+    ['cancelNavigationPathBuild(e="Path calculation cancelled. The destination marker remains visible."){', "cancelNavigationPathBuild(message = 'Routing cancelled.') {"],
+    'clearNavigationGuide(){',
+    cancelSource
+);
+viewer = replaceMethod(viewer, ['indexRawTextures(e){', 'indexRawTextures(files) {'], 'textureCandidates(', textureIndexSource);
+viewer = replaceMethod(viewer, ['textureCandidates(e){', 'textureCandidates(material) {'], 'attachLocalTexture(', textureCandidatesSource);
+viewer = replaceMethod(viewer, ['copyTextureSampling(e,t){', 'copyTextureSampling(source, texture) {'], 'decodeLocalTexture(', textureSamplingSource);
 viewer = replaceMethod(
     viewer,
     ['async findNavigationPathAttempt(e,t,n,i,s,a,o,l){', 'async findNavigationPathAttempt(start, goal, attempt, token, deadline, report, pass, passCount) {'],
@@ -525,12 +656,51 @@ viewer = viewer.replace('jumpHeight:this.fp?.jumpHeight||10', 'jumpHeight:this.f
 if (!viewer.includes('jumpHeight:this.fp?.jumpHeight||6')) {
     throw new Error('Unable to cap the background route worker at a six-unit climb.');
 }
-viewer = viewer.replace(
+viewer = viewer.replaceAll(
     'Pathfinding uses the same 10-unit jump limit as Grounded mode.',
-    'Pathfinding uses the same six-unit upward step limit as Grounded mode; exposed downward drops are allowed.'
+    'Pathfinding enforces a six-unit upward step limit; exposed downward drops are allowed.'
 );
-if (!viewer.includes('same six-unit upward step limit as Grounded mode')) {
+viewer = viewer.replaceAll(
+    'Pathfinding uses the same six-unit upward step limit as Grounded mode; exposed downward drops are allowed.',
+    'Pathfinding enforces a six-unit upward step limit; exposed downward drops are allowed.'
+);
+if (!viewer.includes('Pathfinding enforces a six-unit upward step limit')) {
     throw new Error('Unable to update the navigation movement help.');
+}
+
+// Collapse the viewer chrome to one control bar. Keep the legacy floor and
+// fly elements detached so upstream methods can safely reference them, while
+// exposing only the compact Z-depth popover requested by Eye of Zomm.
+viewer = viewer.replace('t.append(n,i,s,a,o,l);', 't.append(n,i,s,a,o);');
+viewer = viewer.replace(
+    'let L=ge("label","eqlzv-slider-label"),w=ge("span","","Cut above"),M=ge("input","eqlzv-slider");M.type="range",M.min="0",M.max="1000",M.value="1000",M.disabled=!0;let I=ge("span","eqlzv-slider-value","Off");L.append(w,M,I);',
+    'let L=ge("details","eqlzv-z-slicer"),w=ge("summary","eqlzv-button eqlzv-z-button","Z");w.title="Hide geometry above a Z depth",w.setAttribute("aria-label","Z depth slicer");let M=ge("input","eqlzv-slider");M.type="range",M.min="0",M.max="1000",M.value="1000",M.disabled=!0,M.setAttribute("aria-label","Hide geometry above Z");let I=ge("span","eqlzv-slider-value","Off");L.append(w,M,I);'
+);
+viewer = viewer.replace(
+    'c.append(h,u,g,y,m,_,L,N,Ee,X);',
+    't.append(y,L,h,u,_,N,Ee,X,l);'
+);
+viewer = viewer.replace(
+    'G.append(te,he,ae,He,qe,Le,Ue,ne,ye,$,z,ie),e.append(t,c,G,ue)',
+    'G.append(te,he,ae,He,qe,Le,Ue,ne,ye,$,ie),e.append(t,G,ue)'
+);
+for (const required of [
+    'eqlzv-z-slicer',
+    't.append(y,L,h,u,_,N,Ee,X,l)',
+    'e.append(t,G,ue)'
+]) {
+    if (!viewer.includes(required)) throw new Error(`Unable to install compact viewer toolbar: ${required}`);
+}
+
+// Eye of Zomm is a fly-first navigator. Grounded collision remains available
+// to the route validator, but is no longer a user mode or visible control.
+viewer = viewer.replaceAll('this.fp.setFly(!1)', 'this.fp.setFly(!0)');
+viewer = viewer.replaceAll('this.els.fly.textContent="Grounded",this.els.fly.classList.remove("is-active")', 'this.els.fly.textContent="Fly",this.els.fly.classList.add("is-active")');
+viewer = viewer.replaceAll('this.els.firstPersonPrompt.hidden=!1', 'this.els.firstPersonPrompt.hidden=!0');
+viewer = viewer.replaceAll('this.els.firstPersonPrompt.hidden=this.mode!=="first"', 'this.els.firstPersonPrompt.hidden=!0');
+viewer = viewer.replace('!this.worldMapVisible&&e.code==="KeyG"&&(e.preventDefault(),this.toggleFly())', '!1');
+if (!viewer.includes('this.fp.setFly(!0)') || viewer.includes('e.append(t,c,G,ue)')) {
+    throw new Error('Unable to install fly-only viewer mode.');
 }
 
 // Preserve the floor encoded by map labels. Adding 24–35 units before the
@@ -552,8 +722,8 @@ for (const required of [
     if (!viewer.includes(required)) throw new Error(`Unable to install floor-aware map grounding: ${required}`);
 }
 
-viewer = viewer.replace(/fh="v(?:13|14|15)"/, 'fh="v16"');
-if (!viewer.includes('fh="v16"')) throw new Error('Unable to bump the parsed-zone cache version.');
+viewer = viewer.replace(/fh="v(?:13|14|15|16)"/, 'fh="v17"');
+if (!viewer.includes('fh="v17"')) throw new Error('Unable to bump the parsed-zone cache version.');
 writeFileSync(viewerPath, viewer);
 
 const workerPath = `${root}/app/zoneviewer/zone-parser.worker.js`;

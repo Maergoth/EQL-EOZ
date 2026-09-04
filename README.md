@@ -39,9 +39,9 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Shows item sources and known NPC drops without requesting item/NPC pages from the wiki.
 - Embeds a deliberately simplified EQL Zone Viewer.
 - Prompts for the EverQuest folder on first launch, then selects the newest log under `Logs` automatically.
-- Provides First Person 3D, Top Down 3D, and local Map Overlay views with all floors visible by default.
+- Provides First Person 3D, Top Down 3D, and local Map Overlay views with a compact pop-out Z-depth slicer.
 - Synchronizes logged `/location` output into the selected map view and derives first-person facing from consecutive coordinates.
-- Includes a dormant, worker-isolated Recast/Detour route prototype that passes the redistributable route corpus; the existing pathfinder remains authoritative until real-zone validation passes.
+- Runs the production line-map route search in a worker and collision-projects its result without blocking the map; a separate Recast/Detour worker prototype passes the redistributable route corpus and remains gated on decoded real-zone collision export.
 - Shows Folder, Log, Zone, and `/loc` readiness separately instead of collapsing setup and live-state problems into one Sync error.
 - Keeps one named destination active, reports path/marker/error state and routed distance, and re-routes from later `/loc` samples.
 - Keeps minimal-mode destination search in the persistent header so the map begins immediately below it, with synchronized Path/Clear state across full and minimal views.
@@ -128,13 +128,13 @@ The app keeps:
 - folder-first setup and automatic log selection;
 - current-zone load/sync;
 - First Person 3D, Top Down 3D, and Map Overlay views;
-- grounded movement/reset;
-- all-floor display with optional floor selection;
+- fly-first movement and reset-to-Succor behavior;
+- a compact Z-depth slicer for hiding geometry above the chosen elevation;
 - logged `/location` synchronization;
 - path-to-NPC integration;
 - local map/minimap functionality needed for navigation.
 
-Advanced display tuning, performance diagnostics, world-atlas controls, duplicate path-search controls, cut-plane controls, help, and fullscreen UI are not exposed in Eye of Zomm.
+Advanced display tuning, performance diagnostics, world-atlas controls, duplicate path-search controls, discrete floor selection, help, and fullscreen UI are not exposed in Eye of Zomm.
 
 ## Windows installation
 

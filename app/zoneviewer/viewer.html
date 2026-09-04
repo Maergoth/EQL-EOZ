@@ -48,6 +48,7 @@ const app = mountZoneViewer(root, {
     height: '100%'
 });
 configureViewerMovement(app.fp);
+app.fp?.setFly?.(true);
 window.eqlZoneViewer = app;
 
 function simplifyViewerUi() {
@@ -60,6 +61,10 @@ function simplifyViewerUi() {
 const trimObserver = new MutationObserver(simplifyViewerUi);
 trimObserver.observe(root, { childList:true, subtree:true });
 simplifyViewerUi();
+
+app.els?.pathCancel?.addEventListener('click', () => {
+    window.parent?.postMessage({ type:'eoz-route-cancelled' }, window.location.origin);
+});
 
 const zoneAliases = new Map(Object.entries({
     'the northern desert of ro': 'North Ro',
@@ -271,7 +276,7 @@ async function pathToWikiLocation(label, location) {
         const distance = route.slice(1).reduce((sum, point, index) => sum + point.distanceTo(route[index]), 0);
         app.setStatus(`Path to ${label} ready · ${Math.round(distance).toLocaleString()} units.`, 0);
     } else {
-        app.setStatus(`${label} is marked from its EQLWiki location; no grounded route was found.`, 0);
+        app.setStatus(`${label} is marked from its EQLWiki location; no navigable route was found.`, 0);
     }
     app.updateNavigationOverlay();
     app.requestRender();
