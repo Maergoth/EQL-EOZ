@@ -83,6 +83,7 @@ body.minimal-mode .minimal-drop-panel{display:flex;flex-direction:column}
 /* Frameless desktop chrome. Pinned mode hides only this draggable title bar;
    the app intentionally remains visible in the Windows taskbar. */
 .desktop-titlebar{height:32px;display:flex;align-items:center;justify-content:space-between;padding-left:12px;background:#070a10;border-bottom:1px solid rgba(255,255,255,.07);color:#8e9aaa;font-size:11px;user-select:none;-webkit-app-region:drag}
+.titlebar-version{margin-left:5px;color:var(--gold2);font:700 10px/1 system-ui,sans-serif;letter-spacing:.04em}
 .desktop-window-buttons{height:100%;display:flex;-webkit-app-region:no-drag}.desktop-window-buttons button{width:44px;height:100%;border:0;background:transparent;color:#aeb8c5;cursor:pointer}.desktop-window-buttons button:hover{background:rgba(255,255,255,.08);color:#fff}.desktop-window-buttons .window-close:hover{background:#b73535}
 .app-shell{min-height:calc(100vh - 32px)}
 .sidebar{top:104px;height:calc(100vh - 104px)}

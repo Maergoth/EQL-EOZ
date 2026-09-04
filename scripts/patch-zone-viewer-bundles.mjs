@@ -427,25 +427,41 @@ viewer = viewer.replace(
 );
 viewer = viewer.replaceAll(
     'this.els.coord.textContent="X \\u2014  Y \\u2014  Z \\u2014"',
-    'this.els.coord.textContent="/loc \\u2014, \\u2014, \\u2014"'
+    'this.els.coord.textContent="Map X \\u2014  Y \\u2014  Z \\u2014"'
+);
+viewer = viewer.replaceAll(
+    'this.els.coord.textContent="/loc \\u2014, \\u2014, \\u2014"',
+    'this.els.coord.textContent="Map X \\u2014  Y \\u2014  Z \\u2014"'
 );
 viewer = viewer.replaceAll(
     'this.els.coord.textContent=`X ${i.x.toFixed(2)}   Y ${i.y.toFixed(2)}   Z ${i.z.toFixed(2)}`',
-    'this.els.coord.textContent=`/loc ${i.y.toFixed(2)}, ${i.x.toFixed(2)}, ${i.z.toFixed(2)}`'
+    'this.els.coord.textContent=`Map X ${i.y.toFixed(2)}   Y ${i.x.toFixed(2)}   Z ${i.z.toFixed(2)}`'
+);
+viewer = viewer.replaceAll(
+    'this.els.coord.textContent=`/loc ${i.y.toFixed(2)}, ${i.x.toFixed(2)}, ${i.z.toFixed(2)}`',
+    'this.els.coord.textContent=`Map X ${i.y.toFixed(2)}   Y ${i.x.toFixed(2)}   Z ${i.z.toFixed(2)}`'
 );
 viewer = viewer.replaceAll(
     'this.els.coord.textContent=`X ${u.x.toFixed(2)}   Y ${u.y.toFixed(2)}   Z ${u.z.toFixed(2)}`',
-    'this.els.coord.textContent=`/loc ${u.y.toFixed(2)}, ${u.x.toFixed(2)}, ${u.z.toFixed(2)}`'
+    'this.els.coord.textContent=`Map X ${u.y.toFixed(2)}   Y ${u.x.toFixed(2)}   Z ${u.z.toFixed(2)}`'
+);
+viewer = viewer.replaceAll(
+    'this.els.coord.textContent=`/loc ${u.y.toFixed(2)}, ${u.x.toFixed(2)}, ${u.z.toFixed(2)}`',
+    'this.els.coord.textContent=`Map X ${u.y.toFixed(2)}   Y ${u.x.toFixed(2)}   Z ${u.z.toFixed(2)}`'
 );
 viewer = viewer.replaceAll(
     'this.els.coord.textContent=`X ${a.x.toFixed(2)}   Y ${a.y.toFixed(2)}   Z ${a.z.toFixed(2)}`',
-    'this.els.coord.textContent=`/loc ${a.y.toFixed(2)}, ${a.x.toFixed(2)}, ${a.z.toFixed(2)}`'
+    'this.els.coord.textContent=`Map X ${a.y.toFixed(2)}   Y ${a.x.toFixed(2)}   Z ${a.z.toFixed(2)}`'
+);
+viewer = viewer.replaceAll(
+    'this.els.coord.textContent=`/loc ${a.y.toFixed(2)}, ${a.x.toFixed(2)}, ${a.z.toFixed(2)}`',
+    'this.els.coord.textContent=`Map X ${a.y.toFixed(2)}   Y ${a.x.toFixed(2)}   Z ${a.z.toFixed(2)}`'
 );
 if (!viewer.includes('xt=Object.freeze({swap:!0,sx:1,sz:-1})') ||
     !viewer.includes('eqWorldToThree(e,t,n){return new A(-Tt(t),Tt(n),Tt(e))}') ||
     !viewer.includes('threeToWorld(e){return{x:e.z,y:-e.x,z:e.y}}') ||
     !viewer.includes('threeToEq(e){return this.threeToWorld(e)}') ||
-    !viewer.includes('this.els.coord.textContent=`/loc ${i.y.toFixed(2)}, ${i.x.toFixed(2)}, ${i.z.toFixed(2)}`')) {
+    !viewer.includes('this.els.coord.textContent=`Map X ${i.y.toFixed(2)}   Y ${i.x.toFixed(2)}   Z ${i.z.toFixed(2)}`')) {
     throw new Error('Unable to install distinct EQ world and client-map transforms.');
 }
 viewer = viewer.replace(

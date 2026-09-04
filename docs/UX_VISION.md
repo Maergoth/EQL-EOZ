@@ -859,7 +859,7 @@ A change is done only when:
 5. Keyboard and non-color signals are considered.
 6. Production-size data has been exercised.
 7. Parser/transform/business rules have regression coverage.
-8. Version, changelog, and release artifact agree.
+8. Version, changelog, and release artifact agree, and the running version is always visible without opening Settings.
 9. The Windows build has a concrete manual verification script.
 10. Any known limitation is named in user-facing language rather than hidden behind a generic failure.
 
@@ -889,6 +889,8 @@ Severity is based on broken player trust, not implementation size. P0 issues sto
 | Risk | Priority | Why it matters | Release evidence | Owner milestone |
 |---|---|---|---|---|
 | X/Y order or sign regression | P0 | A confidently wrong map is worse than no map | Parser fixture plus Befallen game-client check | Every release |
+| `/who` zone signal ignored or misattributed | P0 | The replacement map can remain unusable despite the game stating the current zone | Exact multi-player Legends row fixture plus no-zoning manual check | Every release |
+| Stale or duplicate installed build | P0 | Test evidence becomes misleading when the running code cannot be identified | Always-visible version plus packaged-ASAR integrity gate | Every release |
 | Wrong stacked-floor grounding | P0 | Marker/path can appear in an inaccessible room | Synthetic policy tests plus Befallen Z `-66` check | Every release |
 | Folder/log state contradicts reality | P0 | The first useful action becomes a dead end | Filesystem tests and clean-profile Windows run | Every release |
 | Consider tray does not appear | P0 | Removes the zero-click loot loop | Exact Legends line fixture and foreground-game check | Every release |

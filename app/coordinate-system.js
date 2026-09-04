@@ -59,6 +59,26 @@ export function formatWorldLocationForPlayer(location, digits = 2) {
     return `/loc ${worldY.toFixed(precision)}, ${worldX.toFixed(precision)}, ${worldZ.toFixed(precision)}`;
 }
 
+/**
+ * EverQuest Legends labels the two planar values in its Map window in the
+ * same order printed by /loc. Keep this adapter separate from canonical world
+ * X/Y so the map HUD can match the game without changing routing math.
+ */
+export function worldToGameMapReadout(location) {
+    const worldX = Number(location?.x);
+    const worldY = Number(location?.y);
+    const worldZ = Number(location?.z);
+    if (![worldX, worldY, worldZ].every(Number.isFinite)) return null;
+    return { x:worldY, y:worldX, z:worldZ };
+}
+
+export function formatWorldLocationForGameMap(location, digits = 2) {
+    const map = worldToGameMapReadout(location);
+    if (!map) return '';
+    const precision = Math.max(0, Math.min(6, Math.trunc(Number(digits) || 0)));
+    return `X ${map.x.toFixed(precision)}  Y ${map.y.toFixed(precision)}  Z ${map.z.toFixed(precision)}`;
+}
+
 function commandCoordinate(value) {
     const number = Number(value);
     if (!Number.isFinite(number)) return null;

@@ -19,7 +19,7 @@ if (!changelog.includes(`## ${pkg.version} -`)) throw new Error(`CHANGELOG.md ne
 for (const required of ['## 6. Click budgets', '## 8. End-to-end UX flows', '## 9. Feature specifications and user stories', '## 15. Acceptance scenarios for release candidates', '## 16. Road to v1']) {
     if (!uxVision.includes(required)) throw new Error(`UX vision is missing required section: ${required}`);
 }
-for (const required of ['`/loc -30.00, -961.00, -66.00`', 'client-map anchor X `961`, Y `30`, Z `-66`', '`/loc -330.00, 120.00, -178.13`', 'Succor anchor X `-120`, Y `330`, Z `-180`', '## 1. Continuous `/loc` tracking', '## 2. Rare-mob replacement map', '## 3. Minimal loot browsing', '## 4. Map Overlay versus S3D textures', '## 5. Persistent golden path']) {
+for (const required of [`\`v${pkg.version}\``, '`X -222.75  Y 125.50  Z -154.10`', 'ZONE: The Castle of Mistmoore 1595 (mistmoore)', '`/loc -30.00, -961.00, -66.00`', 'client-map anchor X `961`, Y `30`, Z `-66`', '`/loc -330.00, 120.00, -178.13`', 'Succor anchor X `-120`, Y `330`, Z `-180`', '## 1. Continuous `/loc` tracking', '## 2. Rare-mob replacement map', '## 3. Minimal loot browsing', '## 4. Map Overlay versus S3D textures', '## 5. Persistent golden path']) {
     if (!manualTest.includes(required)) throw new Error(`Windows acceptance test is missing: ${required}`);
 }
 for (const required of ['docs/UX_VISION.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/HANDOFF.md', 'docs/NAVMESH_EVALUATION.md', 'VALIDATION.md']) {
@@ -43,7 +43,7 @@ for (const required of ['outdoor-open', 'indoor-corridor', 'stacked-floor-stairs
 
 for (const relative of ['../.github/workflows/build-windows.yml', '../.github/workflows/release.yml']) {
     const workflow = readFileSync(new URL(relative, import.meta.url), 'utf8');
-    for (const required of ['npm ci', 'npm run audit:deps', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog', 'Determine signing mode', 'Get-AuthenticodeSignature', "steps.signing.outputs.enabled == 'true'", 'unsigned Windows']) {
+    for (const required of ['npm ci', 'npm run audit:deps', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog', 'npm run test:artifact', 'Determine signing mode', 'Get-AuthenticodeSignature', "steps.signing.outputs.enabled == 'true'", 'unsigned Windows']) {
         if (!workflow.includes(required)) throw new Error(`${relative} is missing release gate: ${required}`);
     }
     if (workflow.includes('Require signing certificate')) throw new Error(`${relative} still blocks unsigned output.`);

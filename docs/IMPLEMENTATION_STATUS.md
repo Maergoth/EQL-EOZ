@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-04
 
-Code baseline: 0.7.6
+Code baseline: 0.7.7
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
@@ -60,6 +60,10 @@ Acceptance for the next integration slice:
 - The 0.7.1 cue is still derived from the current grounded production path. The formal navmesh prototype is not yet connected to proprietary viewer geometry.
 - A signed Windows release still depends on trusted Authenticode credentials being configured.
 
-## 0.7.5–0.7.6 coordinate incident note
+## 0.7.5–0.7.7 coordinate incident note
 
-The earlier transform treated canonical world X/Y, wiki display Y/X, and client-map axes as interchangeable, then incorrectly encoded the client map as `(-world Y,-world X)`. Real map data disproves that assumption: Mistmoore `/loc -330,120,-178.13` corresponds to the map's Succor point `(-120,330,-180)`, so the map is `(-world X,-world Y,Z)` with no swap. The bad transform placed the marker at rotated point `(330,-120)`, while visible world/map readouts also appeared to disagree. `app/coordinate-system.js` now owns each conversion; real Mistmoore and Befallen Succor anchors require map/world paths to meet at one Three.js point, and all visible readouts return to exact game `/loc Y,X,Z` order. Map presentation remains deliberate `.txt` line art; S3D texture fidelity is evaluated in First/Top, with redacted available/material/resolved counts when it fails.
+The earlier transform treated canonical world X/Y, wiki display order, in-game Map labels, and client-map file axes as interchangeable, then incorrectly encoded the client map as `(-world Y,-world X)`. Real map data disproves that assumption: Mistmoore `/loc -330,120,-178.13` corresponds to the map's Succor point `(-120,330,-180)`, so the map file is `(-world X,-world Y,Z)` with no swap. The bad transform placed the marker at rotated point `(330,-120)`. `app/coordinate-system.js` now owns each conversion; real Mistmoore/Befallen anchors and the side-by-side Mistmoore Map capture `X -222.75, Y 125.50, Z -154.10` require map/world paths to meet at one Three.js point. Player-facing viewer readouts use the Map window's labels, not canonical axes.
+
+The screenshot that prompted 0.7.7 still showed the pre-0.7.6 strings (`X … Y … Z …` and `Synced to map location X…`), even though the downloaded 0.7.6 installer's ASAR was independently confirmed to contain the corrected `/loc` HUD and transform. The running build was therefore stale or from another installation. Version is now always visible, and Windows builds inspect the packaged ASAR before upload so source/package drift fails the workflow.
+
+Legends `/who` rows now provide a second zone-detection path. The parser accepts the current character's `ZONE: Display Name 1595 (shortname)` row, strips the instance ID, and lets the app resolve the stable short name to the canonical catalog/viewer zone. Other players and duplicate rows cannot cause a zone reload.

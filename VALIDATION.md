@@ -1,4 +1,4 @@
-# Validation report — v0.7.5
+# Validation report — v0.7.7
 
 Validated in the build environment on 2026-09-04 UTC.
 
@@ -16,6 +16,8 @@ Validated in the build environment on 2026-09-04 UTC.
 - Bundled JSON files parse successfully.
 - The bootstrap script validates manifest shape, gzip SHA-256, decompression, and schema v3 before embedding a production snapshot.
 - Runtime dataset checks now target the GitHub `dataset` branch rather than eqlwiki.com.
+- The exact side-by-side Mistmoore capture is fixed as a regression: the app Map HUD must show `X -222.75, Y 125.50, Z -154.10`, and its canonical-world and client-map-file paths must resolve to the same viewer point.
+- The exact multi-player Legends `/who` capture is covered: another player's row is ignored, the current character's row emits one zone transition, the volatile instance number is removed, `mistmoore` is retained for catalog/archive resolution, and a repeated row does not reload the zone.
 - The reported coordinate regression is covered end to end: displayed Mistmoore `/loc -330, 120, -178.13` normalizes to world `X 120, Y -330, Z -178.13`, projects to the real map's Succor anchor around `X -120, Y 330, Z -180`, and both paths reach the same viewer point. A Befallen Succor anchor independently guards the same no-swap `(-world X,-world Y,Z)` rule.
 - Location and named-destination grounding are release-checked to start at the trusted Z rather than a 24–35 unit offset that could select Befallen's next floor.
 - Legends rare-creature/scowls consider wording is covered with the reported Soldier of V Zher line and clean-name assertion.
@@ -28,7 +30,7 @@ Validated in the build environment on 2026-09-04 UTC.
 - Pinned `recast-navigation` 0.43.1 passes the same 8/8 shared geometry outcomes; Detour partial paths are treated as no-path rather than displayed.
 - Sparse candidate paths are projected back to supplied collision surfaces, then independently sampled; routes that leave the surface or reverse a directed drop fail closed.
 - The deterministic module worker builds to 747 KiB, contains no build-machine/Node filesystem references, and is covered by transferable-buffer, timeout, stale-result, fallback, and worker-restart contracts.
-- A local unpacked Electron build completes, and its ASAR contains the generated worker, route engine/validator, and both Recast third-party license files.
+- A local unpacked Electron build completes, and its ASAR contains the generated worker, route engine/validator, and both Recast third-party license files. Windows workflows also run `npm run test:artifact` after packaging to prove the ASAR version, always-visible version label, coordinate formatter, viewer transform, and Map HUD match the source being released.
 - MIT and Zlib notices are retained. `npm ls --all` validates the pinned dependency tree; GitHub CI and Windows workflows enforce `npm audit --audit-level=high` because the local restricted environment could not reach the advisory service before timeout.
 - Route-distance formatting tests retain near-target precision while quantizing medium/long distances to prevent noisy HUD churn.
 - Diagnostic-export tests prove the allow-list retains useful session/map/route state while excluding the character name, log filename, filesystem paths, viewer messages, and unknown future settings.

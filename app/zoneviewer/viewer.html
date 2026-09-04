@@ -36,7 +36,7 @@ import { mountZoneViewer } from './ZoneViewerApp.js';
 import navigationPolicy, { configureViewerMovement } from '../navigation-policy.js';
 import { LocationHeadingTracker } from '../movement-tracking.js';
 import { routeDistanceLabel, routeGuidance } from '../route-guidance.js';
-import { formatWorldLocationForPlayer } from '../coordinate-system.js';
+import { formatWorldLocationForGameMap } from '../coordinate-system.js';
 
 globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
@@ -589,7 +589,7 @@ window.eqlEyeOfZommViewer = {
         if (typeof app.updateCoordinateHud === 'function') app.updateCoordinateHud(true);
         if (resolvedMode !== 'first' && typeof app.drawMiniMap === 'function') app.drawMiniMap();
         if (typeof app.setStatus === 'function') {
-            app.setStatus(`Synced to game location ${formatWorldLocationForPlayer(worldLocation)} · ${playerMapSetLabel(app.mapData?.sourceLabel)}.`);
+            app.setStatus(`Synced to in-game map ${formatWorldLocationForGameMap(worldLocation)} · ${playerMapSetLabel(app.mapData?.sourceLabel)}.`);
         }
         app.requestRender?.();
         renderRareMobs();

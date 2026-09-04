@@ -317,6 +317,9 @@ async function loadPack() {
     }
 
     rebuildPackIndexes();
+    if (parser.zoneShortName) {
+        parser.zone = zoneRecord(parser.zoneShortName)?.name || parser.zone;
+    }
     if (!settings.era) settings.era = pack.meta.currentEra || 'Classic';
     $('#pack-version').textContent = pack.meta.version || 'unknown';
     $('#pack-mode').textContent = pack.meta.sample ? 'Sample' : 'Production';
@@ -330,6 +333,8 @@ async function connectBridge() {
         bridgeInfo = await api('/api/info');
         parser.setCharacterFromFilename(bridgeInfo.logPath || '');
         $('#app-version').textContent = bridgeInfo.version || 'unknown';
+        $('#titlebar-version').textContent = `v${bridgeInfo.version || 'unknown'}`;
+        document.title = `EQLWiki - Eye of Zomm v${bridgeInfo.version || 'unknown'}`;
         $('#bridge-status').textContent = bridgeInfo.logExists ? 'Live log' : 'Waiting for log';
         $('#bridge-status').className = bridgeInfo.logExists ? 'status-pill status-ok' : 'status-pill status-warn';
         $('#settings-eq-root').textContent = bridgeInfo.eqRootPath || 'No folder selected';
@@ -453,6 +458,9 @@ function consumeText(text, allowTransientUi = true) {
         const event = parser.parse(line);
         if (event && event.type !== 'location') requiresFullRender = true;
         if (event?.type === 'zone') {
+            const canonicalZone = zoneRecord(event.zoneShortName || event.zone)?.name || event.zoneShortName || event.zone;
+            event.zone = canonicalZone;
+            parser.zone = canonicalZone;
             if (activeRoute && zoneKey(activeRoute.zone) !== zoneKey(event.zone)) clearActiveRoute({ clearViewer:false });
             zoneChanged = true;
             latestLocation = null;
@@ -1813,6 +1821,7 @@ async function applyLogSelection(info) {
     $('#settings-log-path').textContent = info.logPath || 'No log selected';
     $('#settings-log-mode').textContent = info.logSelection === 'manual' ? 'Specific file' : 'Newest log automatically';
     $('#app-version').textContent = info.version || bridgeInfo?.version || 'unknown';
+    $('#titlebar-version').textContent = `v${info.version || bridgeInfo?.version || 'unknown'}`;
     $('#automatic-log').hidden = info.logSelection !== 'manual';
     $('#setup-overlay').hidden = Boolean(info.eqRootExists);
     if (previousRoot !== String(info.eqRootPath || '')) viewerFolderPath = '';

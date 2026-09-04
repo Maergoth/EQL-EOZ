@@ -9,7 +9,9 @@ This repository is the source of truth. A new contributor should be able to resu
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [v0.7 Windows/game-client checklist](V0.7_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.7.6**. The 0.7 replacement-map loop is implemented, including presentation-safe route starts, a minimal header destination control, and NPC-name `/waypoint` copying. The Befallen/Mistmoore alignment incidents are covered through explicit logged/wiki, world, client-map, and viewer adapters in `app/coordinate-system.js`; do not collapse them into one generic map transform. Client maps use `(-world X,-world Y,Z)` without an X/Y swap, and all player-facing coordinates return to the game's `/loc Y,X,Z` order. Map presentation is intentionally `.txt` line art, while First/Top are the S3D texture acceptance surfaces. The first 0.8 slices add live route cues, redacted diagnostics, and a deterministic geometry-backed corpus. The pinned Recast/Detour worker remains dormant until real-zone checks pass.
+Current code baseline: **0.7.7**. The 0.7 replacement-map loop is implemented, including presentation-safe route starts, a minimal header destination control, and NPC-name `/waypoint` copying. The Befallen/Mistmoore alignment incidents are covered through explicit logged/wiki, world, client-map-file, in-game-Map-readout, and viewer adapters in `app/coordinate-system.js`; do not collapse them into one generic map transform. Client map files use `(-world X,-world Y,Z)` without an X/Y swap. The viewer HUD uses the exact `X / Y / Z` labels shown by the in-game Map window. Map presentation is intentionally `.txt` line art, while First/Top are the S3D texture acceptance surfaces. The first 0.8 slices add live route cues, redacted diagnostics, and a deterministic geometry-backed corpus. The pinned Recast/Detour worker remains dormant until real-zone checks pass.
+
+The parser also treats the current character's Legends `/who` row as an authoritative zone signal. It strips the volatile instance number, retains the parenthesized short name for catalog/archive matching, ignores other players, and suppresses repeat-zone reloads. Keep the exact capture in `tests/test.mjs` when extending this grammar.
 
 When multiple map families exist under the installation, `mapFamilyForZone` prefers the root `maps` directory so it matches the client's `default` map dropdown. The sync footer names the selected map set. Do not return to the prior byte-size heuristic; add an explicit user-facing selector before allowing a custom folder to win.
 
@@ -74,7 +76,7 @@ Do not start durable history or upgrade scoring from 0.9 until the 0.8 route cor
 ## Release path
 
 - Every change must keep `npm test` green. Catalog-affecting changes must also pass `npm run test:catalog` against the verified production pack.
-- Pushes to `main` run CI and the Windows build workflow. A `vX.Y.Z` tag runs the release workflow.
+- Pushes to `main` run CI and the Windows build workflow. A `vX.Y.Z` tag runs the release workflow. Both Windows workflows inspect the built ASAR with `npm run test:artifact`; never upload an installer that has not passed that package/source/version check.
 - Keep `package.json`, `package-lock.json`, CHANGELOG, validation notes, and installer filename expectations on the same version.
 - Trusted Authenticode signing is required for 1.0. Until certificates are configured, workflows may produce a clearly identified unsigned 0.x installer.
 - Before tagging, complete the Windows/game-client checklist. Repository tests cannot validate proprietary zone textures, stacked-floor placement, label alignment, or subjective route quality.

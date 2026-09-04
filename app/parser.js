@@ -45,6 +45,7 @@ export class EQLogParser {
         this.level = 0;
         this.classes = [];
         this.zone = '';
+        this.zoneShortName = '';
         this.location = null;
         this.observed = new Map();
         this.totalDamage = 0;
@@ -232,15 +233,35 @@ export class EQLogParser {
         x = text.match(/^You have entered (.+?)\.?$/i);
         if (x) {
             this.zone = normalizeName(x[1]);
+            this.zoneShortName = '';
             return this.rememberEvent({ type: 'zone', zone: this.zone });
         }
 
-        // /who self line: [50 MNK/ROG/BER] Maergoth (Iksar) <Guild> ZONE: ...
-        x = text.match(/^\[(\d+)\s+([A-Z]{3}(?:\/[A-Z]{3})*)\]\s+([^\s]+)\s+\([^)]+\).*?\bZONE:/);
+        // Legends /who self line:
+        // [26 MNK/SHM/BER] Maergoth (Iksar) <Guild> ZONE: The Castle of Mistmoore 1595 (mistmoore)
+        // The parenthesized short name is stable while the display name may
+        // contain an instance number. Only the current character's row is an
+        // authoritative zone signal when /who returns multiple players.
+        x = text.match(/^\[(\d+)\s+([A-Z]{3}(?:\/[A-Z]{3})*)\]\s+([^\s]+)\s+\([^)]+\).*?\bZONE:\s*(.*?)\s+\(([^()]+)\)\s*$/i);
         if (x && (!this.character || x[3].toLowerCase() === this.character.toLowerCase())) {
             this.level = Number(x[1]);
-            this.classes = x[2].split('/');
+            this.classes = x[2].toUpperCase().split('/');
             if (!this.character) this.character = x[3];
+            const displayZone = normalizeName(x[4]).replace(/\s+\d+$/, '').trim();
+            const zoneShortName = normalizeName(x[5]).toLowerCase();
+            if (displayZone && zoneShortName !== this.zoneShortName) {
+                this.zone = displayZone;
+                this.zoneShortName = zoneShortName;
+                return this.rememberEvent({
+                    type:'zone',
+                    zone:this.zone,
+                    zoneShortName,
+                    source:'who',
+                    level:this.level,
+                    classes:this.classes.slice(),
+                    character:this.character
+                });
+            }
             return this.rememberEvent({ type: 'profile', level: this.level, classes: this.classes.slice(), character: this.character });
         }
 
@@ -376,6 +397,7 @@ export class EQLogParser {
             level: this.level,
             classes: this.classes.slice(),
             zone: this.zone,
+            zoneShortName: this.zoneShortName,
             location: this.location ? { ...this.location } : null,
             totalDamage: this.totalDamage,
             totalHealing: this.totalHealing,

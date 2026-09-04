@@ -55,6 +55,8 @@ jobs:
           "CSC_KEY_PASSWORD=$env:WINDOWS_CERTIFICATE_PASSWORD" >> $env:GITHUB_ENV
       - name: Build NSIS installer
         run: npm run dist:win
+      - name: Verify packaged version and coordinate code
+        run: npm run test:artifact
       - name: Verify Authenticode signature
         if: steps.signing.outputs.enabled == 'true'
         shell: pwsh

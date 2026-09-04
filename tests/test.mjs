@@ -7,11 +7,13 @@ import { routeDistanceLabel, routeGuidance } from '../app/route-guidance.js';
 import { buildDiagnosticSnapshot } from '../app/diagnostics.js';
 import {
     clientMapToViewer,
+    formatWorldLocationForGameMap,
     formatWorldLocationForPlayer,
     loggedLocationToWorld,
     waypointCommandForWorldLocation,
     wikiLocationToWorld,
     worldToClientMap,
+    worldToGameMapReadout,
     worldToViewer
 } from '../app/coordinate-system.js';
 import {
@@ -45,6 +47,18 @@ assert(s.observed.some(npc => npc.name === 'Guard Wytiffin' && npc.level === 50)
 assert(s.totalDamage === 372, 'outgoing damage only');
 assert(s.location.x === -20.25 && s.location.y === 10.5 && s.location.z === 4, 'normalized map location');
 assert(s.location.logX === -20.25 && s.location.logY === 10.5, 'raw /loc axes retained');
+
+const whoZone = new EQLogParser();
+whoZone.setCharacterFromFilename('C:\\EverQuest Legends\\Logs\\eqlog_Maergoth_eql.txt');
+const otherWhoPlayer = whoZone.parse('[Thu Sep 03 00:00:00 2026] [29 SHD/MIZ/ENC] Gorbs (Iksar) <Reverb> ZONE: The Castle of Mistmoore 1595 (mistmoore)');
+assert(otherWhoPlayer === null, '/who does not adopt another listed player as the current character');
+const whoZoneEvent = whoZone.parse('[Thu Sep 03 00:00:01 2026] [26 MNK/SHM/BER] Maergoth (Iksar) <Reverb> ZONE: The Castle of Mistmoore 1595 (mistmoore)');
+assert(whoZoneEvent?.type === 'zone' && whoZoneEvent.source === 'who', 'Legends /who self row emits a zone event');
+assert(whoZoneEvent.zone === 'The Castle of Mistmoore', '/who strips the volatile instance number from the zone display name');
+assert(whoZoneEvent.zoneShortName === 'mistmoore', '/who retains the stable zone short name for catalog and archive matching');
+assert(whoZone.snapshot().zone === 'The Castle of Mistmoore', '/who updates parser zone state without a zoning line');
+const repeatedWhoZone = whoZone.parse('[Thu Sep 03 00:00:02 2026] [26 MNK/SHM/BER] Maergoth (Iksar) <Reverb> ZONE: The Castle of Mistmoore 1595 (mistmoore)');
+assert(repeatedWhoZone?.type === 'profile', 'repeated /who rows do not churn the active zone');
 
 const befallenLocation = new EQLogParser();
 befallenLocation.parse('[Thu Sep 03 00:00:00 2026] Your Location is -30, -961, -66');
@@ -107,6 +121,29 @@ assert(
     'Befallen /loc matches the real client-map Succor anchor'
 );
 assert(formatWorldLocationForPlayer({ x:NaN, y:1, z:2 }) === '', 'invalid world positions cannot produce a /loc readout');
+
+// Live acceptance fixture captured side-by-side in Mistmoore. The game Map
+// window showed X -223 / Y 126 / Z -154 while the log retained decimals.
+const mistmooreLiveCapture = loggedLocationToWorld(-222.75, 125.50, -154.10);
+assert(
+    JSON.stringify(worldToGameMapReadout(mistmooreLiveCapture)) ===
+        JSON.stringify({ x:-222.75, y:125.5, z:-154.1 }),
+    'Mistmoore game-map X/Y labels preserve the live client readout order'
+);
+assert(
+    formatWorldLocationForGameMap(mistmooreLiveCapture) === 'X -222.75  Y 125.50  Z -154.10',
+    'Mistmoore HUD matches the side-by-side in-game Map coordinates'
+);
+const mistmooreLiveMapAnchor = worldToClientMap(mistmooreLiveCapture);
+assert(
+    JSON.stringify(mistmooreLiveMapAnchor) === JSON.stringify({ x:-125.5, y:222.75, z:-154.1 }),
+    'Mistmoore live position converts to the client map-file anchor without swapping map axes'
+);
+assert(
+    JSON.stringify(worldToViewer(mistmooreLiveCapture)) ===
+        JSON.stringify(clientMapToViewer(mistmooreLiveMapAnchor)),
+    'Mistmoore live marker and local map geometry converge at one viewer point'
+);
 
 const legendsRareConsider = new EQLogParser();
 const legendsRareConsiderEvent = legendsRareConsider.parse(

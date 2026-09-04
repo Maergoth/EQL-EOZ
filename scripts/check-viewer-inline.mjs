@@ -42,14 +42,14 @@ for (const required of [
     'threeToWorld(e){return{x:e.z,y:-e.x,z:e.y}}',
     'u=/^maps$/i.test(l.directory)?1:0,d=/^maps$/i.test(c.directory)?1:0',
     'threeToEq(e){return this.threeToWorld(e)}',
-    'this.els.coord.textContent=`/loc ${i.y.toFixed(2)}, ${i.x.toFixed(2)}, ${i.z.toFixed(2)}`',
+    'this.els.coord.textContent=`Map X ${i.y.toFixed(2)}   Y ${i.x.toFixed(2)}   Z ${i.z.toFixed(2)}`',
     'e.userData.eqlLocalTexturePath=t.path',
     'fh="v16"'
 ]) {
     if (!viewer.includes(required)) throw new Error(`Zone Viewer bundle is missing ${required}.`);
 }
-if (!html.includes('Synced to game location ${formatWorldLocationForPlayer(worldLocation)} · ${playerMapSetLabel(app.mapData?.sourceLabel)}.')) {
-    throw new Error('Zone Viewer sync status does not use the player-facing /loc convention.');
+if (!html.includes('Synced to in-game map ${formatWorldLocationForGameMap(worldLocation)} · ${playerMapSetLabel(app.mapData?.sourceLabel)}.')) {
+    throw new Error('Zone Viewer sync status does not use the in-game Map-window convention.');
 }
 
 const worker = readFileSync(new URL('../app/zoneviewer/zone-parser.worker.js', import.meta.url), 'utf8');
