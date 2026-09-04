@@ -8,7 +8,7 @@
   "main": "desktop/main.cjs",
   "type": "module",
   "scripts": {
-    "build:workers": "node scripts/build-navmesh-worker.mjs",
+    "build:workers": "node scripts/assemble-zone-viewer.mjs && node scripts/build-navmesh-worker.mjs",
     "audit:deps": "node scripts/audit-deps.mjs",
     "prestart": "npm run build:workers",
     "start": "electron .",
