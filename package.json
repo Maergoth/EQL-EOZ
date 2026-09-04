@@ -9,7 +9,7 @@
   "type": "module",
   "scripts": {
     "build:workers": "node scripts/build-navmesh-worker.mjs",
-    "audit:deps": "npm audit --audit-level=high",
+    "audit:deps": "node scripts/audit-deps.mjs",
     "prestart": "npm run build:workers",
     "start": "electron .",
     "pretest": "npm run build:workers",
