@@ -10,7 +10,14 @@ if (!existsSync(archivePath)) {
 }
 
 function packagedText(relativePath) {
-    return asar.extractFile(archivePath, relativePath).toString('utf8');
+    try {
+        return asar.extractFile(archivePath, relativePath).toString('utf8');
+    } catch (error) {
+        // @electron/asar 4 resolves archive entries with the host separator.
+        // Linux accepts POSIX paths; Windows runners require backslashes.
+        if (process.platform !== 'win32') throw error;
+        return asar.extractFile(archivePath, relativePath.replaceAll('/', '\\')).toString('utf8');
+    }
 }
 
 const packagedPackage = JSON.parse(packagedText('package.json'));
