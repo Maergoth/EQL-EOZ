@@ -4,7 +4,12 @@ const attempts = 3;
 const transientPattern = /(?:audit endpoint returned an error|\b(?:429|500|502|503|504)\b|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up)/i;
 
 for (let attempt = 1; attempt <= attempts; attempt += 1) {
-  const result = spawnSync('npm', ['audit', '--audit-level=high'], {
+  const result = spawnSync('npm', [
+    'audit',
+    '--audit-level=high',
+    '--fetch-timeout=60000',
+    '--fetch-retries=0',
+  ], {
     encoding: 'utf8',
     shell: process.platform === 'win32',
   });
