@@ -6,6 +6,13 @@ import { LocationHeadingTracker, locationPollDelay } from '../app/movement-track
 import { routeDistanceLabel, routeGuidance } from '../app/route-guidance.js';
 import { buildDiagnosticSnapshot } from '../app/diagnostics.js';
 import {
+    clientMapToViewer,
+    waypointCommandForWorldLocation,
+    wikiLocationToWorld,
+    worldToClientMap,
+    worldToViewer
+} from '../app/coordinate-system.js';
+import {
     MAX_NAVIGATION_CLIMB_Z,
     canTraverseElevation,
     canUseDropSurface,
@@ -42,8 +49,34 @@ befallenLocation.parse('[Thu Sep 03 00:00:00 2026] Your Location is -30, -961, -
 const befallenState = befallenLocation.snapshot();
 assert(
     befallenState.location.x === -961 && befallenState.location.y === -30 && befallenState.location.z === -66,
-    'Befallen /loc aligns with the EQ map coordinate display'
+    'Befallen /loc normalizes from displayed Y/X to world X/Y'
 );
+const befallenMapAnchor = worldToClientMap(befallenState.location);
+assert(
+    befallenMapAnchor.x === 30 && befallenMapAnchor.y === 961 && befallenMapAnchor.z === -66,
+    'Befallen world location resolves to the southern client-map rooms'
+);
+const befallenViewerFromWorld = worldToViewer(befallenState.location);
+const befallenViewerFromMap = clientMapToViewer(befallenMapAnchor);
+assert(
+    befallenViewerFromWorld.x === befallenViewerFromMap.x &&
+    befallenViewerFromWorld.y === befallenViewerFromMap.y &&
+    befallenViewerFromWorld.z === befallenViewerFromMap.z,
+    'world and client-map adapters meet at the same Befallen viewer anchor'
+);
+assert(
+    JSON.stringify(wikiLocationToWorld([-80, -45])) === JSON.stringify([-45, -80]),
+    'wiki Y/X NPC locations normalize to world X/Y before distance and routing'
+);
+assert(
+    waypointCommandForWorldLocation(befallenState.location) === '/waypoint -30 -961 -66',
+    'waypoint copy converts canonical world X/Y back to EverQuest Y/X/Z order'
+);
+assert(
+    waypointCommandForWorldLocation([-45, -80]) === '/waypoint -80 -45',
+    'two-axis wiki destinations produce a paste-ready waypoint command'
+);
+assert(waypointCommandForWorldLocation([NaN, -80]) === '', 'invalid coordinates cannot produce a waypoint command');
 
 const legendsRareConsider = new EQLogParser();
 const legendsRareConsiderEvent = legendsRareConsider.parse(
@@ -148,12 +181,13 @@ const diagnostic = buildDiagnosticSnapshot({
     parserState:{ character:'Maergoth', zone:'Befallen', level:50, classes:['MNK'], location:{ x:-961, y:-30, z:-66 } },
     settings:{ mapMode:'top', itemTier:4, manualClasses:['MNK'], dangerousFuturePath:'C:\\EverQuest\\Secrets' },
     bridgeInfo:{ eqRootExists:true, logExists:true, eqRootPath:'C:\\EverQuest', logPath:'C:\\EverQuest\\Logs\\eqlog_Maergoth_server.txt', logSelection:'manual' },
-    viewerStatus:{ mounted:true, directorySelected:true, zone:'Befallen', mode:'top', floors:'all', navigation:{ ok:true, routed:true, source:'wiki-location', distance:100, guidance:straightGuidance }, message:'C:\\EverQuest\\befallen.s3d' },
+    viewerStatus:{ mounted:true, directorySelected:true, zone:'Befallen', mode:'top', floors:'all', textures:{ available:42, materials:28, resolved:24 }, navigation:{ ok:true, routed:true, source:'wiki-location', distance:100, guidance:straightGuidance }, message:'C:\\EverQuest\\befallen.s3d' },
     activeRoute:{ name:'Maergoth', zone:'Befallen', status:'ready', lastRoutedLocation:{ x:-961, y:-30, z:-66 }, guidance:straightGuidance },
     now:Date.UTC(2026, 8, 3)
 });
 const diagnosticText = JSON.stringify(diagnostic);
 assert(diagnostic.session.characterDetected && !('character' in diagnostic.session), 'diagnostics retain character detection without identity');
+assert(diagnostic.viewer.textures.available === 42 && diagnostic.viewer.textures.resolved === 24, 'diagnostics retain aggregate texture resolution evidence');
 for (const secret of ['Maergoth', 'C:\\\\EverQuest', 'eqlog_']) assert(!diagnosticText.includes(secret), `diagnostics redact ${secret}`);
 
 const session = new EQLogParser();

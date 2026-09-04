@@ -69,6 +69,11 @@ export function buildDiagnosticSnapshot({ version, pack, parserState, settings, 
             zone:String(viewer.zone || ''),
             mode:String(viewer.mode || ''),
             floors:String(viewer.floors || ''),
+            textures:{
+                available:finiteNumber(viewer.textures?.available),
+                materials:finiteNumber(viewer.textures?.materials),
+                resolved:finiteNumber(viewer.textures?.resolved)
+            },
             navigation:{
                 active:Boolean(viewer.navigation?.ok),
                 routed:Boolean(viewer.navigation?.routed),

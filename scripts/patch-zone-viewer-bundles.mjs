@@ -387,6 +387,33 @@ async function findNavigationPathAttempt(start, goal, attempt, token, deadline, 
 
 const viewerPath = `${root}/app/zoneviewer/ZoneViewerApp.js`;
 let viewer = readFileSync(viewerPath, 'utf8');
+
+// The decoded WLD scene and the client .txt map do not share a planar basis.
+// sage-core emits WLD X,Z,Y while client maps store -worldY,-worldX,Z.
+viewer = viewer.replace(
+    'xt=Object.freeze({swap:!0,sx:1,sz:-1})',
+    'xt=Object.freeze({swap:!1,sx:-1,sz:-1})'
+);
+viewer = viewer.replace(
+    'chooseMapTransform(){return{...xt}}eqMapToThree(e,t,n){return dh(e,t,n)}',
+    'chooseMapTransform(){return{...xt}}eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}eqMapToThree(e,t,n){return dh(e,t,n)}'
+);
+viewer = viewer.replace(
+    'eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}eqMapToThree(e,t,n){return dh(e,t,n)}threeToEq(e){return Yx(e)}',
+    'eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}eqMapToThree(e,t,n){return dh(e,t,n)}threeToWorld(e){return{x:e.z,y:e.x,z:e.y}}threeToEq(e){return this.mapFileVisible?Yx(e):this.threeToWorld(e)}'
+);
+if (!viewer.includes('xt=Object.freeze({swap:!1,sx:-1,sz:-1})') ||
+    !viewer.includes('eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}') ||
+    !viewer.includes('threeToEq(e){return this.mapFileVisible?Yx(e):this.threeToWorld(e)}')) {
+    throw new Error('Unable to install distinct EQ world and client-map transforms.');
+}
+viewer = viewer.replace(
+    'e.userData.eqlOriginalMap=i,e.map=this.els.textures.checked?i:null',
+    'e.userData.eqlOriginalMap=i,e.userData.eqlLocalTexturePath=t.path,e.map=this.els.textures.checked?i:null'
+);
+if (!viewer.includes('e.userData.eqlLocalTexturePath=t.path')) {
+    throw new Error('Unable to install resolved local-texture diagnostics.');
+}
 const miniMapSource = drawMiniMap.toString().replace(/^function /, '');
 const navSource = findNavigationPath.toString().replace(/^async function /, 'async ');
 const elevationSource = navigationCanTraverseElevation.toString().replace(/^function /, '');

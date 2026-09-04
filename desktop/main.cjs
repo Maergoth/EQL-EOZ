@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -665,6 +665,13 @@ ipcMain.handle('eye-of-zomm:window', (_event, action) => {
     else if (action === 'is-maximized') return windowRef.isMaximized();
     else return false;
     return true;
+});
+
+ipcMain.handle('eye-of-zomm:clipboard', (_event, text) => {
+    const value = String(text || '');
+    if (!value || value.length > 512) return { ok:false };
+    clipboard.writeText(value);
+    return { ok:true };
 });
 
 const gotLock = app.requestSingleInstanceLock();

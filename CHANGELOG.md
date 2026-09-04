@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.5 - Coordinate truth and compact navigation
+
+- Separated logged/wiki, canonical world, client `.txt` map, and Three.js viewer coordinates instead of sending all four through one ambiguous transform. The Befallen `/loc -30, -961, -66` fixture now resolves to client-map anchor `30, 961, -66` and the same 3D anchor as decoded WLD geometry.
+- Normalized EQLWiki NPC locations into world X/Y before distance, labels, and routing, while converting back to EverQuest Y/X/Z when copying a game command.
+- Restored paste-ready `/waypoint` copying from NPC names in the minimal rail and NPC browser, with keyboard access, non-modal confirmation, a guarded Electron clipboard bridge, and fallback behavior.
+- Moved minimal-mode destination search, Path, and Clear into the persistent 48-pixel header and removed the redundant route band so the map receives the recovered vertical space.
+- Kept Map Overlay intentionally readable as client `.txt` line art, while adding safe available/material/resolved texture counts to diagnostics for First/Top S3D troubleshooting.
+- Added coordinate-boundary, waypoint-order, compact-header, clipboard-bridge, texture-instrumentation, and packaged-viewer regression gates.
+
 ## 0.7.4 - Presentation-safe route selection
 
 - Stopped wiki-coordinate route starts from forcing First Person or closing Map Overlay.

@@ -1,4 +1,4 @@
-# Validation report — v0.7.4
+# Validation report — v0.7.5
 
 Validated in the build environment on 2026-09-04 UTC.
 
@@ -8,7 +8,7 @@ Validated in the build environment on 2026-09-04 UTC.
 - Parser/scaling/con tests and folder/log-selection filesystem tests pass.
 - Inline Zone Viewer module validation and `node --check` pass for first-party JavaScript.
 - Static UI validation confirms the removed overview surfaces stay absent, all three map modes persist across window modes, Settings owns the EQ folder, route/readiness surfaces exist, routine browser alerts are absent, and retired naming is absent.
-- Release validation confirms version `0.7.0`, required production data, optional certificate handling, and Authenticode verification whenever signing is enabled in either Windows workflow.
+- Release validation confirms the current package/lock/changelog version, required production data, optional certificate handling, and Authenticode verification whenever signing is enabled in either Windows workflow.
 - Item scaling tests cover standalone DMG, static Cold DMG, Ammo +10 Range/tier, and negative-stat recovery.
 - Con-color tests cover modern blue/light-blue/green/gray boundaries plus white, +1 through +3 yellow, and +4 red.
 - Exporter checks require schema v3 and exercise two-coordinate, three-coordinate, template, and multiple-tuple location fixtures when PHP is available.
@@ -16,11 +16,11 @@ Validated in the build environment on 2026-09-04 UTC.
 - Bundled JSON files parse successfully.
 - The bootstrap script validates manifest shape, gzip SHA-256, decompression, and schema v3 before embedding a production snapshot.
 - Runtime dataset checks now target the GitHub `dataset` branch rather than eqlwiki.com.
-- Signed `/loc` normalization is covered with the reported Befallen `Y -30, X -961, Z -66` regression and retains negative map X.
+- The reported Befallen `/loc` regression is covered end to end: displayed `Y -30, X -961, Z -66` normalizes to world `X -961, Y -30, Z -66`, projects to client-map `X 30, Y 961, Z -66`, and both paths reach the same viewer anchor.
 - Location and named-destination grounding are release-checked to start at the trusted Z rather than a 24–35 unit offset that could select Befallen's next floor.
 - Legends rare-creature/scowls consider wording is covered with the reported Soldier of V Zher line and clean-name assertion.
 - Directed route-policy tests allow exactly +6 Z, reject greater climbs, allow exposed drops of any height, and reject drops through an overlapping upper floor.
-- UI checks require the four-step readiness rail, persistent destination/re-route surface, minimal-mode map controls, current-zone item scope, slot/sort overrides, keyboard Itembox access, tier-adjusted tooltip output, and player-centered Top/Map restoration.
+- UI checks require the four-step readiness rail, synchronized full/minimal destinations, the minimal header search with the redundant route band removed, NPC waypoint-copy affordances and clipboard bridge, current-zone item scope, keyboard Itembox access, and player-centered Top/Map restoration.
 - Movement tracking tests cover first-sample behavior, recent-step heading, jitter/duplicate suppression, reversal, teleport rejection, and active-map/route polling cadence.
 - Route-guidance tests cover nearest-segment projection, remaining distance, right-turn detection, opposite-facing recovery, off-route recovery, arrival, and absent-path behavior.
 - The asset-free route corpus passes 8/8 expected outcomes (100%) with zero segment-policy violations across outdoor, indoor, stacked-floor, ramp, closed-door, exposed-drop, and illegal-ascent topology fixtures.
@@ -36,7 +36,7 @@ Validated in the build environment on 2026-09-04 UTC.
 - Inline viewer checks require both local-label and wiki-coordinate route starts to preserve the active First/Top/Map presentation while retaining the route-progress message.
 - Application checks require newest-location coalescing, continuous-movement route scheduling, current-zone rare ranking, and compact mob/loot search.
 - A production-size relevance gate exercises all 11,168 embedded items and confirms Befallen/MNK defaults return useful local equipment before generic consumables.
-- The S3D parser check requires WLD bitmap `fileName` resolution, normalized BMP/DDS lookup, animated-frame filenames, and parsed-zone cache version v16.
+- The S3D parser check requires WLD bitmap `fileName` resolution, normalized BMP/DDS lookup, animated-frame filenames, parsed-zone cache version v16, and a resolved-local-texture marker exposed only as aggregate redacted diagnostics. Map Overlay remains `.txt` line art; First/Top are the texture acceptance surfaces.
 - The product/UX vision is release-checked for click budgets, complete flows, feature user stories, acceptance scenarios, and the release-gated road to v1.
 - README, vision, implementation status, and contributor handoff cross-link the current baseline and exact next spatial-confidence task.
 

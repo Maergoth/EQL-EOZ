@@ -222,13 +222,13 @@ function startRouteWithoutChangingPresentation(start) {
 
 async function pathToWikiLocation(label, location) {
     if (!app?.currentZoneRecord || !Array.isArray(location) || location.length < 2) return false;
-    const [eqX, eqY, rawEqZ] = location.map(Number);
-    if (![eqX, eqY].every(Number.isFinite)) return false;
+    const [worldX, worldY, rawEqZ] = location.map(Number);
+    if (![worldX, worldY].every(Number.isFinite)) return false;
     const hasTrustedElevation = Number.isFinite(rawEqZ);
     const eqZ = hasTrustedElevation ? rawEqZ : 0;
 
     const start = app.navigationStartPoint();
-    const point = app.eqMapToThree(eqX, eqY, eqZ);
+    const point = app.eqWorldToThree(worldX, worldY, eqZ);
     // A trusted wiki Z identifies a floor. Starting 35 units above it can hit
     // the next floor in stacked dungeons, so only allow the viewer's normal
     // six-unit step tolerance above the reported elevation.
@@ -533,10 +533,10 @@ window.eqlEyeOfZommViewer = {
             return { ok:false, reason:'load-zone-first' };
         }
 
-        // Use the viewer's own canonical conversion so the 3D scene and map
-        // overlay share exactly the same EQ X/Y/Z basis.
+        // Logged locations are world X/Y/Z. Client map files have a separate
+        // signed basis and use eqMapToThree instead.
         const eqLocation = { x:Number(location.x), y:Number(location.y), z:Number(location.z) };
-        const point = app.eqMapToThree(eqLocation.x, eqLocation.y, eqLocation.z);
+        const point = app.eqWorldToThree(eqLocation.x, eqLocation.y, eqLocation.z);
         // /loc Z is authoritative. A large upward ray offset can snap to the
         // ceiling or next floor (Befallen's adjacent floors are ~33 units
         // apart), while findGroundPointAt already permits the six-unit step
@@ -547,7 +547,7 @@ window.eqlEyeOfZommViewer = {
         const previousForward = app.lastFirstPersonPose?.forward?.clone?.();
         let forward = previousForward;
         if (movement.heading) {
-            const headingPoint = app.eqMapToThree(
+            const headingPoint = app.eqWorldToThree(
                 eqLocation.x + movement.heading.x,
                 eqLocation.y + movement.heading.y,
                 eqLocation.z
@@ -604,7 +604,7 @@ window.eqlEyeOfZommViewer = {
             seen.add(key);
             const hasZ = Number.isFinite(location[2]);
             const eqZ = hasZ ? location[2] : 0;
-            const point = app.eqMapToThree(location[0], location[1], eqZ);
+            const point = app.eqWorldToThree(location[0], location[1], eqZ);
             const ground = app.findGroundPointAt(point.x, point.z, hasZ ? point.y : app.currentBounds.max.y + 100) || point;
             const resolvedEqZ = hasZ ? eqZ : Number(app.threeToEq?.(ground)?.z) || 0;
             const button = document.createElement('button');
@@ -703,6 +703,11 @@ window.eqlEyeOfZommViewer = {
             zone: app?.currentZoneRecord ? (badge ? badge.textContent.trim() : app.currentZoneRecord.id) : '',
             mode: app?.mapFileVisible ? 'map' : (app?.mode || 'top'),
             floors: app?.selectedFloorIndices?.size ? 'filtered' : 'all',
+            textures:{
+                available:Number(app?.parserStats?.textures || 0),
+                materials:Number(app?.loadedMaterials?.length || 0),
+                resolved:Number(app?.loadedMaterials?.filter?.(material => material?.userData?.eqlLocalTexturePath).length || 0)
+            },
             navigation:navigationResult('', app?.navigationTarget ? 'active' : ''),
             message:app?.els?.statusText?.textContent || ''
         };

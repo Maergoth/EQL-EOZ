@@ -173,3 +173,25 @@ body.minimal-mode .consider-loot-tray,body.minimal-mode.pinned-mode .consider-lo
 @media(max-width:950px){.consider-loot-tray,body.pinned-mode .consider-loot-tray{left:78px}.topbar{gap:7px}.map-active .brand{display:none}}
 @media(max-width:760px){.route-field{min-width:0;flex:1}.map-route-bar{gap:5px}.readiness-steps{flex-wrap:wrap}.consider-loot-tray,body.pinned-mode .consider-loot-tray{left:7px}}
 @media(prefers-reduced-motion:reduce){.view{animation:none}}
+
+/* Minimal navigation lives in the persistent header so the map starts immediately below it. */
+.minimal-route-search{display:none;-webkit-app-region:no-drag}
+body.minimal-mode .minimal-route-search{display:flex;align-items:stretch;flex:1 1 360px;min-width:180px;max-width:440px;height:32px;margin-left:auto;border:1px solid rgba(216,183,92,.34);border-radius:7px;background:#090f17;overflow:hidden}
+body.minimal-mode .minimal-route-search input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:#eef2f6;padding:0 9px;font-size:10px}
+body.minimal-mode .minimal-route-search input::placeholder{color:#6f7d8e}
+body.minimal-mode .minimal-route-search button{border:0;border-left:1px solid rgba(216,183,92,.26);background:linear-gradient(180deg,#6f5928,#4e3d19);color:#fff0b1;padding:0 10px;font-size:9px;font-weight:750;cursor:pointer}
+body.minimal-mode .minimal-route-search .minimal-route-clear{background:#111821;color:#c9b571;font-size:15px;padding:0 9px}
+body.minimal-mode .window-controls{margin-left:0}
+body.minimal-mode .map-route-bar{display:none}
+
+/* NPC names copy a paste-ready game command; routing remains a separate action. */
+.waypoint-npc{display:inline-flex;align-items:center;gap:6px;max-width:100%;margin:0;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:copy}
+.waypoint-npc>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.waypoint-copy-cue{flex:0 0 auto;color:#9d8a50;font:600 11px/1 system-ui,sans-serif;opacity:.72}
+.waypoint-npc:hover{color:#fff0b1}.waypoint-npc:hover .waypoint-copy-cue{color:#f0d77f;opacity:1}
+.waypoint-npc-label{display:inline-block}
+.minimal-mob-heading>div{min-width:0}.minimal-mob-heading .waypoint-npc,.minimal-mob-heading .waypoint-npc-label{color:#ead68c;font:700 12px Georgia,serif}
+.npc-card h3 .waypoint-npc{width:100%}
+
+@media(max-width:1100px){body.minimal-mode .brand{display:none}}
+@media(max-width:800px){body.minimal-mode .minimal-zone-title{display:none}body.minimal-mode .minimal-route-search{min-width:130px}}

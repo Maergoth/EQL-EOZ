@@ -92,6 +92,7 @@
           },
           "loc": {
             "type": "array",
+            "description": "EverQuest displayed location order: Y, X, and optional Z. Normalize at the app coordinate boundary before spatial use.",
             "minItems": 2,
             "maxItems": 3,
             "items": {

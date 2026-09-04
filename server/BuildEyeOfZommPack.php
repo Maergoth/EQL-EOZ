@@ -742,7 +742,8 @@ class BuildEyeOfZommPack extends Maintenance {
             return count( $values ) >= 2 ? $values : null;
         };
 
-        // EQLWiki commonly stores coordinates in {{loc|x|y|z}}.
+        // EQLWiki loc templates preserve EverQuest's displayed Y, X, Z order.
+        // The app normalizes this dataset boundary into world X, Y, Z.
         if ( preg_match(
             '/\{\{\s*(?:loc|location)\s*\|\s*(' . $number . ')\s*\|\s*(' . $number . ')(?:\s*\|\s*(' . $number . '))?/i',
             $text,

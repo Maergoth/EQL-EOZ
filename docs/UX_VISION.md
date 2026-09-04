@@ -117,7 +117,7 @@ Show “Folder ready · type `/loc` in game” before the user clicks Sync. Dist
 
 ### 4.7 Spatial truth is a contract
 
-Coordinate conversion, player marker, camera focus, labels, and paths must share one canonical EQ coordinate basis. No screen may invent its own axis swap or sign inversion.
+Coordinate conversion, player marker, camera focus, labels, and paths must share one canonical world basis. Boundaries are named and tested: logs/wiki display `(Y, X, Z)`, runtime world uses `(X, Y, Z)`, client `.txt` maps use `(-Y, -X, Z)`, and viewer geometry uses `(Y, Z, X)`. No screen or route engine may invent another axis swap or sign inversion.
 
 ### 4.8 Color is reinforcement, not the only signal
 
@@ -130,6 +130,10 @@ Transient intelligence should appear without demanding a click. Pinned mode hide
 ### 4.10 Recovery is part of the happy path
 
 A renamed folder, rotated log, missing map file, stale cache, or interrupted dataset update should have a specific recovery action and preserve unrelated preferences.
+
+### 4.11 Every change carries its proof
+
+Every behavioral change adds the nearest deterministic regression test in the same commit. A reported bug starts with a fixture that fails for the reported case; coordinate, parser, routing, clipboard, and state rules belong in unit or contract tests. Visual behavior that requires proprietary archives or Windows still gets an automated structural guard plus a specific manual acceptance step and redacted diagnostics—not an undocumented “looks right” assumption.
 
 ## 5. Information architecture
 
@@ -665,7 +669,7 @@ Committed user stories:
 - As a first-time user, I choose the game folder once and immediately see whether folder, log, zone, and `/loc` are individually ready.
 - As a returning user, I resume my last full view and map mode while automatic log selection follows the newest log.
 - As an explorer, I type or choose a current-zone destination once, see whether it produced a path or marker, and keep that destination while later `/loc` lines re-route me.
-- As a minimal-mode user, I retain map-mode and destination controls and can collapse the intel rail when I need more map width.
+- As a minimal-mode user, I retain map-mode and header-level destination controls, recover the route panel's vertical space for the map, and can collapse the intel rail when I need more map width.
 - As a loot planner, I open Items to current-zone/class gear and deliberately override slot, order, zone, class, era, or search.
 - As an item researcher, I can focus the same Itembox card with mouse or keyboard and see tier-adjusted values update while the slider moves.
 - As a player with the game foregrounded, routine recovery feedback appears inside Eye of Zomm instead of a modal browser alert.
@@ -673,7 +677,7 @@ Committed user stories:
 0.6 implementation contract:
 
 - A four-step map readiness rail: Folder → Log → Zone → `/loc`.
-- A persistent Live Map destination field with current-zone suggestions, Enter support, Find path, Clear, route source/result, distance, and re-route-on-movement.
+- One synchronized Live Map destination model with current-zone suggestions, Enter support, Find path, Clear, route source/result, distance, and re-route-on-movement; minimal mode presents it in the persistent header rather than a second content band.
 - Route recalculation threshold of eight 3D units to prevent rebuilding for duplicate `/loc` lines.
 - Selected destination waits for the first `/loc` instead of failing or asking for the folder again.
 - Header map-mode controls remain available whenever Live Map is active, including minimal mode.
@@ -698,7 +702,7 @@ Known 0.6 limits, stated rather than hidden:
 0.6 exit checklist:
 
 1. Fresh-folder and returning-startup flows complete with the expected automatic log.
-2. Befallen coordinate fixture remains X `-961`, Y `-30`, Z `-66` and stays on the correct stacked floor.
+2. Befallen `/loc -30, -961, -66` normalizes to world X `-961`, Y `-30`, Z `-66`, projects to client-map X `30`, Y `961`, Z `-66`, and both paths meet on the correct stacked-floor viewer anchor.
 3. Two `/loc` samples update facing; a live destination re-routes without another selection.
 4. First/Top/Map remain available through full/minimal transitions.
 5. The exact Legends rare-creature consider line opens the bottom tray.
@@ -715,16 +719,16 @@ Committed user stories:
 
 - As an explorer, I see named and rare mobs anchored in First Person, Top Down, and Map Overlay and can make one my destination with one click.
 - As a class combination, I see targets with relevant loot before targets with no known upgrade, without losing the ability to inspect all known drops.
-- As a minimal-mode player, I can search a mob or item, expand loot, read Itembox details, select a route, and switch map presentation without returning to the full app.
+- As a minimal-mode player, I can search a destination from the header, search a mob or item in the intel rail, expand loot, read Itembox details, copy a paste-ready `/waypoint`, select a route, and switch map presentation without returning to the full app.
 - As a player who binds `/loc` to movement, repeated lines follow my latest position without queuing stale camera moves or spinning on coordinate jitter.
 - As a player who explicitly chose Top or Map, live location updates preserve that choice instead of flashing through First Person.
 - As a route follower, the golden line remains usable in every presentation and continuous movement cannot indefinitely postpone re-routing.
 
 0.7 implementation contract:
 
-1. EQLWiki current-zone NPC coordinates are projected into the same canonical map basis as local map geometry and `/loc`.
+1. Logged and EQLWiki displayed Y/X coordinates normalize to canonical world X/Y; client `.txt` map and Three.js projections are separate named adapters with an end-to-end Befallen anchor fixture.
 2. Rare labels remain screen-anchored while moving/zooming, honor selected floors, cap density, and favor current-class loot relevance.
-3. A label click selects a persistent route. The compact rail supplies expandable class-filtered/all-loot browsing and Itembox details.
+3. A map-label click selects a persistent route. The compact rail supplies expandable class-filtered/all-loot browsing and Itembox details; clicking an NPC name copies `/waypoint Y X [Z]` with non-modal confirmation while Route remains explicit.
 4. The log reader uses an active-map cadence and retains only the newest unrendered location when movement bindings produce bursts.
 5. Heading derives from a short recency-weighted movement window. Sub-unit jitter is ignored, duplicate samples preserve facing, and zone-scale jumps do not invent a direction.
 6. Location placement updates the retained First Person pose and player arrow without using a visible intermediate mode.
@@ -831,6 +835,7 @@ Deferred beyond 1.0 unless evidence changes the priority:
 10. **Put destinations on the map.** Project current-zone rare/named data into all three presentations and let a marker start navigation.
 11. **Keep compact mode complete.** Search targets and loot, expand class-aware drops, and retain route/map controls beside the game.
 12. **Never commandeer presentation for routing.** Starting a local-label or wiki-coordinate path retains First/Top/Map, camera state, floors, and full/minimal mode while work happens in the background.
+13. **Pair every slice with regression evidence.** Code, its nearest automated contract, and any required real-client checklist update ship together.
 
 ### Approval points for 0.8–1.0
 

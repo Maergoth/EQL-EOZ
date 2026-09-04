@@ -44,7 +44,7 @@ The shared corpus emits:
 - directed off-mesh drop connections;
 - agent constraints including the +6 EQ-Z climb limit.
 
-The EQ boundary remains singular: game/wiki `(x, y, z-up)` is converted to viewer/Recast `(x, z, y)` before engine input and converted back only for EQ-facing display or diagnostics. No engine should perform its own second coordinate guess.
+The spatial boundary is explicit and singular: logged and wiki values arrive in displayed `(Y, X, Z)` order, normalize to world `(X, Y, Z)`, then convert to viewer/Recast `(Y, Z, X)`. Client `.txt` map points use `(-world Y, -world X, world Z)` and therefore convert to the same viewer anchor as world/WLD geometry. No route engine should parse displayed or client-map coordinates or perform its own second transform.
 
 The future worker response must include engine/version, status, path points, generation/query duration, and a machine-readable fallback reason. Before display, every candidate path must pass the existing collision and directed-elevation validator. A failed candidate is evidence for diagnostics, never permission to display an invalid segment.
 

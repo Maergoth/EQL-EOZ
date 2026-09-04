@@ -30,6 +30,12 @@
                 <button id="wiki-search-button" type="button" aria-label="Search EQLWiki" title="Search EQLWiki">↗</button>
             </div>
         </form>
+        <form id="minimal-route-form" class="minimal-route-search" role="search">
+            <input id="minimal-map-destination" type="search" list="map-destinations" autocomplete="off" placeholder="Named mob or map label" aria-label="Navigate to a named mob or map label">
+            <button id="minimal-start-route" type="submit">Path</button>
+            <button id="minimal-clear-route" class="minimal-route-clear" type="button" title="Clear route" aria-label="Clear route" hidden>×</button>
+        </form>
+        <datalist id="map-destinations"></datalist>
         <div class="window-controls">
             <span id="minimal-zone-title" class="minimal-zone-title">Waiting for zone</span>
             <div class="map-mode-switch minimal-map-mode-switch" role="group" aria-label="Map view">
@@ -128,7 +134,6 @@
                 <label class="route-field" for="map-destination"><span>Navigate to</span>
                     <input id="map-destination" class="search-input" type="search" list="map-destinations" autocomplete="off" placeholder="Named mob or map label">
                 </label>
-                <datalist id="map-destinations"></datalist>
                 <button id="start-route" class="primary-button" type="button">Find path</button>
                 <button id="clear-route" class="secondary-button" type="button" hidden>Clear</button>
                 <div id="route-status" class="route-status" aria-live="polite">Choose a current-zone named mob or map label.</div>

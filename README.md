@@ -44,6 +44,8 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Includes a dormant, worker-isolated Recast/Detour route prototype that passes the redistributable route corpus; the existing pathfinder remains authoritative until real-zone validation passes.
 - Shows Folder, Log, Zone, and `/loc` readiness separately instead of collapsing setup and live-state problems into one Sync error.
 - Keeps one named destination active, reports path/marker/error state and routed distance, and re-routes from later `/loc` samples.
+- Keeps minimal-mode destination search in the persistent header so the map begins immediately below it, with synchronized Path/Clear state across full and minimal views.
+- Copies a paste-ready `/waypoint Y X [Z]` command when a located NPC name is activated, while retaining a separate explicit Route action.
 - Provides a pin-to-top option that hides the draggable title bar while keeping the app in the Windows taskbar.
 - Provides a minimal map, live-fight DPS, class-filtered named-mob/drop list, and a collapsible intel rail without losing map controls.
 - Opens Items to recommended current-zone/class loot, with explicit search, slot, sort, class, era, tier, and scope overrides.

@@ -2,14 +2,14 @@
 
 Last updated: 2026-09-04
 
-Code baseline: 0.7.4
+Code baseline: 0.7.5
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
 | Vision area | Status | Evidence | Next condition |
 |---|---|---|---|
 | 0.6 usable loop | Implemented | Folder/log/zone/`/loc` readiness, persistent mode/destination, relevant item defaults, live tier details, non-modal recovery; `npm test` | Retain all [v0.7 manual gates](V0.7_MANUAL_TEST.md) |
-| 0.7 replacement map | Implemented; real-client gate required | Dataset rare labels, minimal loot research, stabilized heading, latest-location coalescing, mode-safe live sync and route starts, continuous route refresh | Pass sections 1–4 of the Windows checklist on the release installer |
+| 0.7 replacement map | Implemented; real-client gate required | Explicit world/client-map/viewer adapters, dataset rare labels, minimal header routing, NPC waypoint copy, texture diagnostics, stabilized heading, latest-location coalescing, mode-safe route starts | Pass sections 1–5 of the Windows checklist on the release installer |
 | 0.8 live route guidance | Implemented in 0.7.1; real-client gate required | Pure projection/remaining-distance/turn/facing/off-route tests; cue HUD in First/Top/Map; route summary updates from `/loc` | Verify cue direction and readability while moving in all three modes |
 | 0.8 redacted diagnostics | Implemented in 0.7.1 | Allow-list snapshot and regression test proving character, log name, paths, and future unknown settings are absent | Attach one exported JSON to a test issue after manually inspecting it |
 | 0.8 route corpus contract | Implemented in 0.7.3 | Reference and candidate both pass 8/8 shared triangle expectations; invalid surface exits and reversed drops are rejected | Extend the same boundary to decoded proprietary real-zone geometry |
@@ -59,3 +59,7 @@ Acceptance for the next integration slice:
 - Automated geometry contracts do not establish visual texture fidelity, rare-label alignment at every camera angle, or route usefulness in a live dungeon.
 - The 0.7.1 cue is still derived from the current grounded production path. The formal navmesh prototype is not yet connected to proprietary viewer geometry.
 - A signed Windows release still depends on trusted Authenticode credentials being configured.
+
+## 0.7.5 incident note
+
+The earlier transform treated canonical world X/Y, wiki display Y/X, and client-map `-Y/-X` as if they were interchangeable. In Befallen this rotated the line map and placed world `(-961,-30,-66)` far from its correct client-map anchor `(30,961,-66)`. `app/coordinate-system.js` now owns each conversion, and unit plus packaged-viewer checks require both map/world paths to meet at the same Three.js point. Map presentation remains deliberate `.txt` line art; S3D texture fidelity is evaluated in First/Top, with redacted available/material/resolved counts when it fails.

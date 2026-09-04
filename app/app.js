@@ -5,6 +5,7 @@ import { itemHasZoneSource, scoreItemForBrowse } from './item-browse.js';
 import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
 import { routeDistanceLabel } from './route-guidance.js';
+import { waypointCommandForWorldLocation, wikiLocationToWorld } from './coordinate-system.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -128,6 +129,51 @@ function showNotice(message, options = {}) {
     while (host.children.length > 4) host.lastElementChild?.remove();
     const duration = Number(options.duration ?? (tone === 'error' ? 9000 : 5000));
     if (duration > 0) setTimeout(() => toast.remove(), duration);
+}
+
+async function writeClipboardText(text) {
+    const value = String(text || '');
+    if (!value) return false;
+    if (window.eyeOfZommWindow?.copyText) {
+        const result = await window.eyeOfZommWindow.copyText(value);
+        if (result?.ok !== false) return true;
+    }
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        return true;
+    }
+    const fallback = document.createElement('textarea');
+    fallback.value = value;
+    fallback.setAttribute('readonly', '');
+    fallback.style.position = 'fixed';
+    fallback.style.opacity = '0';
+    document.body.append(fallback);
+    fallback.select();
+    const copied = document.execCommand('copy');
+    fallback.remove();
+    return copied;
+}
+
+function waypointNameControl(name, worldLocation) {
+    const command = waypointCommandForWorldLocation(worldLocation);
+    if (!command) return `<span class="waypoint-npc-label">${esc(name)}</span>`;
+    return `<button type="button" class="waypoint-npc" data-waypoint="${esc(command)}" title="Copy ${esc(command)}" aria-label="Copy waypoint for ${esc(name)}"><span>${esc(name)}</span><span class="waypoint-copy-cue" aria-hidden="true">⧉</span></button>`;
+}
+
+function bindWaypointButtons(host = document) {
+    host?.querySelectorAll?.('.waypoint-npc').forEach(button => {
+        if (button.dataset.eqlCopyBound) return;
+        button.dataset.eqlCopyBound = '1';
+        button.addEventListener('click', async () => {
+            const command = button.dataset.waypoint || '';
+            try {
+                if (!await writeClipboardText(command)) throw new Error('Clipboard unavailable');
+                showNotice(`Copied ${command}`, { tone:'success', duration:3000 });
+            } catch {
+                showNotice(`Could not copy automatically. Use ${command}`, { tone:'error', duration:8000 });
+            }
+        });
+    });
 }
 
 function showSettingsNotice(message, tone = 'warning') {
@@ -614,10 +660,7 @@ function rareMobsForZone(s, profile, options = {}) {
                 return true;
             });
             source.items = source.allItems.filter(item => itemMatchesProfile(item, profile));
-            const rawLoc = Array.isArray(source.npc?.loc) ? source.npc.loc.slice(0, 3).map(Number) : null;
-            source.loc = rawLoc && rawLoc.slice(0, 2).every(Number.isFinite)
-                ? rawLoc.filter((value, index) => index < 2 || Number.isFinite(value))
-                : null;
+            source.loc = wikiLocationToWorld(source.npc?.loc);
         }
         catalog = Array.from(sources.values());
         rareCatalogCache.set(cacheKey, catalog);
@@ -718,7 +761,7 @@ function renderMinimalZoneDrops(s, profile) {
             ? ` data-loc-x="${source.loc[0]}" data-loc-y="${source.loc[1]}"${source.loc.length >= 3 ? ` data-loc-z="${source.loc[2]}"` : ''}`
             : '';
         return `<div class="minimal-drop-row npc-con-${con.key}${active ? ' is-active-route' : ''}" data-npc-key="${esc(key)}"${locAttrs}>
-        <div class="minimal-mob-heading"><div><strong>${esc(source.name)}</strong><small>${source.npc?.avgLevel ? `<span class="${conClass(con.key)}">Level ${source.npc.avgLevel} · ${esc(con.label)}</span>` : 'Level unknown'}<span class="minimal-distance">${distance ? ` · ${distance}` : ''}</span></small></div><button type="button" class="text-button path-npc" data-npc="${esc(source.name)}">${active ? 'Routing' : 'Route'}</button></div>
+        <div class="minimal-mob-heading"><div>${waypointNameControl(source.name, source.loc)}<small>${source.npc?.avgLevel ? `<span class="${conClass(con.key)}">Level ${source.npc.avgLevel} · ${esc(con.label)}</span>` : 'Level unknown'}<span class="minimal-distance">${distance ? ` · ${distance}` : ''}</span></small></div><button type="button" class="text-button path-npc" data-npc="${esc(source.name)}">${active ? 'Routing' : 'Route'}</button></div>
         <details class="minimal-loot"${openSources.has(key) ? ' open' : ''}><summary>Loot · ${esc(countLabel)}</summary>
         ${source.displayedItems.length ? source.displayedItems.slice(0, 20).map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${esc(item.name)}</a>`).join('') : '<small>No matching item drops in the current dataset.</small>'}
         </details>
@@ -726,6 +769,7 @@ function renderMinimalZoneDrops(s, profile) {
     }).join('');
     host.scrollTop = scrollTop;
     bindPathButtons(host);
+    bindWaypointButtons(host);
 }
 
 function renderHeader(s, profile) {
@@ -970,9 +1014,10 @@ function renderNpcList(s, profile) {
             Number(itemMatchesProfile(right, profile)) - Number(itemMatchesProfile(left, profile)) ||
             itemBrowsePriority(right, s.zone) - itemBrowsePriority(left, s.zone)
         ).slice(0, 4);
+        const worldLocation = wikiLocationToWorld(n.loc);
         return `<article class="data-card npc-card npc-con-${con.key}">
             <div class="card-top">
-                <div><h3>${esc(n.name)}</h3><div class="sub">${esc(n.zone || 'Unknown zone')}</div></div>
+                <div><h3>${waypointNameControl(n.name, worldLocation)}</h3><div class="sub">${esc(n.zone || 'Unknown zone')}</div></div>
                 <span class="pill ${conClass(con.key)}">${esc(con.label)}</span>
             </div>
             <div class="pill-row" style="margin-top:9px">
@@ -994,6 +1039,7 @@ function renderNpcList(s, profile) {
     }
 
     bindPathButtons($('#npc-list'));
+    bindWaypointButtons($('#npc-list'));
 }
 
 function renderItems(s, profile) {
@@ -1128,9 +1174,24 @@ function mapDestinationNames(s = state()) {
     return Array.from(names.values()).sort((a, b) => a.localeCompare(b));
 }
 
+function routeDestinationInputs() {
+    return [$('#map-destination'), $('#minimal-map-destination')].filter(Boolean);
+}
+
+function preferredRouteDestinationInput() {
+    return document.body.classList.contains('minimal-mode')
+        ? $('#minimal-map-destination')
+        : $('#map-destination');
+}
+
+function setRouteDestinationValue(value, source = null) {
+    for (const input of routeDestinationInputs()) {
+        if (input !== source) input.value = value;
+    }
+}
+
 function renderMapRoutePlanner(s = state()) {
     const zoneIdentity = `${zoneKey(s.zone)}:${pack.meta?.version || ''}`;
-    const destinationInput = $('#map-destination');
     const list = $('#map-destinations');
     if (list && renderedDestinationZone !== zoneIdentity) {
         const names = mapDestinationNames(s);
@@ -1138,15 +1199,13 @@ function renderMapRoutePlanner(s = state()) {
         renderedDestinationZone = zoneIdentity;
         renderedDestinationCount = names.length;
     }
-    if (destinationInput) {
+    for (const destinationInput of routeDestinationInputs()) {
         destinationInput.disabled = !s.zone;
         if (activeRoute && document.activeElement !== destinationInput) destinationInput.value = activeRoute.name;
         destinationInput.placeholder = s.zone ? 'Named mob or map label' : 'Waiting for a zone';
     }
-    const start = $('#start-route');
-    if (start) start.disabled = !s.zone;
-    const clear = $('#clear-route');
-    if (clear) clear.hidden = !activeRoute;
+    for (const start of [$('#start-route'), $('#minimal-start-route')].filter(Boolean)) start.disabled = !s.zone;
+    for (const clear of [$('#clear-route'), $('#minimal-clear-route')].filter(Boolean)) clear.hidden = !activeRoute;
     const status = $('#route-status');
     if (!status) return;
     if (!activeRoute) {
@@ -1601,8 +1660,7 @@ function clearActiveRoute(options = {}) {
     routeRequestSerial += 1;
     activeRoute = null;
     viewerApi()?.setActiveRareMob?.('');
-    const input = $('#map-destination');
-    if (input && options.keepInput !== true) input.value = '';
+    if (options.keepInput !== true) setRouteDestinationValue('');
     if (options.clearViewer !== false) viewerApi()?.clearPath?.();
     renderMapRoutePlanner(state());
 }
@@ -1657,10 +1715,8 @@ async function calculateActiveRoute(options = {}) {
     }
 
     const npc = npcRecordForName(activeRoute.name, activeRoute.zone);
-    const rawLocation = Array.isArray(npc?.loc) ? npc.loc.map(Number).filter(Number.isFinite) : null;
-    const wikiLocation = rawLocation && rawLocation.length >= 2
-        ? rawLocation.slice(0, Number(pack.meta?.schemaVersion) >= 3 ? 3 : 2)
-        : null;
+    const worldLocation = wikiLocationToWorld(npc?.loc);
+    const wikiLocation = worldLocation?.slice(0, Number(pack.meta?.schemaVersion) >= 3 ? 3 : 2) || null;
     apiObj.clearPath?.();
     const result = await apiObj.pathTo(activeRoute.name, wikiLocation);
     if (requestSerial !== routeRequestSerial || !activeRoute || `${zoneKey(activeRoute.zone)}|${npcNameKey(activeRoute.name)}` !== routeIdentity) return false;
@@ -1698,7 +1754,7 @@ async function pathToNpc(name) {
     name = String(name || '').trim();
     if (!name) {
         showNotice('Choose a named mob or enter a map label first.', { tone:'warning' });
-        $('#map-destination').focus();
+        preferredRouteDestinationInput()?.focus();
         return false;
     }
     setView('map', { sync:false });
@@ -1714,7 +1770,7 @@ async function pathToNpc(name) {
         message:s.location ? `Preparing path to ${name}…` : `Destination saved · waiting for /loc.`
     };
     viewerApi()?.setActiveRareMob?.(name);
-    $('#map-destination').value = name;
+    setRouteDestinationValue(name);
     renderMapRoutePlanner(s);
     return calculateActiveRoute({ automatic:false });
 }
@@ -1979,11 +2035,13 @@ function wireUi() {
         const editing = /^(?:INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName || '');
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
             event.preventDefault();
-            $('#wiki-search').focus();
-            $('#wiki-search').select();
+            const input = document.body.classList.contains('minimal-mode') ? preferredRouteDestinationInput() : $('#wiki-search');
+            input?.focus();
+            input?.select();
         } else if (event.key === '/' && !editing && !event.ctrlKey && !event.metaKey && !event.altKey) {
             event.preventDefault();
-            $('#wiki-search').focus();
+            const input = document.body.classList.contains('minimal-mode') ? preferredRouteDestinationInput() : $('#wiki-search');
+            input?.focus();
         } else if (event.key === 'Escape') {
             hideItemTooltip();
             if (consideredTarget) hideConsiderTray();
@@ -1993,16 +2051,23 @@ function wireUi() {
     $('#sync-zone').addEventListener('click', () => syncZoneToViewer(true));
     $('#sync-location').addEventListener('click', () => handleMapPrimaryAction().catch(error => showNotice(error.message, { tone:'error' })));
     $('#start-route').addEventListener('click', () => pathToNpc($('#map-destination').value));
-    $('#map-destination').addEventListener('keydown', event => {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            pathToNpc(event.currentTarget.value);
-        }
+    $('#minimal-route-form').addEventListener('submit', event => {
+        event.preventDefault();
+        pathToNpc($('#minimal-map-destination').value);
     });
-    $('#map-destination').addEventListener('input', event => {
-        if (activeRoute && npcNameKey(event.currentTarget.value) !== npcNameKey(activeRoute.name)) clearActiveRoute({ keepInput:true });
-    });
-    $('#clear-route').addEventListener('click', () => clearActiveRoute());
+    for (const input of routeDestinationInputs()) {
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter' && event.currentTarget.id !== 'minimal-map-destination') {
+                event.preventDefault();
+                pathToNpc(event.currentTarget.value);
+            }
+        });
+        input.addEventListener('input', event => {
+            setRouteDestinationValue(event.currentTarget.value, event.currentTarget);
+            if (activeRoute && npcNameKey(event.currentTarget.value) !== npcNameKey(activeRoute.name)) clearActiveRoute({ keepInput:true });
+        });
+    }
+    for (const button of [$('#clear-route'), $('#minimal-clear-route')]) button.addEventListener('click', () => clearActiveRoute());
     $('#window-minimize').addEventListener('click', () => window.eyeOfZommWindow?.minimize());
     $('#window-maximize').addEventListener('click', () => window.eyeOfZommWindow?.toggleMaximize());
     $('#window-close').addEventListener('click', () => window.eyeOfZommWindow?.close());

@@ -34,6 +34,10 @@ for (const required of [
     'same six-unit upward step limit as Grounded mode',
     'this.findGroundPointAt(f.x,f.z,f.y)||f',
     'this.findGroundPointAt(o.x,o.z,o.y)||o.clone()',
+    'xt=Object.freeze({swap:!1,sx:-1,sz:-1})',
+    'eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}',
+    'threeToEq(e){return this.mapFileVisible?Yx(e):this.threeToWorld(e)}',
+    'e.userData.eqlLocalTexturePath=t.path',
     'fh="v16"'
 ]) {
     if (!viewer.includes(required)) throw new Error(`Zone Viewer bundle is missing ${required}.`);

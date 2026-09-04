@@ -1,3 +1,5 @@
+import { loggedLocationToWorld } from './coordinate-system.js';
+
 const LINE_RE = /^\[([^\]]+)\]\s*(.*)$/;
 
 function parseNumber(text) {
@@ -259,18 +261,13 @@ export class EQLogParser {
         for (const pattern of locationPatterns) {
             x = text.match(pattern);
             if (x) {
-                // The client log writes /loc as Y, X, Z. EQ map files and
-                // EQLWiki locations use X, Y, Z with the same signs. Swap
-                // the planar axes once at the parser boundary; the 3D viewer
-                // performs its own Y-up scene conversion later.
+                // The client log writes /loc as Y, X, Z. Normalize only to
+                // world X, Y, Z here. Client map files use a different,
+                // signed coordinate basis and are converted by the viewer.
                 const logY = Number(x[1]);
                 const logX = Number(x[2]);
-                this.location = {
-                    x: logX, y: logY, z: Number(x[3]),
-                    logX, logY,
-                    heading: x[4] === undefined ? null : Number(x[4]),
-                    at: this.currentLineAt || Date.now()
-                };
+                this.location = loggedLocationToWorld(logY, logX, x[3], x[4]);
+                this.location.at = this.currentLineAt || Date.now();
                 return this.rememberEvent({ type: 'location', location: { ...this.location } });
             }
         }
