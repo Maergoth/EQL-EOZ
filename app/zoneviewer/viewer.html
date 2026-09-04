@@ -195,6 +195,31 @@ async function connectSavedHandle(handle) {
     }
 }
 
+function currentPresentation() {
+    return app?.mapFileVisible ? 'map' : (app?.mode === 'first' ? 'first' : 'top');
+}
+
+function restorePresentation(mode) {
+    if (!app?.currentZoneRecord) return;
+    if (mode === 'map' && app.mapData?.lines?.length) {
+        if (!app.mapFileVisible) app.setGameMapVisible(true);
+        return;
+    }
+    if (app.mapFileVisible) app.setGameMapVisible(false);
+    const viewerMode = mode === 'first' ? 'first' : 'top';
+    if (app.mode !== viewerMode) app.setMode(viewerMode);
+}
+
+function startRouteWithoutChangingPresentation(start) {
+    const presentation = currentPresentation();
+    const pending = start();
+    const status = app.els?.statusText?.textContent || '';
+    const progress = app.els?.progress?.hasAttribute?.('value') ? app.els.progress.value : null;
+    restorePresentation(presentation);
+    if (status) app.setStatus(status, progress);
+    return pending;
+}
+
 async function pathToWikiLocation(label, location) {
     if (!app?.currentZoneRecord || !Array.isArray(location) || location.length < 2) return false;
     const [eqX, eqY, rawEqZ] = location.map(Number);
@@ -202,9 +227,7 @@ async function pathToWikiLocation(label, location) {
     const hasTrustedElevation = Number.isFinite(rawEqZ);
     const eqZ = hasTrustedElevation ? rawEqZ : 0;
 
-    app.mapFileVisible && app.setGameMapVisible(false, false);
     const start = app.navigationStartPoint();
-    if (app.mode !== 'first') app.setMode('first');
     const point = app.eqMapToThree(eqX, eqY, eqZ);
     // A trusted wiki Z identifies a floor. Starting 35 units above it can hit
     // the next floor in stacked dungeons, so only allow the viewer's normal
@@ -655,7 +678,7 @@ window.eqlEyeOfZommViewer = {
         const hasLocalMapLabel = (app.gotoNpcEntries || []).some(entry =>
             !rareGotoEntries.includes(entry) && normalizedNpcName(entry.label) === wanted
         );
-        const ok = await app.gotoNpcLabel(String(label), { teleport:false });
+        const ok = await startRouteWithoutChangingPresentation(() => app.gotoNpcLabel(String(label), { teleport:false }));
         if (ok) return navigationResult(String(label), hasLocalMapLabel ? 'map-label' : 'wiki-location');
         const wikiOk = await pathToWikiLocation(String(label), wikiLocation);
         return wikiOk ? navigationResult(String(label), 'wiki-location') : { ok:false, source:'' };

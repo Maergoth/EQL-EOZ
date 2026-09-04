@@ -15,6 +15,12 @@ for (const required of ['window.eqlEyeOfZommViewer', 'useConfiguredFolder()', 's
 for (const required of ['app.setMiniMapVisible?.(true)', 'Path to ${label} ready ·', 'configureViewerMovement(app.fp)', 'EyeOfZommNavigationPolicy', 'LocationHeadingTracker']) {
     if (!html.includes(required)) throw new Error(`Zone Viewer integration is missing ${required}.`);
 }
+for (const required of ['currentPresentation()', 'restorePresentation(presentation)', 'startRouteWithoutChangingPresentation']) {
+    if (!html.includes(required)) throw new Error(`Zone Viewer integration is missing presentation-safe routing: ${required}.`);
+}
+if (html.includes("if (app.mode !== 'first') app.setMode('first')")) {
+    throw new Error('Wiki-coordinate routing still forces First Person mode.');
+}
 
 const viewer = readFileSync(new URL('../app/zoneviewer/ZoneViewerApp.js', import.meta.url), 'utf8');
 for (const required of [

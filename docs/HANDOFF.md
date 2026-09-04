@@ -9,7 +9,7 @@ This repository is the source of truth. A new contributor should be able to resu
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [v0.7 Windows/game-client checklist](V0.7_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.7.3**. The 0.7 replacement-map loop is implemented. The first 0.8 slices add live remaining distance, next-turn/facing cues, redacted support diagnostics, and a deterministic geometry-backed corpus. The pinned Recast/Detour module worker now passes all eight shared outcomes plus packaging and post-query validation gates. It is intentionally dormant: the collision graph remains the production pathfinder until decoded real-zone geometry and Windows/game-client checks pass.
+Current code baseline: **0.7.4**. The 0.7 replacement-map loop is implemented, including presentation-safe route starts that retain First/Top/Map while work runs. The first 0.8 slices add live remaining distance, next-turn/facing cues, redacted support diagnostics, and a deterministic geometry-backed corpus. The pinned Recast/Detour module worker passes all eight shared outcomes plus packaging and post-query validation gates. It is intentionally dormant: the collision graph remains the production pathfinder until decoded real-zone geometry and Windows/game-client checks pass.
 
 ## Run and verify
 

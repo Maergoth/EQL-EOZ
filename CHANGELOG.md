@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.4 - Presentation-safe route selection
+
+- Stopped wiki-coordinate route starts from forcing First Person or closing Map Overlay.
+- Wrapped local map-label route starts so their legacy internal setup cannot commandeer the player's Top Down or Map Overlay choice while background routing runs.
+- Restored the original route-progress message after presentation restoration and added a release regression that forbids the known forced-First-Person path.
+
 ## 0.7.3 - Isolated navmesh worker proof
 
 - Added a pinned, deterministic 747 KiB `recast-navigation` 0.43.1 module-worker bundle with transferable geometry buffers and build/package checks.

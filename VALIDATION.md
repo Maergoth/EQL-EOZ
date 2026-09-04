@@ -1,4 +1,4 @@
-# Validation report — v0.7.3
+# Validation report — v0.7.4
 
 Validated in the build environment on 2026-09-04 UTC.
 
@@ -33,6 +33,7 @@ Validated in the build environment on 2026-09-04 UTC.
 - Route-distance formatting tests retain near-target precision while quantizing medium/long distances to prevent noisy HUD churn.
 - Diagnostic-export tests prove the allow-list retains useful session/map/route state while excluding the character name, log filename, filesystem paths, viewer messages, and unknown future settings.
 - Inline viewer checks require dataset rare markers, marker-to-route messaging, mode-preserving location sync, and the shared heading tracker.
+- Inline viewer checks require both local-label and wiki-coordinate route starts to preserve the active First/Top/Map presentation while retaining the route-progress message.
 - Application checks require newest-location coalescing, continuous-movement route scheduling, current-zone rare ranking, and compact mob/loot search.
 - A production-size relevance gate exercises all 11,168 embedded items and confirms Befallen/MNK defaults return useful local equipment before generic consumables.
 - The S3D parser check requires WLD bitmap `fileName` resolution, normalized BMP/DDS lookup, animated-frame filenames, and parsed-zone cache version v16.

@@ -830,6 +830,7 @@ Deferred beyond 1.0 unless evidence changes the priority:
 9. **Treat movement bindings as a stream.** Coalesce `/loc` bursts to the newest sample and preserve stable facing through duplicates and jitter.
 10. **Put destinations on the map.** Project current-zone rare/named data into all three presentations and let a marker start navigation.
 11. **Keep compact mode complete.** Search targets and loot, expand class-aware drops, and retain route/map controls beside the game.
+12. **Never commandeer presentation for routing.** Starting a local-label or wiki-coordinate path retains First/Top/Map, camera state, floors, and full/minimal mode while work happens in the background.
 
 ### Approval points for 0.8–1.0
 
