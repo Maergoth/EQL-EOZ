@@ -7,6 +7,8 @@ import { routeDistanceLabel, routeGuidance } from '../app/route-guidance.js';
 import { buildDiagnosticSnapshot } from '../app/diagnostics.js';
 import {
     clientMapToViewer,
+    formatWorldLocationForPlayer,
+    loggedLocationToWorld,
     waypointCommandForWorldLocation,
     wikiLocationToWorld,
     worldToClientMap,
@@ -53,8 +55,8 @@ assert(
 );
 const befallenMapAnchor = worldToClientMap(befallenState.location);
 assert(
-    befallenMapAnchor.x === 30 && befallenMapAnchor.y === 961 && befallenMapAnchor.z === -66,
-    'Befallen world location resolves to the southern client-map rooms'
+    befallenMapAnchor.x === 961 && befallenMapAnchor.y === 30 && befallenMapAnchor.z === -66,
+    'Befallen /loc converts to client-map -X/-Y without swapping axes'
 );
 const befallenViewerFromWorld = worldToViewer(befallenState.location);
 const befallenViewerFromMap = clientMapToViewer(befallenMapAnchor);
@@ -77,6 +79,34 @@ assert(
     'two-axis wiki destinations produce a paste-ready waypoint command'
 );
 assert(waypointCommandForWorldLocation([NaN, -80]) === '', 'invalid coordinates cannot produce a waypoint command');
+
+const mistmooreLocation = loggedLocationToWorld(-330, 120, -178.13);
+assert(
+    formatWorldLocationForPlayer(mistmooreLocation) === '/loc -330.00, 120.00, -178.13',
+    'Mistmoore sync readout matches the exact coordinate order shown in game'
+);
+const mistmooreMapAnchor = worldToClientMap(mistmooreLocation);
+assert(
+    mistmooreMapAnchor.x === -120 && mistmooreMapAnchor.y === 330 && mistmooreMapAnchor.z === -178.13,
+    'Mistmoore /loc lands on the real map Succor anchor instead of the rotated opposite point'
+);
+assert(
+    JSON.stringify(worldToViewer(mistmooreLocation)) === JSON.stringify(clientMapToViewer(mistmooreMapAnchor)),
+    'Mistmoore world and client-map coordinates resolve to the same viewer point'
+);
+const mistmooreWikiLocation = wikiLocationToWorld([-330, 120, -178.13]);
+assert(
+    JSON.stringify(mistmooreWikiLocation) === JSON.stringify([120, -330, -178.13]) &&
+    JSON.stringify(worldToViewer({ x:mistmooreWikiLocation[0], y:mistmooreWikiLocation[1], z:mistmooreWikiLocation[2] })) ===
+        JSON.stringify(clientMapToViewer(mistmooreMapAnchor)),
+    'Mistmoore wiki rare-mob locations share the player and local-map anchor'
+);
+const befallenSuccorWorld = loggedLocationToWorld(-82, 35, 0.0029);
+assert(
+    JSON.stringify(worldToClientMap(befallenSuccorWorld)) === JSON.stringify({ x:-35, y:82, z:0.0029 }),
+    'Befallen /loc matches the real client-map Succor anchor'
+);
+assert(formatWorldLocationForPlayer({ x:NaN, y:1, z:2 }) === '', 'invalid world positions cannot produce a /loc readout');
 
 const legendsRareConsider = new EQLogParser();
 const legendsRareConsiderEvent = legendsRareConsider.parse(

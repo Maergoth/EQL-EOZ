@@ -388,23 +388,64 @@ async function findNavigationPathAttempt(start, goal, attempt, token, deadline, 
 const viewerPath = `${root}/app/zoneviewer/ZoneViewerApp.js`;
 let viewer = readFileSync(viewerPath, 'utf8');
 
-// The decoded WLD scene and the client .txt map do not share a planar basis.
-// sage-core emits WLD X,Z,Y while client maps store -worldY,-worldX,Z.
+// Match the game's default map-folder selection unless a future explicit
+// user preference says otherwise. Previously the largest custom map family
+// silently won, so the app could draw a different file set than the client.
 viewer = viewer.replace(
-    'xt=Object.freeze({swap:!0,sx:1,sz:-1})',
-    'xt=Object.freeze({swap:!1,sx:-1,sz:-1})'
+    'let h=l.layers.has(0)?1:0;return(c.layers.has(0)?1:0)-h||l.priority-c.priority||c.bytes-l.bytes||l.directory.localeCompare(c.directory)',
+    'let h=l.layers.has(0)?1:0,u=/^maps$/i.test(l.directory)?1:0,d=/^maps$/i.test(c.directory)?1:0;return(c.layers.has(0)?1:0)-h||d-u||l.priority-c.priority||c.bytes-l.bytes||l.directory.localeCompare(c.directory)'
+);
+if (!viewer.includes('u=/^maps$/i.test(l.directory)?1:0,d=/^maps$/i.test(c.directory)?1:0')) {
+    throw new Error('Unable to install default map-family preference.');
+}
+
+// Client maps store -worldX,-worldY,Z. The viewer's original map adapter
+// places that in the decoded WLD scene's (-worldY,Z,worldX) basis.
+viewer = viewer.replace(
+    'xt=Object.freeze({swap:!1,sx:-1,sz:-1})',
+    'xt=Object.freeze({swap:!0,sx:1,sz:-1})'
 );
 viewer = viewer.replace(
     'chooseMapTransform(){return{...xt}}eqMapToThree(e,t,n){return dh(e,t,n)}',
-    'chooseMapTransform(){return{...xt}}eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}eqMapToThree(e,t,n){return dh(e,t,n)}'
+    'chooseMapTransform(){return{...xt}}eqWorldToThree(e,t,n){return new A(-Tt(t),Tt(n),Tt(e))}eqMapToThree(e,t,n){return dh(e,t,n)}'
 );
 viewer = viewer.replace(
-    'eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}eqMapToThree(e,t,n){return dh(e,t,n)}threeToEq(e){return Yx(e)}',
-    'eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}eqMapToThree(e,t,n){return dh(e,t,n)}threeToWorld(e){return{x:e.z,y:e.x,z:e.y}}threeToEq(e){return this.mapFileVisible?Yx(e):this.threeToWorld(e)}'
+    'eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}',
+    'eqWorldToThree(e,t,n){return new A(-Tt(t),Tt(n),Tt(e))}'
 );
-if (!viewer.includes('xt=Object.freeze({swap:!1,sx:-1,sz:-1})') ||
-    !viewer.includes('eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}') ||
-    !viewer.includes('threeToEq(e){return this.mapFileVisible?Yx(e):this.threeToWorld(e)}')) {
+viewer = viewer.replace(
+    'eqWorldToThree(e,t,n){return new A(-Tt(t),Tt(n),Tt(e))}eqMapToThree(e,t,n){return dh(e,t,n)}threeToEq(e){return Yx(e)}',
+    'eqWorldToThree(e,t,n){return new A(-Tt(t),Tt(n),Tt(e))}eqMapToThree(e,t,n){return dh(e,t,n)}threeToWorld(e){return{x:e.z,y:-e.x,z:e.y}}threeToEq(e){return this.threeToWorld(e)}'
+);
+viewer = viewer.replace(
+    'threeToEq(e){return this.mapFileVisible?Yx(e):this.threeToWorld(e)}',
+    'threeToEq(e){return this.threeToWorld(e)}'
+);
+viewer = viewer.replace(
+    'threeToWorld(e){return{x:e.z,y:e.x,z:e.y}}',
+    'threeToWorld(e){return{x:e.z,y:-e.x,z:e.y}}'
+);
+viewer = viewer.replaceAll(
+    'this.els.coord.textContent="X \\u2014  Y \\u2014  Z \\u2014"',
+    'this.els.coord.textContent="/loc \\u2014, \\u2014, \\u2014"'
+);
+viewer = viewer.replaceAll(
+    'this.els.coord.textContent=`X ${i.x.toFixed(2)}   Y ${i.y.toFixed(2)}   Z ${i.z.toFixed(2)}`',
+    'this.els.coord.textContent=`/loc ${i.y.toFixed(2)}, ${i.x.toFixed(2)}, ${i.z.toFixed(2)}`'
+);
+viewer = viewer.replaceAll(
+    'this.els.coord.textContent=`X ${u.x.toFixed(2)}   Y ${u.y.toFixed(2)}   Z ${u.z.toFixed(2)}`',
+    'this.els.coord.textContent=`/loc ${u.y.toFixed(2)}, ${u.x.toFixed(2)}, ${u.z.toFixed(2)}`'
+);
+viewer = viewer.replaceAll(
+    'this.els.coord.textContent=`X ${a.x.toFixed(2)}   Y ${a.y.toFixed(2)}   Z ${a.z.toFixed(2)}`',
+    'this.els.coord.textContent=`/loc ${a.y.toFixed(2)}, ${a.x.toFixed(2)}, ${a.z.toFixed(2)}`'
+);
+if (!viewer.includes('xt=Object.freeze({swap:!0,sx:1,sz:-1})') ||
+    !viewer.includes('eqWorldToThree(e,t,n){return new A(-Tt(t),Tt(n),Tt(e))}') ||
+    !viewer.includes('threeToWorld(e){return{x:e.z,y:-e.x,z:e.y}}') ||
+    !viewer.includes('threeToEq(e){return this.threeToWorld(e)}') ||
+    !viewer.includes('this.els.coord.textContent=`/loc ${i.y.toFixed(2)}, ${i.x.toFixed(2)}, ${i.z.toFixed(2)}`')) {
     throw new Error('Unable to install distinct EQ world and client-map transforms.');
 }
 viewer = viewer.replace(

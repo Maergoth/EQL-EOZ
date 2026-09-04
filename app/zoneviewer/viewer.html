@@ -36,6 +36,7 @@ import { mountZoneViewer } from './ZoneViewerApp.js';
 import navigationPolicy, { configureViewerMovement } from '../navigation-policy.js';
 import { LocationHeadingTracker } from '../movement-tracking.js';
 import { routeDistanceLabel, routeGuidance } from '../route-guidance.js';
+import { formatWorldLocationForPlayer } from '../coordinate-system.js';
 
 globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
@@ -86,6 +87,13 @@ function norm(text) {
 function viewerName(zoneName) {
     const cleaned = String(zoneName || '').replace(/\s+\d+\s+\([^)]*\)\s*$/,'').trim();
     return zoneAliases.get(norm(cleaned)) || cleaned;
+}
+
+function playerMapSetLabel(sourceLabel) {
+    const source = String(sourceLabel || 'maps').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!source || source.toLowerCase() === 'maps') return 'default map set';
+    const parts = source.split('/').filter(Boolean);
+    return `${parts.at(-1)} map set`;
 }
 
 async function localApi(url, options = {}) {
@@ -535,22 +543,22 @@ window.eqlEyeOfZommViewer = {
 
         // Logged locations are world X/Y/Z. Client map files have a separate
         // signed basis and use eqMapToThree instead.
-        const eqLocation = { x:Number(location.x), y:Number(location.y), z:Number(location.z) };
-        const point = app.eqWorldToThree(eqLocation.x, eqLocation.y, eqLocation.z);
+        const worldLocation = { x:Number(location.x), y:Number(location.y), z:Number(location.z) };
+        const point = app.eqWorldToThree(worldLocation.x, worldLocation.y, worldLocation.z);
         // /loc Z is authoritative. A large upward ray offset can snap to the
         // ceiling or next floor (Befallen's adjacent floors are ~33 units
         // apart), while findGroundPointAt already permits the six-unit step
         // tolerance configured for player movement.
         const ground = app.findGroundPointAt(point.x, point.z, point.y) || point;
         lastSyncedGround = ground.clone();
-        const movement = headingTracker.push(eqLocation, Number(options.timestamp) || Date.now());
+        const movement = headingTracker.push(worldLocation, Number(options.timestamp) || Date.now());
         const previousForward = app.lastFirstPersonPose?.forward?.clone?.();
         let forward = previousForward;
         if (movement.heading) {
             const headingPoint = app.eqWorldToThree(
-                eqLocation.x + movement.heading.x,
-                eqLocation.y + movement.heading.y,
-                eqLocation.z
+                worldLocation.x + movement.heading.x,
+                worldLocation.y + movement.heading.y,
+                worldLocation.z
             );
             const mappedHeading = headingPoint.clone().sub(point).setY(0);
             if (mappedHeading.lengthSq() > .0001) forward = mappedHeading.normalize();
@@ -577,11 +585,11 @@ window.eqlEyeOfZommViewer = {
         } else {
             focusTopViewAt(ground);
         }
-        lastSyncedLocation = eqLocation;
+        lastSyncedLocation = worldLocation;
         if (typeof app.updateCoordinateHud === 'function') app.updateCoordinateHud(true);
         if (resolvedMode !== 'first' && typeof app.drawMiniMap === 'function') app.drawMiniMap();
         if (typeof app.setStatus === 'function') {
-            app.setStatus(`Synced to map location X ${Number(location.x).toFixed(1)} Y ${Number(location.y).toFixed(1)} Z ${Number(location.z).toFixed(1)}.`);
+            app.setStatus(`Synced to game location ${formatWorldLocationForPlayer(worldLocation)} · ${playerMapSetLabel(app.mapData?.sourceLabel)}.`);
         }
         app.requestRender?.();
         renderRareMobs();

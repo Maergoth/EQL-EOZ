@@ -5,7 +5,7 @@ import { itemHasZoneSource, scoreItemForBrowse } from './item-browse.js';
 import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
 import { routeDistanceLabel } from './route-guidance.js';
-import { waypointCommandForWorldLocation, wikiLocationToWorld } from './coordinate-system.js';
+import { formatWorldLocationForPlayer, waypointCommandForWorldLocation, wikiLocationToWorld } from './coordinate-system.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -831,7 +831,7 @@ function renderOverviewNpcs(s, profile) {
 function eventText(e) {
     if (e.type === 'zone') return `Entered ${e.zone}`;
     if (e.type === 'profile') return `${e.character || 'Character'} detected at level ${e.level} · ${(e.classes||[]).join('/')}`;
-    if (e.type === 'location') return `Location ${e.location.x.toFixed(1)}, ${e.location.y.toFixed(1)}, ${e.location.z.toFixed(1)}`;
+    if (e.type === 'location') return formatWorldLocationForPlayer(e.location, 1);
     if (e.type === 'consider') return `${e.target.name} considered at level ${e.target.level}`;
     if (e.type === 'damage') return `${e.source}: ${e.amount} → ${e.victim}`;
     if (e.type === 'heal') return `${e.source}: healed ${e.target}`;
@@ -1446,7 +1446,7 @@ function mapReadinessMessage(s = state()) {
     if (!bridgeInfo.logExists) return 'Game folder ready · waiting for an eqlog_*.txt file in Logs.';
     if (!s.zone) return 'Game folder and log ready · waiting for the next zone line.';
     if (!s.location) return `${s.zone} ready · type /loc in game once to place yourself on the map.`;
-    return `X ${s.location.x.toFixed(1)} · Y ${s.location.y.toFixed(1)} · Z ${s.location.z.toFixed(1)}`;
+    return formatWorldLocationForPlayer(s.location, 1);
 }
 
 function queueViewerSync(operation) {

@@ -16,7 +16,7 @@ Validated in the build environment on 2026-09-04 UTC.
 - Bundled JSON files parse successfully.
 - The bootstrap script validates manifest shape, gzip SHA-256, decompression, and schema v3 before embedding a production snapshot.
 - Runtime dataset checks now target the GitHub `dataset` branch rather than eqlwiki.com.
-- The reported Befallen `/loc` regression is covered end to end: displayed `Y -30, X -961, Z -66` normalizes to world `X -961, Y -30, Z -66`, projects to client-map `X 30, Y 961, Z -66`, and both paths reach the same viewer anchor.
+- The reported coordinate regression is covered end to end: displayed Mistmoore `/loc -330, 120, -178.13` normalizes to world `X 120, Y -330, Z -178.13`, projects to the real map's Succor anchor around `X -120, Y 330, Z -180`, and both paths reach the same viewer point. A Befallen Succor anchor independently guards the same no-swap `(-world X,-world Y,Z)` rule.
 - Location and named-destination grounding are release-checked to start at the trusted Z rather than a 24–35 unit offset that could select Befallen's next floor.
 - Legends rare-creature/scowls consider wording is covered with the reported Soldier of V Zher line and clean-name assertion.
 - Directed route-policy tests allow exactly +6 Z, reject greater climbs, allow exposed drops of any height, and reject drops through an overlapping upper floor.

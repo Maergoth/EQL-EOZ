@@ -605,12 +605,13 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 
 ### Coordinate and camera truth
 
-- Logged `Your Location is -30, -961, -66` produces map X `-961`, Y `-30`, Z `-66`.
+- Logged `Your Location is -30, -961, -66` displays unchanged as `/loc -30, -961, -66`, while its internal client-map anchor is X `961`, Y `30`, Z `-66`.
 - In a stacked zone, that Z remains on the nearest valid floor around `-66`; it must not snap to the floor around `-37` merely because collision was queried from above.
 - Two different `/loc` values orient first person along the observed trajectory.
 - First, Top, and Map remain centered on the same location.
 - Switching window modes does not remove map-mode controls or change the chosen map mode.
 - All floors appear by default after loading a zone.
+- When several map folders contain the zone, Eye of Zomm uses the root `maps` family that corresponds to the game's `default` selection and names the active map set in sync status. A future explicit map-set selector may override it; file size must never choose a custom set silently.
 
 ### Consider and loot
 
@@ -702,14 +703,15 @@ Known 0.6 limits, stated rather than hidden:
 0.6 exit checklist:
 
 1. Fresh-folder and returning-startup flows complete with the expected automatic log.
-2. Befallen `/loc -30, -961, -66` normalizes to world X `-961`, Y `-30`, Z `-66`, projects to client-map X `30`, Y `961`, Z `-66`, and both paths meet on the correct stacked-floor viewer anchor.
-3. Two `/loc` samples update facing; a live destination re-routes without another selection.
-4. First/Top/Map remain available through full/minimal transitions.
-5. The exact Legends rare-creature consider line opens the bottom tray.
-6. Befallen + MNK production data opens with equipment ahead of potions.
-7. Item tier changes an open detail and changed values are visibly different from base.
-8. WLD material lookup resolves static and animated bitmap filenames after a v16 zone-cache rebuild.
-9. Clean-checkout tests, production-catalog gate, Windows build, and installer artifact all succeed.
+2. Befallen `/loc -30, -961, -66` normalizes to world X `-961`, Y `-30`, Z `-66`, projects to client-map X `961`, Y `30`, Z `-66`, and both paths meet on the same stacked-floor viewer anchor.
+3. Mistmoore `/loc -330, 120, -178.13` projects to the real map's Succor anchor near X `-120`, Y `330`, Z `-180` through the shared `(-world X,-world Y,Z)` transform, while every player-facing readout remains `/loc -330.00, 120.00, -178.13`; world and client-map axes never appear as alternate locations.
+4. Two `/loc` samples update facing; a live destination re-routes without another selection.
+5. First/Top/Map remain available through full/minimal transitions.
+6. The exact Legends rare-creature consider line opens the bottom tray.
+7. Befallen + MNK production data opens with equipment ahead of potions.
+8. Item tier changes an open detail and changed values are visibly different from base.
+9. WLD material lookup resolves static and animated bitmap filenames after a v16 zone-cache rebuild.
+10. Clean-checkout tests, production-catalog gate, Windows build, and installer artifact all succeed.
 
 ### 16.2 Version 0.7 — replacement map
 

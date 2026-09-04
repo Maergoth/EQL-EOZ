@@ -31,18 +31,32 @@ export function wikiLocationToWorld(location) {
     return world;
 }
 
-/** The classic client map format is -world Y, -world X, world Z. */
+/** The classic client map format negates world X/Y without swapping them. */
 export function worldToClientMap({ x, y, z = 0 }) {
-    return { x:-finite(y), y:-finite(x), z:finite(z) };
+    return { x:-finite(x), y:-finite(y), z:finite(z) };
 }
 
-/** sage-core emits WLD X, Z, Y into Three.js; EQ world X/Y are WLD Y/X. */
+/** The decoded WLD scene uses viewer (-world Y, world Z, world X). */
 export function worldToViewer({ x, y, z = 0 }) {
-    return { x:finite(y), y:finite(z), z:finite(x) };
+    return { x:-finite(y), y:finite(z), z:finite(x) };
 }
 
 export function clientMapToViewer({ x, y, z = 0 }) {
-    return { x:-finite(x), y:finite(z), z:-finite(y) };
+    return { x:finite(y), y:finite(z), z:-finite(x) };
+}
+
+/**
+ * Format a canonical world position exactly as EverQuest displays `/loc`:
+ * Y, X, Z. Keeping this at the coordinate boundary prevents internal axes
+ * from leaking into player-facing labels.
+ */
+export function formatWorldLocationForPlayer(location, digits = 2) {
+    const worldX = Number(location?.x);
+    const worldY = Number(location?.y);
+    const worldZ = Number(location?.z);
+    if (![worldX, worldY, worldZ].every(Number.isFinite)) return '';
+    const precision = Math.max(0, Math.min(6, Math.trunc(Number(digits) || 0)));
+    return `/loc ${worldY.toFixed(precision)}, ${worldX.toFixed(precision)}, ${worldZ.toFixed(precision)}`;
 }
 
 function commandCoordinate(value) {

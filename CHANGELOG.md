@@ -1,8 +1,17 @@
 # Changelog
 
+## 0.7.6 - Player-facing coordinate clarity
+
+- Corrected the player anchor itself: client `.txt` maps negate canonical world X/Y but do not swap them. Restored the viewer's matching map basis so Mistmoore game `/loc -330, 120, -178.13` lands at the real local-map Succor anchor `-120, 330, -180` instead of the rotated `330, -120` point.
+- Made every visible viewer coordinate use EverQuest's exact `/loc Y, X, Z` order; canonical world and client-map axes remain internal implementation details.
+- Removed the Map-only reverse conversion that made the same synced position appear numerically different when changing First, Top, and Map presentations.
+- Added real Mistmoore and Befallen Succor map anchors as end-to-end transform regressions alongside the stacked-floor fixture.
+- Made the root `maps` family win over silently selected larger custom map packs, matching the in-game `default` dropdown unless the player deliberately chooses another set in a future preference; sync status now names the map set in use.
+- Updated the Windows acceptance script to compare the app's displayed `/loc` directly with game chat in multiple zones.
+
 ## 0.7.5 - Coordinate truth and compact navigation
 
-- Separated logged/wiki, canonical world, client `.txt` map, and Three.js viewer coordinates instead of sending all four through one ambiguous transform. The Befallen `/loc -30, -961, -66` fixture now resolves to client-map anchor `30, 961, -66` and the same 3D anchor as decoded WLD geometry.
+- Separated logged/wiki, canonical world, client `.txt` map, and Three.js viewer coordinates instead of sending all four through one ambiguous transform. This release still swapped the two client-map axes; 0.7.6 corrects that remaining defect with real zone anchors.
 - Normalized EQLWiki NPC locations into world X/Y before distance, labels, and routing, while converting back to EverQuest Y/X/Z when copying a game command.
 - Restored paste-ready `/waypoint` copying from NPC names in the minimal rail and NPC browser, with keyboard access, non-modal confirmation, a guarded Electron clipboard bridge, and fallback behavior.
 - Moved minimal-mode destination search, Path, and Clear into the persistent 48-pixel header and removed the redundant route band so the map receives the recovered vertical space.

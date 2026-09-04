@@ -11,6 +11,9 @@ if (!modules.length) {
 for (const required of ['window.eqlEyeOfZommViewer', 'useConfiguredFolder()', 'setView(mode)', 'syncLocation(location, options = {})', 'setRareMobs(records = [])']) {
     if (!html.includes(required)) throw new Error(`Zone Viewer integration is missing ${required}.`);
 }
+for (const required of ['playerMapSetLabel(sourceLabel)', 'default map set', 'app.mapData?.sourceLabel']) {
+    if (!html.includes(required)) throw new Error(`Zone Viewer map-set status is missing ${required}.`);
+}
 
 for (const required of ['app.setMiniMapVisible?.(true)', 'Path to ${label} ready ·', 'configureViewerMovement(app.fp)', 'EyeOfZommNavigationPolicy', 'LocationHeadingTracker']) {
     if (!html.includes(required)) throw new Error(`Zone Viewer integration is missing ${required}.`);
@@ -34,13 +37,19 @@ for (const required of [
     'same six-unit upward step limit as Grounded mode',
     'this.findGroundPointAt(f.x,f.z,f.y)||f',
     'this.findGroundPointAt(o.x,o.z,o.y)||o.clone()',
-    'xt=Object.freeze({swap:!1,sx:-1,sz:-1})',
-    'eqWorldToThree(e,t,n){return new A(Tt(t),Tt(n),Tt(e))}',
-    'threeToEq(e){return this.mapFileVisible?Yx(e):this.threeToWorld(e)}',
+    'xt=Object.freeze({swap:!0,sx:1,sz:-1})',
+    'eqWorldToThree(e,t,n){return new A(-Tt(t),Tt(n),Tt(e))}',
+    'threeToWorld(e){return{x:e.z,y:-e.x,z:e.y}}',
+    'u=/^maps$/i.test(l.directory)?1:0,d=/^maps$/i.test(c.directory)?1:0',
+    'threeToEq(e){return this.threeToWorld(e)}',
+    'this.els.coord.textContent=`/loc ${i.y.toFixed(2)}, ${i.x.toFixed(2)}, ${i.z.toFixed(2)}`',
     'e.userData.eqlLocalTexturePath=t.path',
     'fh="v16"'
 ]) {
     if (!viewer.includes(required)) throw new Error(`Zone Viewer bundle is missing ${required}.`);
+}
+if (!html.includes('Synced to game location ${formatWorldLocationForPlayer(worldLocation)} · ${playerMapSetLabel(app.mapData?.sourceLabel)}.')) {
+    throw new Error('Zone Viewer sync status does not use the player-facing /loc convention.');
 }
 
 const worker = readFileSync(new URL('../app/zoneviewer/zone-parser.worker.js', import.meta.url), 'utf8');

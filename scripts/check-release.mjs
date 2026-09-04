@@ -19,7 +19,7 @@ if (!changelog.includes(`## ${pkg.version} -`)) throw new Error(`CHANGELOG.md ne
 for (const required of ['## 6. Click budgets', '## 8. End-to-end UX flows', '## 9. Feature specifications and user stories', '## 15. Acceptance scenarios for release candidates', '## 16. Road to v1']) {
     if (!uxVision.includes(required)) throw new Error(`UX vision is missing required section: ${required}`);
 }
-for (const required of ['X `-961`, Y `-30`, Z `-66`', 'client-map anchor X `30`, Y `961`, Z `-66`', '## 1. Continuous `/loc` tracking', '## 2. Rare-mob replacement map', '## 3. Minimal loot browsing', '## 4. Map Overlay versus S3D textures', '## 5. Persistent golden path']) {
+for (const required of ['`/loc -30.00, -961.00, -66.00`', 'client-map anchor X `961`, Y `30`, Z `-66`', '`/loc -330.00, 120.00, -178.13`', 'Succor anchor X `-120`, Y `330`, Z `-180`', '## 1. Continuous `/loc` tracking', '## 2. Rare-mob replacement map', '## 3. Minimal loot browsing', '## 4. Map Overlay versus S3D textures', '## 5. Persistent golden path']) {
     if (!manualTest.includes(required)) throw new Error(`Windows acceptance test is missing: ${required}`);
 }
 for (const required of ['docs/UX_VISION.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/HANDOFF.md', 'docs/NAVMESH_EVALUATION.md', 'VALIDATION.md']) {
