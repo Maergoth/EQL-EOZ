@@ -37,6 +37,8 @@ import navigationPolicy, { configureViewerMovement } from '../navigation-policy.
 import { LocationHeadingTracker } from '../movement-tracking.js';
 import { routeDistanceLabel, routeGuidance } from '../route-guidance.js';
 import { formatWorldLocationForGameMap } from '../coordinate-system.js';
+import { RecastRouteClient } from '../recast-route-client.js';
+import { cropCollisionGeometryForRoute, exportViewerCollisionGeometry } from '../collision-geometry.js';
 
 globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
@@ -63,6 +65,7 @@ trimObserver.observe(root, { childList:true, subtree:true });
 simplifyViewerUi();
 
 app.els?.pathCancel?.addEventListener('click', () => {
+    cancelCandidateRoute('cancelled');
     window.parent?.postMessage({ type:'eoz-route-cancelled' }, window.location.origin);
 });
 
@@ -364,6 +367,214 @@ function normalizedNpcName(value) {
     return String(value || '').trim().toLowerCase().replace(/['’‘`]/g, '').replace(/[_\s]+/g, ' ');
 }
 
+let collisionExportSerial = 0;
+let collisionGeometry = null;
+let collisionGeometryPromise = null;
+let candidateRouteSerial = 0;
+let collisionGeometryState = { status:'idle' };
+let candidateRouteState = { status:'idle' };
+
+function finiteMetric(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+
+function candidateStateFrom(result = {}, previous = candidateRouteState) {
+    return {
+        ...previous,
+        status:String(result.status || previous.status || 'idle'),
+        reason:String(result.reason || ''),
+        engine:String(result.engine || previous.engine || ''),
+        engineVersion:String(result.engineVersion || previous.engineVersion || ''),
+        generationMs:finiteMetric(result.generationMs ?? previous.generationMs),
+        queryMs:finiteMetric(result.queryMs ?? previous.queryMs),
+        totalMs:finiteMetric(result.totalMs ?? previous.totalMs),
+        violationCount:finiteMetric(result.violationCount ?? previous.violationCount)
+    };
+}
+
+const recastRouteClient = new RecastRouteClient({
+    onState:state => { candidateRouteState = candidateStateFrom(state); }
+});
+
+function plainPoint(point) {
+    if (!point || !['x', 'y', 'z'].every(axis => Number.isFinite(Number(point[axis])))) return null;
+    return { x:Number(point.x), y:Number(point.y), z:Number(point.z) };
+}
+
+function resetSpatialRouteState() {
+    collisionExportSerial += 1;
+    candidateRouteSerial += 1;
+    recastRouteClient.destroy();
+    collisionGeometry = null;
+    collisionGeometryPromise = null;
+    collisionGeometryState = { status:'idle' };
+    candidateRouteState = { status:'idle' };
+}
+
+function cancelCandidateRoute(reason = 'cancelled') {
+    candidateRouteSerial += 1;
+    recastRouteClient.cancel(reason, { restartWorker:true });
+    candidateRouteState = candidateStateFrom({ status:'cancelled', reason }, { status:'idle' });
+}
+
+function startCollisionGeometryExport(zoneIdentity) {
+    const serial = ++collisionExportSerial;
+    const zone = String(app?.currentZoneRecord?.id || '');
+    const format = String(app?.currentZoneRecord?.format || '');
+    const startedAt = performance.now();
+    collisionGeometry = null;
+    collisionGeometryState = { status:'preparing', zone, format };
+    collisionGeometryPromise = (async () => {
+        // The visible zone is already mounted. Yield once before flattening its
+        // collision meshes so loading never waits on candidate path data.
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const geometry = await exportViewerCollisionGeometry(app.zoneGroup, {
+            shouldCancel:() => serial !== collisionExportSerial || zoneIdentity !== loadedZoneIdentity
+        });
+        if (serial !== collisionExportSerial || zoneIdentity !== loadedZoneIdentity) return null;
+        if (!geometry) throw new Error('No finite collision triangles were exported.');
+        collisionGeometry = geometry;
+        collisionGeometryState = {
+            status:'ready',
+            zone,
+            format,
+            buildMs:performance.now() - startedAt,
+            sourceMeshes:Number(geometry.stats?.sourceMeshes) || 0,
+            vertices:Number(geometry.stats?.vertices) || 0,
+            triangles:Number(geometry.stats?.triangles) || 0,
+            skippedTriangles:Number(geometry.stats?.skippedTriangles) || 0
+        };
+        return geometry;
+    })().catch(error => {
+        if (serial === collisionExportSerial && zoneIdentity === loadedZoneIdentity) {
+            collisionGeometryState = {
+                status:'error',
+                zone,
+                format,
+                buildMs:performance.now() - startedAt,
+                reason:error?.message === 'No finite collision triangles were exported.' ? 'no-collision-geometry' : 'collision-export-failed'
+            };
+        }
+        return null;
+    });
+}
+
+function removeRenderedPath() {
+    const group = app?.navigationGuideGroup;
+    if (!group?.children) return;
+    for (const child of [...group.children]) {
+        const routeMesh = String(child.name || '').startsWith('navigation-golden-path') ||
+            (Number(child.renderOrder) >= 910 && Number(child.renderOrder) <= 912);
+        if (!routeMesh) continue;
+        group.remove(child);
+        child.traverse?.(object => {
+            object.geometry?.dispose?.();
+            const materials = Array.isArray(object.material) ? object.material : [object.material];
+            materials.filter(Boolean).forEach(material => material.dispose?.());
+        });
+    }
+}
+
+function replacePathWithCandidate(result, label) {
+    const template = app?.navigationTarget?.ground || app?.navigationStartPoint?.();
+    const points = (result?.path || []).map(point => {
+        const value = plainPoint(point);
+        return value && template?.clone?.().set(value.x, value.y, value.z);
+    }).filter(Boolean);
+    if (points.length < 2) return false;
+    removeRenderedPath();
+    app.navigationPath = [];
+    app.addNavigationPath(points);
+    app.updateNavigationOverlay?.();
+    app.drawMiniMap?.();
+    app.requestRender?.();
+    const guidance = renderRouteGuidance();
+    const distance = guidance.active ? guidance.remainingDistance : points.slice(1)
+        .reduce((sum, point, index) => sum + point.distanceTo(points[index]), 0);
+    app.setStatus?.(`Path to ${label} updated · ${Math.round(distance).toLocaleString()} units.`, 0);
+    window.parent?.postMessage({
+        type:'eoz-route-candidate-ready',
+        name:String(label || ''),
+        distance,
+        guidance
+    }, window.location.origin);
+    return true;
+}
+
+function scheduleCandidateRoute(label) {
+    const target = app?.navigationTarget;
+    const start = plainPoint(target?.requestStart || app?.navigationStartPoint?.());
+    const goal = plainPoint(target?.ground);
+    if (!target?.key || !start || !goal || !loadedZoneIdentity) return false;
+    const serial = ++candidateRouteSerial;
+    const zoneIdentity = loadedZoneIdentity;
+    const targetKey = target.key;
+    const fallbackPath = (app.navigationPath || []).map(plainPoint).filter(Boolean);
+    const guidePoints = fallbackPath.length >= 2 ? fallbackPath : [start, goal];
+    candidateRouteState = {
+        status:collisionGeometry ? 'preparing' : 'waiting-geometry',
+        reason:'',
+        fallbackAvailable:fallbackPath.length >= 2
+    };
+
+    void (async () => {
+        const fullGeometry = collisionGeometry || await collisionGeometryPromise;
+        if (!fullGeometry || serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey) {
+            if (serial === candidateRouteSerial && !fullGeometry) {
+                candidateRouteState = candidateStateFrom({ status:'fallback', reason:'collision-geometry-unavailable' });
+            }
+            return;
+        }
+        const cropStartedAt = performance.now();
+        const cropped = await cropCollisionGeometryForRoute(fullGeometry, guidePoints, {
+            // A direct start/goal marker is useful for the crop but is not
+            // evidence that a drop is exposed. Only the established,
+            // collision-approved line may authorize one-way drop links.
+            dropPath:fallbackPath,
+            shouldCancel:() => serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey
+        });
+        if (serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey) return;
+        if (!cropped.ok) {
+            candidateRouteState = candidateStateFrom({ status:'fallback', reason:cropped.reason }, {
+                ...candidateRouteState,
+                cropMs:performance.now() - cropStartedAt,
+                sourceTriangles:finiteMetric(cropped.stats?.sourceTriangles),
+                selectedTriangles:finiteMetric(cropped.stats?.selectedTriangles),
+                corridorMargin:finiteMetric(cropped.stats?.margin)
+            });
+            return;
+        }
+        candidateRouteState = {
+            ...candidateRouteState,
+            status:'calculating',
+            cropMs:performance.now() - cropStartedAt,
+            sourceTriangles:finiteMetric(cropped.stats?.sourceTriangles),
+            selectedTriangles:finiteMetric(cropped.stats?.selectedTriangles),
+            corridorMargin:finiteMetric(cropped.stats?.margin)
+        };
+        const result = await recastRouteClient.route({
+            geometry:cropped.geometry,
+            start,
+            goal
+        }, {
+            rerouting:fallbackPath.length >= 2,
+            transferGeometry:true
+        });
+        if (serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey) return;
+        candidateRouteState = candidateStateFrom(result, candidateRouteState);
+        if (result.ok && !replacePathWithCandidate(result, label)) {
+            candidateRouteState = candidateStateFrom({ status:'fallback', reason:'candidate-render-failed' }, candidateRouteState);
+        }
+    })().catch(() => {
+        if (serial === candidateRouteSerial && zoneIdentity === loadedZoneIdentity) {
+            candidateRouteState = candidateStateFrom({ status:'fallback', reason:'candidate-orchestration-failed' }, candidateRouteState);
+        }
+    });
+    return true;
+}
+
 function clearRareMobs() {
     const oldEntries = new Set(rareGotoEntries);
     app.gotoNpcEntries = (app.gotoNpcEntries || []).filter(entry => !oldEntries.has(entry));
@@ -520,6 +731,10 @@ window.eqlEyeOfZommViewer = {
         const alreadyLoaded = app.currentZoneRecord && selected &&
             app.currentZoneRecord.id === selected.id && app.currentZoneRecord.format === selected.format;
         if (!alreadyLoaded) {
+            // Stop exporting/querying the previous zone before the viewer
+            // begins replacing its scene graph, not only after the new load.
+            resetSpatialRouteState();
+            loadedZoneIdentity = '';
             await app.loadSelectedZone();
         }
         if (!app.currentZoneRecord) {
@@ -532,6 +747,7 @@ window.eqlEyeOfZommViewer = {
         const zoneIdentity = `${app.currentZoneRecord.id || ''}:${app.currentZoneRecord.format || ''}`;
         const changedZone = zoneIdentity !== loadedZoneIdentity;
         if (changedZone) {
+            resetSpatialRouteState();
             lastSyncedLocation = null;
             lastSyncedGround = null;
             headingTracker.reset();
@@ -541,6 +757,9 @@ window.eqlEyeOfZommViewer = {
             app.selectedFloorIndices?.clear?.();
             root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
             app.applyFloorSelection?.();
+            startCollisionGeometryExport(zoneIdentity);
+        } else if (!collisionGeometryPromise) {
+            startCollisionGeometryExport(zoneIdentity);
         }
         return {
             ok:true,
@@ -704,13 +923,21 @@ window.eqlEyeOfZommViewer = {
             !rareGotoEntries.includes(entry) && normalizedNpcName(entry.label) === wanted
         );
         const ok = await startRouteWithoutChangingPresentation(() => app.gotoNpcLabel(String(label), { teleport:false }));
-        if (ok) return navigationResult(String(label), hasLocalMapLabel ? 'map-label' : 'wiki-location');
+        if (ok) {
+            const result = navigationResult(String(label), hasLocalMapLabel ? 'map-label' : 'wiki-location');
+            scheduleCandidateRoute(result.label || String(label));
+            return result;
+        }
         const wikiOk = await pathToWikiLocation(String(label), wikiLocation);
-        return wikiOk ? navigationResult(String(label), 'wiki-location') : { ok:false, source:'' };
+        if (!wikiOk) return { ok:false, source:'' };
+        const result = navigationResult(String(label), 'wiki-location');
+        scheduleCandidateRoute(result.label || String(label));
+        return result;
     },
 
     clearPath() {
         if (!app) return { ok:false };
+        cancelCandidateRoute('cleared');
         app.clearNavigationGuide?.();
         app.updateNavigationOverlay?.();
         app.drawMiniMap?.();
@@ -734,6 +961,10 @@ window.eqlEyeOfZommViewer = {
                 resolved:Number(app?.loadedMaterials?.filter?.(material => material?.userData?.eqlLocalTexturePath).length || 0)
             },
             navigation:navigationResult('', app?.navigationTarget ? 'active' : ''),
+            spatial:{
+                collision:{ ...collisionGeometryState },
+                candidate:{ ...candidateRouteState }
+            },
             message:app?.els?.statusText?.textContent || ''
         };
     },
@@ -744,6 +975,7 @@ window.eqlEyeOfZommViewer = {
     }
 };
 
+window.addEventListener('beforeunload', resetSpatialRouteState, { once:true });
 window.parent?.postMessage({ type:'eoz-viewer-ready' }, window.location.origin);
 </script>
 </body>

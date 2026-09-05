@@ -18,7 +18,9 @@ export function itemHasZoneSource(item, zone, normalizeZone = defaultZoneKey) {
 }
 
 export function itemHasClassStats(item) {
-    return Object.keys(item?.stats || {}).some(stat => String(stat).toUpperCase() !== 'WT');
+    return Object.entries(item?.stats || {}).some(([stat, value]) =>
+        String(stat).toUpperCase() !== 'WT' && Number.isFinite(Number(value)) && Number(value) !== 0
+    );
 }
 
 export function scoreItemForBrowse(item, options = {}) {

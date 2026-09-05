@@ -31,11 +31,16 @@ export class RecastRouteClient {
         return worker;
     }
 
-    async route(request, { rerouting = false } = {}) {
-        this.cancel('superseded');
+    async route(request, { rerouting = false, transferGeometry = false } = {}) {
+        const supersedingActiveRequest = Boolean(this.pending);
+        this.cancel('superseded', { restartWorker:supersedingActiveRequest });
         const id = `route-${++this.sequence}`;
-        const positions = new Float32Array(request.geometry.positions);
-        const indices = new Uint32Array(request.geometry.indices);
+        const positions = transferGeometry && request.geometry.positions instanceof Float32Array
+            ? request.geometry.positions
+            : new Float32Array(request.geometry.positions);
+        const indices = transferGeometry && request.geometry.indices instanceof Uint32Array
+            ? request.geometry.indices
+            : new Uint32Array(request.geometry.indices);
         const payload = {
             ...request,
             geometry:{ ...request.geometry, positions, indices }
@@ -74,12 +79,16 @@ export class RecastRouteClient {
         this.restartWorker();
     }
 
-    cancel(reason = 'cancelled') {
-        if (!this.pending) return;
+    cancel(reason = 'cancelled', { restartWorker = false } = {}) {
+        if (!this.pending) {
+            if (restartWorker) this.restartWorker();
+            return;
+        }
         const { resolve, timeout } = this.pending;
         this.pending = null;
         clearTimeout(timeout);
         resolve({ ok:false, status:'cancelled', reason });
+        if (restartWorker) this.restartWorker();
     }
 
     restartWorker() {

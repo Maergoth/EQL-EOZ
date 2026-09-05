@@ -1,14 +1,14 @@
 # Navmesh dependency and UX evaluation
 
-Status: isolated corpus prototype passed; real-zone production integration not yet approved
+Status: guarded decoded-viewer integration implemented; first-choice promotion awaits the real-zone matrix
 
-Reviewed: 2026-09-04
+Reviewed: 2026-09-05
 
 Candidate: [`recast-navigation` 0.43.1](https://github.com/isaac-mason/recast-navigation-js)
 
 ## Decision
 
-The pinned `recast-navigation` 0.43.1 worker passed the shared geometry corpus and is approved for real-zone integration testing. Do not replace the current collision-validated pathfinder or add a player-facing engine toggle until proprietary-zone and responsiveness gates pass. The dormant local bundle may ship in 0.7.3 so packaging can be tested without activating it.
+The pinned `recast-navigation` 0.43.1 worker passed the shared geometry corpus and now runs as a guarded candidate against decoded viewer collision geometry. The established collision-validated pathfinder still produces the first visible route. Recast may atomically replace only its rendered ribbon after full-goal, collision-surface, and directed-elevation validation. Do not make it first choice or add a player-facing engine toggle until the proprietary-zone and responsiveness gates pass.
 
 Why it is the preferred prototype:
 
@@ -34,7 +34,9 @@ Directly compiling upstream Recast/Detour with Emscripten remains the control-he
 
 ## Route-engine boundary
 
-The implemented prototype lives behind `app/recast-route-client.js`. It transfers cloned typed buffers to a generated local module worker, applies a 12-second timeout, ignores stale responses, and restarts after worker-level failure. `app/recast-route-engine.js` rejects Detour partial results; `app/route-validation.js` grounds sparse funnel points and independently rejects paths that leave the supplied surface or reverse an exposed drop.
+The integrated candidate lives behind `app/recast-route-client.js`. `app/collision-geometry.js` cooperatively flattens the viewer's transformed `zoneGroup` collision meshes in the existing right-handed Y-up basis, skips props/pass-through/degenerate triangles, and crops a bounded corridor around the established route. The full zone buffer remains local; only ephemeral route-local typed buffers transfer to the generated module worker.
+
+The client applies a 12-second timeout, uses latest-request-wins worker termination, and restarts after worker-level failure. Zone, destination, clear, and reroute changes invalidate orchestration serials before any response can display. `app/recast-route-engine.js` rejects Detour partial results and shares the +6 climb limit; `app/route-validation.js` grounds sparse funnel points and independently rejects paths that leave the supplied surface, exceed upward policy, or reverse an exposed drop.
 
 The shared corpus emits:
 
@@ -46,7 +48,18 @@ The shared corpus emits:
 
 The spatial boundary is explicit and singular: logged and wiki values arrive in displayed `(Y, X, Z)` order, normalize to world `(X, Y, Z)`, then convert to viewer/Recast `(-Y, Z, X)`. Client `.txt` map points use `(-world X, -world Y, world Z)` and therefore convert to the same viewer anchor as world/WLD geometry. No route engine should parse displayed or client-map coordinates or perform its own second transform.
 
-The future worker response must include engine/version, status, path points, generation/query duration, and a machine-readable fallback reason. Before display, every candidate path must pass the existing collision and directed-elevation validator. A failed candidate is evidence for diagnostics, never permission to display an invalid segment.
+The worker response includes engine/version, status, path points, generation/query duration, validation count, and a machine-readable fallback reason. Before display, every candidate path passes the collision and directed-elevation validator. Diagnostics schema v2 retains only the aggregate engine/version, counts, timings, status, validation count, and reason; it deliberately drops path points, targets, coordinates, worker error detail, and local paths. A failed candidate is evidence for diagnostics, never permission to display an invalid segment.
+
+## 0.8.0 integration state
+
+- `exportViewerCollisionGeometry` applies each collision mesh's `matrixWorld`, reverses winding under negative determinants, produces finite `Float32Array` positions and `Uint32Array` indices, and yields cooperatively during large zones.
+- `cropCollisionGeometryForRoute` bounds work around the established route, caps the payload at 250,000 triangles, and derives downward-only links from exposed drops already accepted by that route.
+- The established route is calculated and shown before candidate work is scheduled. Recast success removes only render-order 910–912 route meshes, preserves the destination beam/target/camera/presentation, and installs the new line and existing cue logic atomically.
+- Missing geometry, empty/oversized crops, generation/query failure, partial goals, validator rejection, timeout, cancellation, and stale responses cannot remove the established line.
+- The asset-free integration test runs exported/cropped viewer-format triangles through Recast and independent validation; winding, prop exclusion, crop selection, mirrored transforms, cancellation, and one-way drops have focused contracts.
+- Windows ASAR verification requires the collision exporter, worker client, viewer orchestration, owner-state message, and bundled Recast worker to ship together.
+
+This is integration evidence, not the real-client promotion decision. See the exact matrix and failure taxonomy in [the handoff](HANDOFF.md#exact-next-work) and [Windows checklist](WINDOWS_MANUAL_TEST.md#5b-guarded-spatial-candidate-and-fallback).
 
 ## Player-facing UX contract
 
@@ -72,7 +85,7 @@ Normal use gets no engine selector, navmesh settings, Recast terminology, blocki
 5. The packaged Windows build contains only pinned local worker/WASM assets and required MIT/Zlib notices.
 6. Real-client tests confirm stacked floors, ramps, doors, and drops without adding engine-specific controls to the UI.
 
-Items 1–5 pass in 0.7.3: 8/8 shared outcomes, zero accepted validation violations, a deterministic 747 KiB worker artifact, and retained MIT/Zlib notices. Item 6 and decoded real-zone performance remain the activation gate. `npm audit --audit-level=high` is enforced in GitHub CI/build/release; the restricted local environment timed out contacting the advisory service, while `npm ls --all` confirmed a complete pinned dependency tree.
+Items 1–5 pass through 0.8.0: 8/8 shared outcomes, zero accepted validation violations, a deterministic worker artifact, decoded-viewer export-to-Recast coverage, and retained MIT/Zlib notices. Item 6—real-client correctness and responsiveness across the complete matrix—remains the promotion gate. `npm audit --audit-level=high` is enforced locally and in GitHub CI/build/release, and `npm ls --all` confirms the pinned dependency tree.
 
 ## Sources reviewed
 

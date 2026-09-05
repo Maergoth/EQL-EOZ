@@ -1,10 +1,10 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.7.2
-Last updated: 2026-09-03
+Baseline: 0.8.0
+Last updated: 2026-09-05
 
-Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](V0.7_MANUAL_TEST.md)
+Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
 
 ## 1. Product promise
 
@@ -158,7 +158,7 @@ The persistent header contains only cross-cutting state and actions:
 - Pin to top;
 - Minimal/Full view.
 
-Minimal mode is not a separate product area. It is a compact presentation of Live Map with map-view controls, current-fight DPS, named-mob/drop intelligence, and the consider tray.
+Minimal mode is not a separate product area. Its default is the compact named/rare-mob intelligence list plus current-fight DPS and the consider tray. The map and row-level route actions are independent opt-ins; omitting them must not disable waypoint copy, considers, or loot.
 
 ## 6. Click budgets
 
@@ -383,26 +383,30 @@ Requirements:
 - Manual Sync actions are available as recovery, but automatic log events are primary.
 - Location status uses labeled X/Y/Z to make axis debugging possible.
 - Named-mob labels, player marker, destination, and route share the same transform.
-- Destination search, route status, distance, and **Clear** remain in the Live Map workspace in full and minimal modes.
+- Destination search, route status, distance, and **Clear** remain in the full Live Map workspace. Minimal mode relies on its named/rare list and exposes row-level Route actions only when enabled.
 - Advanced rendering diagnostics and duplicate navigation controls remain hidden.
 
 ### 9.4 Minimal mode
 
 User stories:
 
-- As a player keeping the game foregrounded, I want only navigation, current DPS, and zone loot intelligence.
-- As a player switching between map styles, I want mode controls in the compact header.
+- As a player keeping the game foregrounded, I want named targets, current DPS, and zone loot intelligence without a mostly empty map.
+- As a player who wants navigation in the compact view, I want to opt into the map and its mode controls.
 - As a loot planner, I want **My Class** and **Named only** without opening Settings.
-- As a player who needs more map room, I want to collapse and restore the intel panel without leaving minimal mode.
+- As a player who wants routes, I want to enable row-level Route actions without restoring a duplicate destination field.
 
 Requirements:
 
-- Contains map, compact mode switch, current fight DPS/name, and mob/drop list.
+- Defaults to current fight DPS/name and the named/rare mob/drop list; the map and route actions default off.
+- Settings exposes independent **Show map** and **Show path controls** choices, with route actions unavailable when the map is hidden.
+- Contains no duplicate destination-search surface; named routes originate from the list.
+- Clicking a located NPC name still copies a waypoint, and consider pop-under loot still opens, regardless of map/routing preferences.
+- **My Class** excludes statless, weight-only, and zero-value placeholder records.
 - Consider tray overlays the bottom and remains inspectable.
 - Does not hide the app from the taskbar.
 - Does not remove the ability to unpin or return to Full view.
-- Intel panel is visible by default and can be collapsed from the compact header.
-- At the minimum supported width, map controls and window actions do not overlap.
+- Intel panel is visible by default and uses the full workspace when the map is hidden.
+- At the minimum supported width, enabled map controls and window actions do not overlap.
 
 ### 9.5 NPCs
 
@@ -646,7 +650,7 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 - Pin keeps the app above the game.
 - Pin hides custom titlebar only.
 - App remains on the taskbar.
-- Minimal mode retains First/Top/Map, Pin, and Full view controls.
+- Minimal mode retains Pin and Full view controls and exposes First/Top/Map whenever its map is enabled.
 
 ## 16. Road to v1
 
@@ -670,7 +674,7 @@ Committed user stories:
 - As a first-time user, I choose the game folder once and immediately see whether folder, log, zone, and `/loc` are individually ready.
 - As a returning user, I resume my last full view and map mode while automatic log selection follows the newest log.
 - As an explorer, I type or choose a current-zone destination once, see whether it produced a path or marker, and keep that destination while later `/loc` lines re-route me.
-- As a minimal-mode user, I retain map-mode and header-level destination controls, recover the route panel's vertical space for the map, and can collapse the intel rail when I need more map width.
+- As a minimal-mode user, I get the named/rare intel list by default and can opt into the map and row-level routes without a duplicate destination field.
 - As a loot planner, I open Items to current-zone/class gear and deliberately override slot, order, zone, class, era, or search.
 - As an item researcher, I can focus the same Itembox card with mouse or keyboard and see tier-adjusted values update while the slider moves.
 - As a player with the game foregrounded, routine recovery feedback appears inside Eye of Zomm instead of a modal browser alert.
@@ -678,12 +682,12 @@ Committed user stories:
 0.6 implementation contract:
 
 - A four-step map readiness rail: Folder → Log → Zone → `/loc`.
-- One synchronized Live Map destination model with current-zone suggestions, Enter support, Find path, Clear, route source/result, distance, and re-route-on-movement; minimal mode presents it in the persistent header rather than a second content band.
+- One synchronized full Live Map destination model with current-zone suggestions, Enter support, Find path, Clear, route source/result, distance, and re-route-on-movement; Minimal uses the named/rare list as its only route source when routing is enabled.
 - Route recalculation threshold of eight 3D units to prevent rebuilding for duplicate `/loc` lines.
 - Selected destination waits for the first `/loc` instead of failing or asking for the folder again.
 - Header map-mode controls remain available whenever Live Map is active, including minimal mode.
 - Last full-mode view and selected map presentation persist across window-mode changes.
-- Minimal intel rail defaults open and has a remembered collapse toggle.
+- Minimal intel defaults visible while map and row-level routing are remembered independent opt-ins that default off.
 - Items default to current zone, effective classes, current era, and recommended order. Search broadens globally unless zone was explicitly pinned.
 - Slot and sort overrides plus one-click Reset.
 - Item icons in result cards and keyboard-focusable Itembox details.
@@ -721,7 +725,7 @@ Committed user stories:
 
 - As an explorer, I see named and rare mobs anchored in First Person, Top Down, and Map Overlay and can make one my destination with one click.
 - As a class combination, I see targets with relevant loot before targets with no known upgrade, without losing the ability to inspect all known drops.
-- As a minimal-mode player, I can search a destination from the header, search a mob or item in the intel rail, expand loot, read Itembox details, copy a paste-ready `/waypoint`, select a route, and switch map presentation without returning to the full app.
+- As a minimal-mode player, I can search a mob or item in the intel rail, expand loot, read Itembox details, copy a paste-ready `/waypoint`, optionally select a row route, and optionally switch map presentation without returning to the full app.
 - As a player who binds `/loc` to movement, repeated lines follow my latest position without queuing stale camera moves or spinning on coordinate jitter.
 - As a player who explicitly chose Top or Map, live location updates preserve that choice instead of flashing through First Person.
 - As a route follower, the golden line remains usable in every presentation and continuous movement cannot indefinitely postpone re-routing.
@@ -745,20 +749,20 @@ Committed user stories:
 
 Release thesis: paths must be predictable enough that a player will use them in a multi-floor dungeon without cross-checking every turn.
 
-Implementation note (updated for 0.7.9): deterministic route cues, redacted diagnostics, and the eight-expectation geometry corpus are implemented. The production line-map graph now runs in a Web Worker first, then projects and collision-validates its small candidate on the renderer in yielding chunks; the old tens-of-thousands-of-raycasts UI-thread graph has been removed from the active flow. Cancel clears both the calculation and its persistent destination. Minimal view defaults to rare-mob intel with map and routing independently opt-in. Desktop archive discovery is metadata-only, and WLD skipped-material groups preserve polygon alignment. The pinned `recast-navigation` 0.43.1 worker still passes 8/8 synthetic outcomes but remains gated on decoded real-zone collision export. See [the navmesh evaluation](NAVMESH_EVALUATION.md), [implementation status](IMPLEMENTATION_STATUS.md), and [contributor handoff](HANDOFF.md#exact-next-work).
+Implementation note (updated for 0.8.0): deterministic route cues, diagnostics schema v2, and the eight-expectation geometry corpus are implemented. The established line-map graph still runs in a Web Worker first and is collision-projected in yielding renderer chunks. After that usable line or honest marker exists, the wrapper cooperatively exports the already-decoded viewer collision mesh, crops a capped route corridor, and transfers it to the pinned `recast-navigation` 0.43.1 worker. Only a full candidate that independently passes surface, +6 upward-climb, and directed-drop validation may atomically replace the ribbon; every failure and stale response preserves established guidance. Minimal defaults to rare-mob intel with map and routing independently opt-in. WLD skipped-material groups preserve sequential polygon alignment, corroborated by EQEmu's WLD exporter, but texture fidelity and route quality still require the proprietary Windows matrix. See [the navmesh evaluation](NAVMESH_EVALUATION.md), [implementation status](IMPLEMENTATION_STATUS.md), and [contributor handoff](HANDOFF.md#exact-next-work).
 
 Navigation architecture:
 
 1. Decode the collision mesh using the existing read-only local-file pipeline.
-2. Build a Recast polygon mesh in a worker, never on the renderer/UI thread.
+2. Cooperatively export and crop already-decoded collision data after the visible zone mounts, then build the Recast polygon mesh in a worker, never on the renderer/UI thread.
 3. Use a single documented coordinate adapter at the boundary. EQEmu demonstrates the equivalent server-side Detour bridge by passing EQ `(x, y, z)` to Detour as `(x, z, y)` and converting it back at the route boundary.
 4. Add directed off-mesh links for exposed downward drops and upward transitions no greater than +6 EQ Z.
 5. Query with Detour, smooth the corridor, validate every rendered segment against local collision, and fall back to the 0.7 graph if generation fails.
-6. Retain the implemented next-turn cue, remaining distance, redacted route diagnostics, and 8/8 shared synthetic geometry outcomes while connecting decoded proprietary viewer geometry to the candidate boundary and running the outdoor/indoor/stacked/ramp/door/drop Windows matrix.
+6. Retain the implemented next-turn cue, remaining distance, schema-v2 aggregate diagnostics, and 8/8 shared synthetic geometry outcomes while running the outdoor/indoor/stacked/ramp/door/drop Windows matrix.
 
 Route-engine UX contract: preparation and queries remain background work. The current valid line stays visible until a validated replacement is ready; stale results are discarded; view/minimal choices never change; compatibility fallback is automatic; and normal UI uses “path,” “updating,” and concrete recovery language rather than navmesh/Recast terminology.
 
-The design takes conceptual guidance from EQEmu's [Detour navmesh pathfinder](https://github.com/EQEmu/EQEmu/blob/master/zone/pathfinder_nav_mesh.cpp) and [ground/ceiling raycasts](https://github.com/EQEmu/EQEmu/blob/master/zone/map.cpp), but Eye of Zomm remains a separate read-only viewer and will not copy server movement or automation behavior.
+The design takes conceptual guidance from EQEmu's [Detour navmesh pathfinder](https://github.com/EQEmu/EQEmu/blob/master/zone/pathfinder_nav_mesh.cpp) and [ground/ceiling raycasts](https://github.com/EQEmu/EQEmu/blob/master/zone/map.cpp). EQEmu's sequential [azone2 WLD material/polygon loop](https://github.com/EQEmu/EQEmu/blob/master/utils/deprecated/azone2/wld.cpp) also corroborates the skipped-material cursor repair. Eye of Zomm remains a separate read-only viewer and will not copy server movement or automation behavior.
 
 0.8 exit gate: the synthetic corpus remains at or above 95%, the decoded real-zone Windows matrix passes its outdoor/indoor/stacked/ramp/door/drop expectations, no displayed segment violates collision or directed elevation policy, fallback is automatic, and candidate route work does not block input/rendering.
 

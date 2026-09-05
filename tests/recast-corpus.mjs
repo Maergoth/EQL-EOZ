@@ -24,6 +24,10 @@ const invalid = validateRouteGeometry(rampRequest, [rampRequest.start, { x:10, y
 if (invalid.valid || !invalid.violations.some(violation => violation.includes('walkable surface'))) {
     throw new Error('Post-query validation accepted a route that left the collision surface.');
 }
+const excessiveClimb = validateRouteGeometry(rampRequest, [rampRequest.start, { x:1, y:7, z:0 }]);
+if (excessiveClimb.valid || !excessiveClimb.violations.some(violation => violation.includes('upward climb'))) {
+    throw new Error('Post-query validation did not report its explicit +6 upward-climb guard.');
+}
 const projectedRamp = projectRouteToGeometry(rampRequest, [{ x:0, y:.25, z:0 }, { x:20, y:10.25, z:0 }]);
 if (!validateRouteGeometry(rampRequest, projectedRamp).valid || projectedRamp.length < 10) {
     throw new Error('Route projection did not create a collision-grounded ramp path.');
@@ -32,6 +36,14 @@ const drop = ROUTE_CORPUS.find(fixture => fixture.id === 'exposed-drop');
 const dropRequest = fixtureRouteRequest(drop, drop.expectations[0]);
 const reversedDrop = validateRouteGeometry(dropRequest, [dropRequest.goal, dropRequest.start]);
 if (reversedDrop.valid) throw new Error('Post-query validation accepted a reversed drop as an ascent.');
+
+const broadGeometry = {
+    positions:new Float32Array([-1000, 0, -1000, 1000, 0, -1000, 0, 0, 1000]),
+    indices:new Uint32Array([0, 2, 1]),
+    offMeshConnections:[]
+};
+const broadSurface = validateRouteGeometry({ geometry:broadGeometry }, [{ x:-10, y:0, z:0 }, { x:10, y:0, z:0 }]);
+if (!broadSurface.valid) throw new Error('Spatial validation lost a triangle spanning many index cells.');
 
 const timings = results.map(result => result.result.totalMs).filter(Number.isFinite).sort((a, b) => a - b);
 const p95 = timings[Math.max(0, Math.ceil(timings.length * .95) - 1)];

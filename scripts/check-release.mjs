@@ -1,10 +1,12 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
 const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
 const uxVision = readFileSync(new URL('../docs/UX_VISION.md', import.meta.url), 'utf8');
-const manualTest = readFileSync(new URL('../docs/V0.7_MANUAL_TEST.md', import.meta.url), 'utf8');
+const manualTest = readFileSync(new URL('../docs/WINDOWS_MANUAL_TEST.md', import.meta.url), 'utf8');
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
 const handoff = readFileSync(new URL('../docs/HANDOFF.md', import.meta.url), 'utf8');
 const implementationStatus = readFileSync(new URL('../docs/IMPLEMENTATION_STATUS.md', import.meta.url), 'utf8');
@@ -16,22 +18,28 @@ if (lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version
     throw new Error('package.json and package-lock.json versions must match.');
 }
 if (!changelog.includes(`## ${pkg.version} -`)) throw new Error(`CHANGELOG.md needs a ${pkg.version} release heading.`);
+for (const [name, content] of [['UX vision', uxVision], ['manual test', manualTest], ['handoff', handoff], ['implementation status', implementationStatus]]) {
+    if (!content.includes(pkg.version)) throw new Error(`${name} does not identify the current ${pkg.version} baseline.`);
+}
 for (const required of ['## 6. Click budgets', '## 8. End-to-end UX flows', '## 9. Feature specifications and user stories', '## 15. Acceptance scenarios for release candidates', '## 16. Road to v1']) {
     if (!uxVision.includes(required)) throw new Error(`UX vision is missing required section: ${required}`);
 }
-for (const required of [`\`v${pkg.version}\``, '`X -222.75  Y 125.50  Z -154.10`', 'ZONE: The Castle of Mistmoore 1595 (mistmoore)', '`/loc -30.00, -961.00, -66.00`', 'client-map anchor X `961`, Y `30`, Z `-66`', '`/loc -330.00, 120.00, -178.13`', 'Succor anchor X `-120`, Y `330`, Z `-180`', '## 1. Continuous `/loc` tracking', '## 2. Rare-mob replacement map', '## 3. Minimal loot browsing', '## 4. Map Overlay versus S3D textures', '## 5. Persistent golden path']) {
+for (const required of [`\`v${pkg.version}\``, '`X -222.75  Y 125.50  Z -154.10`', 'ZONE: The Castle of Mistmoore 1595 (mistmoore)', '`/loc -30.00, -961.00, -66.00`', 'client-map anchor X `961`, Y `30`, Z `-66`', '`/loc -330.00, 120.00, -178.13`', 'Succor anchor X `-120`, Y `330`, Z `-180`', '## 1. Continuous `/loc` tracking', '## 2. Rare-mob replacement map', '## 3. Minimal loot browsing', '## 4. Map Overlay versus S3D textures', '## 5. Persistent golden path', '## 5b. Guarded spatial candidate and fallback', '100%', '125%', '150%']) {
     if (!manualTest.includes(required)) throw new Error(`Windows acceptance test is missing: ${required}`);
 }
 for (const required of ['docs/UX_VISION.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/HANDOFF.md', 'docs/NAVMESH_EVALUATION.md', 'VALIDATION.md']) {
     if (!readme.includes(required)) throw new Error(`README is missing project-documentation link: ${required}`);
 }
-for (const required of ['recast-navigation` 0.43.1', '## Player-facing UX contract', 'dedicated module worker', 'current collision-validated pathfinder', 'MIT', 'Zlib']) {
+for (const required of ['intel-first named/rare-mob list', 'row-level Route actions', 'statless and weight-only', 'guarded Recast/Detour candidate']) {
+    if (!readme.includes(required)) throw new Error(`README is missing current 0.8 behavior: ${required}`);
+}
+for (const required of ['recast-navigation` 0.43.1', '## Player-facing UX contract', 'dedicated module worker', 'established collision-validated pathfinder', 'MIT', 'Zlib']) {
     if (!navmeshEvaluation.includes(required)) throw new Error(`Navmesh evaluation is missing: ${required}`);
 }
 for (const required of ['recast-navigation-js 0.43.1', 'Recast Navigation / Detour', 'MIT', 'Zlib']) {
     if (!recastNotices.includes(required)) throw new Error(`Recast notice is missing: ${required}`);
 }
-for (const required of ['## Exact next work', 'IMPLEMENTATION_STATUS.md', 'UX_VISION.md', 'npm test', 'npm run test:catalog']) {
+for (const required of ['## Exact next work', 'IMPLEMENTATION_STATUS.md', 'UX_VISION.md', 'npm test', 'npm run test:catalog', '0.8.0', 'schema v2', 'Mistmoore', 'Make the promotion decision']) {
     if (!handoff.includes(required)) throw new Error(`Contributor handoff is missing: ${required}`);
 }
 for (const required of ['Code baseline:', '## Current highest-priority task', '0.8 route corpus', 'HANDOFF.md', 'UX_VISION.md']) {
@@ -64,4 +72,18 @@ for (const required of ['npm run audit:deps', 'npm test', 'fetch-bootstrap-pack.
     if (!ciWorkflow.includes(required)) throw new Error(`CI is missing production catalog gate: ${required}`);
 }
 
-console.log('Version and optional-signing workflow checks passed.');
+const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
+for (const relative of ['README.md', 'VALIDATION.md', 'CHANGELOG.md', 'docs/HANDOFF.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/NAVMESH_EVALUATION.md', 'docs/UX_VISION.md', 'docs/WINDOWS_MANUAL_TEST.md']) {
+    const absolute = resolve(repositoryRoot, relative);
+    const content = readFileSync(absolute, 'utf8');
+    for (const match of content.matchAll(/\]\(([^)]+)\)/g)) {
+        const target = match[1].trim();
+        if (!target || target.startsWith('#') || /^[a-z][a-z0-9+.-]*:/i.test(target)) continue;
+        const path = decodeURIComponent(target.split('#', 1)[0].split('?', 1)[0]);
+        if (path && !existsSync(resolve(dirname(absolute), path))) {
+            throw new Error(`${relative} has a broken local Markdown link: ${target}`);
+        }
+    }
+}
+
+console.log('Version, documentation-link, and optional-signing workflow checks passed.');

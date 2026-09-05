@@ -25,6 +25,15 @@ for (const marker of [
     if (!viewer.includes(marker)) throw new Error(`Lazy archive contract is missing: ${marker}`);
 }
 if (!integration.includes('eyeOfZommReadFile:() => handle.readFile()')) throw new Error('Desktop directory integration eagerly loads archive bytes.');
+for (const marker of [
+    "from '../collision-geometry.js'",
+    'startCollisionGeometryExport(zoneIdentity)',
+    'cropCollisionGeometryForRoute(fullGeometry, guidePoints',
+    'transferGeometry:true',
+    "type:'eoz-route-candidate-ready'"
+]) {
+    if (!integration.includes(marker)) throw new Error(`Guarded collision candidate integration is missing: ${marker}`);
+}
 
 if (viewer.includes('G.append(te,he,ae,He,qe,Le,Ue,ne,ye,$,z,ie)')) {
     throw new Error('The click-to-enter prompt is still mounted over the map.');

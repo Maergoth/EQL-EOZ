@@ -22,7 +22,7 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - [Implementation status](docs/IMPLEMENTATION_STATUS.md): delivered features, evidence gaps, and the exact next task.
 - [Contributor handoff](docs/HANDOFF.md): setup, architecture, safety boundary, data sources, and release procedure.
 - [Navmesh evaluation](docs/NAVMESH_EVALUATION.md): dependency decision, worker boundary, risks, and player-facing route-state contract.
-- [Validation report](VALIDATION.md) and [Windows/game-client checklist](docs/V0.7_MANUAL_TEST.md): automated and proprietary-asset release gates.
+- [Validation report](VALIDATION.md) and [Windows/game-client checklist](docs/WINDOWS_MANUAL_TEST.md): automated and proprietary-asset release gates.
 - [Changelog](CHANGELOG.md): versioned user-facing changes.
 
 ## What it does
@@ -41,13 +41,13 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Prompts for the EverQuest folder on first launch, then selects the newest log under `Logs` automatically.
 - Provides First Person 3D, Top Down 3D, and local Map Overlay views with a compact pop-out Z-depth slicer.
 - Synchronizes logged `/location` output into the selected map view and derives first-person facing from consecutive coordinates.
-- Runs the production line-map route search in a worker and collision-projects its result without blocking the map; a separate Recast/Detour worker prototype passes the redistributable route corpus and remains gated on decoded real-zone collision export.
+- Runs the production line-map route search first without blocking the map, then sends a route-local crop of the viewer's decoded collision triangles to a Recast/Detour worker. Only a full, independently collision-validated candidate may atomically replace the visible line; failure or stale work leaves the existing route intact.
 - Shows Folder, Log, Zone, and `/loc` readiness separately instead of collapsing setup and live-state problems into one Sync error.
 - Keeps one named destination active, reports path/marker/error state and routed distance, and re-routes from later `/loc` samples.
-- Keeps minimal-mode destination search in the persistent header so the map begins immediately below it, with synchronized Path/Clear state across full and minimal views.
+- Makes Minimal view an intel-first named/rare-mob list with no duplicate destination field. The 3D map and row-level Route actions are independent Settings opt-ins and both default off.
 - Copies a paste-ready `/waypoint Y X [Z]` command when a located NPC name is activated, while retaining a separate explicit Route action.
 - Provides a pin-to-top option that hides the draggable title bar while keeping the app in the Windows taskbar.
-- Provides a minimal map, live-fight DPS, class-filtered named-mob/drop list, and a collapsible intel rail without losing map controls.
+- Keeps waypoint copy, consider pop-under loot, and class-filtered named-mob/drop intel available even when Minimal view's map and route actions are hidden; class-filtered loot excludes statless and weight-only records.
 - Opens Items to recommended current-zone/class loot, with explicit search, slot, sort, class, era, tier, and scope overrides.
 - Shows keyboard-accessible EQLWiki Itembox-inspired local-data tooltips, including embedded wiki icons and tier/base comparisons.
 - Searches EQLWiki from the global search field and opens exact wiki links from local records.
@@ -132,7 +132,10 @@ The app keeps:
 - a compact Z-depth slicer for hiding geometry above the chosen elevation;
 - logged `/location` synchronization;
 - path-to-NPC integration;
+- background collision export plus guarded Recast/Detour candidate routing with automatic fallback;
 - local map/minimap functionality needed for navigation.
+
+For WLD/S3D zones, skipped or unresolved material groups still advance their polygon ranges, preventing one missing link from shifting later textures onto the wrong faces. Bitmap aliases and repeating UV sampling are retained. Map Overlay intentionally remains client `.txt` line art; texture checks belong in First and Top views.
 
 Advanced display tuning, performance diagnostics, world-atlas controls, duplicate path-search controls, discrete floor selection, help, and fullscreen UI are not exposed in Eye of Zomm.
 
@@ -162,7 +165,7 @@ npm test
 npm start
 ```
 
-Before publishing a Windows build, run the real-client checks in [docs/V0.7_MANUAL_TEST.md](docs/V0.7_MANUAL_TEST.md).
+Before promoting a Windows build, run the real-client checks in [docs/WINDOWS_MANUAL_TEST.md](docs/WINDOWS_MANUAL_TEST.md).
 
 Build Windows installer:
 

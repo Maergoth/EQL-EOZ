@@ -2,6 +2,9 @@ import { MAX_NAVIGATION_CLIMB_Z } from './navigation-policy.js';
 
 const SAMPLE_SPACING = 2;
 const SURFACE_TOLERANCE = .9;
+const TRIANGLE_CELL_SIZE = 48;
+const MAX_CELLS_PER_TRIANGLE = 64;
+const spatialIndexCache = new WeakMap();
 
 function finitePoint(point) {
     return point && ['x', 'y', 'z'].every(axis => Number.isFinite(Number(point[axis])));
@@ -36,9 +39,52 @@ function triangleSurfaceY(positions, indices, triangleOffset, point) {
     return u * positions[ia + 1] + v * positions[ib + 1] + w * positions[ic + 1];
 }
 
+function spatialIndex(geometry) {
+    const cached = spatialIndexCache.get(geometry);
+    if (cached) return cached;
+    const cells = new Map();
+    const broadTriangles = [];
+    const { positions, indices } = geometry;
+    const cellCoordinate = value => Math.floor(value / TRIANGLE_CELL_SIZE);
+    for (let offset = 0; offset + 2 < indices.length; offset += 3) {
+        const ia = indices[offset] * 3;
+        const ib = indices[offset + 1] * 3;
+        const ic = indices[offset + 2] * 3;
+        const xs = [positions[ia], positions[ib], positions[ic]];
+        const zs = [positions[ia + 2], positions[ib + 2], positions[ic + 2]];
+        if (![...xs, ...zs].every(Number.isFinite)) continue;
+        const minX = cellCoordinate(Math.min(...xs));
+        const maxX = cellCoordinate(Math.max(...xs));
+        const minZ = cellCoordinate(Math.min(...zs));
+        const maxZ = cellCoordinate(Math.max(...zs));
+        const cellCount = (maxX - minX + 1) * (maxZ - minZ + 1);
+        if (cellCount > MAX_CELLS_PER_TRIANGLE) {
+            broadTriangles.push(offset);
+            continue;
+        }
+        for (let x = minX; x <= maxX; x += 1) {
+            for (let z = minZ; z <= maxZ; z += 1) {
+                const key = `${x}:${z}`;
+                const values = cells.get(key);
+                if (values) values.push(offset);
+                else cells.set(key, [offset]);
+            }
+        }
+    }
+    const index = { cells, broadTriangles, cellCoordinate };
+    spatialIndexCache.set(geometry, index);
+    return index;
+}
+
 function surfaceYs(point, geometry) {
     const values = [];
-    for (let offset = 0; offset < geometry.indices.length; offset += 3) {
+    const index = spatialIndex(geometry);
+    const local = index.cells.get(`${index.cellCoordinate(point.x)}:${index.cellCoordinate(point.z)}`) || [];
+    for (const offset of local) {
+        const y = triangleSurfaceY(geometry.positions, geometry.indices, offset, point);
+        if (y !== null) values.push(y);
+    }
+    for (const offset of index.broadTriangles) {
         const y = triangleSurfaceY(geometry.positions, geometry.indices, offset, point);
         if (y !== null) values.push(y);
     }
@@ -100,6 +146,10 @@ export function validateRouteGeometry(request, path) {
             continue;
         }
         const deltaY = to.y - from.y;
+        if (deltaY > MAX_NAVIGATION_CLIMB_Z) {
+            violations.push(`segment ${segmentIndex}: exceeds upward climb limit`);
+            continue;
+        }
         const isDrop = deltaY < -MAX_NAVIGATION_CLIMB_Z && matchingDrop(from, to, geometry.offMeshConnections || []);
         if (deltaY < -MAX_NAVIGATION_CLIMB_Z && !isDrop) {
             violations.push(`segment ${segmentIndex}: undeclared drop`);

@@ -1,13 +1,13 @@
-# Validation report — v0.7.9
+# Validation report — v0.8.0
 
-Validated in the build environment on 2026-09-04 UTC.
+Validated in the build environment on 2026-09-05 UTC.
 
 ## Automated checks
 
 - `npm test` passes.
 - Parser/scaling/con tests and folder/log-selection filesystem tests pass.
 - Inline Zone Viewer module validation and `node --check` pass for first-party JavaScript.
-- Focused contracts prove intel-first minimal defaults, optional map/routing controls, class-stat loot eligibility, lazy current-zone archive hydration, WLD material-group cursor alignment, one-row viewer chrome, fly initialization, Succor reset, worker-first routing, persistent cancellation, and repeating texture sampling.
+- Focused contracts prove intel-first Minimal defaults, removal of its destination surface and legacy CSS/JS hooks, optional map/row-routing controls, class-stat loot eligibility, lazy current-zone archive hydration, WLD material-group cursor alignment, one-row viewer chrome, fly initialization, Succor reset, worker-first routing, persistent cancellation, and repeating texture sampling.
 - Static UI validation confirms the removed overview surfaces stay absent, all three map modes persist across window modes, Settings owns the EQ folder, route/readiness surfaces exist, routine browser alerts are absent, and retired naming is absent.
 - Release validation confirms the current package/lock/changelog version, required production data, optional certificate handling, and Authenticode verification whenever signing is enabled in either Windows workflow.
 - Release validation requires the first successful `main` build of a new `0.x` version to publish one immutable-tagged GitHub prerelease, while repeat builds at the same version preserve that release and explicit `0.x` tags remain classified as prerelease.
@@ -24,18 +24,21 @@ Validated in the build environment on 2026-09-04 UTC.
 - Location and named-destination grounding are release-checked to start at the trusted Z rather than a 24–35 unit offset that could select Befallen's next floor.
 - Legends rare-creature/scowls consider wording is covered with the reported Soldier of V Zher line and clean-name assertion.
 - Directed route-policy tests allow exactly +6 Z, reject greater climbs, allow exposed drops of any height, and reject drops through an overlapping upper floor.
-- UI checks require the four-step readiness rail, synchronized full/minimal destinations, the minimal header search with the redundant route band removed, NPC waypoint-copy affordances and clipboard bridge, current-zone item scope, keyboard Itembox access, and player-centered Top/Map restoration.
+- UI checks require the four-step readiness rail, the full-view destination planner, no Minimal-view destination form or stale styling/hooks, list-driven optional Route actions, NPC waypoint-copy affordances and clipboard bridge, current-zone item scope, keyboard Itembox access, and player-centered Top/Map restoration.
 - Movement tracking tests cover first-sample behavior, recent-step heading, jitter/duplicate suppression, reversal, teleport rejection, and active-map/route polling cadence.
 - Route-guidance tests cover nearest-segment projection, remaining distance, right-turn detection, opposite-facing recovery, off-route recovery, arrival, and absent-path behavior.
 - The asset-free route corpus passes 8/8 expected outcomes (100%) with zero segment-policy violations across outdoor, indoor, stacked-floor, ramp, closed-door, exposed-drop, and illegal-ascent topology fixtures.
 - Every corpus fixture emits finite typed triangle buffers with in-range indices and upward-facing winding; route requests retain their start/goal anchors, closed doors have no bridge geometry, and exposed drops emit exactly one directed off-mesh link.
 - Pinned `recast-navigation` 0.43.1 passes the same 8/8 shared geometry outcomes; Detour partial paths are treated as no-path rather than displayed.
-- Sparse candidate paths are projected back to supplied collision surfaces, then independently sampled; routes that leave the surface or reverse a directed drop fail closed.
-- The deterministic module worker builds to 747 KiB, contains no build-machine/Node filesystem references, and is covered by transferable-buffer, timeout, stale-result, fallback, and worker-restart contracts.
-- A local unpacked Electron build completes, and its ASAR contains the generated worker, route engine/validator, and both Recast third-party license files. Windows workflows also run `npm run test:artifact` after packaging to prove the ASAR version, always-visible version label, coordinate formatter, viewer transform, and Map HUD match the source being released.
-- MIT and Zlib notices are retained. `npm ls --all` validates the pinned dependency tree; GitHub CI and Windows workflows enforce `npm audit --audit-level=high` because the local restricted environment could not reach the advisory service before timeout.
+- Sparse candidate paths are projected back to supplied collision surfaces, then independently sampled through a worker-local X/Z triangle index; routes that leave the surface, exceed the +6 upward climb, or reverse a directed drop fail closed, and a broad-surface fixture protects triangles spanning many index cells.
+- Viewer collision-export tests apply mesh world transforms, preserve upward winding under mirrored transforms, exclude props, reject non-finite/degenerate triangles, support cooperative cancellation, crop only the route corridor, cap route payload size, and emit downward-only links.
+- An integration contract sends exported/cropped viewer-format triangles through Recast and the independent validator with a successful full-goal result and zero violations.
+- The wrapper's static contract requires cooperative zone export, route-local transfer, established-first scheduling, atomic candidate-owner messaging, aggregate spatial status, and cancellation on clear/unload. Runtime client tests require transferred buffers, latest-request-wins worker termination, fallback, and engine-fault restart.
+- The deterministic module worker builds to approximately 748 KiB and contains no build-machine/Node filesystem references. Windows ASAR checks require the collision exporter/cropper, client, viewer orchestration, app-owner update, generated worker, route engine/validator, and both Recast license files.
+- A local unpacked Electron build completes. Windows workflows also run `npm run test:artifact` after packaging to prove the ASAR contains a production-scale schema-v3 bootstrap pack and that its version, always-visible version label, coordinate formatter, viewer transform, Map HUD, texture cursor patch, and spatial candidate modules match the source being released.
+- MIT and Zlib notices are retained. `npm ls --all` validates the pinned dependency tree; local and GitHub CI/Windows workflows enforce `npm audit --audit-level=high`.
 - Route-distance formatting tests retain near-target precision while quantizing medium/long distances to prevent noisy HUD churn.
-- Diagnostic-export tests prove the allow-list retains useful session/map/route state while excluding the character name, log filename, filesystem paths, viewer messages, and unknown future settings.
+- Diagnostic-export tests prove schema v2 retains useful session/map/route readiness plus aggregate collision/candidate identity, counts, timings, outcome, and fallback reason while excluding character and target names, player/route coordinates, raw worker detail, log filename, filesystem paths, viewer messages, and unknown future settings.
 - Inline viewer checks require dataset rare markers, marker-to-route messaging, mode-preserving location sync, and the shared heading tracker.
 - Inline viewer checks require both local-label and wiki-coordinate route starts to preserve the active First/Top/Map presentation while retaining the route-progress message.
 - Application checks require newest-location coalescing, continuous-movement route scheduling, current-zone rare ranking, and compact mob/loot search.
@@ -64,7 +67,7 @@ Observed parsed events:
 
 ## Real-client checks still required
 
-The repository cannot ship or inspect a player's proprietary S3D/EQG archives. Signed coordinate placement, stacked-floor selection, S3D texture fidelity, rare-label alignment, live heading, and route quality therefore also use the Windows checklist in `docs/V0.7_MANUAL_TEST.md`. Automated tests prevent known transform and movement-policy regressions; they do not substitute for the final visual check against the game.
+The repository cannot ship or inspect a player's proprietary S3D/EQG archives. Signed coordinate placement, stacked-floor selection, S3D texture fidelity, rare-label alignment, live heading, candidate responsiveness, and route quality therefore also use [`docs/WINDOWS_MANUAL_TEST.md`](docs/WINDOWS_MANUAL_TEST.md). Automated tests prevent known transform, material-cursor, and movement-policy regressions; they do not substitute for the final visual check against the game.
 
 ## Desktop packaging note
 

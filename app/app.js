@@ -1185,7 +1185,7 @@ function mapDestinationNames(s = state()) {
 }
 
 function routeDestinationInputs() {
-    return [$('#map-destination'), $('#minimal-map-destination')].filter(Boolean);
+    return [$('#map-destination')].filter(Boolean);
 }
 
 function preferredRouteDestinationInput() {
@@ -1214,8 +1214,8 @@ function renderMapRoutePlanner(s = state()) {
         if (activeRoute && document.activeElement !== destinationInput) destinationInput.value = activeRoute.name;
         destinationInput.placeholder = s.zone ? 'Named mob or map label' : 'Waiting for a zone';
     }
-    for (const start of [$('#start-route'), $('#minimal-start-route')].filter(Boolean)) start.disabled = !s.zone;
-    for (const clear of [$('#clear-route'), $('#minimal-clear-route')].filter(Boolean)) clear.hidden = !activeRoute;
+    $('#start-route').disabled = !s.zone;
+    $('#clear-route').hidden = !activeRoute;
     const status = $('#route-status');
     if (!status) return;
     if (!activeRoute) {
@@ -2079,7 +2079,7 @@ function wireUi() {
     $('#start-route').addEventListener('click', () => pathToNpc($('#map-destination').value));
     for (const input of routeDestinationInputs()) {
         input.addEventListener('keydown', event => {
-            if (event.key === 'Enter' && event.currentTarget.id !== 'minimal-map-destination') {
+            if (event.key === 'Enter') {
                 event.preventDefault();
                 pathToNpc(event.currentTarget.value);
             }
@@ -2089,7 +2089,7 @@ function wireUi() {
             if (activeRoute && npcNameKey(event.currentTarget.value) !== npcNameKey(activeRoute.name)) clearActiveRoute({ keepInput:true });
         });
     }
-    for (const button of [$('#clear-route'), $('#minimal-clear-route')].filter(Boolean)) button.addEventListener('click', () => clearActiveRoute());
+    $('#clear-route').addEventListener('click', () => clearActiveRoute());
 
     $('#settings-minimal-map').addEventListener('change', event => {
         settings.minimalMapVisible = Boolean(event.target.checked);
@@ -2122,6 +2122,16 @@ function wireUi() {
             });
         } else if (event.data?.type === 'eoz-rare-mob-selected' && event.data.name) {
             pathToNpc(event.data.name);
+        } else if (event.data?.type === 'eoz-route-candidate-ready' && event.data.name) {
+            if (!activeRoute || npcNameKey(event.data.name) !== npcNameKey(activeRoute.name) ||
+                zoneKey(activeRoute.zone) !== zoneKey(state().zone)) return;
+            const distance = Number(event.data.distance);
+            activeRoute.status = 'ready';
+            activeRoute.source = 'collision-navmesh';
+            activeRoute.message = `${event.data.name} · ${routeDistanceLabel(distance)} units remaining · following /loc.`;
+            applyRouteGuidance(event.data.guidance);
+            renderMapRoutePlanner(state());
+            scheduleRouteRefresh(state().location);
         } else if (event.data?.type === 'eoz-route-cancelled') {
             clearActiveRoute({ clearViewer:false });
         }

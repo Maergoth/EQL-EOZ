@@ -198,6 +198,7 @@ assert(scaledItemStats(item, 10).STA === 0, 'negative stat reaches zero by tier 
 assert(itemHasClassStats({ stats:{ AC:5, WT:1 } }), 'class loot accepts an item with gameplay stats');
 assert(!itemHasClassStats({ stats:{ WT:1 } }), 'class loot rejects weight-only items');
 assert(!itemHasClassStats({ stats:{} }), 'class loot rejects statless items');
+assert(!itemHasClassStats({ stats:{ AC:0, WT:1 } }), 'class loot rejects zero-value placeholders');
 
 const zoneGear = {
     name:'Pristine Studded Leather Tunic', classes:['MNK'], slots:['CHEST'], stats:{ AC:25, AGI:10, WT:1.4 },
@@ -247,19 +248,37 @@ assert(routeDistanceLabel(86) === '85', 'mid-range route distance is calmly quan
 assert(routeDistanceLabel(842) === '850', 'long route distance avoids noisy single-unit churn');
 
 const diagnostic = buildDiagnosticSnapshot({
-    version:'0.7.1',
+    version:'0.8.0',
     pack:{ meta:{ version:'2026-09-03', schemaVersion:3 } },
     parserState:{ character:'Maergoth', zone:'Befallen', level:50, classes:['MNK'], location:{ x:-961, y:-30, z:-66 } },
     settings:{ mapMode:'top', itemTier:4, manualClasses:['MNK'], dangerousFuturePath:'C:\\EverQuest\\Secrets' },
     bridgeInfo:{ eqRootExists:true, logExists:true, eqRootPath:'C:\\EverQuest', logPath:'C:\\EverQuest\\Logs\\eqlog_Maergoth_server.txt', logSelection:'manual' },
-    viewerStatus:{ mounted:true, directorySelected:true, zone:'Befallen', mode:'top', floors:'all', textures:{ available:42, materials:28, resolved:24 }, navigation:{ ok:true, routed:true, source:'wiki-location', distance:100, guidance:straightGuidance }, message:'C:\\EverQuest\\befallen.s3d' },
+    viewerStatus:{
+        mounted:true,
+        directorySelected:true,
+        zone:'Befallen',
+        mode:'top',
+        floors:'all',
+        textures:{ available:42, materials:28, resolved:24 },
+        navigation:{ ok:true, routed:true, source:'wiki-location', distance:100, guidance:straightGuidance },
+        spatial:{
+            collision:{ status:'ready', zone:'befallen', format:'s3d', buildMs:18, sourceMeshes:7, vertices:900, triangles:300, skippedTriangles:2, localPath:'C:\\EverQuest\\befallen.s3d' },
+            candidate:{ status:'fallback', reason:'validation-failed', engine:'recast-navigation', engineVersion:'0.43.1', fallbackAvailable:true, cropMs:5, sourceTriangles:300, selectedTriangles:120, corridorMargin:96, generationMs:20, queryMs:2, totalMs:27, violationCount:1, detail:'Maergoth at -961,-30,-66', path:[{ x:-961, y:-30, z:-66 }], target:'Maergoth' }
+        },
+        message:'C:\\EverQuest\\befallen.s3d'
+    },
     activeRoute:{ name:'Maergoth', zone:'Befallen', status:'ready', lastRoutedLocation:{ x:-961, y:-30, z:-66 }, guidance:straightGuidance },
     now:Date.UTC(2026, 8, 3)
 });
 const diagnosticText = JSON.stringify(diagnostic);
+assert(diagnostic.schema === 'eye-of-zomm-diagnostics-v2', 'diagnostics identify the aggregate spatial schema');
 assert(diagnostic.session.characterDetected && !('character' in diagnostic.session), 'diagnostics retain character detection without identity');
+assert(diagnostic.session.locationDetected && !('location' in diagnostic.session), 'diagnostics retain location readiness without coordinates');
+assert(diagnostic.route.lastRoutedLocationDetected && !('lastRoutedLocation' in diagnostic.route), 'diagnostics retain reroute readiness without coordinates');
 assert(diagnostic.viewer.textures.available === 42 && diagnostic.viewer.textures.resolved === 24, 'diagnostics retain aggregate texture resolution evidence');
-for (const secret of ['Maergoth', 'C:\\\\EverQuest', 'eqlog_']) assert(!diagnosticText.includes(secret), `diagnostics redact ${secret}`);
+assert(diagnostic.viewer.spatial.candidate.engine === 'recast-navigation' && diagnostic.viewer.spatial.candidate.violationCount === 1, 'diagnostics retain aggregate candidate evidence');
+assert(diagnostic.viewer.navigation.guidance.distanceToTurn === null, 'diagnostics do not turn missing metrics into measured zeroes');
+for (const secret of ['Maergoth', 'C:\\\\EverQuest', 'eqlog_', '"path"', '"detail"', '"target"', '-961']) assert(!diagnosticText.includes(secret), `diagnostics redact ${secret}`);
 
 const session = new EQLogParser();
 session.setCharacterFromFilename('C:\\EverQuest\\Logs\\eqlog_Maergoth_rivervale.txt');

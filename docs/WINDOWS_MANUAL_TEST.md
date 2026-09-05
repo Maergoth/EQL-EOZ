@@ -1,6 +1,8 @@
-# Eye of Zomm v0.7 — replacement-map acceptance test
+# Eye of Zomm Windows/game-client acceptance test
 
-Run this against `EQLWiki-Eye-of-Zomm-Setup-0.7.9-x64.exe` and a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the custom title bar visibly says `v0.7.9`; stop if it does not. Record Windows scaling, zone, character, and pass/fail; redact logs and filesystem paths before sharing diagnostics.
+Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.0-x64.exe`.
+
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the custom title bar visibly says `v0.8.0`; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
 
 ## 1. Continuous `/loc` tracking
 
@@ -59,6 +61,19 @@ Pass: line art is limited to Map presentation, First/Top resolve expected S3D te
 
 Pass: route work does not block position updates, the line is never presented as valid when collision validation fails, and continuous `/loc` traffic cannot starve re-routing.
 
+## 5b. Guarded spatial candidate and fallback
+
+Use Settings → **Export redacted diagnostics** after each case below. The candidate is deliberately invisible as a named engine in normal UI; use `viewer.spatial` in the JSON to distinguish it from the established route.
+
+1. Run one route in each category: outdoor open terrain, narrow indoor corridor, stacked-floor stairs, legal ramp, closed door or solid wall, exposed downward drop, and the same drop attempted in reverse.
+2. Start with a route already visible. While the candidate state is `waiting-geometry`, `preparing`, or `calculating`, drag, zoom, change First/Top/Map, open loot, and continue producing `/loc`. The existing line must stay visible and input must remain responsive.
+3. For a successful candidate, confirm `viewer.spatial.collision.status` and `viewer.spatial.candidate.status` are `ready`, triangle counts are non-zero, timings are finite, and the displayed line changes without moving the camera, clearing the destination, changing the Z slice, or interrupting the cue HUD.
+4. For the closed door/wall and reverse-drop cases, confirm no line crosses the barrier or turns the drop into an ascent. A `fallback` or `no-path` candidate is acceptable only when the established route/marker remains honest and usable.
+5. Start a long route, immediately choose another mob, then change zones. Confirm no earlier candidate reappears. Repeat with **Cancel path**; movement must not restart the cancelled destination.
+6. Test at 100%, 125%, and 150% Windows scaling in at least one indoor and one outdoor zone. Record collision export, crop, generation, query, and total timing values plus whether interaction visibly stalled.
+
+Pass: all displayed candidate segments remain on the intended walkable surface, upward movement never exceeds +6 Z without a gradual surface, drops are one-way, stale work never wins, and every candidate failure preserves the established valid route or honest marker. Do not promote the candidate to first-choice routing until this entire matrix passes.
+
 ## 5a. Fly-first viewer chrome and Succor reset
 
 1. Confirm the embedded viewer has one control row, with **Reset** immediately after **Load Zone**, a single **Z** button, and no Grounded or Floors control.
@@ -73,7 +88,7 @@ Pass: the map maximizes usable height, Fly is the only navigation mode, Z clippi
 1. Follow a route with at least one obvious turn. Confirm the viewer HUD and route status show decreasing remaining distance and the same next-turn direction.
 2. Face away from the path, return to it, then move more than 30 units away. Confirm cues distinguish facing recovery, off-route recovery, and normal progress without hiding the golden line.
 3. Repeat in First, Top, and Map. Confirm the cue remains readable and does not take map controls or marker clicks.
-4. In Settings, export redacted diagnostics. Open the JSON and confirm it contains route/map readiness but no character name, EQ/log path, log filename, or log contents.
+4. In Settings, export redacted diagnostics. Open the JSON and confirm it contains route/map readiness plus aggregate `viewer.spatial` counts/timings/outcomes, but no character or target name, player/route coordinates, raw worker error detail, EQ/log path, log filename, or log contents.
 
 Pass: guidance agrees with the displayed path while live movement updates it, and the exported file is useful without exposing identity or local filesystem details.
 
@@ -83,4 +98,4 @@ Run the v0.6 checks for folder/log persistence, zone textures, Legends rare-crea
 
 ## Release decision
 
-Do not publish if mode preservation, signed coordinates, heading stability, rare-marker alignment, minimal loot browsing, or continuous-movement route refresh fails. A route may fail only with an honest marker/reason; an invalid displayed route is always release-blocking.
+Do not promote the guarded candidate to first-choice routing if texture fidelity, mode preservation, signed coordinates, heading stability, rare-marker alignment, minimal loot browsing, continuous-movement refresh, stale-work safety, input responsiveness, or any spatial case fails. A route may fail only with an honest marker/reason; an invalid displayed route is always release-blocking.

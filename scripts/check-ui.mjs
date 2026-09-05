@@ -29,7 +29,7 @@ const html = readFileSync(join(root, 'app/index.html'), 'utf8');
 for (const required of ['id="top-classes"', 'data-map-mode="first"', 'data-map-mode="top"', 'data-map-mode="map"', 'minimal-map-mode-switch', 'id="map-source-status"', 'id="map-readiness"', 'id="map-destination"', 'id="route-status"', 'id="minimal-rare-search"', 'Named &amp; rare mobs', 'id="settings-minimal-map"', 'id="settings-minimal-routing"', 'id="settings-eq-root"', 'id="settings-map-status"', 'id="export-diagnostics"', 'id="item-current-zone"', 'id="item-slot"', 'id="item-sort"', 'id="item-context"', 'id="desktop-titlebar"', 'id="titlebar-version"', 'id="consider-loot-tray"', 'id="consider-my-class"', 'id="toast-region"']) {
     if (!html.includes(required)) throw new Error(`Required UI element is missing: ${required}`);
 }
-for (const removed of ['id="minimal-route-form"', 'id="minimal-map-destination"', 'id="minimal-start-route"']) {
+for (const removed of ['id="minimal-route-form"', 'id="minimal-map-destination"', 'id="minimal-start-route"', 'id="minimal-clear-route"']) {
     if (html.includes(removed)) throw new Error(`Removed minimal route search is still present: ${removed}`);
 }
 for (const removed of ['CURRENT TARGET', 'Last /location', 'id="settings-server"']) {
@@ -47,6 +47,9 @@ for (const required of ['setView(mode)', 'const changedZone = zoneIdentity !== l
     if (!viewer.includes(required)) throw new Error(`Map integration check is missing: ${required}`);
 }
 if (!viewer.includes("type:'eoz-route-cancelled'")) throw new Error('Viewer cancel does not notify the route owner.');
+for (const required of ['exportViewerCollisionGeometry', 'cropCollisionGeometryForRoute', 'scheduleCandidateRoute', 'resetSpatialRouteState', "type:'eoz-route-candidate-ready'", 'spatial:{']) {
+    if (!viewer.includes(required)) throw new Error(`Spatial candidate integration is missing: ${required}`);
+}
 
 const application = readFileSync(join(root, 'app/app.js'), 'utf8');
 if (!application.includes("event.data?.type === 'eoz-route-cancelled'") || !application.includes('clearActiveRoute({ clearViewer:false })')) {
@@ -56,11 +59,13 @@ for (const required of ['showConsiderTray(event.target)', 'CONSIDER_TRAY_DURATIO
     if (!application.includes(required)) throw new Error(`Consider loot tray behavior is missing: ${required}`);
 }
 if (application.includes('alert(')) throw new Error('Focus-stealing browser alerts remain in the application shell.');
+if (!application.includes("event.data?.type === 'eoz-route-candidate-ready'")) throw new Error('Application does not own validated candidate route updates.');
 
 const styles = readFileSync(join(root, 'app/styles.css'), 'utf8');
-for (const required of ['.con-light-blue', '.npc-con-light-blue', 'body.minimal-mode .map-route-bar{display:none}', '.minimal-route-search', '.waypoint-npc', '.titlebar-version']) {
+for (const required of ['.con-light-blue', '.npc-con-light-blue', 'body.minimal-mode .map-route-bar{display:none}', '.waypoint-npc', '.titlebar-version']) {
     if (!styles.includes(required)) throw new Error(`Modern con presentation is missing: ${required}`);
 }
+if (styles.includes('.minimal-route-search')) throw new Error('Removed Minimal destination styling remains in the stylesheet.');
 
 const preload = readFileSync(join(root, 'desktop/preload.cjs'), 'utf8');
 const desktopMain = readFileSync(join(root, 'desktop/main.cjs'), 'utf8');

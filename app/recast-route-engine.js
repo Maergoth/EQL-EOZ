@@ -1,6 +1,7 @@
 import { init, NavMeshQuery } from 'recast-navigation';
 import { generateSoloNavMesh } from 'recast-navigation/generators';
 import { projectRouteToGeometry, validateRouteGeometry } from './route-validation.js';
+import { MAX_NAVIGATION_CLIMB_Z } from './navigation-policy.js';
 
 export const RECAST_ENGINE_VERSION = '0.43.1';
 
@@ -9,7 +10,7 @@ const GENERATOR_CONFIG = Object.freeze({
     ch:.25,
     walkableSlopeAngle:60,
     walkableHeight:8,
-    walkableClimb:4,
+    walkableClimb:MAX_NAVIGATION_CLIMB_Z,
     walkableRadius:1,
     maxEdgeLen:48,
     maxSimplificationError:.5,

@@ -1,16 +1,44 @@
 function finiteNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
 }
 
-function cleanLocation(location) {
-    if (!location) return null;
-    const cleaned = {
-        x:finiteNumber(location.x),
-        y:finiteNumber(location.y),
-        z:finiteNumber(location.z)
+function cleanToken(value) {
+    return String(value || '').replace(/[^a-z0-9._:-]/gi, '').slice(0, 80);
+}
+
+function cleanSpatialStatus(spatial) {
+    const collision = spatial?.collision || {};
+    const candidate = spatial?.candidate || {};
+    return {
+        collision:{
+            status:cleanToken(collision.status),
+            zone:cleanToken(collision.zone),
+            format:cleanToken(collision.format),
+            reason:cleanToken(collision.reason),
+            buildMs:finiteNumber(collision.buildMs),
+            sourceMeshes:finiteNumber(collision.sourceMeshes),
+            vertices:finiteNumber(collision.vertices),
+            triangles:finiteNumber(collision.triangles),
+            skippedTriangles:finiteNumber(collision.skippedTriangles)
+        },
+        candidate:{
+            status:cleanToken(candidate.status),
+            reason:cleanToken(candidate.reason),
+            engine:cleanToken(candidate.engine),
+            engineVersion:cleanToken(candidate.engineVersion),
+            fallbackAvailable:Boolean(candidate.fallbackAvailable),
+            cropMs:finiteNumber(candidate.cropMs),
+            sourceTriangles:finiteNumber(candidate.sourceTriangles),
+            selectedTriangles:finiteNumber(candidate.selectedTriangles),
+            corridorMargin:finiteNumber(candidate.corridorMargin),
+            generationMs:finiteNumber(candidate.generationMs),
+            queryMs:finiteNumber(candidate.queryMs),
+            totalMs:finiteNumber(candidate.totalMs),
+            violationCount:finiteNumber(candidate.violationCount)
+        }
     };
-    return Object.values(cleaned).every(value => value !== null) ? cleaned : null;
 }
 
 function cleanGuidance(guidance) {
@@ -31,7 +59,7 @@ export function buildDiagnosticSnapshot({ version, pack, parserState, settings, 
     const bridge = bridgeInfo || {};
     const viewer = viewerStatus || {};
     return {
-        schema:'eye-of-zomm-diagnostics-v1',
+        schema:'eye-of-zomm-diagnostics-v2',
         generatedAt:new Date(now || Date.now()).toISOString(),
         appVersion:String(version || bridge.version || 'unknown'),
         platform:String(bridge.platform || 'unknown'),
@@ -45,7 +73,7 @@ export function buildDiagnosticSnapshot({ version, pack, parserState, settings, 
             level:finiteNumber(state.level),
             classes:Array.isArray(state.classes) ? state.classes.map(String) : [],
             characterDetected:Boolean(state.character),
-            location:cleanLocation(state.location)
+            locationDetected:Boolean(state.location)
         },
         preferences:{
             era:String(settings?.era || ''),
@@ -82,14 +110,15 @@ export function buildDiagnosticSnapshot({ version, pack, parserState, settings, 
                 source:String(viewer.navigation?.source || ''),
                 distance:finiteNumber(viewer.navigation?.distance),
                 guidance:cleanGuidance(viewer.navigation?.guidance)
-            }
+            },
+            spatial:cleanSpatialStatus(viewer.spatial)
         },
         route:activeRoute ? {
             active:true,
             zone:String(activeRoute.zone || ''),
             status:String(activeRoute.status || ''),
             source:String(activeRoute.source || ''),
-            lastRoutedLocation:cleanLocation(activeRoute.lastRoutedLocation),
+            lastRoutedLocationDetected:Boolean(activeRoute.lastRoutedLocation),
             guidance:cleanGuidance(activeRoute.guidance)
         } : { active:false }
     };
