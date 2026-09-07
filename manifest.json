@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "product": "EQLWiki - Eye of Zomm",
+  "version": "20260907T042536Z-67711905f645",
+  "generatedAt": "2026-09-07T04:25:36+00:00",
+  "pack": "eqlwiki-eye-of-zomm-data.json.gz",
+  "encoding": "gzip",
+  "sha256": "d0b831cacbc416f113032b2602a7bf52b2e31ab8c7baeca93a696e1591092e87",
+  "bytes": 2745277,
+  "source": "EQLWiki"
+}
