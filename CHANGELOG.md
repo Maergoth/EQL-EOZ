@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.8.3 - Map overlay, raid intel and PNUT triggers
+
+- Add an independent lightweight client-map overlay with logged position, named destinations, floor filtering and validated route guidance; remove Minimal view and the Consider window.
+- Considering or killing a listed named NPC selects, expands and briefly highlights its intel row with a soft blip, without activating a window.
+- Detect Raid Instance headings dynamically in wiki content, preserve normal/raid variants and provenance, and present Normal Zone/Raid Zone groups with complete expandable drops.
+- Replace the timer editor with PNUT-style trigger lists and When/Then/Timer editing, isolated regex matching, match previews, captures, cooldowns and local sound/speech actions.
+- Check unknown live NPC/item events against a complete bundled wiki presence index. Show Screenshot/Ignore notices inside Timers/Triggers for 15 seconds, paused on hover; explicit screenshots copy locally and never upload.
+- Make cumulative item-era filtering explicit, offer eras present in the dataset, and keep First/Top/Map controls on the map page.
+- Refresh the release bootstrap from the reviewed production exporter and retain existing log, folder and overlay preferences during upgrade.
+
+## 0.8.2 - Native modular overlays, timers and application updates
+
+- Add a separate Application updates card and header badge, with compatible beta-release discovery, verified downloads, cancellation, Later, and explicit installer approval.
+- Keep verified downloads across relaunches, make startup downloading opt-in, and preserve the normal NSIS app identity and user-data profile.
+- Reject mismatched installer names, sizes, hashes, redirects and downgrades; permit a replacement download when staged files change and retain the app if Windows handoff fails.
+- Translate PNUT’s compact encounter header, exact Overview/Damage/Healing/Taken/Session tabs and flat metric tables into the EQL-themed overlays.
+- Replace the large floating timer editor with display-only radial countdown rows and a thin swing bar; all configuration and countdown actions live on the main Timers page.
+- Parse own incoming melee, spell, DoT and unknown-caster damage for Taken, with attacker/ability counts and rates while preserving outgoing totals.
+- Add four actual transparent native overlay windows for Parse, Zone & loot, Consider and Timers, with saved independent positions/sizes, layout locks, background opacity, font scale and mouse passthrough.
+- Keep one shared log/parser/timer session alive when the main window hides; retain player parse tabs, complete ability totals, encounter selection, class-aware scaled loot, waypoint/wiki actions and opt-in routes into the existing Map Explorer.
+- Add tray/main/checked-shortcut recovery, monitor clamping, crash recovery and stale-session feedback; sandbox each lightweight renderer with restricted IPC.
+- Implement manual/repeating countdowns, saved literal log triggers, zone-filtered kill reminders and one-time spawn reminders from a chosen duration. Persist deadlines and reject historical/stale/replayed timer starts.
+- Add an observed melee swing bar using own hits/misses, same-second round deduplication, rolling timing changes, cast hold, optional weapon-delay seed and idle reset. EQL timestamps limit it to an estimate, without hand or weapon inference.
+- Add synthetic regression coverage, a real Electron four-window/shared-session smoke and packaged-source parity gates for the new runtime.
+
 ## 0.8.1 - Wiki and map integration corrections
 
 - Recover complete ramp candidates with validated exact-endpoint connectors, preserve legal supported stairs, and permit one independently certified local-drop retry when ordinary routing fails. Real Mistmoore/Kurn descents recover while blocked and reverse probes remain rejected.

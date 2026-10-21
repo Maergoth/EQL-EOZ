@@ -36,6 +36,7 @@ const fixtures = [
     ["Beholder's Maze", 'Gorge of King Xorbb'],
     ['Clan Runnyeye', 'Runnyeye Citadel'],
     ['Kerra Isle', 'Kerra Island'],
+    ['kerraridge', 'Kerra Island'],
     ['Qeynos Catacombs', 'Qeynos Aqueducts'],
     ['Southern Ro', 'South Ro'],
     ['North Felwithe', 'Northern Felwithe'],
@@ -64,6 +65,7 @@ class Title {
 class ZoneAliasHarness {
     private array $zoneCatalog = [];
     private array $zoneAliasMap = [];
+    private array $wikiEntityNames = [ 'npcs' => [], 'items' => [], 'titles' => [] ];
 ${methods}
     public function fatalError(string $message) { throw new Exception($message); }
     public function run(array $fixtures) {

@@ -56,12 +56,14 @@ function harness() {
         settings:{ mapMode:'top' }, bridgeInfo:{ eqRootExists:true, logExists:true },
         viewerFolderStatus:'ready', viewerZoneState:{ zone:'', status:'idle', message:'' },
         partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,
+        overlaySession:{ inputs:[], consume(event, context) { this.inputs.push({ event, context }); }, flush() {} },
+        wikiDiscovery:{consume() {}},
         $:node, state:() => parser.snapshot(), viewerApi:() => viewer,
         waitForViewerApi:async () => viewer, ensureViewerFolderConnected:async () => true,
         queueViewerSync:operation => { const pending = operation(); operations.push(pending); return pending; },
         queueLatestLocationSync:location => { operations.push(context.syncLocationToViewer(false, location)); },
         scheduleRouteRefresh() {}, syncRareMobsToViewer() {}, showNotice() {},
-        clearActiveRoute() {}, showConsiderTray() {}, setActiveMapMode() {}, applyRouteGuidance() {}
+        clearActiveRoute() {}, focusIntelForConsider() {}, setActiveMapMode() {}, applyRouteGuidance() {}
     });
     const code = [
         between(source, 'function zoneRecord(', 'function npcNameKey('),
@@ -76,6 +78,19 @@ function harness() {
         while (operations.length) await operations.shift();
         context.renderMapReadiness();
     } };
+}
+
+{
+    const h = harness();
+    const fresh = new Date().toUTCString();
+    const stale = new Date(Date.now() - 60000).toUTCString();
+    h.context.consumeText(`[${fresh}] You hit a synthetic rat for 11 points of damage.\n`);
+    h.context.consumeText(`[${stale}] You hit a synthetic rat for 12 points of damage.\n`);
+    h.context.consumeText('You hit a synthetic rat for 13 points of damage.\n');
+    h.context.consumeText(`[${fresh}] You hit a synthetic rat for 14 points of damage.\n`, false);
+    assert.deepEqual(h.context.overlaySession.inputs.map(input => input.context.live), [true, false, false, false],
+        'Only fresh original timestamps in an appended live batch can drive timers; stale, missing timestamp and initial-tail events cannot.');
+    assert.equal(h.parser.snapshot().totalDamage, 50, 'Timer freshness never discards normal parse history.');
 }
 
 {

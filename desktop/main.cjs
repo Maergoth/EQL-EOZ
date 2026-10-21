@@ -1,6 +1,7 @@
 'use strict';
 
-const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
+const electron = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = electron;
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -8,6 +9,9 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const { URL } = require('node:url');
+const { AppUpdater, isReleaseNotesUrl } = require('./app-updater.cjs');
+const { OverlayHost } = require('./overlay-host.cjs');
+const { DiscoveryHost } = require('./discovery-host.cjs');
 const {
     inferEqRootPath,
     isEqLogName,
@@ -32,7 +36,35 @@ const SUPPORTED_EQ_EXTENSIONS = new Set(['.s3d', '.eqg', '.txt', '.eff', '.xmi',
 let server = null;
 let windowRef = null;
 let port = DEFAULT_PORT;
-let normalWindowBounds = null;
+let appUpdater = null;
+let overlayHost = null;
+let discoveryHost = null;
+let quitting = false;
+let sessionNeedsReload = false;
+
+function getAppUpdater() {
+    if (!appUpdater) appUpdater = new AppUpdater({
+        version:APP_VERSION,
+        cacheDirectory:path.join(userDataDir(), 'app-updates'),
+        isPackaged:app.isPackaged,
+        confirmInstall:async version => {
+            const result = await dialog.showMessageBox(windowRef || undefined, {
+                type:'question',
+                title:'Install Eye of Zomm update',
+                message:`Install Eye of Zomm ${version}?`,
+                detail:'Eye of Zomm will close and the Windows installer will open. Your saved settings, wiki data, and logs are kept. Finish the installer to reopen the app.',
+                buttons:['Later', 'Install update'],
+                defaultId:0,
+                cancelId:0,
+                noLink:true
+            });
+            return result.response === 1;
+        },
+        launchInstaller:target => shell.openPath(target),
+        onInstallerLaunched:() => app.quit()
+    });
+    return appUpdater;
+}
 
 function rootDir() {
     return path.join(__dirname, '..');
@@ -52,6 +84,29 @@ function configPath() {
 
 function packStatePath() {
     return path.join(userDataDir(), 'eye-of-zomm-pack-state.json');
+}
+
+function overlayPreferencesPath() {
+    return path.join(userDataDir(), 'eye-of-zomm-overlays.json');
+}
+
+function showMainWindow() {
+    if (!windowRef || windowRef.isDestroyed()) return;
+    if (sessionNeedsReload) {
+        sessionNeedsReload = false;
+        overlayHost?.noteSessionRestart();
+        // Recovery is explicit through Open Eye of Zomm, the tray, or the
+        // recovery shortcut. Reload only the app-owned root, never a frame URL.
+        // Active timers restore from their saved deadlines; parse history is
+        // reconstructed from the available log tail by the new session owner.
+        void windowRef.loadURL(`http://${HOST}:${port}/`).catch(() => {
+            sessionNeedsReload = true;
+            overlayHost?.markSessionUnavailable();
+        });
+    }
+    if (windowRef.isMinimized()) windowRef.restore();
+    windowRef.show();
+    windowRef.focus();
 }
 
 function productionPackPath() {
@@ -87,7 +142,6 @@ async function readConfig() {
         logPath: '',
         logSelection: 'automatic',
         alwaysOnTop: false,
-        minimalMode: false,
         ...(await readJson(configPath(), {}))
     };
 }
@@ -104,24 +158,6 @@ async function setAlwaysOnTop(enabled) {
     windowRef?.setAlwaysOnTop(enabled, enabled ? 'screen-saver' : 'normal');
     windowRef?.setSkipTaskbar(false);
     await updateConfig({ alwaysOnTop: enabled });
-    return enabled;
-}
-
-async function setMinimalMode(enabled) {
-    enabled = Boolean(enabled);
-    if (windowRef && !windowRef.isDestroyed()) {
-        if (enabled) {
-            normalWindowBounds ||= windowRef.getBounds();
-            windowRef.setMinimumSize(720, 420);
-            const bounds = windowRef.getBounds();
-            windowRef.setBounds({ ...bounds, width: Math.min(bounds.width, 1040), height: Math.min(bounds.height, 680) }, true);
-        } else {
-            windowRef.setMinimumSize(1024, 700);
-            if (normalWindowBounds) windowRef.setBounds(normalWindowBounds, true);
-            normalWindowBounds = null;
-        }
-    }
-    await updateConfig({ minimalMode: enabled });
     return enabled;
 }
 
@@ -514,7 +550,6 @@ async function apiInfo() {
         productionPack: fs.existsSync(productionPackPath()),
         windowState: {
             alwaysOnTop: Boolean(windowRef?.isAlwaysOnTop() ?? config.alwaysOnTop),
-            minimalMode: Boolean(config.minimalMode)
         },
         desktop: true
     };
@@ -543,7 +578,7 @@ async function requestHandler(req, res) {
         const pathname = url.pathname;
         const isMutation = [
             '/api/select-eq-root', '/api/select-log', '/api/log/automatic',
-            '/api/window/always-on-top', '/api/window/minimal', '/api/update-pack'
+            '/api/window/always-on-top', '/api/update-pack'
         ].includes(pathname);
         if (isMutation && !trustedMutation(req, pathname)) {
             return sendJson(res, req.method === 'POST' ? 403 : 405, { error: 'Trusted POST required' });
@@ -575,11 +610,6 @@ async function requestHandler(req, res) {
         if (pathname === '/api/window/always-on-top') {
             const enabled = url.searchParams.get('enabled') === '1';
             await setAlwaysOnTop(enabled);
-            return sendJson(res, 200, { ok: true, enabled });
-        }
-        if (pathname === '/api/window/minimal') {
-            const enabled = url.searchParams.get('enabled') === '1';
-            await setMinimalMode(enabled);
             return sendJson(res, 200, { ok: true, enabled });
         }
         if (pathname === '/api/update-pack') {
@@ -625,12 +655,11 @@ async function startServer() {
 }
 
 function createWindow(config = {}) {
-    const minimalMode = Boolean(config.minimalMode);
     windowRef = new BrowserWindow({
-        width: minimalMode ? 1040 : 1440,
-        height: minimalMode ? 680 : 900,
-        minWidth: minimalMode ? 720 : 1024,
-        minHeight: minimalMode ? 420 : 700,
+        width: 1440,
+        height: 900,
+        minWidth: 1024,
+        minHeight: 700,
         backgroundColor: '#08101b',
         frame: false,
         autoHideMenuBar: true,
@@ -641,23 +670,27 @@ function createWindow(config = {}) {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
-            webSecurity: true
+            webSecurity: true,
+            autoplayPolicy: 'no-user-gesture-required',
+            // This renderer is the sole log/session owner even when only
+            // independent native overlays are visible.
+            backgroundThrottling: false
         }
     });
     windowRef.setAlwaysOnTop(Boolean(config.alwaysOnTop), config.alwaysOnTop ? 'screen-saver' : 'normal');
     windowRef.setSkipTaskbar(false);
 
-    const openApprovedWikiUrl = url => {
+    const openApprovedExternalUrl = url => {
         try {
             const target = new URL(url);
-            if (target.protocol === 'https:' && ['eqlwiki.com', 'www.eqlwiki.com'].includes(target.hostname.toLowerCase())) {
+            if ((target.protocol === 'https:' && ['eqlwiki.com', 'www.eqlwiki.com'].includes(target.hostname.toLowerCase())) || isReleaseNotesUrl(url)) {
                 void shell.openExternal(target.toString());
             }
         } catch {}
     };
 
     windowRef.webContents.setWindowOpenHandler(({ url }) => {
-        openApprovedWikiUrl(url);
+        openApprovedExternalUrl(url);
         return { action: 'deny' };
     });
 
@@ -665,12 +698,29 @@ function createWindow(config = {}) {
         const localPrefix = `http://${HOST}:${port}/`;
         if (!url.startsWith(localPrefix)) {
             event.preventDefault();
-            openApprovedWikiUrl(url);
+            openApprovedExternalUrl(url);
         }
     });
 
     windowRef.once('ready-to-show', () => windowRef.show());
-    windowRef.on('closed', () => { windowRef = null; });
+    windowRef.on('close', event => {
+        if (!quitting && overlayHost?.hasVisiblePanels() && overlayHost.hasRecoveryControl()) {
+            event.preventDefault();
+            windowRef.hide();
+        }
+    });
+    const unavailable = () => { sessionNeedsReload = true; overlayHost?.markSessionUnavailable(); };
+    windowRef.webContents.on('render-process-gone', unavailable);
+    windowRef.webContents.on('render-process-gone', () => discoveryHost?.clear());
+    windowRef.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+        if (isMainFrame && !isInPlace) discoveryHost?.clear();
+    });
+    windowRef.webContents.on('unresponsive', unavailable);
+    windowRef.webContents.on('responsive', () => { sessionNeedsReload = false; });
+    windowRef.webContents.on('did-start-loading', () => overlayHost?.markSessionUnavailable());
+    // Hidden overlay windows still count as open Electron windows. Once the
+    // session window really closes, quit rather than leaving orphaned panels.
+    windowRef.on('closed', () => { windowRef = null; if (!quitting) app.quit(); });
     void windowRef.loadURL(`http://${HOST}:${port}/`);
 }
 
@@ -689,8 +739,40 @@ async function bootstrap() {
     // Never delay first paint on remote data. The cached/bootstrap pack loads immediately;
     // a tiny GitHub dataset-manifest check runs in parallel on every startup.
     void updateStaticDataPack(false).catch(error => console.warn('[Eye of Zomm] data sync:', error));
+    overlayHost = new OverlayHost({
+        electron,
+        origin:`http://${HOST}:${port}`,
+        getMainWindow:() => windowRef,
+        showMain:showMainWindow,
+        readPreferences:() => readJson(overlayPreferencesPath(), {}),
+        writePreferences:preferences => atomicWriteJson(overlayPreferencesPath(), preferences)
+    });
+    await overlayHost.initialize();
+    discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
+        isTimerPanel:event=>overlayHost.overlaySender(event)==='timers'});
     createWindow(config);
+    // Metadata checks are quiet. Application downloads require an explicit
+    // request or the saved opt-in; a staged installer never runs on startup.
+    void getAppUpdater().startup().catch(() => console.warn('[Eye of Zomm] application update check unavailable.'));
 }
+
+ipcMain.handle('eye-of-zomm:app-update', async (event, action, value) => {
+    // Only the main local application frame can control an installer. The
+    // embedded zone viewer and unrelated loopback clients have no update API.
+    if (!windowRef || windowRef.isDestroyed() || event.sender !== windowRef.webContents ||
+        event.senderFrame !== windowRef.webContents.mainFrame ||
+        event.senderFrame?.url !== `http://${HOST}:${port}/`) {
+        throw new Error('Application update request is unavailable.');
+    }
+    const updater = getAppUpdater();
+    if (action === 'get-status') return updater.getStatus();
+    if (action === 'check') return updater.check();
+    if (action === 'download') return updater.download();
+    if (action === 'cancel') return updater.cancel();
+    if (action === 'startup-download' && typeof value === 'boolean') return updater.setStartupDownload(value);
+    if (action === 'install') return updater.install();
+    throw new Error('Unknown application update request.');
+});
 
 ipcMain.handle('eye-of-zomm:window', (_event, action) => {
     if (!windowRef || windowRef.isDestroyed()) return false;
@@ -714,10 +796,7 @@ if (!gotLock) {
     app.quit();
 } else {
     app.on('second-instance', () => {
-        if (!windowRef) return;
-        if (windowRef.isMinimized()) windowRef.restore();
-        windowRef.show();
-        windowRef.focus();
+        showMainWindow();
     });
 
     app.whenReady().then(bootstrap).catch(error => {
@@ -732,5 +811,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+    quitting = true;
+    overlayHost?.dispose();
+    discoveryHost?.dispose();
+    appUpdater?.shutdown();
     try { server?.close(); } catch {}
 });

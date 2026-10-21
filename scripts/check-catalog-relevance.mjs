@@ -7,6 +7,8 @@ const pack = JSON.parse(readFileSync(packPath, 'utf8'));
 if (!Array.isArray(pack.items) || pack.items.length < 1000) {
     throw new Error('Catalog relevance check requires the production bootstrap pack.');
 }
+if (pack.meta?.wikiEntitiesComplete !== true || !['npcs','items','titles'].every(key => pack.wikiEntities?.[key]?.length > 0) ||
+    !pack.npcs?.some(npc => npc.raidInstance === true)) throw new Error('The production catalog requires the refreshed raid and public wiki presence export.');
 
 const items = pack.items
     .filter(item => {

@@ -56,7 +56,9 @@ for (const [name, content, required] of [
     ['sync status', viewerHtml, 'Synced to in-game map ${formatWorldLocationForGameMap(worldLocation)}'],
     ['viewer world transform', viewerBundle, 'eqWorldToThree(e,t,n){return new A(-Tt(t),Tt(n),Tt(e))}'],
     ['viewer map HUD', viewerBundle, 'this.els.coord.textContent=`Map X ${i.y.toFixed(2)}   Y ${i.x.toFixed(2)}   Z ${i.z.toFixed(2)}`'],
-    ['intel-first minimal settings', app, 'minimalMapVisible: false'],
+    ['overlay route opt-in', app, 'routingEnabled: false'],
+    ['native map snapshot', app, 'dataVersion:mapDataRevision'],
+    ['complete lazy drop broker', app, "action === 'session:intel-drops'"],
     ['lazy archive hydration', viewerBundle, 'l.eyeOfZommReadFile?await l.eyeOfZommReadFile():l'],
     ['lazy local file bridge', viewerHtml, 'eyeOfZommReadFile:() => handle.readFile()'],
     ['WLD material group alignment', viewerWorker, 'p+=T.polygonCount;continue'],
@@ -75,6 +77,10 @@ if (Number(bootstrap?.meta?.schemaVersion) < 3 || bootstrap?.meta?.sample === tr
     !Array.isArray(bootstrap?.npcs) || bootstrap.npcs.length < 1000 ||
     !Array.isArray(bootstrap?.items) || bootstrap.items.length < 1000) {
     throw new Error('Packaged bootstrap is missing the production-scale schema-v3 dataset.');
+}
+if (bootstrap.meta.wikiEntitiesComplete !== true || !['npcs','items','titles'].every(key => bootstrap.wikiEntities?.[key]?.length > 0) ||
+    !bootstrap.npcs.some(npc => npc.raidInstance === true)) {
+    throw new Error('Packaged bootstrap must include the complete wiki presence catalog and exported raid variants.');
 }
 
 console.log(`Packaged app verified as v${packagedPackage.version} with production data and current coordinate, texture, and spatial-candidate code.`);

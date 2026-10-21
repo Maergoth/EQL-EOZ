@@ -26,7 +26,7 @@ for (const file of files) {
 }
 
 const html = readFileSync(join(root, 'app/index.html'), 'utf8');
-for (const required of ['id="top-classes"', 'data-map-mode="first"', 'data-map-mode="top"', 'data-map-mode="map"', 'minimal-map-mode-switch', 'id="map-source-status"', 'id="map-readiness"', 'id="map-destination"', 'id="route-status"', 'id="minimal-rare-search"', 'Named &amp; rare mobs', 'id="settings-minimal-map"', 'id="settings-minimal-routing"', 'id="settings-eq-root"', 'id="settings-map-status"', 'id="export-diagnostics"', 'id="item-current-zone"', 'id="item-slot"', 'id="item-sort"', 'id="item-context"', 'id="desktop-titlebar"', 'id="titlebar-version"', 'id="consider-loot-tray"', 'id="consider-my-class"', 'id="toast-region"']) {
+for (const required of ['id="top-classes"', 'data-map-mode="first"', 'data-map-mode="top"', 'data-map-mode="map"', 'id="map-source-status"', 'id="map-readiness"', 'id="map-destination"', 'id="route-status"', 'id="settings-routing-enabled"', 'id="overlay-controller"', 'id="settings-eq-root"', 'id="settings-map-status"', 'id="export-diagnostics"', 'id="item-current-zone"', 'id="item-slot"', 'id="item-sort"', 'id="item-context"', 'id="desktop-titlebar"', 'id="titlebar-version"', 'id="toast-region"']) {
     if (!html.includes(required)) throw new Error(`Required UI element is missing: ${required}`);
 }
 for (const removed of ['id="minimal-route-form"', 'id="minimal-map-destination"', 'id="minimal-start-route"', 'id="minimal-clear-route"']) {
@@ -55,14 +55,15 @@ const application = readFileSync(join(root, 'app/app.js'), 'utf8');
 if (!application.includes("event.data?.type === 'eoz-route-cancelled'") || !application.includes('clearActiveRoute({ clearViewer:false })')) {
     throw new Error('Route cancellation can still be restarted by automatic rerouting.');
 }
-for (const required of ['showConsiderTray(event.target)', 'CONSIDER_TRAY_DURATION', 'armConsiderTrayTimeout(8000)', 'npcNameKey(sourceName)', 'ensureViewerFolderConnected', 'mapReadinessMessage', 'renderMapReadiness', 'mapDestinationNames', 'rareMobsForZone', 'rareCatalogCache', 'syncRareMobsToViewer', 'queueLatestLocationSync', 'pendingViewerLocation', 'renderLiveLocation', 'updateMinimalDistances', 'scheduleRouteRefresh', 'ROUTE_REFRESH_DISTANCE', 'applyRouteGuidance', 'buildDiagnosticSnapshot', 'exportDiagnostics', "result.source === 'map-label' ? 'local map label' : 'EQLWiki location'", 'itemBrowsePriority', 'Tier ${tier} adjusted stats', 'showNotice', 'waypointCommandForWorldLocation', 'bindWaypointButtons', 'writeClipboardText', 'routeDestinationInputs', 'preferredRouteDestinationInput', 'event.zoneShortName || event.zone', 'zoneRecord(parser.zoneShortName)?.name', "$('#titlebar-version').textContent", 'document.title']) {
-    if (!application.includes(required)) throw new Error(`Consider loot tray behavior is missing: ${required}`);
+for (const required of ['npcNameKey(sourceName)', 'ensureViewerFolderConnected', 'mapReadinessMessage', 'renderMapReadiness', 'mapDestinationNames', 'rareMobsForZone', 'rareCatalogCache', 'syncRareMobsToViewer', 'queueLatestLocationSync', 'pendingViewerLocation', 'renderLiveLocation', 'scheduleRouteRefresh', 'ROUTE_REFRESH_DISTANCE', 'applyRouteGuidance', 'buildDiagnosticSnapshot', 'exportDiagnostics', "result.source === 'map-label' ? 'local map label' : 'EQLWiki location'", 'itemBrowsePriority', 'Tier ${tier} adjusted stats', 'focusIntelForConsider', "action === 'session:intel-drops'", "action === 'session:map-data'", 'showNotice', 'waypointCommandForWorldLocation', 'bindWaypointButtons', 'writeClipboardText', 'routeDestinationInputs', 'preferredRouteDestinationInput', 'event.zoneShortName || event.zone', 'zoneRecord(parser.zoneShortName)?.name', "$('#titlebar-version').textContent", 'document.title']) {
+    if (!application.includes(required)) throw new Error(`Overlay integration behavior is missing: ${required}`);
 }
 if (application.includes('alert(')) throw new Error('Focus-stealing browser alerts remain in the application shell.');
 if (!application.includes("event.data?.type === 'eoz-route-candidate-ready'")) throw new Error('Application does not own validated candidate route updates.');
 
 const styles = readFileSync(join(root, 'app/styles.css'), 'utf8');
-for (const required of ['.con-light-blue', '.npc-con-light-blue', 'body.minimal-mode .map-route-bar{display:none}', '.waypoint-npc', '.titlebar-version']) {
+if (/minimal-mode|consider-loot-tray/.test(html + styles)) throw new Error('Retired play mode or Consider tray remains.');
+for (const required of ['.con-light-blue', '.npc-con-light-blue', '.waypoint-npc', '.titlebar-version']) {
     if (!styles.includes(required)) throw new Error(`Modern con presentation is missing: ${required}`);
 }
 if (styles.includes('.minimal-route-search')) throw new Error('Removed Minimal destination styling remains in the stylesheet.');

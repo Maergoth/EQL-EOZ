@@ -1,8 +1,8 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.8.1
-Last updated: 2026-09-05
+Baseline: 0.8.3
+Last updated: 2026-10-21
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
 
@@ -135,17 +135,52 @@ A renamed folder, rotated log, missing map file, stale cache, or interrupted dat
 
 Every behavioral change adds the nearest deterministic regression test in the same commit. A reported bug starts with a fixture that fails for the reported case; coordinate, parser, routing, clipboard, and state rules belong in unit or contract tests. Visual behavior that requires proprietary archives or Windows still gets an automated structural guard plus a specific manual acceptance step and redacted diagnostics—not an undocumented “looks right” assumption.
 
+### 4.12 PNUT-style native overlays and timers
+
+Use EQL's navy/gold visual identity with PNUT's compact encounter tabs,
+hover/focus menus and independent overlay panels. Layout lock preserves tab/menu
+interaction; Ignore mouse is a separate state with tray/main-window recovery.
+Keep the named/rare loot, considered-target Intel focus, item scaling, wiki links and validated
+map/route tools. Exclude Elitist/Carebear and Revenge. Current parses remain
+player-only; rune grants are capacity rather than proven absorption.
+
+The 0.8.3 PR implements four independent transparent native windows: Parse,
+Map, Zone & loot and Timers. One main-renderer session owns parsing, timers,
+pack and routes while hidden. Panels save independent bounds and use restricted
+snapshot/command IPC, tray/main recovery and a checked global shortcut. The heavy
+Map Explorer remains in the main app and opens explicitly from panel actions;
+the native Map is a lightweight client line-map canvas sharing location/routes.
+Intel separates Normal Zone/Raid Zone sources, lazily expands every matching
+drop with Show More, and selects/expands on a named consider or kill with a mild
+flash/blip. It never activates the window. Minimal and Consider windows are retired.
+
+The [PNUT UX plan](PNUT_UX_PLAN.md) records the reference commit, implementation
+seams and acceptance gates. [Timers](TIMERS.md) include manual/repeat, literal or
+worker-isolated regex triggers, PNUT named captures, preview, cooldown/overlap,
+warning/end colors and sound/speech, kill-based reminders and an observed swing estimate with optional
+weapon-delay seed. Historical/stale log reads cannot trigger them. Live-game
+compositing, physical passthrough and OS-wide scaling remain manual acceptance;
+this implementation does not claim docking or hand-precise swing timing.
+
+Verified missing wiki entities appear inside main/native Timers/Triggers only
+with a complete catalog. Screenshot/Ignore notices last 15 visible seconds,
+pausing for hover/focus and source selection. Visible interactive native Timers
+takes priority over main Timers so one surface owns the notice clock. Explicit capture copies a chosen
+window/display to the clipboard, plays a mild shutter and says “Paste your clipboard
+into discord!”; no upload or new popup occurs. Ignore persists locally.
+
 ## 5. Information architecture
 
-The application has seven destinations, ordered by frequency and immediacy:
+The application has eight destinations, ordered by frequency and immediacy:
 
 1. **Overview** — session orientation and recent activity.
-2. **Live Map** — position, navigation, named mobs, and minimal-mode workspace.
+2. **Live Map** — position, navigation, named mobs, and full Map Explorer.
 3. **NPCs** — current-zone target intelligence and paths.
 4. **Items** — current-zone/class loot first, global research on demand.
 5. **Drops** — observed loot history and evidence-based rates.
 6. **Combat** — current and historical encounters.
-7. **Settings** — folder/log, character fallback, window, parser, and dataset controls.
+7. **Timers** — PNUT-style trigger list/editor, countdowns, cues and swing preferences.
+8. **Settings** — folder/log, character fallback, window, parser, and dataset controls.
 
 The persistent header contains only cross-cutting state and actions:
 
@@ -156,9 +191,12 @@ The persistent header contains only cross-cutting state and actions:
 - log readiness;
 - Search EQLWiki;
 - Pin to top;
-- Minimal/Full view.
+- Overlays.
 
-Minimal mode is not a separate product area. Its default is the compact named/rare-mob intelligence list plus current-fight DPS and the consider tray. The map and row-level route actions are independent opt-ins; omitting them must not disable waypoint copy, considers, or loot.
+Parse, Map, Intel and Timers are independent native windows with separately saved
+visibility/layout/input preferences. The main app retains detailed browsing and
+editing. First/Top/Map controls appear only on the main Map page; item filtering
+uses cumulative **Through era** options drawn from eras present in the dataset.
 
 ## 6. Click budgets
 
@@ -171,13 +209,13 @@ These are design constraints, not aspirational marketing numbers.
 | Place the player from `/loc` | 0 | 0 | 0 |
 | Switch First/Top/Map view | 1 | 1 | 1 |
 | Inspect a considered mob's loot | 0 | 0 | 0 |
-| Keep consider loot open | 0 while hovered/focused | 0 | 0 |
+| Keep selected named loot expanded | 0 until collapsed | 0 | 0 |
 | Route to the considered mob | 1 | 1 | 1 |
 | Route to a listed current-zone mob | 2 from anywhere; 1 from NPC/Map | same | 1 |
 | See useful current-zone class items | 1 to open Items | 1 | 1 |
 | Search the global item catalog | 1 field focus + typing | same | 1 |
 | Search EQLWiki | 1 field focus + typing/Enter | same | 1 |
-| Enter or leave minimal mode | 1 | 1 | 1 |
+| Show or hide one native overlay | 1 | 1 | 1 |
 | Return to automatic newest-log selection | 2: Settings + action | same | 1 in Settings |
 
 No recovery flow should make the player reselect a valid folder merely to wake up the map.
@@ -253,15 +291,16 @@ If the root moved or disappeared, show one recovery card with the previous path 
 
 Entry points:
 
-- **Path** beside a current-zone mob in minimal mode;
+- **Route** beside a current-zone mob in Intel;
 - **Path in map** on an NPC card;
-- **Path** in the consider tray;
+- a named marker on the native Map;
 - the persistent **Navigate to** field within Live Map.
 
 Flow:
 
 1. Click **Path**.
-2. Eye of Zomm opens Live Map if needed and ensures the current zone is loaded.
+2. Eye of Zomm ensures the current zone is loaded. Native Route keeps the game
+   foregrounded and shares the result with the native Map; full Map Explorer opens explicitly.
 3. Resolve the destination in this order:
    - exact baked-in local map label;
    - normalized local map label;
@@ -283,21 +322,18 @@ Movement contract:
 - floors, ramps, corridors, and doors must remain spatially distinct;
 - “no route found” still leaves a useful destination marker and source explanation.
 
-### 8.5 Consider-to-loot
+### 8.5 Named consider/kill-to-loot
 
-1. Consider an NPC in game.
+1. Consider or kill a listed named NPC in game.
 2. The parser recognizes standard and Legends descriptor forms such as `- a rare creature - scowls at you`.
-3. A tray docks to the bottom without changing the active app destination or stealing keyboard focus.
-4. It shows:
-   - clean NPC name;
-   - level and con label;
-   - known drops;
-   - embedded item icons when available;
-   - **My Class** filter;
-   - **Path**;
-   - close control.
-5. Hovering/focusing the tray pauses dismissal. Leaving resumes a shorter grace period.
-6. Hovering an item opens its Itembox-style detail card.
+3. Intel selects, scrolls to and expands the matching source without changing
+   OS focus; a mild flash/blip draws attention and respects reduced motion.
+4. Its Normal Zone/Raid Zone identity, con/level, class-filtered tier-scaled
+   drops, wiki link, waypoint and optional Route remain available.
+5. Expansion survives snapshots until the player collapses it or selects another
+   target. Show More retrieves every matching drop, including lists beyond five.
+6. Explicit item/details actions open the full browser. No separate Consider
+   window or dismissal timer competes with the list.
 
 If no drops are known, keep the NPC identity and path action visible. Explain whether the dataset has no drops or the class filter removed them.
 
@@ -316,7 +352,7 @@ If no drops are known, keep the NPC identity and path action visible. Explain wh
 ### 8.7 Combat and loot review
 
 1. The current fight begins with the first outgoing hostile action.
-2. Current-fight DPS stays prominent on Overview and minimal Live Map.
+2. Current-fight DPS stays prominent on Overview and native Parse.
 3. Combat events remain in the same encounter while successive events are no farther apart than the configured quiet period.
 4. A later hostile event starts a new encounter.
 5. Encounter name is the first attacked NPC plus start timestamp.
@@ -383,30 +419,28 @@ Requirements:
 - Manual Sync actions are available as recovery, but automatic log events are primary.
 - Location status uses labeled X/Y/Z to make axis debugging possible.
 - Named-mob labels, player marker, destination, and route share the same transform.
-- Destination search, route status, distance, and **Clear** remain in the full Live Map workspace. Minimal mode relies on its named/rare list and exposes row-level Route actions only when enabled.
+- Destination search, route status, distance, and **Clear** remain in the full Live Map workspace. Intel exposes row-level Route actions only when enabled; native Map shares the selected destination and route.
 - Advanced rendering diagnostics and duplicate navigation controls remain hidden.
 
-### 9.4 Minimal mode
+### 9.4 Native overlay workspace
 
 User stories:
 
-- As a player keeping the game foregrounded, I want named targets, current DPS, and zone loot intelligence without a mostly empty map.
-- As a player who wants navigation in the compact view, I want to opt into the map and its mode controls.
-- As a loot planner, I want **My Class** and **Named only** without opening Settings.
-- As a player who wants routes, I want to enable row-level Route actions without restoring a duplicate destination field.
+- As a player keeping the game foregrounded, I want independently positioned parse, map, named-loot and timer surfaces.
+- As a loot planner, I want source variants, **My Class**, search and every matching drop without opening Settings.
+- As a player who wants routes, I want shared validated guidance without activating the main app.
 
 Requirements:
 
-- Defaults to current fight DPS/name and the named/rare mob/drop list; the map and route actions default off.
-- Settings exposes independent **Show map** and **Show path controls** choices, with route actions unavailable when the map is hidden.
-- Contains no duplicate destination-search surface; named routes originate from the list.
-- Clicking a located NPC name still copies a waypoint, and consider pop-under loot still opens, regardless of map/routing preferences.
+- Four actual native windows: Parse, Map, Zone & loot and Timers. Each saves bounds, opacity, text size, lock and mouse passthrough.
+- Main/tray/shortcut recovery restores input; closing main with visible recoverable panels keeps one log session alive.
+- Normal Zone and slightly red Raid Zone sections preserve variant identity through browsing, routes and lazy drop requests.
+- Three-item previews are bounded; Show More retrieves all matching drops and rejects stale zone/class/tier/era/pack responses.
+- Named considers/kills select and expand Intel with a mild flash/blip and no OS focus change.
 - **My Class** excludes statless, weight-only, and zero-value placeholder records.
-- Consider tray overlays the bottom and remains inspectable.
-- Does not hide the app from the taskbar.
-- Does not remove the ability to unpin or return to Full view.
-- Intel panel is visible by default and uses the full workspace when the map is hidden.
-- At the minimum supported width, enabled map controls and window actions do not overlap.
+- Native Timers is a display surface; all editing lives on main Timers, with inline missing-wiki Screenshot/Ignore notices on both surfaces.
+- No Minimal mode, separate Consider window, second 3D decoder or per-panel parser.
+- Native Map uses client line geometry and owner location/route state; full Map Explorer remains explicit.
 
 ### 9.5 NPCs
 
@@ -533,14 +567,14 @@ Avoid “try again” without identifying what is missing. Avoid directing users
 
 - Every actionable control is a semantic button, link, input, or select.
 - Visible focus treatment meets the same prominence as hover treatment.
-- Enter submits Search EQLWiki; Escape closes transient trays/tooltips where appropriate.
+- Enter submits Search EQLWiki; Escape closes transient menus/tooltips where appropriate.
 - Con, connection, and route states include text in addition to color.
 - Minimum pointer target is 32×32 px in compact surfaces and 36×36 px elsewhere where layout permits.
-- Tooltips are reachable by keyboard focus; Escape dismisses tooltip and consider-tray content without moving focus automatically.
-- Transient consider content uses a polite live region and does not move keyboard focus automatically.
+- Tooltips are reachable by keyboard focus; Escape dismisses transient content without moving focus automatically.
+- Named-event Intel attention uses a polite live region and does not move keyboard or OS focus automatically.
 - Animation is short and nonessential; reduced-motion preferences should disable entrance movement.
 - Text remains legible at 125% and 150% Windows scale.
-- Minimal mode supports the documented minimum 720×420 window without hiding critical actions.
+- Main supports the documented minimum 720×420 window; native panels clamp to reachable monitor bounds without hiding recovery actions.
 
 ## 12. Visual hierarchy
 
@@ -549,7 +583,7 @@ Avoid “try again” without identifying what is missing. Avoid directing users
 - current zone;
 - current fight while active;
 - map/player/destination when on Live Map;
-- considered NPC while tray is present.
+- selected named NPC in Intel.
 
 ### Secondary
 
@@ -617,11 +651,11 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 - All floors appear by default after loading a zone.
 - When several map folders contain the zone, Eye of Zomm uses the root `maps` family that corresponds to the game's `default` selection and names the active map set in sync status. A future explicit map-set selector may override it; file size must never choose a custom set silently.
 
-### Consider and loot
+### Named events and loot
 
-- `Soldier of V Zher - a rare creature - scowls at you, ready to attack -- looks like quite a gamble. (Lvl: 26)` opens the docked tray for `Soldier of V Zher` at level 26.
-- Hover pauses dismissal.
-- My Class changes visible drops without closing the tray.
+- `Soldier of V Zher - a rare creature - scowls at you, ready to attack -- looks like quite a gamble. (Lvl: 26)` selects and expands the matching Intel source for `Soldier of V Zher` at level 26; a named kill does the same without OS activation.
+- Selection survives snapshots; Show More displays every matching drop, with normal and raid sources kept distinct.
+- My Class changes visible drops without losing current source context.
 - Item hover shows cached icon/data and tier-adjusted stats when tier is nonzero.
 
 ### Navigation
@@ -650,9 +684,13 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 - Pin keeps the app above the game.
 - Pin hides custom titlebar only.
 - App remains on the taskbar.
-- Minimal mode retains Pin and Full view controls and exposes First/Top/Map whenever its map is enabled.
+- Native Parse/Map/Intel/Timers visibility and layouts are independent; recovery remains reachable. First/Top/Map controls appear only on the main Map page.
 
 ## 16. Road to v1
+
+The 0.5–0.7 milestones below retain historical implementation evidence. Their
+Minimal/consider-tray surfaces were superseded by the 0.8.3 native workspace in
+sections 4.12 and 9.4; those retired surfaces are not current acceptance gates.
 
 The route to 1.0 is organized around user confidence, not the number of features shipped. Each release must close one complete loop and retain all earlier acceptance contracts.
 
@@ -770,7 +808,7 @@ Navigation architecture:
 5. Query with Detour, smooth the corridor, validate every rendered segment against local collision, and fall back to the 0.7 graph if generation fails.
 6. Retain the implemented next-turn cue, remaining distance, schema-v2 aggregate diagnostics, and 8/8 shared synthetic geometry outcomes while running the outdoor/indoor/stacked/ramp/door/drop Windows matrix.
 
-Route-engine UX contract: preparation and queries remain background work. The current valid line stays visible until a validated replacement is ready; stale results are discarded; view/minimal choices never change; compatibility fallback is automatic; and normal UI uses “path,” “updating,” and concrete recovery language rather than navmesh/Recast terminology.
+Route-engine UX contract: preparation and queries remain background work. The current valid line stays visible until a validated replacement is ready; stale results are discarded; presentation/native visibility choices never change; compatibility fallback is automatic; and normal UI uses “path,” “updating,” and concrete recovery language rather than navmesh/Recast terminology.
 
 The design takes conceptual guidance from EQEmu's [Detour navmesh pathfinder](https://github.com/EQEmu/EQEmu/blob/master/zone/pathfinder_nav_mesh.cpp) and [ground/ceiling raycasts](https://github.com/EQEmu/EQEmu/blob/master/zone/map.cpp). EQEmu's sequential [azone2 WLD material/polygon loop](https://github.com/EQEmu/EQEmu/blob/master/utils/deprecated/azone2/wld.cpp) also corroborates the skipped-material cursor repair. Eye of Zomm remains a separate read-only viewer and will not copy server movement or automation behavior.
 
@@ -839,20 +877,20 @@ Deferred beyond 1.0 unless evidence changes the priority:
 
 ## 17. Product decisions and approval points
 
-### Implemented through 0.7
+### Implemented decisions, updated for 0.8.3
 
-1. **Remember presentation.** Preserve First/Top/Map and the last full-mode view; minimal always presents Live Map without overwriting that remembered view.
+1. **Remember presentation.** Preserve First/Top/Map, the main destination and each native panel's visibility/layout independently.
 2. **Search overrides contextual item scope.** Empty query is current-zone/class; deliberate search is global unless Current zone was explicitly selected.
 3. **Make Auto visible.** Detected classes appear selected while Auto remains the explicit source of truth.
-4. **Keep the consider timeout calm.** Sixteen seconds initially, paused while hovered/focused, eight-second grace after leaving.
+4. **Keep named attention calm.** Select and expand Intel once per consider/kill with a mild flash/blip; no popup or automatic collapse timer.
 5. **Keep the route destination.** Re-route after eight or more units of observed movement; duplicate `/loc` values do not rebuild.
-6. **Allow compact-map focus.** Intel rail starts visible and can be collapsed/restored from the minimal header.
+6. **Keep compact surfaces independent.** Native Map and Intel can be shown/hidden separately without resetting shared target state.
 7. **Make item detail keyboard-reachable.** Hover and focus share one cached Itembox surface; Escape dismisses transient content.
 8. **Use non-modal feedback.** Routine state/recovery notices do not steal focus from the game.
 9. **Treat movement bindings as a stream.** Coalesce `/loc` bursts to the newest sample and preserve stable facing through duplicates and jitter.
 10. **Put destinations on the map.** Project current-zone rare/named data into all three presentations and let a marker start navigation.
 11. **Keep compact mode complete.** Search targets and loot, expand class-aware drops, and retain route/map controls beside the game.
-12. **Never commandeer presentation for routing.** Starting a local-label or wiki-coordinate path retains First/Top/Map, camera state, floors, and full/minimal mode while work happens in the background.
+12. **Never commandeer presentation for routing.** Starting a local-label or wiki-coordinate path retains First/Top/Map, camera state, floors and native visibility while work happens in the background.
 13. **Pair every slice with regression evidence.** Code, its nearest automated contract, and any required real-client checklist update ship together.
 
 ### Approval points for 0.8–1.0
@@ -890,13 +928,13 @@ This table is the compact product contract for the app's most common jobs. A jou
 | Place player | Zone known, no location | Readiness stops at `/loc` and explains the in-game action | Type `/loc` in game | Place, ground, center, and later orient the player | Center control repeats the exact missing prerequisite |
 | Change map presentation | Zone loaded | Retain the last selected First, Top, or Map mode | Choose mode | Later `/loc` re-centers that same mode | An unavailable overlay leaves working 3D visible |
 | Navigate | Current zone plus destination | Mark destination and show calculating/waiting state | Find path or Path | Re-route after meaningful `/loc` movement | Retain destination; identify missing coordinate versus no valid path |
-| Consider loot | Consider log line | Bottom tray opens with identity, con, and class drops | None | Timeout pauses for hover/focus | My Class and Wiki remain available when no filtered drops exist |
+| Named loot | Listed named consider/kill line | Matching Intel row selects, expands and flashes/blips mildly | None | Repeated snapshots retain expansion; no OS activation | My Class, Wiki and honest empty-drop context remain available |
 | Browse items | Items opened | Current-zone, detected-class, recommended results | None beyond opening Items | Zone/profile changes refresh scope | Search, slot, sort, class, era, and Reset are explicit overrides |
 | Inspect an item | Hover or keyboard focus | Cached Itembox detail and icon | Hover/focus | Tier changes refresh adjusted values immediately | Missing fields are omitted or labeled unknown; Wiki remains explicit |
 | Review a fight | Outgoing hostile event | Current fight becomes the primary metric | None | Quiet-period grouping produces an encounter | Gap setting rebuilds encounter grouping without losing raw events |
 | Review a drop | Loot line | Newest row records item, source, zone, time, and evidence | Open Drops | Nearby kills update observed numerator/denominator | Unknown source stays unknown; no authoritative-rate claim is invented |
 | Search the wiki | Any screen | Search EQLWiki remains globally available | Type and press Enter | System browser opens Special:Search | Empty submission does nothing; local app state is unchanged |
-| Compact the window | Any screen | Pin and Minimal remain global | Toggle Pin or Minimal | Map controls, route, fight, and consider state remain usable | Full view restores the prior full destination; taskbar presence is retained |
+| Arrange compact surfaces | Any screen | Native Parse/Map/Intel/Timers save independent layouts | Show/hide a panel | One session keeps shared target, parse and timers current | Main/tray/shortcut recover input; main retains detailed browsing |
 
 ## 20. Prioritization and risk register
 
@@ -909,7 +947,7 @@ Severity is based on broken player trust, not implementation size. P0 issues sto
 | Stale or duplicate installed build | P0 | Test evidence becomes misleading when the running code cannot be identified | Always-visible version plus packaged-ASAR integrity gate | Every release |
 | Wrong stacked-floor grounding | P0 | Marker/path can appear in an inaccessible room | Synthetic policy tests plus Befallen Z `-66` check | Every release |
 | Folder/log state contradicts reality | P0 | The first useful action becomes a dead end | Filesystem tests and clean-profile Windows run | Every release |
-| Consider tray does not appear | P0 | Removes the zero-click loot loop | Exact Legends line fixture and foreground-game check | Every release |
+| Named Intel attention does not appear | P0 | Removes the zero-click loot loop | Exact Legends consider/kill fixtures and foreground-game no-activation check | Every release |
 | Search field cannot receive input | P0 | Breaks the only global research action | Static drag-region check and keyboard/mouse smoke test | Every release |
 | Texture lookup falls back to gray/white | P0 | Makes 3D navigation unreadable | WLD `fileName` contract, cache bump, visual zone check | 0.6 |
 | Route crosses wall or floor | P0 | Guidance becomes actively misleading | Collision/elevation tests; never label an unvalidated line valid | 0.6 graph, 0.7 navmesh |
@@ -931,7 +969,7 @@ Before 0.9, run at least five sessions with players who did not build Eye of Zom
 | Find where the character is | Zone entered, no prior `/loc` | Participant understands the prompt, types `/loc`, and verifies the marker | Zero app recovery clicks |
 | Navigate to a named NPC | Player placed in a zone with a known named | Destination, route/marker state, and distance are understood | At most one app action from Map/NPC/consider context |
 | Find a useful item here | Known zone and class profile | Participant finds current-zone class gear and can broaden deliberately | No query required for the first useful result |
-| Inspect considered loot | Game foregrounded | Tray is noticed, held open, filtered, and an item is inspected | No focus theft; no prerequisite explanation |
+| Inspect considered loot | Game foregrounded | Matching Intel row is noticed, expanded, filtered, and an item is inspected | No focus theft; no prerequisite explanation |
 | Review the last pull and loot | At least two pulls separated by the configured gap | Correct encounter and observed drop evidence are found | At most two destination changes |
 | Recover a moved install folder | Saved root made unavailable | Participant identifies the failed step and restores it | One new folder choice; other preferences survive |
 

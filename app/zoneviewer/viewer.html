@@ -1018,6 +1018,20 @@ window.eqlEyeOfZommViewer = {
         return { ok:true };
     },
 
+    overlayNavigation() {
+        // Export only a collision-validated route. Destinations alone are markers.
+        const path = app?.navigationPath;
+        const ready = establishedRouteState.status === 'ready' || candidateRouteState.status === 'ready';
+        const select = root.querySelector('.eqlzv-zone-select');
+        const selected = select?.selectedOptions?.[0];
+        if (!ready || !app?.navigationTarget || !app?.currentZoneRecord ||
+            !zoneLoadGuard.isReady(app.currentZoneRecord) ||
+            (selected && String(selected.value).toUpperCase() !== `${app.currentZoneRecord.format}:${app.currentZoneRecord.id}`.toUpperCase()) ||
+            !Array.isArray(path) || path.length < 2 || path.length > 5000) return null;
+        const points = path.map(point => ({x:point.z,y:-point.x,z:point.y}));
+        return points.every(point => Object.values(point).every(Number.isFinite)) ? {points} : null;
+    },
+
     status() {
         const select = root.querySelector('.eqlzv-zone-select');
         const badge = root.querySelector('.eqlzv-zone-badge');

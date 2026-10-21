@@ -1,4 +1,108 @@
-# Validation report — v0.8.1
+# Validation report — v0.8.3
+
+## 0.8.3 map, intel, triggers and inline wiki notices
+
+The full source suite passes, including dynamic Raid Instance section fixtures,
+normal/raid identities, complete lazy drop replies, catalog completeness,
+regex worker timeouts/recovery, capture/Ignore authorization, fifteen-second
+notice deadlines and hover/focus holds. Source review also recovered stale
+map-root races and rejects an incomplete file inventory instead of claiming a
+map is missing. No runtime dependency was added.
+
+The actual Electron native-window smoke passes with a synthetic layered map,
+twelve normal drops versus two raid drops, consider selection/expansion without
+window activation, regex match preview and live named captures, Taken totals,
+hidden-owner continuity and cumulative Classic/Velious item filtering. All
+First/Top/Map controls are contained by the main map page. The worker/CSP smoke
+passes with JavaScript evaluation blocked and the WASM route worker available.
+
+Read-only parsing of the selected local client Maps directory matched 123 of
+124 catalog identities after the Kerra Island `kerraridge` alias correction,
+covering 862,469 lines and 4,358 labels. New Sebilis Expedition has no matching
+client map in this installation. Missing maps show an explicit fallback;
+markers never fabricate a validated route. Game files and raw logs are excluded.
+
+The discovery smoke uses a synthetic capture source and an in-memory clipboard
+spy. It verifies explicit capture, copied pixels and instructions without
+touching the user's clipboard or reading the desktop. This is separate from a
+physical game screenshot, foreground/DPI, click-through or audio-device check.
+Known named targets continue to use log text; screenshots do not drive parsing.
+
+The reviewed wiki producer reached staging in EQLWiki #39 and production through
+the separate scoped promotion #40 (`cc70c432`). Deployment succeeded; the installed
+producer matched the reviewed Git source hash. The prior filtered manifest/gzip
+pair was preserved before the existing low-priority refresh job published
+`20261021T095417Z-c7004672e0f3` to the dataset branch. This export contains 124
+zones, 8,679 NPC records (117 raid variants), 11,270 items and a complete public
+presence index (8,159 NPC names, 11,259 item names and 26,342 titles). King Tranix
+remains raid-only; Fire Giant Warrior retains both variants; Robe of the Kedge
+retains raid and normal-zone sources. No database pages or host scripts changed.
+
+The local 0.8.3 NSIS build passes exact-source ASAR validation against that freshly
+fetched bootstrap, including the map renderer, regex worker, discovery UI/host,
+timer editor, and native preloads. The installer remains unsigned. Physical
+game/DPI/audio/desktop-capture checks and installed upgrades are distinct from
+these build and synthetic checks. Earlier 0.8.2 observations remain historical.
+
+## 0.8.2 application updates, native overlays and timers
+
+The dependency-free updater has 22 mocked lifecycle/network/IPC checks plus
+renderer checks for progress, cancellation, Later, explicit install action,
+retryable error visibility and stale responses. Independent review identified
+and verified fixes for hidden retry errors and redownloading changed/missing
+staged installers. Actual Electron smoke exercises the preload API and Settings
+controls in unsupported development mode while retaining the worker/CSP check.
+
+The full test suite, both 8/8 route corpora, production catalog relevance (64
+Befallen/MNK items), and the high-severity dependency gate pass. The existing
+eight moderate builder-chain advisories remain; no new dependency is added.
+A read-only unauthenticated GitHub check selects the actual v0.8.1 installer
+and valid asset digest for a simulated 0.8.0 client, and correctly finds no newer
+release for the 0.8.2 candidate. It downloads or executes no installer.
+
+Local Windows NSIS compilation and the expanded exact-source ASAR gate pass
+for 0.8.2 with production snapshot `20261021T062421Z-830bd5a89bfa` (124 zones,
+8,645 NPC records, 11,262 items). The ASAR exact-source gate includes the updater, isolated native host/preload,
+parser/timer/session/controller modules, panel HTML/CSS/JS and Settings markup. The installer reports `NotSigned`
+and was not installed or used to perform an upgrade.
+
+The overlay implementation now creates four actual independent transparent
+BrowserWindows: Parse, Zone & loot, Consider and Timers. Twenty-one mocked native
+checks cover bounds/default grid, trust, independent preferences, lock versus
+passthrough, unavailable recovery controls, stale/crashed owner, explicit recovery
+and route actions that span a zone/opt-in change. Renderer tests cover complete
+parse aggregates, scopes, escaped dataset text, timer forms, scaling/opacity,
+menus, recovery and command-error visibility. The source map is retained in the
+[PNUT UX plan](docs/PNUT_UX_PLAN.md).
+
+Timer tests cover manual/repeat and sleep/restart phase, pause/resume/reset,
+literal triggers, kill-based deadlines, zone filters, malformed saved data,
+capacity, replay guards, valid original timestamp freshness, initial history,
+character/log changes, own melee hits/misses, same-second deduplication, special
+exclusion, casts, delay seeds, idle reset and faster/slower estimate changes.
+Snapshot tests prove bounded UTF-8 payloads below 2 MiB preserve aggregate
+damage/healing/rune totals, action counts and timer deadlines; raw lines and
+paths are omitted. No runtime dependency is added.
+
+`npm run test:native-overlays` passes using the real desktop bootstrap and
+separate native handles with an isolated profile and synthetic log. It proves
+four frameless/transparent sandboxed windows, independent bounds, locked
+interaction, native passthrough/recovery calls, real preload IPC, storage isolation and CSP
+rejection of direct HTTP API access, a shared
+140-damage parse and two timers using an isolated synthetic dataset/icon,
+editor values across timer paints, error
+feedback, panel reload/recreation and continued parsing with the owner hidden.
+Five synthetic compositor captures were inspected: parse, intel, consider,
+timers and the main controller. They were captured at this desktop's 1.5 device
+pixel ratio, not a complete OS-wide DPI matrix.
+
+The native test keeps windows hidden and captures their actual renderers. It
+does not click through a foreground game, establish foreground focus behavior,
+exercise physical monitor removal or sleep, or validate live log wording.
+Native docking and another 3D map window are not implemented. Installed upgrade
+execution also remains untested; use the updated [Windows checklist](docs/WINDOWS_MANUAL_TEST.md)
+for those checks. Building/hash-checking an unsigned installer does not prove
+installation or signing.
 
 ## 0.8.1 integration audit
 
@@ -125,3 +229,27 @@ The repository cannot redistribute proprietary S3D/EQG archives. Authorized loca
 The final Windows NSIS compilation runs in GitHub Actions. The workflow installs the locked Electron/Electron Builder versions, runs the test suite, and requires the schema-v3 GitHub dataset. When both trusted PFX secrets are configured it signs and verifies the application and installer; otherwise it records an unsigned-build warning and still uploads the installer.
 
 A release tag uses the same gates. It attaches a verified signed installer when credentials are configured, or a clearly identified unsigned installer while signing is deferred.
+
+## PNUT layout correction in the 0.8.2 PR
+
+The native UI now directly follows PNUT's compact encounter header, exact
+Overview/Damage/Healing/Taken/Session tabs, flat meter tables, radial timer rows
+and thin attack bar. All timer forms, countdown actions and swing configuration
+are in the main Timers page. The native timer window fits its visible rows,
+with a 36px minimum; it no longer retains a 420px configuration window.
+The pinned PNUT MIT attribution is bundled and checked in the ASAR.
+
+Taken grammar is backed by a read-only local-log pattern audit and synthetic
+regressions for own incoming melee, direct spells, DoTs, unknown casters,
+player/pet exclusion, rune capacity, mixed encounters and counts/rates. No raw
+logs or player names are committed. Main editor tests cover editing, all overlap
+modes, live draft retention, pause/resume/reset/dismiss, kill reminders, swing
+preferences and visible error handling.
+
+The read-only grammar rerun recognized 135,916/135,916 candidate incoming lines
+across 11 local logs: 115,341 melee, 11,251 direct/unknown-caster non-melee and
+9,324 DoT lines. This measures recognition of those grammar families, not an
+independent gameplay damage total. Nine synthetic Taken regressions retain the
+observed multiword-attacker and additional-verb forms. A native geometry check
+also prevents Chromium table pseudo-elements from creating an empty first cell
+and clipping attacker/ability names.

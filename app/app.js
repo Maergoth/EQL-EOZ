@@ -7,6 +7,14 @@ import { buildDiagnosticSnapshot } from './diagnostics.js';
 import { routeDistanceLabel } from './route-guidance.js';
 import { formatWorldLocationForPlayer, waypointCommandForWorldLocation, wikiLocationToWorld } from './coordinate-system.js';
 import { resolveZoneRecord } from './zone-identity.js';
+import { mountAppUpdates } from './app-update-ui.js';
+import { compactParseSnapshot, createOverlaySession } from './overlay-session.js';
+import { mountOverlayController } from './overlay-controller.js';
+import { mountTimerSettings } from './timer-settings.js';
+import { createMapDataLoader } from './map-overlay-data.js';
+import { createTimerAlerts } from './timer-alerts.js';
+import { createWikiDiscovery } from './wiki-discovery.js';
+import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -32,8 +40,11 @@ let viewerFolderPromise = null;
 let viewerFolderPath = '';
 let viewerFolderStatus = 'idle';
 let viewerZoneState = { zone:'', status:'idle', message:'' };
-let consideredTarget = null;
-let considerTrayTimer = null;
+let focusedIntelTarget = null;
+let intelFocusSequence = 0;
+let nativeMapVisible = false;
+let discoveryInNative = false;
+let mapDataRevision = 0;
 let activeTooltipItem = null;
 let activeTooltipTarget = null;
 let lastTooltipPointer = null;
@@ -44,7 +55,6 @@ let renderedDestinationZone = '';
 let renderedDestinationCount = 0;
 let renderedRareViewerKey = '';
 let rareCatalogCache = new Map();
-const CONSIDER_TRAY_DURATION = 16000;
 const ROUTE_REFRESH_DISTANCE = 8;
 
 const prefs = {
@@ -61,22 +71,25 @@ let settings = Object.assign({
     currentZoneOnly: true,
     itemTier: 0,
     encounterGapSeconds: 15,
-    minimalMyClassOnly: true,
-    minimalNamedOnly: true,
-    considerMyClassOnly: true,
+    intelMyClassOnly: true,
+    intelNamedOnly: true,
     itemCurrentZoneOnly: true,
     itemZoneFilterExplicit: false,
     itemSlot: '',
     itemSort: 'recommended',
     mapMode: 'first',
     lastView: 'overview',
-    minimalIntelVisible: true,
-    minimalMapVisible: false,
-    minimalRoutingVisible: false
+    routingEnabled: false
 }, prefs.load());
+// Preserve deliberate filters from older installs while retiring the mode.
+const legacyOverlayPrefs = prefs.load();
+settings.intelMyClassOnly = legacyOverlayPrefs.intelMyClassOnly ?? legacyOverlayPrefs.minimalMyClassOnly ?? true;
+settings.intelNamedOnly = legacyOverlayPrefs.intelNamedOnly ?? legacyOverlayPrefs.minimalNamedOnly ?? true;
+settings.routingEnabled = legacyOverlayPrefs.routingEnabled ?? legacyOverlayPrefs.minimalRoutingVisible ?? false;
+for (const key of Object.keys(settings)) if (key.startsWith('minimal') || key === 'considerMyClassOnly') delete settings[key];
 if (!['first', 'top', 'map'].includes(settings.mapMode)) settings.mapMode = 'first';
 if (!['recommended', 'name'].includes(settings.itemSort)) settings.itemSort = 'recommended';
-if (!['overview', 'map', 'npcs', 'items', 'drops', 'combat', 'settings'].includes(settings.lastView)) settings.lastView = 'overview';
+if (!['overview', 'map', 'npcs', 'items', 'drops', 'combat', 'timers', 'settings'].includes(settings.lastView)) settings.lastView = 'overview';
 let itemZoneFilterExplicit = Boolean(settings.itemZoneFilterExplicit || settings.itemCurrentZoneOnly === false);
 parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
@@ -329,6 +342,7 @@ async function loadPack() {
 async function connectBridge() {
     try {
         bridgeInfo = await api('/api/info');
+        mapDataLoader.invalidate(); mapDataRevision++;
         parser.setCharacterFromFilename(bridgeInfo.logPath || '');
         $('#app-version').textContent = bridgeInfo.version || 'unknown';
         $('#titlebar-version').textContent = `v${bridgeInfo.version || 'unknown'}`;
@@ -435,7 +449,7 @@ async function pollLog() {
             else renderLiveLocation();
         }
         schedulePoll(locationPollDelay({
-            mapVisible:document.body.classList.contains('map-active') || document.body.classList.contains('minimal-mode'),
+            mapVisible:nativeMapVisible || document.body.classList.contains('map-active'),
             routeActive:Boolean(activeRoute)
         }));
     } catch (error) {
@@ -466,8 +480,15 @@ function consumeText(text, allowTransientUi = true) {
             latestLocation = null;
         }
         if (event?.type === 'location') latestLocation = { ...event.location };
-        if (allowTransientUi && event?.type === 'consider') showConsiderTray(event.target);
+        const originalAt = Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] || '');
+        const freshTimerEvent = Number.isFinite(originalAt) && Math.abs(Date.now() - originalAt) <= 10000;
+        let listedTarget = false;
+        if (allowTransientUi && freshTimerEvent && ['consider','kill'].includes(event?.type)) listedTarget = focusIntelForConsider(event.type === 'consider' ? event.target : {name:event.victim});
+        if (!listedTarget) wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt});
+        overlaySession.consume(event, { zone:parser.zone, character:parser.character, live:allowTransientUi && freshTimerEvent,
+            text:line, at:parser.currentLineAt, logId:bridgeInfo?.logPath || 'current-log' });
     }
+    overlaySession.flush();
     if (zoneChanged) {
         pendingViewerLocation = null;
         queueViewerSync(async () => {
@@ -487,6 +508,118 @@ function consumeText(text, allowTransientUi = true) {
 
 function state() {
     return parser.snapshot();
+}
+
+const raidVariant = npc => npc?.raidInstance === true || npc?.instanceType === 'raid';
+const intelIdentity = npc => `${zoneKey(npc?.zone)}|${npcNameKey(npc?.name)}|${raidVariant(npc) ? 'raid' : 'normal'}`;
+function focusIntelForConsider(target) {
+    if (!target?.name || !state().zone) return;
+    const s = state();
+    const matches = rareMobsForZone(s, effectiveProfile(s)).filter(source => npcNameKey(source.name) === npcNameKey(target.name));
+    const source = matches.find(source => intelIdentity(source) === focusedIntelTarget?.id) || matches.find(source => !raidVariant(source)) || matches[0];
+    if (!source) return;
+    focusedIntelTarget = { id:intelIdentity(source), name:source.name, zone:s.zone, raidInstance:raidVariant(source) };
+    intelFocusSequence++;
+    timerAlerts.blip();
+    void overlaySession.publish();
+    return true;
+}
+
+function overlayItemSummary(item, budget) {
+    let icon = itemIconSource(item);
+    if (icon.length > 12000 || icon.length > budget.remaining) icon = '';
+    budget.remaining -= icon.length;
+    return { name:String(item.name || '').slice(0,240), icon,
+        slots:(item.slots || []).slice(0,8).map(slot => String(slot).slice(0,60)),
+        stats:Object.fromEntries(Object.entries(scaledItemStats(item,settings.itemTier) || {}).slice(0,24)
+            .filter(([,value]) => typeof value === 'number' || typeof value === 'string')
+            .map(([key,value]) => [key.slice(0,40), typeof value === 'string' ? value.slice(0,80) : value])), tier:Number(settings.itemTier) || 0 };
+}
+const mapDataLoader = createMapDataLoader({ getManifest:() => api('/api/eq-files'),
+    readText:async path => { const response = await fetch(`/api/eq-file?path=${encodeURIComponent(path)}`); if (!response.ok) throw new Error('The local map could not be read.'); return response.text(); },
+    resolveZone:zoneRecord, getRootKey:() => bridgeInfo?.eqRootPath || '' });
+
+function overlaySessionSnapshot() {
+    const s = state();
+    const profile = effectiveProfile(s);
+    const budget = { remaining:240 * 1024 };
+    const canRoute = Boolean(settings.routingEnabled && s.zone && s.location);
+    const sources = rareMobsForZone(s, profile, { includeGeneric:!settings.intelNamedOnly });
+    const npcs = sources.map(source => ({
+        id:intelIdentity(source), name:source.name, raidInstance:raidVariant(source), level:source.npc?.avgLevel || 0,
+        levelMin:source.npc?.levelMin || 0, levelMax:source.npc?.levelMax || 0,
+        con:conForLevel(source.npc?.avgLevel, profile.level), named:isNamedSource(source.name), rare:true,
+        distance:Number.isFinite(source.distance) ? source.distance : null,
+        waypoint:Boolean(waypointCommandForWorldLocation(source.loc)),
+        dropCount:(settings.intelMyClassOnly ? source.items : source.allItems).length,
+        drops:(settings.intelMyClassOnly ? source.items : source.allItems).slice(0, 3).map(item => overlayItemSummary(item,budget))
+    }));
+    const selected = focusedIntelTarget && zoneKey(focusedIntelTarget.zone) === zoneKey(s.zone) ? focusedIntelTarget : null;
+    const navigation = activeRoute?.status === 'ready' && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? viewerApi()?.overlayNavigation?.() : null;
+    return { character:s.character, zone:s.zone, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
+        parse:compactParseSnapshot(s), discovery:discoveryInNative ? wikiDiscovery.snapshot().pending : [], intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), canRoute,
+            packVersion:pack.meta?.manifestVersion || pack.meta?.version || '', profileKey:JSON.stringify([profile.classes.slice().sort(),settings.itemTier,settings.era]),
+            focusedNpcId:selected?.id || '', focusSequence:intelFocusSequence },
+        map:{ zone:s.zone, dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
+            npcs:sources.filter(source => source.loc?.length >= 2).map(source => ({id:intelIdentity(source),name:source.name,loc:source.loc,raidInstance:raidVariant(source)})),
+            route:{ points:navigation?.points || [], message:activeRoute && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? activeRoute.message : '' } } };
+}
+
+async function handleOverlayCommand({ action, payload = {} }) {
+    const requestedZone = state().zone;
+    const resolveNpc = () => {
+        const currentZone = state().zone;
+        if (!currentZone || zoneKey(requestedZone) !== zoneKey(currentZone) ||
+            (payload.zone && zoneKey(payload.zone) !== zoneKey(currentZone))) throw new Error('That NPC belongs to a previous zone.');
+        const npc = npcRecordForName(payload.npc, currentZone, payload.raidInstance);
+        if (!npc || (npc.zone && zoneKey(npc.zone) !== zoneKey(currentZone))) throw new Error('That NPC is no longer available in the current zone.');
+        return npc;
+    };
+    if (action === 'session:class-filter') {
+        if (payload.panel !== 'intel' || typeof payload.enabled !== 'boolean') return;
+        settings.intelMyClassOnly = payload.enabled;
+        prefs.save(settings); renderAll(); return;
+    }
+    if (action === 'session:map-data') {
+        if (!payload.zone || zoneKey(payload.zone) !== zoneKey(requestedZone)) throw new Error('That map belongs to a previous zone.');
+        const rootKey = bridgeInfo?.eqRootPath, revision = mapDataRevision;
+        const data = await mapDataLoader.load(requestedZone,parser.zoneShortName);
+        if (zoneKey(state().zone) !== zoneKey(requestedZone) || rootKey !== bridgeInfo?.eqRootPath || revision !== mapDataRevision) throw new Error('The map context changed while it was loading.');
+        return data;
+    }
+    if (action === 'session:intel-drops') {
+        const npc = resolveNpc(), profile = effectiveProfile(state());
+        const items = knownDropsForNpc(npc).filter(item => eraAllowed(item.era) && (!settings.intelMyClassOnly || (itemMatchesProfile(item,profile) && itemHasClassStats(item))));
+        const budget = {remaining:1024*1024};
+        return {items:items.map(item => overlayItemSummary(item,budget)),total:items.length};
+    }
+    if (action === 'session:select-npc') {
+        const npc = resolveNpc(); focusedIntelTarget = {id:intelIdentity(npc),name:npc.name,zone:requestedZone,raidInstance:raidVariant(npc)}; intelFocusSequence++; return;
+    }
+    if (action === 'session:cancel-route') { clearActiveRoute(); return; }
+    if (action === 'session:copy-waypoint') {
+        const command = waypointCommandForWorldLocation(wikiLocationToWorld(resolveNpc().loc));
+        if (!command || !await writeClipboardText(command)) throw new Error('No waypoint could be copied for this NPC.');
+        showNotice(`Copied ${command}`, { tone:'success' }); return;
+    }
+    if (action === 'session:wiki') { const npc = resolveNpc(); openExternal(wikiUrl(npc.wikiTitle || npc.name)); return; }
+    if (action === 'session:route') {
+        resolveNpc();
+        if (!settings.routingEnabled) throw new Error('Enable path controls in Settings before requesting a route.');
+        const npc = resolveNpc();
+        if (!settings.routingEnabled) throw new Error('Path controls were disabled.');
+        await pathToNpc(npc.name,{openMain:false,raidInstance:raidVariant(npc)}); return;
+    }
+    if (action === 'session:open') {
+        if (!['map', 'items', 'npcs', 'combat', 'timers', 'settings'].includes(payload.view)) return;
+        const npc = payload.npc ? resolveNpc() : null;
+        const item = payload.item ? itemRecord(payload.item) : null;
+        if (payload.item && !item) throw new Error('That item is no longer available in the current dataset.');
+        await window.eyeOfZommOverlays?.control('show-main');
+        if (npc) $('#npc-search').value = resolveNpc().name;
+        if (item) $('#item-search').value = item.name;
+        setView(payload.view); renderAll();
+    }
 }
 
 function currentEraIndex() {
@@ -535,6 +668,9 @@ function knownDropsForNpc(npc) {
     const fallback = lootByNpcName.get(nameKey) || [];
     const seen = new Set();
     return [...exact, ...fallback].filter(item => {
+        // A named NPC in another zone or instance must not leak its loot here.
+        if (!(item.dropSources || []).some(source => npcNameKey(source.name) === nameKey &&
+            (!source.zone || zoneKey(source.zone) === zoneKey(npc?.zone)) && raidVariant(source) === raidVariant(npc))) return false;
         const key = String(item?.wikiTitle || item?.name || '').toLowerCase();
         if (!key || seen.has(key)) return false;
         seen.add(key);
@@ -542,72 +678,20 @@ function knownDropsForNpc(npc) {
     });
 }
 
-function npcRecordForName(name, zone = state().zone) {
+function npcRecordForName(name, zone = state().zone, raidInstance) {
     const wanted = npcNameKey(name);
     if (!wanted) return null;
-    return allNpcsForState(state()).find(npc =>
+    const matches = allNpcsForState(state()).filter(npc =>
         npcNameKey(npc.name) === wanted &&
-        (!zone || !npc.zone || zoneKey(npc.zone) === zoneKey(zone))
-    ) || null;
-}
-
-function hideConsiderTray() {
-    clearTimeout(considerTrayTimer);
-    considerTrayTimer = null;
-    consideredTarget = null;
-    const tray = $('#consider-loot-tray');
-    if (tray) tray.hidden = true;
-}
-
-function armConsiderTrayTimeout(delay = CONSIDER_TRAY_DURATION) {
-    clearTimeout(considerTrayTimer);
-    const tray = $('#consider-loot-tray');
-    if (!consideredTarget || tray?.matches(':hover')) return;
-    considerTrayTimer = setTimeout(hideConsiderTray, delay);
-}
-
-function renderConsiderTray() {
-    const tray = $('#consider-loot-tray');
-    if (!tray || !consideredTarget) return;
-    const s = state();
-    const profile = effectiveProfile(s);
-    const npc = npcRecordForName(consideredTarget.name, consideredTarget.zone || s.zone) || {
-        name:consideredTarget.name,
-        zone:consideredTarget.zone || s.zone,
-        avgLevel:Number(consideredTarget.level) || 0,
-        wikiTitle:consideredTarget.name,
-        observed:true
-    };
-    const allDrops = knownDropsForNpc(npc).filter(item => eraAllowed(item.era));
-    const drops = settings.considerMyClassOnly
-        ? allDrops.filter(item => itemMatchesProfile(item, profile) && itemHasClassStats(item))
-        : allDrops;
-    const con = conForLevel(Number(consideredTarget.level) || npc.avgLevel, profile.level);
-
-    tray.className = `consider-loot-tray npc-con-${con.key}`;
-    tray.hidden = false;
-    $('#consider-tray-name').textContent = consideredTarget.name;
-    $('#consider-tray-meta').textContent = `${consideredTarget.level ? `Level ${consideredTarget.level} · ` : ''}${con.label} · ${drops.length}${settings.considerMyClassOnly && allDrops.length !== drops.length ? ` of ${allDrops.length}` : ''} known drops`;
-    $('#consider-my-class').checked = Boolean(settings.considerMyClassOnly);
-    $('#consider-path').dataset.npc = consideredTarget.name;
-    $('#consider-path').hidden = !s.zone;
-
-    const host = $('#consider-tray-drops');
-    host.innerHTML = drops.length ? drops.slice(0, 16).map(item => {
-        const icon = itemIconSource(item);
-        const slot = (item.slots || []).join(' · ') || 'Item';
-        return `<a class="consider-drop-card item-hover" href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" data-item-title="${esc(item.name)}">
-            ${icon ? `<img src="${esc(icon)}" alt="">` : '<span class="consider-drop-icon">◇</span>'}
-            <span><strong>${esc(item.name)}</strong><small>${esc(slot)}</small></span>
-        </a>`;
-    }).join('') : `<div class="consider-empty">${settings.considerMyClassOnly && allDrops.length ? 'No known drops match your class. Turn off My Class to see everything.' : 'No drops are known for this NPC in the current dataset.'}</div>`;
-}
-
-function showConsiderTray(target) {
-    if (!target?.name) return;
-    consideredTarget = { ...target, zone:state().zone };
-    renderConsiderTray();
-    armConsiderTrayTimeout();
+        (!zone || !npc.zone || zoneKey(npc.zone) === zoneKey(zone)) &&
+        (typeof raidInstance !== 'boolean' || raidVariant(npc) === raidInstance)
+    );
+    const direct = matches.find(npc => !raidVariant(npc)) || matches[0];
+    if (direct) return direct;
+    const source = rareMobsForZone(state(),effectiveProfile(state()),{includeGeneric:true}).find(source =>
+        npcNameKey(source.name) === wanted && (!zone || zoneKey(source.zone) === zoneKey(zone)) &&
+        (typeof raidInstance !== 'boolean' || raidVariant(source) === raidInstance));
+    return source ? {...source.npc,name:source.name,zone:source.zone,raidInstance:raidVariant(source)} : null;
 }
 
 function allNpcsForState(s) {
@@ -617,7 +701,7 @@ function allNpcsForState(s) {
     }));
     const merged = new Map();
     for (const npc of [...pack.npcs, ...observed]) {
-        const key = `${zoneKey(npc.zone)}|${npcNameKey(npc.name)}`;
+        const key = intelIdentity(npc);
         const old = merged.get(key);
         if (!old || npc.observed) merged.set(key, Object.assign({}, old || {}, npc));
     }
@@ -637,24 +721,24 @@ function rareMobsForZone(s, profile, options = {}) {
     let catalog = rareCatalogCache.get(cacheKey);
     if (!catalog) {
         const sources = new Map();
-        const addSource = name => {
+        const addSource = (name, raidInstance = false) => {
             name = String(name || '').trim();
             if (!name || (!includeGeneric && !isNamedSource(name))) return null;
-            const key = npcNameKey(name);
-            if (!sources.has(key)) sources.set(key, { name, npc:null, allItems:[], items:[] });
+            const key = `${npcNameKey(name)}|${raidInstance ? 'raid' : 'normal'}`;
+            if (!sources.has(key)) sources.set(key, { name, zone:s.zone, raidInstance, npc:null, allItems:[], items:[] });
             return sources.get(key);
         };
 
         for (const npc of pack.npcs || []) {
             if (zoneKey(npc.zone) !== zoneKey(s.zone)) continue;
-            const source = addSource(npc.name);
+            const source = addSource(npc.name,raidVariant(npc));
             if (source) source.npc = npc;
         }
         for (const item of pack.items || []) {
             if (!eraAllowed(item.era)) continue;
             for (const drop of item.dropSources || []) {
                 if (zoneKey(drop.zone) !== zoneKey(s.zone)) continue;
-                const source = addSource(drop.name);
+                const source = addSource(drop.name,raidVariant(drop));
                 if (source) source.allItems.push(item);
             }
         }
@@ -725,61 +809,6 @@ function syncRareMobsToViewer(force = false) {
     return true;
 }
 
-function renderMinimalZoneDrops(s, profile) {
-    const host = $('#minimal-zone-drops');
-    const scrollTop = host.scrollTop;
-    const openSources = new Set(Array.from(host.querySelectorAll('[data-npc-key] details[open]'))
-        .map(details => details.closest('[data-npc-key]')?.dataset.npcKey)
-        .filter(Boolean));
-    $('#minimal-zone-title').textContent = s.zone || 'Waiting for zone';
-    if (!s.zone) {
-        host.className = 'minimal-zone-drops empty-state';
-        host.textContent = 'Waiting for a detected zone.';
-        return;
-    }
-
-    const myClassOnly = Boolean(settings.minimalMyClassOnly);
-    const namedOnly = Boolean(settings.minimalNamedOnly);
-    $('#minimal-my-class').checked = myClassOnly;
-    $('#minimal-named-only').checked = namedOnly;
-    const query = String($('#minimal-rare-search')?.value || '').trim().toLowerCase();
-    const sources = rareMobsForZone(s, profile, { includeGeneric:!namedOnly })
-        .map(source => ({ ...source, displayedItems:myClassOnly ? source.items : source.allItems }))
-        .filter(source => source.displayedItems.length || namedOnly)
-        .filter(source => !query || source.name.toLowerCase().includes(query) || source.allItems.some(item => String(item.name || '').toLowerCase().includes(query)))
-        .slice(0, 120);
-    if (!sources.length) {
-        host.className = 'minimal-zone-drops empty-state';
-        host.textContent = myClassOnly && profile.classes.length
-            ? 'No matching named drops are known for your class in this zone.'
-            : 'No named or drop records are known for this zone.';
-        return;
-    }
-
-    host.className = 'minimal-zone-drops';
-    host.innerHTML = sources.map(source => {
-        const con = conForLevel(source.npc?.avgLevel, profile.level);
-        const active = activeRoute && npcNameKey(activeRoute.name) === npcNameKey(source.name);
-        const distance = Number.isFinite(source.distance) ? `${Math.round(source.distance).toLocaleString()}u away` : '';
-        const countLabel = myClassOnly && source.allItems.length !== source.displayedItems.length
-            ? `${source.displayedItems.length} class · ${source.allItems.length} total`
-            : `${source.displayedItems.length} known`;
-        const key = npcNameKey(source.name);
-        const locAttrs = source.loc?.length >= 2
-            ? ` data-loc-x="${source.loc[0]}" data-loc-y="${source.loc[1]}"${source.loc.length >= 3 ? ` data-loc-z="${source.loc[2]}"` : ''}`
-            : '';
-        return `<div class="minimal-drop-row npc-con-${con.key}${active ? ' is-active-route' : ''}" data-npc-key="${esc(key)}"${locAttrs}>
-        <div class="minimal-mob-heading"><div>${waypointNameControl(source.name, source.loc)}<small>${source.npc?.avgLevel ? `<span class="${conClass(con.key)}">Level ${source.npc.avgLevel} · ${esc(con.label)}</span>` : 'Level unknown'}<span class="minimal-distance">${distance ? ` · ${distance}` : ''}</span></small></div><button type="button" class="text-button path-npc" data-npc="${esc(source.name)}">${active ? 'Routing' : 'Route'}</button></div>
-        <details class="minimal-loot"${openSources.has(key) ? ' open' : ''}><summary>Loot · ${esc(countLabel)}</summary>
-        ${source.displayedItems.length ? source.displayedItems.slice(0, 20).map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${esc(item.name)}</a>`).join('') : '<small>No matching item drops in the current dataset.</small>'}
-        </details>
-    </div>`;
-    }).join('');
-    host.scrollTop = scrollTop;
-    bindPathButtons(host);
-    bindWaypointButtons(host);
-}
-
 function renderHeader(s, profile) {
     $('#top-character').textContent = s.character || '—';
     $('#top-classes').textContent = profile.classes.length ? profile.classes.join('/') : '—';
@@ -801,8 +830,6 @@ function renderMetrics(s, profile) {
     const fight = s.fight?.active ? s.fight : null;
     $('#metric-fight').textContent = fight ? `${formatNum(fight.dps)} DPS` : '0 DPS';
     $('#metric-fight-detail').textContent = fight ? `${fight.name} · ${formatNum(fight.damage)} damage${fight.active ? ' · active' : ''}` : 'No outgoing damage yet';
-    $('#minimal-fight-dps').textContent = fight ? `${formatNum(fight.dps)} DPS` : '0 DPS';
-    $('#minimal-fight-name').textContent = fight ? `${fight.name} · ${formatNum(fight.damage)} damage` : 'No active fight';
     clearTimeout(fightExpiryTimer);
     if (fight) {
         const remaining = (settings.encounterGapSeconds * 1000) - (Date.now() - Number(fight.lastAt || 0));
@@ -1074,7 +1101,7 @@ function renderItems(s, profile) {
     const scopeLabel = currentZoneOnly ? `in <strong>${esc(s.zone)}</strong>` : 'across all zones';
     const slotLabel = selectedSlot ? ` · <strong>${esc(selectedSlot)}</strong>` : '';
     const rankingLabel = sortMode === 'recommended' ? ' · useful gear and named drops first' : ' · sorted by name';
-    $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel}${slotLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}${rankingLabel}.`;
+    $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel} through <strong>${esc(settings.era)}</strong>${slotLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}${rankingLabel}.`;
     $('#item-list').innerHTML = visible.map(item => {
         const stats = scaledItemStats(item, tier);
         const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
@@ -1151,7 +1178,15 @@ function updateClassChipState() {
 
 function buildEraSelect() {
     const select = $('#era-select');
-    select.innerHTML = ERAS.map(e => `<option ${e === settings.era ? 'selected' : ''}>${e}</option>`).join('');
+    const available = ERAS.filter(era => (pack.items || []).some(item => item.era === era));
+    const choices = available.length ? available : ['Classic'];
+    // Later expansions with no catalog records appeared to be a broken filter.
+    // Keep cumulative progression explicit and offer eras present in this pack.
+    if (!choices.includes(settings.era)) {
+        settings.era = choices.filter(era => ERAS.indexOf(era) <= currentEraIndex()).at(-1) || choices[0];
+        prefs.save(settings);
+    }
+    select.innerHTML = choices.map(e => `<option value="${esc(e)}" ${e === settings.era ? 'selected' : ''}>${esc(e)}</option>`).join('');
 }
 
 function buildItemSlotSelect() {
@@ -1186,11 +1221,7 @@ function routeDestinationInputs() {
     return [$('#map-destination')].filter(Boolean);
 }
 
-function preferredRouteDestinationInput() {
-    return document.body.classList.contains('minimal-mode')
-        ? $('#minimal-rare-search')
-        : $('#map-destination');
-}
+function preferredRouteDestinationInput() { return $('#map-destination'); }
 
 function setRouteDestinationValue(value, source = null) {
     for (const input of routeDestinationInputs()) {
@@ -1291,24 +1322,6 @@ function renderViewPanel(view, s, profile) {
     } else if (view === 'combat') {
         renderCombat(s);
         renderEncounters(s);
-    } else if (view === 'map') {
-        renderMinimalZoneDrops(s, profile);
-    }
-}
-
-function updateMinimalDistances(s) {
-    if (!s.location) return;
-    for (const row of $$('#minimal-zone-drops [data-loc-x][data-loc-y]')) {
-        const x = Number(row.dataset.locX);
-        const y = Number(row.dataset.locY);
-        const z = Number(row.dataset.locZ);
-        const distance = Math.hypot(
-            x - s.location.x,
-            y - s.location.y,
-            ...(Number.isFinite(z) ? [z - s.location.z] : [])
-        );
-        const label = row.querySelector('.minimal-distance');
-        if (label && Number.isFinite(distance)) label.textContent = ` · ${Math.round(distance).toLocaleString()}u away`;
     }
 }
 
@@ -1319,7 +1332,6 @@ function renderLiveLocation() {
     $('#map-subtitle').textContent = mapReadinessMessage(s);
     renderMapReadiness(s);
     renderMapRoutePlanner(s);
-    updateMinimalDistances(s);
 }
 
 function renderAll() {
@@ -1334,10 +1346,6 @@ function renderAll() {
     renderHeader(s, profile);
     renderMetrics(s, profile);
     renderViewPanel(activeView, s, profile);
-    if (document.body.classList.contains('minimal-mode') && activeView !== 'map') {
-        renderMinimalZoneDrops(s, profile);
-    }
-    if (consideredTarget && !$('#consider-loot-tray')?.hidden) renderConsiderTray();
     $('#map-title').textContent = s.zone ? `${s.zone} · Zone Viewer` : 'Zone Viewer';
     $('#map-subtitle').textContent = mapReadinessMessage(s);
     $('#manual-level').value = settings.manualLevel || '';
@@ -1346,11 +1354,11 @@ function renderAll() {
     $('#item-slot').value = settings.itemSlot || '';
     $('#item-sort').value = settings.itemSort || 'recommended';
     $('#encounter-gap').value = settings.encounterGapSeconds || 15;
+    $('#settings-routing-enabled').checked = Boolean(settings.routingEnabled);
     if ($('#era-select').value !== settings.era) $('#era-select').value = settings.era;
     setActiveMapMode(settings.mapMode || 'first');
     renderMapReadiness(s);
     renderMapRoutePlanner(s);
-    applyMinimalIntelState();
     syncRareMobsToViewer(false);
 }
 
@@ -1359,7 +1367,7 @@ function setView(view, options = {}) {
     $$('.nav-button').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
     $$('[data-view-panel]').forEach(p => p.classList.toggle('is-active', p.dataset.viewPanel === view));
     document.body.classList.toggle('map-active', view === 'map');
-    if (options.remember !== false && !document.body.classList.contains('minimal-mode')) {
+    if (options.remember !== false) {
         settings.lastView = view;
         prefs.save(settings);
     }
@@ -1370,35 +1378,8 @@ function setView(view, options = {}) {
     if (view === 'map' && options.sync !== false) setTimeout(() => syncZoneToViewer(false), 100);
 }
 
-function applyMinimalIntelState() {
-    const visible = settings.minimalIntelVisible !== false;
-    document.body.classList.toggle('minimal-intel-hidden', !visible);
-    const button = $('#minimal-intel-toggle');
-    if (button) {
-        button.setAttribute('aria-pressed', String(visible));
-        button.textContent = visible ? 'Hide intel' : 'Show intel';
-    }
-}
-
-function applyMinimalContentState() {
-    const mapVisible = Boolean(settings.minimalMapVisible);
-    const routingVisible = mapVisible && Boolean(settings.minimalRoutingVisible);
-    document.body.classList.toggle('minimal-map-hidden', !mapVisible);
-    document.body.classList.toggle('minimal-routing-hidden', !routingVisible);
-    const mapToggle = $('#settings-minimal-map');
-    const routingToggle = $('#settings-minimal-routing');
-    if (mapToggle) mapToggle.checked = mapVisible;
-    if (routingToggle) {
-        routingToggle.checked = Boolean(settings.minimalRoutingVisible);
-        routingToggle.disabled = !mapVisible;
-    }
-}
-
 function applyWindowState(windowState = {}) {
     const pinned = Boolean(windowState.alwaysOnTop);
-    const minimal = Boolean(windowState.minimalMode);
-    const wasMinimal = document.body.classList.contains('minimal-mode');
-    document.body.classList.toggle('minimal-mode', minimal);
     document.body.classList.toggle('pinned-mode', pinned);
     for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
         if (!button) continue;
@@ -1406,16 +1387,6 @@ function applyWindowState(windowState = {}) {
         button.setAttribute('aria-pressed', String(pinned));
         button.textContent = pinned ? '◆ Pinned to top' : '◇ Pin to top';
     }
-    for (const button of [$('#minimal-mode'), $('#settings-minimal-mode')]) {
-        if (!button) continue;
-        button.classList.toggle('is-active', minimal);
-        button.setAttribute('aria-pressed', String(minimal));
-        button.textContent = minimal ? 'Full view' : 'Minimal view';
-    }
-    if (minimal && !wasMinimal) setView('map', { remember:false });
-    else if (!minimal && wasMinimal) setView(settings.lastView || 'overview', { remember:false });
-    applyMinimalIntelState();
-    applyMinimalContentState();
     setTimeout(() => viewerApi()?.resize?.(), 80);
 }
 
@@ -1425,15 +1396,6 @@ async function toggleAlwaysOnTop() {
     bridgeInfo ||= {};
     bridgeInfo.windowState = { ...(bridgeInfo.windowState || {}), alwaysOnTop: Boolean(result.enabled) };
     applyWindowState(bridgeInfo.windowState);
-}
-
-async function toggleMinimalMode() {
-    const current = Boolean(bridgeInfo?.windowState?.minimalMode);
-    const result = await mutate(`/api/window/minimal?enabled=${current ? '0' : '1'}`);
-    bridgeInfo ||= {};
-    bridgeInfo.windowState = { ...(bridgeInfo.windowState || {}), minimalMode: Boolean(result.enabled) };
-    applyWindowState(bridgeInfo.windowState);
-    renderAll();
 }
 
 function viewerApi() {
@@ -1775,7 +1737,7 @@ async function calculateActiveRoute(options = {}) {
         return false;
     }
 
-    const npc = npcRecordForName(activeRoute.name, activeRoute.zone);
+    const npc = npcRecordForName(activeRoute.name, activeRoute.zone, activeRoute.raidInstance);
     const worldLocation = wikiLocationToWorld(npc?.loc);
     const wikiLocation = worldLocation?.slice(0, Number(pack.meta?.schemaVersion) >= 3 ? 3 : 2) || null;
     apiObj.clearPath?.();
@@ -1812,14 +1774,14 @@ async function calculateActiveRoute(options = {}) {
     return Boolean(result?.ok);
 }
 
-async function pathToNpc(name) {
+async function pathToNpc(name, options = {}) {
     name = String(name || '').trim();
     if (!name) {
         showNotice('Choose a named mob or enter a map label first.', { tone:'warning' });
         preferredRouteDestinationInput()?.focus();
         return false;
     }
-    setView('map', { sync:false });
+    if (options.openMain !== false) setView('map', { sync:false });
     const s = state();
     if (!s.zone) {
         showNotice('A current zone must be detected before choosing a destination.', { tone:'warning' });
@@ -1827,6 +1789,7 @@ async function pathToNpc(name) {
     }
     activeRoute = {
         name,
+        raidInstance:options.raidInstance,
         zone:s.zone,
         status:s.location ? 'working' : 'waiting',
         message:s.location ? `Preparing path to ${name}…` : `Destination saved · waiting for /loc.`
@@ -1878,7 +1841,7 @@ async function applyLogSelection(info) {
     $('#titlebar-version').textContent = `v${info.version || bridgeInfo?.version || 'unknown'}`;
     $('#automatic-log').hidden = info.logSelection !== 'manual';
     $('#setup-overlay').hidden = Boolean(info.eqRootExists);
-    if (previousRoot !== String(info.eqRootPath || '')) viewerFolderPath = '';
+    if (previousRoot !== String(info.eqRootPath || '')) { viewerFolderPath = ''; mapDataLoader.invalidate(); mapDataRevision++; }
     if (info.eqRootExists) await ensureViewerFolderConnected(false, previousRoot !== String(info.eqRootPath || ''));
     else updateViewerFolderStatus('missing');
     renderAll();
@@ -2031,52 +1994,13 @@ function wireUi() {
             button.disabled = false;
         }
     });
+    $('#settings-routing-enabled').addEventListener('change', event => { settings.routingEnabled = event.target.checked; prefs.save(settings); renderAll(); });
     $('#export-diagnostics').addEventListener('click', exportDiagnostics);
     $('#wiki-search-form').addEventListener('submit', e => { e.preventDefault(); runWikiSearch(); });
     $('#wiki-search-button').addEventListener('click', runWikiSearch);
-    $('#minimal-my-class').addEventListener('change', event => {
-        settings.minimalMyClassOnly = Boolean(event.target.checked);
-        prefs.save(settings);
-        renderAll();
-    });
-    $('#minimal-named-only').addEventListener('change', event => {
-        settings.minimalNamedOnly = Boolean(event.target.checked);
-        prefs.save(settings);
-        renderAll();
-    });
-    $('#minimal-rare-search').addEventListener('input', () => {
-        const s = state();
-        renderMinimalZoneDrops(s, effectiveProfile(s));
-    });
-    $('#consider-my-class').addEventListener('change', event => {
-        settings.considerMyClassOnly = Boolean(event.target.checked);
-        prefs.save(settings);
-        renderConsiderTray();
-        armConsiderTrayTimeout();
-    });
-    $('#consider-path').addEventListener('click', event => {
-        const name = event.currentTarget.dataset.npc;
-        if (name) pathToNpc(name);
-    });
-    $('#consider-close').addEventListener('click', hideConsiderTray);
-    $('#consider-loot-tray').addEventListener('pointerenter', () => clearTimeout(considerTrayTimer));
-    $('#consider-loot-tray').addEventListener('pointerleave', () => armConsiderTrayTimeout(8000));
-    $('#consider-loot-tray').addEventListener('focusin', () => clearTimeout(considerTrayTimer));
-    $('#consider-loot-tray').addEventListener('focusout', event => {
-        if (!event.currentTarget.contains(event.relatedTarget)) armConsiderTrayTimeout(8000);
-    });
     for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
         button.addEventListener('click', () => toggleAlwaysOnTop().catch(error => showNotice(`Unable to change pinning: ${error.message}`, { tone:'error' })));
     }
-    for (const button of [$('#minimal-mode'), $('#settings-minimal-mode')]) {
-        button.addEventListener('click', () => toggleMinimalMode().catch(error => showNotice(`Unable to change the window view: ${error.message}`, { tone:'error' })));
-    }
-    $('#minimal-intel-toggle').addEventListener('click', () => {
-        settings.minimalIntelVisible = settings.minimalIntelVisible === false;
-        prefs.save(settings);
-        applyMinimalIntelState();
-        setTimeout(() => viewerApi()?.resize?.(), 50);
-    });
     document.addEventListener('pointerover', event => {
         const target = event.target.closest?.('[data-item-title]');
         if (target) showItemTooltip(target, event);
@@ -2101,20 +2025,19 @@ function wireUi() {
         const editing = /^(?:INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName || '');
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
             event.preventDefault();
-            const input = document.body.classList.contains('minimal-mode') ? preferredRouteDestinationInput() : $('#wiki-search');
+            const input = $('#wiki-search');
             input?.focus();
             input?.select();
         } else if (event.key === '/' && !editing && !event.ctrlKey && !event.metaKey && !event.altKey) {
             event.preventDefault();
-            const input = document.body.classList.contains('minimal-mode') ? preferredRouteDestinationInput() : $('#wiki-search');
+            const input = $('#wiki-search');
             input?.focus();
         } else if (event.key === 'Escape') {
             hideItemTooltip();
-            if (consideredTarget) hideConsiderTray();
         }
     });
     $$('[data-map-mode]').forEach(button => button.addEventListener('click', () => setMapMode(button.dataset.mapMode, true)));
-    $('#sync-zone').addEventListener('click', () => syncZoneToViewer(true));
+    $('#sync-zone').addEventListener('click', () => { mapDataLoader.invalidate(); mapDataRevision++; void overlaySession.publish(); void syncZoneToViewer(true); });
     $('#sync-location').addEventListener('click', () => handleMapPrimaryAction().catch(error => showNotice(error.message, { tone:'error' })));
     $('#start-route').addEventListener('click', () => pathToNpc($('#map-destination').value));
     for (const input of routeDestinationInputs()) {
@@ -2131,17 +2054,6 @@ function wireUi() {
     }
     $('#clear-route').addEventListener('click', () => clearActiveRoute());
 
-    $('#settings-minimal-map').addEventListener('change', event => {
-        settings.minimalMapVisible = Boolean(event.target.checked);
-        prefs.save(settings);
-        applyMinimalContentState();
-        setTimeout(() => viewerApi()?.resize?.(), 50);
-    });
-    $('#settings-minimal-routing').addEventListener('change', event => {
-        settings.minimalRoutingVisible = Boolean(event.target.checked);
-        prefs.save(settings);
-        applyMinimalContentState();
-    });
     $('#window-minimize').addEventListener('click', () => window.eyeOfZommWindow?.minimize());
     $('#window-maximize').addEventListener('click', () => window.eyeOfZommWindow?.toggleMaximize());
     $('#window-close').addEventListener('click', () => window.eyeOfZommWindow?.close());
@@ -2180,6 +2092,33 @@ function wireUi() {
 
 buildClassChips();
 wireUi();
+const overlaySession = createOverlaySession({ api:window.eyeOfZommOverlays, getSession:overlaySessionSnapshot,
+    onCommand:handleOverlayCommand, onCues:cues => timerAlerts.play(cues), notify:message => showNotice(message, { tone:'warning' }) });
+const timerAlerts = createTimerAlerts();
+const wikiDiscovery = createWikiDiscovery({getPack:()=>pack,
+    onMissing:entry=>window.eyeOfZommDiscovery?.show(entry) || Promise.reject(new Error('The desktop discovery prompt is unavailable.')),
+    onWarning:message=>showNotice(message,{tone:'warning'})});
+window.eyeOfZommDiscovery?.onAction?.(({action,id})=>{if(action==='ignore')wikiDiscovery.ignore(id);else wikiDiscovery.dismiss(id);void overlaySession.publish();});
+window.eyeOfZommOverlays?.onState?.(next => {
+    nativeMapVisible = Boolean(next.panels?.map?.visible);
+    const useNative = Boolean(next.panels?.timers?.visible && !next.panels.timers.passThrough);
+    if (discoveryInNative !== useNative) { discoveryInNative=useNative; void overlaySession.publish(); }
+});
+const overlayController = mountOverlayController({ root:document.getElementById('overlay-controller'), api:window.eyeOfZommOverlays });
+const timerSettings = mountTimerSettings({ root:document.getElementById('timer-settings'), session:overlaySession });
+const discoveryNotices = mountWikiDiscoveryNotices({root:document.getElementById('wiki-discovery-notices'),action:(action,value)=>window.eyeOfZommDiscovery.action(action,value)});
+overlaySession.onTimers(()=>discoveryNotices.render(discoveryInNative ? [] : wikiDiscovery.snapshot().pending));
+$('#open-native-overlays').addEventListener('click', async () => {
+    try { await window.eyeOfZommOverlays.control('show-all'); }
+    catch { showNotice('Native overlays require the Eye of Zomm desktop app.', { tone:'warning' }); }
+});
+const appUpdatesUi = mountAppUpdates({
+    openSettings:async () => {
+        setView('settings');
+        document.getElementById('check-app-update').focus();
+    }
+});
+window.addEventListener('pagehide', () => { appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();
