@@ -1,11 +1,16 @@
 # Changelog
 
-## 0.8.2 - Application updates and overlay UX direction
+## 0.8.2 - Native modular overlays, timers and application updates
 
 - Add a separate Application updates card and header badge, with compatible beta-release discovery, verified downloads, cancellation, Later, and explicit installer approval.
 - Keep verified downloads across relaunches, make startup downloading opt-in, and preserve the normal NSIS app identity and user-data profile.
 - Reject mismatched installer names, sizes, hashes, redirects and downgrades; permit a replacement download when staged files change and retain the app if Windows handoff fails.
-- Record PNUT's interaction patterns and an EQL-themed overlay design, including independent panels, layout lock, separate click-through, hover/focus menus, player parse tabs and retained wiki/map/loot tools. Native overlays remain planned.
+- Add four actual transparent native overlay windows for Parse, Zone & loot, Consider and Timers, with saved independent positions/sizes, layout locks, background opacity, font scale and mouse passthrough.
+- Keep one shared log/parser/timer session alive when the main window hides; retain player parse tabs, complete ability totals, encounter selection, class-aware scaled loot, waypoint/wiki actions and opt-in routes into the existing Map Explorer.
+- Add tray/main/checked-shortcut recovery, monitor clamping, crash recovery and stale-session feedback; sandbox each lightweight renderer with restricted IPC.
+- Implement manual/repeating countdowns, saved literal log triggers, zone-filtered kill reminders and one-time spawn reminders from a chosen duration. Persist deadlines and reject historical/stale/replayed timer starts.
+- Add an observed melee swing bar using own hits/misses, same-second round deduplication, rolling timing changes, cast hold, optional weapon-delay seed and idle reset. EQL timestamps limit it to an estimate, without hand or weapon inference.
+- Add synthetic regression coverage, a real Electron four-window/shared-session smoke and packaged-source parity gates for the new runtime.
 
 ## 0.8.1 - Wiki and map integration corrections
 

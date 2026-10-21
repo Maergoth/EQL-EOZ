@@ -53,6 +53,8 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Keeps waypoint copy, consider pop-under loot, and class-filtered named-mob/drop intel available even when Minimal view's map and route actions are hidden; class-filtered loot excludes statless and weight-only records.
 - Opens Items to recommended current-zone/class loot, with explicit search, slot, sort, class, era, tier, and scope overrides.
 - Checks for new application releases, offers verified downloads and a user-approved Windows installer, and keeps app updates separate from wiki-data synchronization.
+- Offers independent native Parse, Zone & loot, Consider and Timers overlays with saved layouts, lock controls, mouse passthrough and tray recovery.
+- Runs countdowns, log-triggered and kill-based reminders, plus a swing bar learned from your outgoing melee hits and misses.
 - Shows keyboard-accessible EQLWiki Itembox-inspired local-data tooltips, including embedded wiki icons and tier/base comparisons.
 - Searches EQLWiki from the global search field and opens exact wiki links from local records.
 
@@ -130,8 +132,26 @@ stay in the existing application profile.
 This feature starts with 0.8.2. Older installations need that first updater
 build installed normally; **Sync with Wiki** updates data rather than app code.
 Unsigned beta installers remain unsigned. See the
-[PNUT UX plan](docs/PNUT_UX_PLAN.md) for implementation boundaries and the
-proposed overlay workspace; native overlays are not yet implemented.
+[PNUT UX plan](docs/PNUT_UX_PLAN.md) for implementation boundaries.
+
+### Native overlays and timers
+
+Choose **Overlays** in the header or configure individual panels in
+**Settings → Native overlays**. Parse, Zone & loot, Consider and Timers are real
+separate desktop windows. Unlock a panel to move/resize it; locking keeps tabs
+and menus interactive. **Ignore mouse** passes clicks through the panel.
+Restore input from Settings, the tray or **Ctrl+Shift+O** when registered.
+Each panel remembers its layout, opacity and font scale. Closing the main app
+while panels are visible keeps the shared session running; use the tray's
+**Quit Eye of Zomm** to exit. The complete Map Explorer opens from panel actions.
+
+The Timers panel supports manual/repeating countdowns, saved literal log
+triggers and target-kill reminders, plus a one-time reminder from the latest
+logged kill. You supply the duration; EoZ does not know a mob's respawn period.
+Pause, resume, reset or dismiss rows. Its observed swing bar learns your own
+melee rounds, accepts an optional weapon-delay seed and waits for real attacks.
+EQL's one-second log timestamps make this an estimate. See [timer behavior](docs/TIMERS.md)
+for limits, replay protection and cast handling.
 
 ## Wiki search / Open in browser
 

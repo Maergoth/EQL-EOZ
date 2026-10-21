@@ -8,6 +8,8 @@ import { routeDistanceLabel } from './route-guidance.js';
 import { formatWorldLocationForPlayer, waypointCommandForWorldLocation, wikiLocationToWorld } from './coordinate-system.js';
 import { resolveZoneRecord } from './zone-identity.js';
 import { mountAppUpdates } from './app-update-ui.js';
+import { compactParseSnapshot, createOverlaySession } from './overlay-session.js';
+import { mountOverlayController } from './overlay-controller.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -468,7 +470,12 @@ function consumeText(text, allowTransientUi = true) {
         }
         if (event?.type === 'location') latestLocation = { ...event.location };
         if (allowTransientUi && event?.type === 'consider') showConsiderTray(event.target);
+        const originalAt = Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] || '');
+        const freshTimerEvent = Number.isFinite(originalAt) && Math.abs(Date.now() - originalAt) <= 10000;
+        overlaySession.consume(event, { zone:parser.zone, character:parser.character, live:allowTransientUi && freshTimerEvent,
+            text:line, at:parser.currentLineAt, logId:bridgeInfo?.logPath || 'current-log' });
     }
+    overlaySession.flush();
     if (zoneChanged) {
         pendingViewerLocation = null;
         queueViewerSync(async () => {
@@ -488,6 +495,87 @@ function consumeText(text, allowTransientUi = true) {
 
 function state() {
     return parser.snapshot();
+}
+
+function overlaySessionSnapshot() {
+    const s = state();
+    const profile = effectiveProfile(s);
+    let iconBudget = 240 * 1024;
+    const itemSummary = item => {
+        let icon = itemIconSource(item);
+        if (icon.length > 12000 || icon.length > iconBudget) icon = '';
+        iconBudget -= icon.length;
+        return { name:String(item.name || '').slice(0, 240), icon,
+            slots:(item.slots || []).slice(0, 8).map(slot => String(slot).slice(0, 60)),
+            stats:Object.fromEntries(Object.entries(scaledItemStats(item, settings.itemTier) || {}).slice(0, 24)
+                .filter(([, value]) => typeof value === 'number' || typeof value === 'string')
+                .map(([key, value]) => [key.slice(0, 40), typeof value === 'string' ? value.slice(0, 80) : value])),
+            tier:Number(settings.itemTier) || 0 };
+    };
+    const canRoute = Boolean(settings.minimalRoutingVisible && s.zone && s.location);
+    const npcs = rareMobsForZone(s, profile, { includeGeneric:!settings.minimalNamedOnly }).slice(0, 50).map(source => ({
+        id:source.name, name:source.name, level:source.npc?.avgLevel || 0,
+        levelMin:source.npc?.levelMin || 0, levelMax:source.npc?.levelMax || 0,
+        con:conForLevel(source.npc?.avgLevel, profile.level), named:isNamedSource(source.name), rare:true,
+        distance:Number.isFinite(source.distance) ? source.distance : null,
+        waypoint:Boolean(waypointCommandForWorldLocation(source.loc)),
+        dropCount:(settings.minimalMyClassOnly ? source.items : source.allItems).length,
+        drops:(settings.minimalMyClassOnly ? source.items : source.allItems).slice(0, 5).map(itemSummary)
+    }));
+    let consider = { myClassOnly:Boolean(settings.considerMyClassOnly) };
+    if (consideredTarget && zoneKey(consideredTarget.zone) === zoneKey(s.zone)) {
+        const npc = npcRecordForName(consideredTarget.name, s.zone) || { name:consideredTarget.name, zone:s.zone };
+        const drops = knownDropsForNpc(npc).filter(item => eraAllowed(item.era) &&
+            (!settings.considerMyClassOnly || (itemMatchesProfile(item, profile) && itemHasClassStats(item))));
+        consider = { ...consider, name:consideredTarget.name, zone:s.zone, level:consideredTarget.level || npc.avgLevel || 0,
+            con:conForLevel(consideredTarget.level || npc.avgLevel, profile.level), canRoute,
+            waypoint:Boolean(waypointCommandForWorldLocation(wikiLocationToWorld(npc.loc))), dropCount:drops.length, drops:drops.slice(0, 16).map(itemSummary) };
+    }
+    return { character:s.character, zone:s.zone, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
+        parse:compactParseSnapshot(s), intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.minimalMyClassOnly), canRoute }, consider };
+}
+
+async function handleOverlayCommand({ action, payload = {} }) {
+    const requestedZone = state().zone;
+    const resolveNpc = () => {
+        const currentZone = state().zone;
+        if (!currentZone || zoneKey(requestedZone) !== zoneKey(currentZone) ||
+            (payload.zone && zoneKey(payload.zone) !== zoneKey(currentZone))) throw new Error('That NPC belongs to a previous zone.');
+        const npc = npcRecordForName(payload.npc, currentZone);
+        if (!npc || (npc.zone && zoneKey(npc.zone) !== zoneKey(currentZone))) throw new Error('That NPC is no longer available in the current zone.');
+        return npc;
+    };
+    if (action === 'session:class-filter') {
+        if (!['intel', 'consider'].includes(payload.panel) || typeof payload.enabled !== 'boolean') return;
+        settings[payload.panel === 'intel' ? 'minimalMyClassOnly' : 'considerMyClassOnly'] = payload.enabled;
+        prefs.save(settings); renderAll(); return;
+    }
+    if (action === 'session:copy-waypoint') {
+        const command = waypointCommandForWorldLocation(wikiLocationToWorld(resolveNpc().loc));
+        if (!command || !await writeClipboardText(command)) throw new Error('No waypoint could be copied for this NPC.');
+        showNotice(`Copied ${command}`, { tone:'success' }); return;
+    }
+    if (action === 'session:wiki') { const npc = resolveNpc(); openExternal(wikiUrl(npc.wikiTitle || npc.name)); return; }
+    if (action === 'session:route') {
+        resolveNpc();
+        if (!settings.minimalRoutingVisible) throw new Error('Enable path controls in Settings before requesting a route.');
+        await window.eyeOfZommOverlays?.control('show-main');
+        if (document.body.classList.contains('minimal-mode')) await toggleMinimalMode();
+        const npc = resolveNpc();
+        if (!settings.minimalRoutingVisible) throw new Error('Path controls were disabled.');
+        await pathToNpc(npc.name); return;
+    }
+    if (action === 'session:open') {
+        if (!['map', 'items', 'npcs', 'combat', 'settings'].includes(payload.view)) return;
+        const npc = payload.npc ? resolveNpc() : null;
+        const item = payload.item ? itemRecord(payload.item) : null;
+        if (payload.item && !item) throw new Error('That item is no longer available in the current dataset.');
+        await window.eyeOfZommOverlays?.control('show-main');
+        if (document.body.classList.contains('minimal-mode')) await toggleMinimalMode();
+        if (npc) $('#npc-search').value = resolveNpc().name;
+        if (item) $('#item-search').value = item.name;
+        setView(payload.view); renderAll();
+    }
 }
 
 function currentEraIndex() {
@@ -2181,6 +2269,13 @@ function wireUi() {
 
 buildClassChips();
 wireUi();
+const overlaySession = createOverlaySession({ api:window.eyeOfZommOverlays, getSession:overlaySessionSnapshot,
+    onCommand:handleOverlayCommand, notify:message => showNotice(message, { tone:'warning' }) });
+const overlayController = mountOverlayController({ root:document.getElementById('overlay-controller'), api:window.eyeOfZommOverlays });
+$('#open-native-overlays').addEventListener('click', async () => {
+    try { await window.eyeOfZommOverlays.control('show-all'); }
+    catch { showNotice('Native overlays require the Eye of Zomm desktop app.', { tone:'warning' }); }
+});
 const appUpdatesUi = mountAppUpdates({
     openSettings:async () => {
         if (document.body.classList.contains('minimal-mode')) await toggleMinimalMode();
@@ -2188,7 +2283,7 @@ const appUpdatesUi = mountAppUpdates({
         document.getElementById('check-app-update').focus();
     }
 });
-window.addEventListener('pagehide', () => appUpdatesUi.dispose(), { once:true });
+window.addEventListener('pagehide', () => { appUpdatesUi.dispose(); overlaySession.dispose(); overlayController.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

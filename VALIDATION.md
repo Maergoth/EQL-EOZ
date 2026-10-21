@@ -1,6 +1,6 @@
 # Validation report — v0.8.2
 
-## 0.8.2 application updates and overlay design
+## 0.8.2 application updates, native overlays and timers
 
 The dependency-free updater has 22 mocked lifecycle/network/IPC checks plus
 renderer checks for progress, cancellation, Later, explicit install action,
@@ -18,15 +18,47 @@ release for the 0.8.2 candidate. It downloads or executes no installer.
 
 Local Windows NSIS compilation and the expanded exact-source ASAR gate pass
 for 0.8.2 with production snapshot `20261021T062421Z-830bd5a89bfa` (124 zones,
-8,645 NPC records, 11,262 items). The ASAR includes the new updater, preload,
-renderer module and Settings markup/styles. The installer reports `NotSigned`
+8,645 NPC records, 11,262 items). The ASAR exact-source gate includes the updater, isolated native host/preload,
+parser/timer/session/controller modules, panel HTML/CSS/JS and Settings markup. The installer reports `NotSigned`
 and was not installed or used to perform an upgrade.
 
-The overlay deliverable is an interactive concept and the source-backed
-[PNUT UX plan](docs/PNUT_UX_PLAN.md). It does not establish native overlay,
-shared-session, focus, mouse-passthrough, docking or OS-wide scaling behavior.
-Installation/upgrade execution remains untested; use the updated
-[Windows checklist](docs/WINDOWS_MANUAL_TEST.md) for a controlled upgrade.
+The overlay implementation now creates four actual independent transparent
+BrowserWindows: Parse, Zone & loot, Consider and Timers. Twenty mocked native
+checks cover bounds/default grid, trust, independent preferences, lock versus
+passthrough, unavailable recovery controls, stale/crashed owner, explicit recovery
+and route actions that span a zone/opt-in change. Renderer tests cover complete
+parse aggregates, scopes, escaped dataset text, timer forms, scaling/opacity,
+menus, recovery and command-error visibility. The source map is retained in the
+[PNUT UX plan](docs/PNUT_UX_PLAN.md).
+
+Timer tests cover manual/repeat and sleep/restart phase, pause/resume/reset,
+literal triggers, kill-based deadlines, zone filters, malformed saved data,
+capacity, replay guards, valid original timestamp freshness, initial history,
+character/log changes, own melee hits/misses, same-second deduplication, special
+exclusion, casts, delay seeds, idle reset and faster/slower estimate changes.
+Snapshot tests prove bounded UTF-8 payloads below 2 MiB preserve aggregate
+damage/healing/rune totals, action counts and timer deadlines; raw lines and
+paths are omitted. No runtime dependency is added.
+
+`npm run test:native-overlays` passes using the real desktop bootstrap and
+separate native handles with an isolated profile and synthetic log. It proves
+four frameless/transparent sandboxed windows, independent bounds, locked
+interaction, native passthrough/recovery calls, real preload IPC, storage isolation and CSP
+rejection of direct HTTP API access, a shared
+140-damage parse and two timers using an isolated synthetic dataset/icon,
+editor values across timer paints, error
+feedback, panel reload/recreation and continued parsing with the owner hidden.
+Five synthetic compositor captures were inspected: parse, intel, consider,
+timers and the main controller. They were captured at this desktop's 1.5 device
+pixel ratio, not a complete OS-wide DPI matrix.
+
+The native test keeps windows hidden and captures their actual renderers. It
+does not click through a foreground game, establish foreground focus behavior,
+exercise physical monitor removal or sleep, or validate live log wording.
+Native docking and another 3D map window are not implemented. Installed upgrade
+execution also remains untested; use the updated [Windows checklist](docs/WINDOWS_MANUAL_TEST.md)
+for those checks. Building/hash-checking an unsigned installer does not prove
+installation or signing.
 
 ## 0.8.1 integration audit
 

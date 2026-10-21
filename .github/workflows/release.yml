@@ -42,6 +42,8 @@ jobs:
         run: npm test
       - name: Test actual desktop CSP and browser worker
         run: npm run test:desktop-worker
+      - name: Test actual native overlay windows and shared session
+        run: npm run test:native-overlays
       - name: Fetch production bootstrap data
         shell: bash
         run: node scripts/fetch-bootstrap-pack.mjs --required

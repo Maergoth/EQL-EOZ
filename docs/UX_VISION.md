@@ -135,7 +135,7 @@ A renamed folder, rotated log, missing map file, stale cache, or interrupted dat
 
 Every behavioral change adds the nearest deterministic regression test in the same commit. A reported bug starts with a fixture that fails for the reported case; coordinate, parser, routing, clipboard, and state rules belong in unit or contract tests. Visual behavior that requires proprietary archives or Windows still gets an automated structural guard plus a specific manual acceptance step and redacted diagnostics—not an undocumented “looks right” assumption.
 
-### 4.12 PNUT-style overlay direction (proposed)
+### 4.12 PNUT-style native overlays and timers
 
 Use EQL's navy/gold visual identity with PNUT's compact encounter tabs,
 hover/focus menus and independent overlay panels. Layout lock preserves tab/menu
@@ -144,10 +144,18 @@ Keep the named/rare loot, consider tray, item scaling, wiki links and validated
 map/route tools. Exclude Elitist/Carebear and Revenge. Current parses remain
 player-only; rune grants are capacity rather than proven absorption.
 
-The [PNUT UX plan](PNUT_UX_PLAN.md) records the reference commit, exact source
-locations, state model and staged implementation. Shared session ownership must
-precede native overlay windows. This direction is a concept, not an implemented
-multi-window overlay. The 0.8.2 application updater is implemented separately.
+The 0.8.2 PR implements four independent transparent native windows: Parse,
+Zone & loot, Consider and Timers. One main-renderer session owns parsing, timers,
+pack and routes while hidden. Panels save independent bounds and use restricted
+snapshot/command IPC, tray/main recovery and a checked global shortcut. The heavy
+Map Explorer remains in the main app and opens explicitly from panel actions.
+
+The [PNUT UX plan](PNUT_UX_PLAN.md) records the reference commit, implementation
+seams and acceptance gates. [Timers](TIMERS.md) include manual/repeat, literal
+log triggers, kill-based reminders and an observed swing estimate with optional
+weapon-delay seed. Historical/stale log reads cannot trigger them. Live-game
+compositing, physical passthrough and OS-wide scaling remain manual acceptance;
+this implementation does not claim docking or hand-precise swing timing.
 
 ## 5. Information architecture
 

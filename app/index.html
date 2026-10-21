@@ -42,6 +42,7 @@
             <button id="pin-window" class="topbar-control" type="button" aria-pressed="false">◇ Pin to top</button>
             <button id="minimal-mode" class="topbar-control" type="button" aria-pressed="false">Minimal</button>
             <button id="app-update-badge" class="topbar-control app-update-badge" type="button" hidden>App update</button>
+            <button id="open-native-overlays" class="topbar-control" type="button" title="Show independent native overlay windows">Overlays</button>
         </div>
         <div class="live-strip">
             <span id="bridge-status" class="status-pill status-warn">Connecting</span>
@@ -263,6 +264,7 @@
                 </div>
             </div>
             <div class="settings-grid">
+                <div id="overlay-controller" class="panel"></div>
                 <article class="panel">
                     <h2>EverQuest folder</h2>
                     <div class="setting-line"><span>Game folder</span><code id="settings-eq-root">—</code></div>

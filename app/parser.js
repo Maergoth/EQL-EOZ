@@ -1,6 +1,7 @@
 import { loggedLocationToWorld } from './coordinate-system.js';
 
 const LINE_RE = /^\[([^\]]+)\]\s*(.*)$/;
+const AUTO_ATTACK_VERBS = new Set(['hit', 'slash', 'crush', 'pierce', 'punch', 'claw', 'bite', 'maul']);
 
 function parseNumber(text) {
     return Number(String(text || '').replace(/,/g, ''));
@@ -217,7 +218,12 @@ export class EQLogParser {
         }
         this.currentFight.damage += n;
         this.currentFight.lastAt = now;
-        return this.rememberCombatEvent({ type: 'damage', victim, encounterTarget: victim, amount: n, source: source || kind, kind });
+        const event = { type: 'damage', victim, encounterTarget: victim, amount: n, source: source || kind, kind };
+        if (kind === 'melee') {
+            event.skill = normalizeName(source).toLowerCase();
+            event.swingEligible = AUTO_ATTACK_VERBS.has(event.skill);
+        }
+        return this.rememberCombatEvent(event);
     }
 
     parse(rawLine) {
@@ -315,10 +321,21 @@ export class EQLogParser {
         x = text.match(/^You (\w+) (?:on )?(.+?) for ([\d,]+) points? of damage\.?(?:\s*\(([^)]+)\))?$/i);
         if (x) return this.noteDamage(x[2], x[3], x[1], 'melee');
 
-        // Some abilities say "strike ...", "backstab ...", etc. The prior rule covers
-        // the supplied log. Failed attacks are intentionally excluded.
+        // Misses inform the observed swing estimate without changing historical
+        // damage totals, combat-event grouping or observed NPC damage.
+        x = text.match(/^You try to (\w+) (.+?), but miss[.!]*$/i);
+        if (x) return this.rememberEvent({ type:'melee-miss', victim:normalizeName(x[2]), skill:x[1].toLowerCase(), swingEligible:AUTO_ATTACK_VERBS.has(x[1].toLowerCase()) });
+
+        // Other failed abilities still contribute no damage or combat events.
         if (/^You try to /i.test(text)) {
             return null;
+        }
+
+        x = text.match(/^You begin casting (.+?)[.!]*$/i);
+        if (x) return this.rememberEvent({ type:'cast-begin', spell:trimSentence(x[1]) });
+
+        if (/^Your (?:casting|spell) (?:is|was|has been) interrupted[.!]*$/i.test(text)) {
+            return this.rememberEvent({ type:'cast-interrupt' });
         }
 
         // Healing performed by the player.
@@ -401,6 +418,7 @@ export class EQLogParser {
             location: this.location ? { ...this.location } : null,
             totalDamage: this.totalDamage,
             totalHealing: this.totalHealing,
+            sessionSeconds,
             sessionDps: sessionSeconds ? this.totalDamage / sessionSeconds : 0,
             fight,
             encounters,

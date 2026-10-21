@@ -26,6 +26,13 @@ EQLWiki - Eye of Zomm is intentionally designed around a narrow, auditable bound
 
 The desktop service binds only to `127.0.0.1`. Renderer polling therefore stays on the user's own PC.
 
+Native overlays are separate transparent app windows, never injected into the
+game. One main renderer owns log parsing and timers; sandboxed panels receive
+bounded local snapshots without raw lines, paths or installer access. The host
+persists layout preferences only. Local timer preferences/deadlines/replay guards
+are stored in EoZ's profile, and the checked recovery shortcut affects only EoZ
+windows. No screen capture, game input or process hook is used by the product.
+
 The embedded Zone Viewer receives bounded, read-only access to supported zone/map files under the selected folder. Its parsed/cached data is maintained by the viewer runtime and is never written back into the EverQuest installation.
 
 Remote structured knowledge arrives from GitHub as a static gzip data pack originally generated on EQLWiki. The app verifies the published SHA-256 before replacing the previous local pack.

@@ -3,9 +3,9 @@
 ## Scope and source map
 
 Requested October 21, 2026: add an application update flow comparable to PNUT,
-then conceptualize an EQL-themed overlay with PNUT's compact controls while
-retaining Eye of Zomm's custom tools. The application updater is implemented
-in the 0.8.2 candidate. The overlay is a proposed design, not a shipped feature.
+then implement actual modular native overlays and timers while retaining
+Eye of Zomm's custom tools. The updater, four native windows and timer engine
+are implemented in the 0.8.2 PR candidate, which is not yet merged or released.
 Elitist/Carebear controls and Revenge are outside this design.
 
 Reference PNUT commit:
@@ -59,93 +59,89 @@ build installed normally; it cannot acquire new application code through wiki
 data synchronization. Unsigned beta installers remain unsigned; hash verification
 does not turn them into Authenticode-signed releases.
 
-## Proposed overlay workspace
+## Native overlay workspace in 0.8.2
 
-Use the existing EQL deep navy surfaces, gold `#d8b75c`/`#f0d77f`, blue accents,
-and readable light text. Keep serif type for small titles, sans-serif for
-controls and tabular numerals for parses. Adjust background opacity independently
-of text so lowering the panel background does not fade the numbers.
+Four transparent, frameless, always-on-top Electron BrowserWindows live outside
+the main application window. Choose **Overlays** in the header or use
+**Settings → Native overlays**. Fresh installs start with all panels hidden.
+Each window saves its visibility, bounds, opacity, font scale, layout lock and
+mouse passthrough separately in EoZ's profile. EQL navy/gold surfaces, readable
+numbers and hover/click/focus menus apply throughout.
 
-| Surface | PNUT-style interaction | EoZ content retained |
-| --- | --- | --- |
-| Parse | Compact tabs; Live / Previous encounter / Session dropdown; hover/focus toolbar | Player damage, healing, encounter history and event feed; optional rune-grant capacity view |
-| Zone & loot | Compact current-zone list; hover/focus detail; clear sort and class filters | Named/rare mobs, con colors, distance/readiness, My Class loot, observed rates and exact wiki links |
-| Consider | Small contextual pop-under, optionally pinned | Current consider target, class-aware drops, item icons and tier-adjusted Itembox details |
-| Map & route | Optional independent panel; First / Top / Map header menus | Current logged location, selected NPC, waypoint copy, validated route cues, cancel and honest marker-only fallback |
-| Workspace controller | Show/hide panels; Edit layout / Lock layout; reset and presets | Access to the complete main app, settings, update status and recovery |
+| Native window | Interactions and retained content |
+| --- | --- |
+| Parse | Damage, Healing, Rune capacity and Feed tabs; Live, Previous, Session and saved encounters; complete ability aggregates with a bounded recent feed |
+| Zone & loot | Named/rare NPCs, con colors, distance, class filter, tier-scaled drops, wiki links, waypoint copying and opt-in routing |
+| Consider | Current considered target, con, class filter and known drops; opens full item/NPC views |
+| Timers | Manual/repeating countdowns, reusable literal log triggers and kill-triggered reminders, one-time reminder from the latest kill, pause/resume/reset/dismiss and observed swing bar |
 
-Initial presets should be **Intel** (zone/loot and considers), **Parse**
-(parse and considers), and **Explore** (intel and optional map/route). Opening
-an overlay must not enable map/routing preferences that the player left off.
-The complete item browser and Map Explorer remain in the main app.
+The main app retains the complete item browser and the single heavy Map
+Explorer. A panel's Map Explorer or Route action opens it explicitly. Opening
+panels never enables map/routing preferences that the player left off. This
+slice adds no duplicate 3D window, archive decoder, meshes or route worker.
+Native docking and layout presets are not implemented.
 
-## Interaction states
+### Interaction and recovery
 
-| State | Drag/resize | Tabs, menus and tooltips | Recovery |
+| State | Move/resize | Tabs, menus, keyboard | Recovery |
 | --- | --- | --- | --- |
-| Edit layout | Enabled; show handles and panel controls | Enabled | Lock layout action |
-| Locked layout | Disabled; quiet chrome | Enabled | Hover, click or keyboard access to controls |
-| Ignore mouse | Disabled; all mouse input passes through | Unavailable | Independent tray/main-window controls; tested optional global shortcut |
+| Layout unlocked | Header and window edges | Enabled | Lock layout |
+| Layout locked | Disabled | Enabled | Panel menu, main controller or tray |
+| Ignore mouse | All input passes through | Unavailable | Tray, main controller or registered Ctrl+Shift+O |
 
-Do not conflate pin-to-top, layout lock and mouse passthrough. Some PNUT comments
-do conflate these, but its actual lock implementation preserves interaction.
-Full passthrough cannot depend on hovering the ignored panel to unlock it.
-Electron's [`setIgnoreMouseEvents`](https://www.electronjs.org/docs/latest/api/browser-window#winsetignoremouseeventsignore-options)
-ignores mouse input; forwarded move events do not restore click handling.
+Lock and passthrough are independent. Windows use `showInactive`; locked
+interactive panels remain focusable. Opacity changes only the background.
+Shortcut registration failure is disclosed. If neither tray nor shortcut works,
+passthrough is disabled and closing the main app cannot strand the session.
+Monitor changes clamp bounds to a current screen. Reset positions also restores
+mouse input and unlocks layouts.
 
-Hover dropdowns must also open by click and keyboard focus. Keep controls open
-while a popup is active, a text field is being edited or a drag is underway.
-Escape closes a menu without clearing its selection. Every parse explicitly
-identifies Live, a pinned encounter or Session; selecting historical data must
-not continue labeling the display Live.
+Closing the main app while recoverable panels are visible hides it and keeps
+its one parser running. **Quit Eye of Zomm** in the tray exits all windows. With
+no visible panel, closing exits normally. A stale/crashed owner is shown as
+unavailable and session actions are disabled. Explicit Open main recovers a
+crashed renderer. Parse history is in memory; saved timer deadlines and panel
+preferences survive restart.
 
-Use nonactivating presentation during play and an explicit edit mode for text
-input. Test the behavior with the actual Windows window manager. A proposed
-global recovery shortcut must check whether registration succeeded, disclose a
-conflict and retain tray/main-window recovery. PNUT's discovered Qt shortcuts
-are app-local, not evidence that a global shortcut already exists. See
-[Electron globalShortcut](https://www.electronjs.org/docs/latest/api/global-shortcut).
+### Shared session and boundaries
 
-## Data and performance boundaries
+`app/app.js` remains the sole parser, log cursor, pack and route owner.
+`app/overlay-session.js` owns one timer engine, batches local persistence and
+publishes once per second. Panels interpolate bars without scheduling timer
+state or reading logs. `desktop/overlay-host.cjs` brokers bounded snapshots and
+allowlisted commands through authenticated root frames and separate sandboxed
+preloads. Panels have no installer, filesystem or main-window preload API.
 
-EoZ currently owns its parser and log cursor in the main renderer. Loading that
-same app page into several windows would create competing independent session
-state. First introduce one shared session owner for parser, log offset,
-encounters, loot observations, data pack and route selection. Overlay renderers
-consume snapshots and send narrowly allowed actions to that owner. Preserve
-the current sandbox, context isolation, loopback boundary and diagnostics redaction.
+Only appended lines with valid original timestamps within ten seconds can start
+log-driven timers or swings. Initial tails, truncation replay, stale lines and
+missing timestamps still populate parse history without starting timers. Replay
+guards persist locally. Historical reads align timer zone visibility. Rules and
+precision limits are documented in [TIMERS.md](TIMERS.md).
 
-Current log support proves outgoing player damage, player healing and **rune
-capacity granted**. It does not prove damage absorbed, damage taken or a group
-actor leaderboard. Do not present those as new capabilities merely by borrowing
-PNUT's tabs. Start with player-only parses; add other metrics only with real
-sanitized log evidence and parser fixtures.
+Snapshots omit raw lines, paths and the full pack. The latest 20 encounters have
+complete aggregates before raw feeds are bounded to 120 events each. Session
+aggregates cover every retained encounter; the recent session feed has 60 events.
+Intel previews up to 50 NPCs and five drops each; considers show 16 drops, with
+full drop counts. Item icons share a 240 KiB budget. Host snapshots are ephemeral
+and stay in local app processes. The metrics remain player outgoing damage,
+healing and rune **capacity granted**, not absorption or a group leaderboard.
+No game hook, process inspection, synthetic input, OCR or game-file write is
+added. Revenge and Elitist/Carebear controls remain excluded.
 
-Keep one heavy Map Explorer and one owner of route selection. A lightweight map
-overlay can share location/route state; it must not create duplicate archive
-decoders, meshes, WebGL contexts or Recast workers. Hidden views should stop
-painting without stopping the session parser. All current route validation,
-exact zone ownership, location freshness and cancellation guards remain required.
-The overlay reads ordinary logs/local files; it never injects into the game.
+## Source map and continuation plan
 
-## Implementation order and acceptance
+| Area | Implementation and checks |
+| --- | --- |
+| Native lifecycle, trust, layout and rescue | `desktop/overlay-host.cjs`, `desktop/overlay-preload.cjs`, `desktop/main.cjs`; `tests/native-overlays.mjs` |
+| Sole session, bounded summaries, timer persistence | `app/overlay-session.js`, `app/app.js`; `tests/overlay-session.mjs`, freshness integration in `tests/map-sync-integration.mjs` |
+| Native renderers and main controls | `app/overlay.html`, `app/overlay.css`, `app/overlay.js`, `app/overlay-controller.js`; `tests/overlay-ui.mjs` |
+| Timer rules and log grammar | `app/timer-engine.js`, `app/parser.js`; `tests/timer-engine.mjs`, `docs/TIMERS.md`; pinned PNUT `swing.py`, `timer_panel.py`, `triggers_runtime.py` |
+| Actual Windows runtime | `scripts/test-native-overlays.mjs`; isolated profile and synthetic log, never player files |
+| Installer source parity | `scripts/packaged-runtime-sources.mjs`, `scripts/check-packaged-artifact.mjs` |
 
-1. **Updater:** mocked metadata/download/cancellation/persistence and install
-   approval tests; real Electron preload/UI checks; packaged-source verification;
-   controlled Windows NSIS upgrade test before claiming installed upgrade success.
-2. **Shared session:** replay synthetic logs into one owner; main and overlays
-   agree on totals, encounters, loot and location. Open/hide/reload/destroy panels
-   without resetting or double-counting. Prove viewer messages retain their owner.
-3. **Parse and intel panels:** deliver lock versus passthrough, hover/click/focus
-   menus, encounter tabs, saved layout, screen clamping, controller/tray recovery
-   and shortcut-conflict feedback. Test 100/125/150% OS scaling and monitor removal.
-4. **Map integration:** preserve opt-in defaults, presentation, target, route,
-   cancel and latest-zone/current-location behavior. Compare CPU/GPU/memory with
-   panels visible and hidden before allowing extra 3D windows.
-5. **Acceptance:** synthetic fixtures and desktop window tests are separate
-   from installation and live-game observations. Keep the guarded route engine
-   policy until its existing real-client gates pass.
-
-The interactive concept illustrates this proposed workspace with synthetic
-sample data. It is not evidence that native passthrough, docking or shared
-session migration has shipped.
+Before completing the PR: run the full suite, Electron worker and native-window
+smokes, production bootstrap/catalog checks, NSIS build and exact-source artifact
+gate. These establish synthetic-input behavior. Complete [Windows acceptance](WINDOWS_MANUAL_TEST.md)
+separately for physical click-through over the game, 100/125/150% OS scaling,
+monitor removal, sleep and live log grammar. Building an installer does not prove
+an installed upgrade. Keep the guarded routing-engine policy unchanged.

@@ -51,7 +51,7 @@ npm run test:catalog
 
 Do not commit proprietary S3D/EQG archives, player logs, exported diagnostics, or the generated bootstrap pack.
 
-## Application updates and overlay direction
+## Application updates, native overlays and timers
 
 The 0.8.2 candidate adds application releases independently of wiki-data Sync.
 `desktop/app-updater.cjs` owns release selection, bounded download/verification,
@@ -61,12 +61,22 @@ status, Download, Later and Install update… in Settings and a compact badge.
 Downloads on startup are opt-in; installation is never automatic. App ID,
 profile paths and the game-read boundary stay intact.
 
-[PNUT_UX_PLAN.md](PNUT_UX_PLAN.md) retains the inspected PNUT commit/source map,
-the EQL-themed overlay concept and exact next implementation seams. Native
-overlays are proposed. First extract one shared session owner before adding
-independent renderers, then deliver parse/intel panels and recovery, then map
-integration. Preserve player-only parse semantics and distinguish rune capacity
-from absorbed damage. Do not copy PNUT's Revenge or Elitist/Carebear controls.
+[PNUT_UX_PLAN.md](PNUT_UX_PLAN.md) retains the pinned PNUT reference, implementation
+map and acceptance gates. Four actual native windows (Parse, Zone & loot,
+Consider, Timers) share the existing main renderer's single log/parser/route
+session. `app/overlay-session.js` owns timer persistence and bounded snapshots;
+`desktop/overlay-host.cjs` owns window layout, restricted IPC, tray and shortcut
+recovery. Lightweight renderers have no log, filesystem or updater API.
+
+Layout lock preserves keyboard/menu interaction; mouse passthrough is separate.
+The main window hides on close while recoverable panels remain; tray Quit exits
+all windows. Explicit Open main reloads a crashed owner; parse history rebuilds
+from the tail while saved timer deadlines survive. Timers include manual/repeat,
+literal log triggers, user-duration kill reminders and an observed melee swing
+estimate. Only fresh appended timestamps drive them. Read [TIMERS.md](TIMERS.md)
+for precision/replay rules. The single Map Explorer remains in the main app.
+Preserve player-only parses and rune-capacity semantics; Revenge and
+Elitist/Carebear remain excluded.
 
 ## Runtime architecture
 
@@ -108,10 +118,13 @@ The app is read-only with respect to EverQuest. It may consume `/loc` lines prod
 
 ## Exact next work
 
-For the requested overlay evolution, follow the shared-session and native-window
-phases in [PNUT_UX_PLAN.md](PNUT_UX_PLAN.md). Complete the controlled Windows
-updater/installer acceptance before claiming a successful installed upgrade.
-The updater's mocked and actual-Electron checks do not launch an installer.
+For native overlays, use the source map in [PNUT_UX_PLAN.md](PNUT_UX_PLAN.md) and
+repeat `npm run test:native-overlays` against the current runtime. Complete
+physical game-window passthrough, OS scaling/monitor removal, sleep and live log
+acceptance in [WINDOWS_MANUAL_TEST.md](WINDOWS_MANUAL_TEST.md). The synthetic
+native smoke does not establish those physical interactions. Complete controlled
+Windows updater/installer acceptance before claiming an installed upgrade;
+automated smokes never execute the installer.
 
 Use [MAP_VALIDATION.md](MAP_VALIDATION.md) for completed 0.8.1 rendered checks,
 aggregate results, and private local rerun context. Continue section 16.3 of

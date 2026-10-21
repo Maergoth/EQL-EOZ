@@ -1,6 +1,7 @@
 'use strict';
 
-const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
+const electron = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = electron;
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -9,6 +10,7 @@ const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const { URL } = require('node:url');
 const { AppUpdater, isReleaseNotesUrl } = require('./app-updater.cjs');
+const { OverlayHost } = require('./overlay-host.cjs');
 const {
     inferEqRootPath,
     isEqLogName,
@@ -35,6 +37,9 @@ let windowRef = null;
 let port = DEFAULT_PORT;
 let normalWindowBounds = null;
 let appUpdater = null;
+let overlayHost = null;
+let quitting = false;
+let sessionNeedsReload = false;
 
 function getAppUpdater() {
     if (!appUpdater) appUpdater = new AppUpdater({
@@ -78,6 +83,29 @@ function configPath() {
 
 function packStatePath() {
     return path.join(userDataDir(), 'eye-of-zomm-pack-state.json');
+}
+
+function overlayPreferencesPath() {
+    return path.join(userDataDir(), 'eye-of-zomm-overlays.json');
+}
+
+function showMainWindow() {
+    if (!windowRef || windowRef.isDestroyed()) return;
+    if (sessionNeedsReload) {
+        sessionNeedsReload = false;
+        overlayHost?.noteSessionRestart();
+        // Recovery is explicit through Open Eye of Zomm, the tray, or the
+        // recovery shortcut. Reload only the app-owned root, never a frame URL.
+        // Active timers restore from their saved deadlines; parse history is
+        // reconstructed from the available log tail by the new session owner.
+        void windowRef.loadURL(`http://${HOST}:${port}/`).catch(() => {
+            sessionNeedsReload = true;
+            overlayHost?.markSessionUnavailable();
+        });
+    }
+    if (windowRef.isMinimized()) windowRef.restore();
+    windowRef.show();
+    windowRef.focus();
 }
 
 function productionPackPath() {
@@ -667,7 +695,10 @@ function createWindow(config = {}) {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
-            webSecurity: true
+            webSecurity: true,
+            // This renderer is the sole log/session owner even when only
+            // independent native overlays are visible.
+            backgroundThrottling: false
         }
     });
     windowRef.setAlwaysOnTop(Boolean(config.alwaysOnTop), config.alwaysOnTop ? 'screen-saver' : 'normal');
@@ -696,7 +727,20 @@ function createWindow(config = {}) {
     });
 
     windowRef.once('ready-to-show', () => windowRef.show());
-    windowRef.on('closed', () => { windowRef = null; });
+    windowRef.on('close', event => {
+        if (!quitting && overlayHost?.hasVisiblePanels() && overlayHost.hasRecoveryControl()) {
+            event.preventDefault();
+            windowRef.hide();
+        }
+    });
+    const unavailable = () => { sessionNeedsReload = true; overlayHost?.markSessionUnavailable(); };
+    windowRef.webContents.on('render-process-gone', unavailable);
+    windowRef.webContents.on('unresponsive', unavailable);
+    windowRef.webContents.on('responsive', () => { sessionNeedsReload = false; });
+    windowRef.webContents.on('did-start-loading', () => overlayHost?.markSessionUnavailable());
+    // Hidden overlay windows still count as open Electron windows. Once the
+    // session window really closes, quit rather than leaving orphaned panels.
+    windowRef.on('closed', () => { windowRef = null; if (!quitting) app.quit(); });
     void windowRef.loadURL(`http://${HOST}:${port}/`);
 }
 
@@ -715,6 +759,15 @@ async function bootstrap() {
     // Never delay first paint on remote data. The cached/bootstrap pack loads immediately;
     // a tiny GitHub dataset-manifest check runs in parallel on every startup.
     void updateStaticDataPack(false).catch(error => console.warn('[Eye of Zomm] data sync:', error));
+    overlayHost = new OverlayHost({
+        electron,
+        origin:`http://${HOST}:${port}`,
+        getMainWindow:() => windowRef,
+        showMain:showMainWindow,
+        readPreferences:() => readJson(overlayPreferencesPath(), {}),
+        writePreferences:preferences => atomicWriteJson(overlayPreferencesPath(), preferences)
+    });
+    await overlayHost.initialize();
     createWindow(config);
     // Metadata checks are quiet. Application downloads require an explicit
     // request or the saved opt-in; a staged installer never runs on startup.
@@ -761,10 +814,7 @@ if (!gotLock) {
     app.quit();
 } else {
     app.on('second-instance', () => {
-        if (!windowRef) return;
-        if (windowRef.isMinimized()) windowRef.restore();
-        windowRef.show();
-        windowRef.focus();
+        showMainWindow();
     });
 
     app.whenReady().then(bootstrap).catch(error => {
@@ -779,6 +829,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+    quitting = true;
+    overlayHost?.dispose();
     appUpdater?.shutdown();
     try { server?.close(); } catch {}
 });

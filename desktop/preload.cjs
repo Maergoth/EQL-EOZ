@@ -18,3 +18,17 @@ contextBridge.exposeInMainWorld('eyeOfZommUpdates', {
     setStartupDownload:enabled => ipcRenderer.invoke('eye-of-zomm:app-update', 'startup-download', enabled),
     install:() => ipcRenderer.invoke('eye-of-zomm:app-update', 'install')
 });
+
+const subscribe = (channel, callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, value) => callback(value);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+};
+contextBridge.exposeInMainWorld('eyeOfZommOverlays', {
+    getState:() => ipcRenderer.invoke('eye-of-zomm:overlays', 'get-state'),
+    control:(action, panel, value) => ipcRenderer.invoke('eye-of-zomm:overlays', 'control', { action, panel, value }),
+    publish:snapshot => ipcRenderer.invoke('eye-of-zomm:overlays', 'publish', snapshot),
+    onAction:callback => subscribe('eye-of-zomm:overlay-command', callback),
+    onState:callback => subscribe('eye-of-zomm:overlays-state', callback)
+});

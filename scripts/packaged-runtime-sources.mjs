@@ -8,6 +8,13 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/styles.css',
     'app/app.js',
     'app/app-update-ui.js',
+    'app/parser.js',
+    'app/timer-engine.js',
+    'app/overlay-session.js',
+    'app/overlay-controller.js',
+    'app/overlay.html',
+    'app/overlay.css',
+    'app/overlay.js',
     'app/item-browse.js',
     'app/item-scaling.js',
     'app/zone-identity.js',
@@ -29,7 +36,9 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/workers/recast-route.worker.js',
     'desktop/main.cjs',
     'desktop/preload.cjs',
-    'desktop/app-updater.cjs'
+    'desktop/app-updater.cjs',
+    'desktop/overlay-host.cjs',
+    'desktop/overlay-preload.cjs'
 ]);
 
 export function verifyPackagedRuntimeSources(packagedText, sourceText) {
