@@ -58,6 +58,7 @@ let renderedDestinationZone = '';
 let renderedDestinationCount = 0;
 let renderedRareViewerKey = '';
 let rareCatalogCache = new Map();
+const renderedItemLists = new WeakMap();
 const ROUTE_REFRESH_DISTANCE = 8;
 
 const prefs = {
@@ -260,10 +261,14 @@ function itemIconSource(item) {
     return typeof source === 'string' && source.startsWith('data:image/') ? source : '';
 }
 
-function itemHoverAttrs(itemOrName) {
+function itemHoverAttrs(itemOrName, extraClass = '') {
     const item = typeof itemOrName === 'string' ? itemRecord(itemOrName) : itemOrName;
     const name = item?.name || itemOrName || '';
-    return `class="item-hover" data-item-title="${esc(name)}" tabindex="0" aria-describedby="item-tooltip"`;
+    return `class="item-hover${extraClass ? ` ${esc(extraClass)}` : ''}" data-item-title="${esc(name)}" tabindex="0" aria-describedby="item-tooltip"`;
+}
+function itemIconHtml(item) {
+    const icon = itemIconSource(item);
+    return `<span ${itemHoverAttrs(item,'item-card-icon')} role="img" aria-label="${esc(`Stats for ${item.name}`)}">${icon ? `<img src="${esc(icon)}" alt="">` : '◇'}</span>`;
 }
 
 function itemMatchesProfile(item, profile) {
@@ -1036,7 +1041,7 @@ function positionTooltip(event) {
 function showItemTooltip(target, event) {
     const item = itemRecord(target?.dataset?.itemTitle);
     const tooltip = $('#item-tooltip');
-    if (!item || !tooltip) return;
+    if (!item || !tooltip) { hideItemTooltip(); return; }
     activeTooltipItem = item;
     activeTooltipTarget = target;
     const rect = target.getBoundingClientRect();
@@ -1051,6 +1056,15 @@ function showItemTooltip(target, event) {
 function refreshItemTooltip() {
     const tooltip = $('#item-tooltip');
     if (!activeTooltipItem || !tooltip || tooltip.hidden) return;
+    activeTooltipItem = itemRecord(activeTooltipItem.name);
+    if (!activeTooltipItem) { hideItemTooltip(); return; }
+    // Log updates can replace a visible list without a physical pointer move.
+    // Rebind the same local item instead of retaining a detached hover target.
+    if (!activeTooltipTarget?.isConnected || !activeTooltipTarget.closest('.view.is-active')) {
+        activeTooltipTarget = [...document.querySelectorAll('.view.is-active [data-item-title]')].find(target =>
+            itemRecord(target.dataset.itemTitle) === activeTooltipItem && target.getClientRects().length);
+        if (!activeTooltipTarget) { hideItemTooltip(); return; }
+    }
     tooltip.innerHTML = tooltipHtml(activeTooltipItem);
     if (lastTooltipPointer) positionTooltip(lastTooltipPointer);
 }
@@ -1078,7 +1092,7 @@ function renderNpcList(s, profile) {
     const total = npcs.length;
     const visible = npcs.slice(0, 300);
 
-    $('#npc-list').innerHTML = visible.map(n => {
+    let markup = visible.map(n => {
         const con = conForLevel(n.avgLevel, profile.level);
         const knownDrops = knownDropsForNpc(n).filter(item => eraAllowed(item.era));
         const drops = knownDrops.slice().sort((left, right) =>
@@ -1096,7 +1110,7 @@ function renderNpcList(s, profile) {
                 ${n.era && n.era !== 'Observed' ? `<span class="pill">${esc(n.era)}</span>` : ''}
                 ${n.observed ? '<span class="pill">Observed locally</span>' : ''}
             </div>
-            ${drops.length ? `<div class="known-drops"><span class="filter-label">Known drops</span>${drops.map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${esc(item.name)}</a>`).join('')}</div>` : ''}
+            ${drops.length ? `<div class="known-drops"><span class="filter-label">Known drops</span>${drops.map(item => { const icon = itemIconSource(item); return `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${icon ? `<img class="known-drop-icon" src="${esc(icon)}" alt="">` : '<span class="known-drop-icon item-icon-placeholder" aria-hidden="true">◇</span>'}<span class="known-drop-name">${esc(item.name)}</span></a>`; }).join('')}</div>` : ''}
             ${n.damageDone ? `<div class="sub" style="margin-top:9px">${formatNum(n.damageDone)} damage observed this session</div>` : ''}
             <div class="card-actions">
                 <a class="mini-button" href="${wikiUrl(n.wikiTitle || n.name)}" target="_blank" rel="noopener">Open on Wiki</a>
@@ -1104,13 +1118,15 @@ function renderNpcList(s, profile) {
             </div>
         </article>`;
     }).join('') || '<div class="empty-state">No NPCs match the current filters.</div>';
-
     if (total > visible.length) {
-        $('#npc-list').insertAdjacentHTML('beforeend', `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`);
+        markup += `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`;
     }
-
-    bindPathButtons($('#npc-list'));
-    bindWaypointButtons($('#npc-list'));
+    const host = $('#npc-list');
+    if (renderedItemLists.get(host) !== markup) {
+        host.innerHTML = markup; renderedItemLists.set(host,markup);
+        bindPathButtons(host); bindWaypointButtons(host);
+    }
+    refreshItemTooltip();
 }
 
 function renderItems(s, profile) {
@@ -1138,13 +1154,12 @@ function renderItems(s, profile) {
     const slotLabel = selectedSlot ? ` · <strong>${esc(selectedSlot)}</strong>` : '';
     const rankingLabel = sortMode === 'recommended' ? ' · useful gear and named drops first' : ' · sorted by name';
     $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel} through <strong>${esc(settings.era)}</strong>${slotLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}${rankingLabel}.`;
-    $('#item-list').innerHTML = visible.map(item => {
+    let markup = visible.map(item => {
         const stats = scaledItemStats(item, tier);
         const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
-        const icon = itemIconSource(item);
         return `<article class="data-card">
             <div class="card-top">
-                <div class="item-card-heading">${icon ? `<img src="${esc(icon)}" alt="">` : '<span class="item-card-icon">◇</span>'}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}${tier ? ` · Tier ${tier}` : ''}</div></div></div>
+                <div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}${tier ? ` · Tier ${tier}` : ''}</div></div></div>
                 <span class="pill">${esc(item.era || '')}</span>
             </div>
             <div class="pill-row" style="margin-top:9px">${(item.classes||[]).map(c => `<span class="pill">${esc(c)}</span>`).join('')}</div>
@@ -1157,20 +1172,23 @@ function renderItems(s, profile) {
             <div class="card-actions"><a class="mini-button" href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener">Item wiki</a></div>
         </article>`;
     }).join('') || `<div class="empty-state item-empty-state">No matching items are known${currentZoneOnly ? ` in ${esc(s.zone)}` : ''}.${currentZoneOnly ? ' <button type="button" class="secondary-button" data-broaden-items>Show all zones</button>' : ''}</div>`;
-
     if (total > visible.length) {
-        $('#item-list').insertAdjacentHTML('beforeend', `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`);
+        markup += `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`;
     }
-
-    bindPathButtons($('#item-list'));
-    $('#item-list').querySelector('[data-broaden-items]')?.addEventListener('click', () => {
-        itemZoneFilterExplicit = true;
-        settings.itemCurrentZoneOnly = false;
-        settings.itemZoneFilterExplicit = true;
-        prefs.save(settings);
-        $('#item-current-zone').checked = false;
-        renderItems(state(), effectiveProfile(state()));
-    });
+    const host = $('#item-list');
+    if (renderedItemLists.get(host) !== markup) {
+        host.innerHTML = markup; renderedItemLists.set(host,markup);
+        bindPathButtons(host);
+        host.querySelector('[data-broaden-items]')?.addEventListener('click', () => {
+            itemZoneFilterExplicit = true;
+            settings.itemCurrentZoneOnly = false;
+            settings.itemZoneFilterExplicit = true;
+            prefs.save(settings);
+            $('#item-current-zone').checked = false;
+            renderItems(state(), effectiveProfile(state()));
+        });
+    }
+    refreshItemTooltip();
 }
 
 function buildClassChips() {
@@ -2049,6 +2067,8 @@ function wireUi() {
         if (target) showItemTooltip(target, event);
     });
     document.addEventListener('pointermove', event => {
+        const target = event.target.closest?.('[data-item-title]');
+        if (target && (activeTooltipTarget !== target || !activeTooltipItem)) showItemTooltip(target,event);
         if (activeTooltipItem) lastTooltipPointer = { clientX:event.clientX, clientY:event.clientY };
         positionTooltip(event);
     });

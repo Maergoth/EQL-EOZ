@@ -5,13 +5,13 @@ export const WHATS_NEW_STEPS = Object.freeze([
         copy:'The main app remembers its size, position and maximized state in a standard Windows frame. Choose Minimize to tray and Start minimized in Settings. A green Update available button appears for newer releases. Download, then choose Restart to install update for a silent upgrade and automatic relaunch. Settings also links to GitHub.',
         alt:'Eye of Zomm main workspace showing the current desktop layout and settings.',caption:'Current app capture with a disposable demonstration profile.'}),
     Object.freeze({title:'Keep the map in view',image:'map',view:'map',action:'Open Map',
-        copy:'Hover the zone-title row to reveal Reset, Follow, zoom and the Map, Top and navigable First person cycle beside its name. Use the separate grip to move an unlocked window. Z and tolerance choose nearby floors; unknown-height markers stay visible. Monster names are interactive.',
+        copy:'Hover the zone-title row for Reset, Follow, zoom and the Map, Top and navigable First person cycle. Use the separate grip to move an unlocked window. Z and tolerance choose nearby floors; Plane of Hate starts at Z 120 and remains adjustable. Unknown-height markers stay visible.',
         alt:'Eye of Zomm native Map with its horizontal Z slice slider and nearby-floor controls.',caption:'The current native Map and its controls, using demonstration data.'}),
     Object.freeze({title:'Follow named mobs and their loot',image:'intel',view:'npcs',action:'Open NPCs',
-        copy:'Item Level Slider and My Class stay above the scrolling list. Raid Zone comes first, with separate drops. Hover or focus a mob name for actions; its Map button previews that source in first person. Show More expands every matching drop.',
+        copy:'Item Level Slider and My Class stay above the scrolling list. Click Raid Zone to collapse it. Hover a mob name for actions in that same row, or an item name/icon for its tier-adjusted stat block. Show More expands every matching drop; Map previews the exact source in first person.',
         alt:'Eye of Zomm zone intel showing named mobs, distinct raid sources and matching loot.',caption:'Synthetic NPC and loot records demonstrate the current intel view.'}),
     Object.freeze({title:'Bring only the overlays you need',image:'timers',view:'timers',action:'Open Triggers',
-        copy:'Parse, Map, Zone & loot and Triggers are separate desktop windows. Unlock panels to move them and resize supported panels; Triggers fits its rows automatically. Set countdowns and log triggers on the main Triggers page; the swing bar learns your own attacks.',
+        copy:'Configure countdowns and log matches in Triggers; its compact overlay also shows swing estimates. Parse keeps Overview, Damage, Healing, Taken and Session. Healing includes labeled rune capacity. New session clears parse/loot totals while keeping your log position, map and running triggers.',
         alt:'Eye of Zomm main Triggers page with a log-trigger editor, match preview and named captures.',caption:'The current trigger editor with a synthetic log line and named-capture preview.'})
 ]);
 

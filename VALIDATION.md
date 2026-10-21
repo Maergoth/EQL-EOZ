@@ -38,6 +38,15 @@ run in GitHub CI. No local app tests/build/install are used. Live game focus,
 actual Hate ceiling geometry and a complete installed update remain separate
 manual acceptance; the Z 120 presentation default does not change collision data.
 
+The follow-up Fine Steel Rapier report concerns the main app. Its published
+record has an exact name/wikiTitle and numeric stats. Item-browser pictures
+lacked hover hooks, while unconditional Item/NPC list reconstruction could
+detach a hovered target during live updates. Both name/icon surfaces now share
+the local tooltip path; unchanged presentation keeps its DOM, required redraws
+rebind an active item, and real pointer motion can recover a dismissed target.
+Native CI exercises trusted main-window name/icon hover, keyboard focus,
+preserved Wiki links and active tooltip/DOM retention through a logged rune.
+
 ## 0.8.6 map interaction and Intel source repair
 
 The live 0.8.5 report exposed gaps in the earlier synthetic acceptance checks:

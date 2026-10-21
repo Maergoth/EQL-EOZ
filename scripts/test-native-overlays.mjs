@@ -493,6 +493,50 @@ try {
             assert.equal(await execute(owner, () => document.querySelectorAll('#item-list .data-card').length),3);
             assert.equal(await execute(owner, () => [...document.querySelectorAll('[data-map-mode]')].every(element=>Boolean(element.closest('[data-view-panel="map"]')))),true,'First/Top/Map controls belong only to the main Map page');
             await execute(owner, () => {const search=document.querySelector('#item-search');search.value='';search.dispatchEvent(new Event('input'));const era=document.querySelector('#era-select');era.value='Classic';era.dispatchEvent(new Event('change'));});
+            // Exercise main-window markup and real pointer dispatch as well as
+            // the native Intel renderer: the Item picture used to have no
+            // tooltip identity at all, and live redraws detached name targets.
+            showNativeInactive.call(owner);
+            await execute(owner,()=>{
+                window.__mainItemPointer=[];
+                document.addEventListener('pointerover',event=>{const target=event.target.closest?.('[data-item-title]');if(target)window.__mainItemPointer.push({name:target.dataset.itemTitle,trusted:event.isTrusted});},true);
+                const search=document.querySelector('#item-search');search.value='Synthetic Charm 1';search.dispatchEvent(new Event('input'));
+            });
+            const mainHover = async selector => {
+                const target=await execute(owner,selector=>{
+                    const target=document.querySelector(selector);
+                    if(!target)throw new Error(`Missing main item hover surface: ${selector}`);
+                    document.activeElement?.blur();target.scrollIntoView({block:'center',inline:'nearest'});
+                    const rect=target.getBoundingClientRect(),identity=target.closest('[data-item-title]');window.__mainItemPointer=[];
+                    return{x:Math.round(rect.left+Math.min(8,rect.width/2)),y:Math.round(rect.top+rect.height/2),name:identity.dataset.itemTitle,tag:target.tagName};
+                },selector);
+                owner.webContents.sendInputEvent({type:'mouseMove',x:5,y:5});
+                owner.webContents.sendInputEvent({type:'mouseMove',x:target.x,y:target.y});
+                await until(async()=>execute(owner,name=>{const tooltip=document.querySelector('#item-tooltip');return !tooltip.hidden&&tooltip.querySelector('.itembox-title>span')?.textContent===name&&window.__mainItemPointer.some(event=>event.trusted&&event.name===name);},target.name),`Trusted main hover exposes stats from ${selector}`);
+                return execute(owner,(selector,target)=>{
+                    const tooltip=document.querySelector('#item-tooltip'),node=document.querySelector(selector),identity=node.closest('[data-item-title]');
+                    return{...target,stats:tooltip.querySelectorAll('.tooltip-stat').length,description:identity.getAttribute('aria-describedby'),tabbable:identity.tabIndex>=0,href:identity.getAttribute('href')};
+                },selector,target);
+            };
+            const mainItemName=await mainHover('#item-list h3[data-item-title]');
+            const mainItemIcon=await mainHover('#item-list .item-card-icon img');
+            assert.equal(mainItemName.name,mainItemIcon.name);assert(mainItemName.stats>0&&mainItemIcon.stats>0&&mainItemIcon.tabbable&&mainItemIcon.description==='item-tooltip','Main Item browser name and picture share keyboard-accessible stat hooks');
+            await execute(owner,()=>{window.__retainedMainItem=document.querySelector('#item-list h3[data-item-title]');const search=document.querySelector('#item-search');search.dispatchEvent(new Event('input'));});
+            assert.equal(await execute(owner,()=>window.__retainedMainItem===document.querySelector('#item-list h3[data-item-title]')),true,'Unchanged Item results retain their actual DOM targets across redraw requests');
+            await append(['You gain a rune for 1 points of absorption.']);
+            await until(async()=>(await state()).snapshot.session.parse.totalRuneCapacity===501,'Main item hover survives a real log-driven redraw');
+            assert.equal(await execute(owner,()=>window.__retainedMainItem.isConnected&&!document.querySelector('#item-tooltip').hidden),true,'Live combat updates keep unchanged item name/icon tooltips attached');
+            await execute(owner,()=>{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));const target=document.querySelector('#item-list h3[data-item-title]'),rect=target.getBoundingClientRect();target.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:rect.left+2,clientY:rect.top+2}));});
+            assert.equal(await execute(owner,()=>document.querySelector('#item-tooltip').hidden),false,'Pointer movement restores the current item after an explicit dismissal without requiring a new enter');
+            await execute(owner,()=>{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));document.querySelector('[data-view="npcs"]').click();const search=document.querySelector('#npc-search');search.value='Synthetic Keeper';search.dispatchEvent(new Event('input'));});
+            const mainNpcName=await mainHover('#npc-list .known-drops .known-drop-name');
+            const mainNpcIcon=await mainHover('#npc-list .known-drops img.known-drop-icon');
+            assert.equal(mainNpcName.name,mainNpcIcon.name);assert(mainNpcName.stats>0&&mainNpcIcon.stats>0&&/^https?:/.test(mainNpcName.href||''),'NPC loot names and pictures both expose real local stats while preserving their Wiki link');
+            await execute(owner,()=>{const target=document.querySelector('#npc-list .known-drops [data-item-title]');target.focus();});
+            assert.equal(await execute(owner,()=>!document.querySelector('#item-tooltip').hidden&&document.activeElement.dataset.itemTitle===document.querySelector('#item-tooltip .itembox-title>span').textContent),true,'Main NPC loot remains available to keyboard focus');
+            await screenshot(owner,'main-item-hover');
+            await execute(owner,()=>{document.activeElement?.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));document.querySelector('[data-view="items"]').click();const search=document.querySelector('#item-search');search.value='';search.dispatchEvent(new Event('input'));});
+            owner.hide();
             for (const window of Object.values(panels())) assert.equal(await execute(window, () => Boolean(document.querySelector('form, #swing-delay, #timer-form'))), false, 'floating panels contain no timer forms or settings');
             const tabs = await execute(panels().parse, () => [...document.querySelectorAll('[data-tab]')].map(button => button.textContent.trim()));
             assert.deepEqual(tabs, ['Overview', 'Damage', 'Healing', 'Taken', 'Session']);
