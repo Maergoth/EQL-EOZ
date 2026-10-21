@@ -375,7 +375,7 @@ try {
             assert.deepEqual(await execute(panels().map, () => ({mode:document.querySelector('[data-map-action="mode"]').textContent,follow:document.querySelector('[data-map-action="follow"]').getAttribute('aria-pressed'),z:Number(document.querySelector('[data-map-z]').value),tolerance:Number(document.querySelector('[data-map-tolerance]').value),iframes:document.querySelectorAll('.native-map-3d-stage iframe').length})),{mode:'Map',follow:'true',z:0,tolerance:25,iframes:0},'Reset restores default Map/follow/slice and releases the lazy 3D viewer without replaying old focus');
             const modes = await execute(panels().map, () => {const button=document.querySelector('[data-map-action="mode"]'),labels=[];for(let index=0;index<3;index++){button.click();labels.push(button.textContent);}return{labels,iframes:document.querySelectorAll('.native-map-3d-stage iframe').length};});
             assert.deepEqual(modes,{labels:['Top 3D','First Person','Map'],iframes:0},'Native view cycles create/release the 3D controller; its full geometry fixture is a separate smoke');
-            await execute(panels().intel, () => { document.querySelector('#intel-body').scrollTop = 0;document.querySelector('[data-intel-section="raid"] .npc-name').focus(); });
+            await execute(panels().intel, () => { document.querySelector('#intel-body').scrollTop = 0;const name=document.querySelector('[data-intel-section="raid"] .npc-name');name.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse'})); });
             await screenshot(panels().intel,'intel-raid');
             const beforeKillSequence=(await state()).snapshot.session.intel.focusSequence;
             const beforeKillFocus=focusCalls();
@@ -485,7 +485,7 @@ try {
                     window.webContents.sendInputEvent({type:'mouseMove',...point});
                     await until(async () => execute(window,()=>getComputedStyle(document.querySelector('.native-map-tools')).visibility==='visible'),'Map tour capture shows the same-row header after actual title hover');
                 }
-                if(name==='intel')await execute(window, () => {document.querySelector('#intel-body').scrollTop=0;document.querySelector('[data-intel-section="raid"] .npc-name').focus();});
+                if(name==='intel')await execute(window, () => {document.querySelector('#intel-body').scrollTop=0;document.querySelector('[data-intel-section="raid"] .npc-name').dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse'}));});
                 await screenshot(window, name);
                 if(name==='map')window.hide();
             }
