@@ -13,6 +13,8 @@ const extract = (name, next) => {
 const methods = [
     extract('loadZoneCatalog', 'listPagesInCategory').replace("__DIR__ . '/zone-catalog.json'", "getenv('EOZ_CATALOG_PATH')"),
     extract('buildNpcRecords', 'buildItemRecord'),
+    extract('rememberNpcLootSources', 'mergeNpcLootSources'),
+    extract('dropSourceMarkup', 'dropSourceNames'),
     extract('detectZonesFromCategories', 'detectZonesFromField'),
     extract('detectZonesFromField', 'detectZonesFromTitle'),
     extract('detectZonesFromTitle', 'detectEra'),
@@ -56,16 +58,19 @@ const npcFixtures = [
     ['Synthetic unknown', 'Various', ['Named Mobs'], ['']]
 ];
 const php = `<?php
+define('NS_MAIN', 0);
 class Title {
     private string $text;
-    public function __construct(string $text) { $this->text = str_replace('_', ' ', $text); }
+    public function __construct(string $text) { $this->text = ucfirst(str_replace('_', ' ', $text)); }
     public static function makeTitle($namespace, string $text) { return new self($text); }
+    public static function newFromText(string $text, $namespace = 0) { return new self($text); }
     public function getText() { return $this->text; }
 }
 class ZoneAliasHarness {
     private array $zoneCatalog = [];
     private array $zoneAliasMap = [];
     private array $wikiEntityNames = [ 'npcs' => [], 'items' => [], 'titles' => [] ];
+    private array $npcLootSources = [];
 ${methods}
     public function fatalError(string $message) { throw new Exception($message); }
     public function run(array $fixtures) {
@@ -87,7 +92,7 @@ ${methods}
         $this->loadZoneCatalog();
         $out = [];
         foreach ($fixtures as [$title, $zoneField, $categories]) {
-            $text = "{{Namedmobpage\\n| zone = " . $zoneField . "\\n| level = 12\\n| location = (10, 20, 30)\\n}}";
+            $text = "{{Namedmobpage\\n| zone = " . $zoneField . "\\n| level = 12\\n| location = (10, 20, 30)\\n| known_loot = <ul><li>{{:synthetic_fixture_drop}}</li></ul>\\n}}";
             $page = new class($text) {
                 private string $text;
                 public function __construct(string $text) { $this->text = $text; }

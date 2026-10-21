@@ -146,7 +146,12 @@ page titles win over display names and retain internal case after MediaWiki's
 normal first-letter/space normalization; a bounded local redirect lookup supports
 item aliases. Public NPC revision/field evidence is retained in `lootSources`.
 Normal/raid NPC template and loot-section scope still apply, with shared NPC
-variants derived through the existing instance index. Notes, unknown templates,
+variants derived through the existing instance index.
+An unlabeled public NPC template preceding a separate explicit raid NPC template
+retains its own loot; a single shared template still supplies both known variants.
+Explicit loot sections preserve their scope even when that instance has no stat
+block; the client can still display its documented source row. Sibling sections
+return to the enclosing template's default instance. Notes, unknown templates,
 comments, namespace links and prose do not establish additional drops.
 `meta.npcLootSourcesIncluded` marks completed reconciliation;
 `npcLootSourceCounts` reports candidate titles, distinct resolved items,

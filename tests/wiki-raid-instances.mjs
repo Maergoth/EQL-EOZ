@@ -86,10 +86,12 @@ Object.assign(fixtures, {
     'Synthetic scoped looter':{text:withLoot(npc(10),'* {{:Synthetic normal-only loot}}')+'\n= Raid Instance =\n'+withLoot(npc(60),'* {{:Synthetic raid-only loot}}'),revision:410},
     'Synthetic normal-only loot':{text:item('Synthetic normal-only loot',''),revision:411},
     'Synthetic raid-only loot':{text:item('Synthetic raid-only loot',''),revision:412},
-    'Synthetic nested looter':{text:withLoot(npc(50),'* {{:Synthetic normal-only loot}}\n== Raid Instance ==\n* {{:Synthetic raid-only loot}}\n== Other drops ==\n* {{:Synthetic NPC-only wand}}'),revision:413},
+    'Synthetic nested looter':{text:withLoot(npc(50),'* {{:Synthetic normal-only loot}}\n== Raid Instance ==\n* {{:Synthetic raid-only loot}}\n== Other drops ==\n* {{:Synthetic NPC-only wand}}')+'\n= Raid Instance =\n'+npc(60),revision:413},
     'Synthetic case looter':{text:withLoot(npc(40),'* {{:synthetic_case_charm}}'),revision:414},
     'Synthetic case charm':{text:item('Synthetic case charm',''),revision:415},
-    'Synthetic Case charm':{text:item('Synthetic Case charm',''),revision:416}
+    'Synthetic Case charm':{text:item('Synthetic Case charm',''),revision:416},
+    'Synthetic loot-only raid looter':{text:withLoot(npc(50),'* {{:Synthetic normal-only loot}}\n== Raid Instance ==\n* {{:Synthetic raid-only loot}}\n== Other drops ==\n* {{:Synthetic NPC-only wand}}'),revision:417},
+    'Synthetic outer raid looter':{text:'= Raid Instance =\n'+withLoot(npc(60),'* {{:Synthetic raid-only loot}}\n== Normal Instance ==\n* {{:Synthetic normal-only loot}}\n== Other drops ==\n* {{:Synthetic NPC-only wand}}'),revision:418}
 });
 const php = `<?php
 class Maintenance {}
@@ -191,9 +193,16 @@ assert.equal(sources('Synthetic linked shield').find(source=>source.name==='Synt
 assert.deepEqual(sources('Synthetic NPC-only wand').filter(source=>source.name==='Fire Giant Warrior').map(source=>source.raidInstance),[false,true],'NPC-only loot follows established shared normal/raid variants');
 assert(sources('Synthetic NPC-only wand').some(source=>source.name==='Synthetic loot priest'),'An item redirect in known_loot resolves locally to the canonical item');
 assert.deepEqual(sources('Synthetic normal-only loot').filter(source=>source.name==='Synthetic scoped looter').map(source=>source.raidInstance),[false],'Explicit public NPC template loot stays public');
+assert.equal(sources('Synthetic normal-only loot').find(source=>source.name==='Synthetic scoped looter').lootSources[0].section,'','Unlabeled public template scope does not invent an explicit Normal Instance header');
 assert.deepEqual(sources('Synthetic raid-only loot').filter(source=>source.name==='Synthetic scoped looter').map(source=>source.raidInstance),[true],'Explicit raid NPC template loot stays raid');
 assert.deepEqual(sources('Synthetic raid-only loot').filter(source=>source.name==='Synthetic nested looter').map(source=>source.raidInstance),[true],'A Raid Instance heading inside known_loot scopes its item sources');
 assert.deepEqual(sources('Synthetic NPC-only wand').filter(source=>source.name==='Synthetic nested looter').map(source=>source.raidInstance),[false],'A sibling section ends nested known_loot raid scope');
+assert.deepEqual(records('Synthetic loot-only raid looter').map(npc=>npc.raidInstance),[false],'Loot sections do not invent missing raid stat blocks');
+assert.deepEqual(sources('Synthetic raid-only loot').filter(source=>source.name==='Synthetic loot-only raid looter').map(source=>source.raidInstance),[true],'An explicit raid loot section remains a valid source without raid stats');
+assert.equal(sources('Synthetic raid-only loot').find(source=>source.name==='Synthetic loot-only raid looter').lootSources[0].section,'Raid Instance','A source without same-instance stats retains explicit loot-section evidence');
+assert.deepEqual(sources('Synthetic normal-only loot').filter(source=>source.name==='Synthetic loot-only raid looter').map(source=>source.raidInstance),[false],'Unlabeled normal loot stays normal beside a nested raid loot section');
+assert.deepEqual(sources('Synthetic NPC-only wand').filter(source=>source.name==='Synthetic loot-only raid looter').map(source=>source.raidInstance),[false],'Sibling loot returns to its enclosing normal template');
+assert.deepEqual(sources('Synthetic NPC-only wand').filter(source=>source.name==='Synthetic outer raid looter').map(source=>source.raidInstance),[true],'Sibling loot returns to its enclosing explicit raid template after an inner normal section');
 assert.equal(sources('Synthetic note item').length,0,'Comments, nowiki, unknown wrappers, namespace links and rarity-note links cannot invent loot');
 assert.equal(sources('Synthetic prose item').length,0,'Non-list prose does not establish item loot');
 assert.equal(actual.items.some(record=>record.wikiTitle==='Synthetic no-stat drop'),false,'NPC lists cannot synthesize missing item stat records');
@@ -201,7 +210,12 @@ assert(actual.lootCounts.sourcesAdded > 0 && actual.lootCounts.itemsEnriched > 0
 assert(actual.lootCounts.unresolvedItems > 0,'Unresolved/statless references are counted without creating records');
 assert.equal(actual.repeatLootCounts.sourcesAdded,0,'Existing source identities never count as newly added known_loot sources');
 assert.equal(actual.repeatLootCounts.itemsEnriched,0,'Reconciliation with no new source identities reports zero newly enriched items');
-for (const item of actual.items) for (const source of item.dropSources.filter(source=>source.lootSources)) assert(actual.npcs.some(npc=>npc.zone===source.zone&&npc.name===source.name&&npc.raidInstance===source.raidInstance),'Every NPC-derived item source joins an exported NPC variant');
+for (const item of actual.items) for (const source of item.dropSources.filter(source=>source.lootSources)) {
+    const siblings = actual.npcs.filter(npc=>npc.zone===source.zone&&npc.name===source.name);
+    const exact = siblings.filter(npc=>npc.raidInstance===source.raidInstance);
+    const explicitLootWithoutStats = exact.length===0 && siblings.length>0 && source.lootSources.some(entry=>entry.section===(source.raidInstance?'Raid Instance':'Normal Instance'));
+    assert(exact.length===1 || explicitLootWithoutStats,'NPC-derived sources join one exact variant or retain explicit instance loot evidence alongside the other documented stat variant');
+}
 assert.deepEqual(sources('Synthetic styled Hate gem').map(source=>[source.zone,source.name,source.raidInstance]),[['Plane of Hate',hateNpc,false],['Plane of Hate',hateNpc,true]],'Styled link destinations retain exact normal/raid NPC identity, without labels or revamp annotations');
 for (const source of sources('Synthetic styled Hate gem')) assert(records(source.name).some(record=>record.zone===source.zone&&record.raidInstance===source.raidInstance),'Every styled Hate drop joins its actual exported NPC variant');
 assert.deepEqual(sources('Synthetic ground book').map(source=>[source.zone,source.name]),[['Plane of Hate','Ground Spawn']],'A nested Loc annotation is not a second monster or a drop source');

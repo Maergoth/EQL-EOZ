@@ -36,9 +36,10 @@ the guarded engine policy and conservative clearance checks.
 
 Next verify known-walkable ramp/drop/door coverage and live movement/heading,
 OS-wide DPI changes, and installer behavior. The reviewed raid/catalog producer
-is deployed; dataset `20261021T101150Z-dd346c8cc55d` includes 117 raid variants
-and complete public presence indexes. The current release fetches and checks
-that production snapshot independently of application publication. Capture only
+includes raid variants and complete public presence indexes. The current
+[dataset manifest](https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json)
+is independent of application publication; 0.8.7 additionally requires the
+reviewed NPC known-loot reconciliation and reported Hate drops. Capture only
 aggregate schema-v2 diagnostics. Both established and candidate paths must
 validate before display; do not introduce a renderer-thread collision graph
 or expose an engine selector.
