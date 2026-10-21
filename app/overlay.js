@@ -96,7 +96,7 @@ export function renderItem(item = {}, index = 0, context = '') {
 export function renderIntel(intel = {}, {query = '', expanded = new Set(), loading = new Set(), dropCache = new Map(), errors = new Map()} = {}) {
     const needle = String(query).trim().toLocaleLowerCase();
     const npcs = (Array.isArray(intel.npcs) ? intel.npcs : []).map((npc,index) => ({npc,index})).filter(({npc}) => !needle || String(npc.name).toLocaleLowerCase().includes(needle));
-    return [false,true].map(raid => {
+    return [true,false].map(raid => {
         const sources = npcs.filter(({npc}) => isRaidSource(npc) === raid);
         return `<section class="intel-group ${raid ? 'is-raid' : ''}" data-intel-section="${raid ? 'raid' : 'normal'}" aria-label="${raid ? 'Raid Zone' : 'Normal Zone'}"><h2>${raid ? 'Raid Zone' : 'Normal Zone'} <span>${sources.length}</span></h2>${sources.length ? sources.map(({npc,index}) => {
             const key = intelNpcKey(npc,intel);

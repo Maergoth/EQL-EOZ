@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {selectMapFamily,parseClientMap,createMapDataLoader} from '../app/map-overlay-data.js';
-import {mapBounds,layoutMapLabels} from '../app/map-overlay.js';
+import {mapBounds,layoutMapLabels,knownMapZ,mapElevationBounds,mapSliceContainsZ,clipMapSegmentToSlice} from '../app/map-overlay.js';
 const zone={name:'Mistmoore Castle',aliases:['mistmoore']};
 const files=[{path:'Maps/Brewall/mistmoore.txt',size:12},{path:'Maps/mistmoore_1.txt',size:12},{path:'Maps/mistmoore.txt',size:12},{path:'Maps/mistmoore_2.txt',size:12},{path:'Maps/mistmooreb.txt',size:12}];
 assert.deepEqual(selectMapFamily(files,zone).layers.map(file=>file.path),['Maps/mistmoore.txt','Maps/mistmoore_1.txt','Maps/mistmoore_2.txt']);
@@ -10,6 +10,15 @@ const parsed=parseClientMap(geometry,2);
 assert.deepEqual(parsed.lines,[[-20,-10,0,-40,-30,4,0,0,0,2]]);
 assert.equal(parsed.labels[0].label,'Synthetic Keeper');
 assert.deepEqual(mapBounds(parsed.lines),{minX:-40,minY:-30,maxX:-20,maxY:-10});
+for(const z of [null,undefined,'','  ',false,true,NaN,Infinity]){assert.equal(knownMapZ(z),false);assert.equal(mapSliceContainsZ(z,100,25),true,'Unknown-Z mobs pierce every slice without being assigned floor zero');}
+for(const z of [0,'0',-25,25])assert.equal(knownMapZ(z),true);
+assert.equal(mapSliceContainsZ(0,100,25),false,'Explicit Z zero is a known floor');
+assert.equal(mapSliceContainsZ(75,100,25),true);assert.equal(mapSliceContainsZ(74,100,25),false);assert.equal(mapSliceContainsZ(130,100,35),true);
+assert.deepEqual(mapElevationBounds([[0,0,-10,0,0,50]],[{loc:[1,2,null]},{loc:[1,2,125]}],{z:-40}),{min:-40,max:125});
+assert.deepEqual(mapElevationBounds([],[{loc:[1,2,null]}]),{min:-1,max:1});
+assert.deepEqual(clipMapSegmentToSlice({x:0,y:0,z:0},{x:100,y:0,z:100},0,25),[{x:0,y:0,z:0},{x:25,y:0,z:25}],'A ramp endpoint intersects the band even when its midpoint does not');
+assert.deepEqual(clipMapSegmentToSlice({x:100,y:0,z:100},{x:0,y:0,z:0},50,10),[{x:60,y:0,z:60},{x:40,y:0,z:40}],'Descending segments clip in their existing direction');
+assert.equal(clipMapSegmentToSlice({x:0,y:0,z:50},{x:1,y:1,z:50},0,25),null,'Out-of-slice route segments are omitted rather than joined across a gap');
 const labelNpcs=[{id:'normal',name:'Synthetic Keeper',screen:{x:150,y:90}},{id:'raid',name:'Synthetic Keeper',raidInstance:true,selected:true,screen:{x:155,y:95}}];
 const layout=layoutMapLabels({npcs:labelNpcs,labels:[{label:'  SYNTHETIC_Keeper ',screen:{x:149,y:90}},{label:'Safe point',screen:{x:60,y:155}}],width:330,height:210});
 assert.equal(layout.labels.length,1,'Client map text matching an NPC is suppressed after underscore/case/space normalization');

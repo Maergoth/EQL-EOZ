@@ -15,6 +15,7 @@ import { createMapDataLoader } from './map-overlay-data.js';
 import { createTimerAlerts } from './timer-alerts.js';
 import { createWikiDiscovery } from './wiki-discovery.js';
 import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
+import { mountWhatsNew } from './whats-new.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -356,7 +357,7 @@ async function connectBridge() {
         $('#setup-overlay').hidden = Boolean(bridgeInfo.eqRootExists);
         const packState = bridgeInfo.dataPack || {};
         $('#pack-update-status').textContent = packState.lastStatus || (bridgeInfo.productionPack ? 'cached' : 'sample fallback');
-        applyWindowState(bridgeInfo.windowState || {});
+        applyWindowSettings(bridgeInfo.windowState || {});
         if (!logOffset) logOffset = 0;
         schedulePoll(50);
         schedulePackRefreshCheck();
@@ -1378,24 +1379,31 @@ function setView(view, options = {}) {
     if (view === 'map' && options.sync !== false) setTimeout(() => syncZoneToViewer(false), 100);
 }
 
-function applyWindowState(windowState = {}) {
-    const pinned = Boolean(windowState.alwaysOnTop);
-    document.body.classList.toggle('pinned-mode', pinned);
-    for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
-        if (!button) continue;
-        button.classList.toggle('is-active', pinned);
-        button.setAttribute('aria-pressed', String(pinned));
-        button.textContent = pinned ? '◆ Pinned to top' : '◇ Pin to top';
-    }
-    setTimeout(() => viewerApi()?.resize?.(), 80);
+function applyWindowSettings(windowState = {}) {
+    const supported = typeof window.eyeOfZommWindow?.setSettings === 'function';
+    $('#settings-minimize-to-tray').checked = Boolean(windowState.minimizeToTray);
+    $('#settings-start-minimized').checked = Boolean(windowState.startMinimized);
+    $('#settings-minimize-to-tray').disabled = !supported;
+    $('#settings-start-minimized').disabled = !supported;
+    $('#settings-window-status').textContent = !supported
+        ? 'Window settings are available in the desktop app.'
+        : windowState.trayAvailable
+            ? 'Window size and position are saved. Restore from the taskbar or the tray menu.'
+            : 'Window size and position are saved. If the tray is unavailable, minimize uses the taskbar.';
 }
 
-async function toggleAlwaysOnTop() {
-    const current = Boolean(bridgeInfo?.windowState?.alwaysOnTop);
-    const result = await mutate(`/api/window/always-on-top?enabled=${current ? '0' : '1'}`);
-    bridgeInfo ||= {};
-    bridgeInfo.windowState = { ...(bridgeInfo.windowState || {}), alwaysOnTop: Boolean(result.enabled) };
-    applyWindowState(bridgeInfo.windowState);
+async function saveWindowSetting(key, enabled) {
+    const controls = [$('#settings-minimize-to-tray'), $('#settings-start-minimized')];
+    controls.forEach(control => { control.disabled = true; });
+    try {
+        const result = await window.eyeOfZommWindow.setSettings({ [key]:enabled });
+        bridgeInfo ||= {};
+        bridgeInfo.windowState = result;
+        applyWindowSettings(result);
+    } catch (error) {
+        applyWindowSettings(bridgeInfo?.windowState || {});
+        showNotice(`Unable to save window settings: ${error.message}`, { tone:'error' });
+    }
 }
 
 function viewerApi() {
@@ -1998,9 +2006,8 @@ function wireUi() {
     $('#export-diagnostics').addEventListener('click', exportDiagnostics);
     $('#wiki-search-form').addEventListener('submit', e => { e.preventDefault(); runWikiSearch(); });
     $('#wiki-search-button').addEventListener('click', runWikiSearch);
-    for (const button of [$('#pin-window'), $('#settings-pin-window')]) {
-        button.addEventListener('click', () => toggleAlwaysOnTop().catch(error => showNotice(`Unable to change pinning: ${error.message}`, { tone:'error' })));
-    }
+    $('#settings-minimize-to-tray').addEventListener('change', event => { void saveWindowSetting('minimizeToTray', event.target.checked); });
+    $('#settings-start-minimized').addEventListener('change', event => { void saveWindowSetting('startMinimized', event.target.checked); });
     document.addEventListener('pointerover', event => {
         const target = event.target.closest?.('[data-item-title]');
         if (target) showItemTooltip(target, event);
@@ -2054,12 +2061,6 @@ function wireUi() {
     }
     $('#clear-route').addEventListener('click', () => clearActiveRoute());
 
-    $('#window-minimize').addEventListener('click', () => window.eyeOfZommWindow?.minimize());
-    $('#window-maximize').addEventListener('click', () => window.eyeOfZommWindow?.toggleMaximize());
-    $('#window-close').addEventListener('click', () => window.eyeOfZommWindow?.close());
-    $('#desktop-titlebar').addEventListener('dblclick', event => {
-        if (!event.target.closest('button')) window.eyeOfZommWindow?.toggleMaximize();
-    });
     window.addEventListener('message', event => {
         if (event.origin !== window.location.origin) return;
         if (event.data?.type === 'eoz-viewer-ready') {
@@ -2118,7 +2119,8 @@ const appUpdatesUi = mountAppUpdates({
         document.getElementById('check-app-update').focus();
     }
 });
-window.addEventListener('pagehide', () => { appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
+const whatsNew = mountWhatsNew({ button:$('#open-whats-new'), navigate:view => setView(view) });
+window.addEventListener('pagehide', () => { whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

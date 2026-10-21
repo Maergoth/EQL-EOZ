@@ -31,6 +31,7 @@ function fixture(bridge) {
 for (const status of ['available', 'downloading', 'ready', 'installing']) {
     assert.equal(appUpdatePresentation(state(status)).showBadge, true);
 }
+assert.equal(appUpdatePresentation(state('available')).badge, 'Update Available');
 assert.equal(appUpdatePresentation(state('ready')).showInstall, true);
 assert.equal(appUpdatePresentation(state('available')).showInstall, false);
 assert.equal(appUpdatePresentation(state('downloading', { downloadedBytes:20, totalBytes:10 })).percent, 100);
@@ -61,6 +62,8 @@ await flush();
 assert.equal(app.elements['download-app-update'].hidden, false);
 assert.equal(app.elements['install-app-update'].hidden, true);
 assert.equal(app.elements['app-update-notes'].href, current.releaseUrl);
+assert.equal(app.elements['app-update-badge'].textContent,'Update Available');
+assert.equal(app.elements['app-update-badge'].hidden,false);
 app.elements['app-update-badge'].click();
 assert.equal(app.openedSettings(), 1);
 app.elements['download-app-update'].click();
@@ -87,7 +90,10 @@ await app.controller.refresh();
 assert.equal(app.elements['app-update-detail'].hidden, false);
 assert.match(app.elements['app-update-detail'].textContent, /could not open/);
 app.elements['later-app-update'].click();
-assert.equal(app.elements['app-update-badge'].hidden, true);
+assert.equal(app.elements['app-update-badge'].hidden, false, 'An available update remains reachable from the header after Later');
+assert.equal(app.elements['later-app-update'].hidden,true);
+app.elements['app-update-badge'].click();
+assert.equal(app.openedSettings(),2,'The retained header update button still opens Settings');
 assert.equal(app.elements['install-app-update'].hidden, false, 'Later retains the staged update in Settings');
 app.elements['app-update-startup-download'].checked = true;
 app.elements['app-update-startup-download'].dispatchEvent(new Event('change'));

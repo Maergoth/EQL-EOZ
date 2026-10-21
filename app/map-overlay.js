@@ -5,6 +5,25 @@ export function mapBounds(lines) {
     for (const line of lines || []) for (const index of [0,3]) { minX=Math.min(minX,line[index]);maxX=Math.max(maxX,line[index]);minY=Math.min(minY,line[index+1]);maxY=Math.max(maxY,line[index+1]); }
     return Number.isFinite(minX) ? {minX,minY,maxX,maxY} : {minX:-500,minY:-500,maxX:500,maxY:500};
 }
+export const knownMapZ = value => (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') && Number.isFinite(Number(value));
+export function mapElevationBounds(lines = [],npcs = [],location = null) {
+    let low=Infinity,high=-Infinity;
+    const include=value=>{if(knownMapZ(value)){low=Math.min(low,Number(value));high=Math.max(high,Number(value));}};
+    for(const line of lines){include(line[2]);include(line[5]);}for(const npc of npcs)include(npc.loc?.[2]);include(location?.z);
+    const min = Number.isFinite(low) ? Math.floor(low) : -1,max = Number.isFinite(high) ? Math.ceil(high) : 1;
+    return min === max ? {min:min-1,max:max+1} : {min,max};
+}
+export const mapSliceContainsZ = (z,center,tolerance = 25) => !knownMapZ(z) || Math.abs(Number(z)-center)<=tolerance;
+export function clipMapSegmentToSlice(start,end,center,tolerance = 25) {
+    if (!knownMapZ(start.z) || !knownMapZ(end.z)) return [start,end];
+    const from = Number(start.z),to = Number(end.z),delta = to-from;
+    if (!delta) return mapSliceContainsZ(from,center,tolerance) ? [start,end] : null;
+    const crossings = [(center-tolerance-from)/delta,(center+tolerance-from)/delta].sort((a,b)=>a-b);
+    const low = Math.max(0,crossings[0]),high = Math.min(1,crossings[1]);
+    if (low>high) return null;
+    const at = t => ({x:start.x+(end.x-start.x)*t,y:start.y+(end.y-start.y)*t,z:from+delta*t});
+    return [at(low),at(high)];
+}
 const normalizedLabel = value => String(value || '').normalize('NFKC').replace(/_/g,' ').replace(/’/g,"'").replace(/\s+/g,' ').trim().toLocaleLowerCase();
 const overlaps = (a,b) => a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y;
 // Screen-space labels are expendable; source markers and their hit targets are
@@ -32,9 +51,9 @@ export function layoutMapLabels({npcs = [],npcNames = npcs.map(npc => npc.name),
 }
 export function mountMapOverlay({ root, bridge, getSession, document = globalThis.document } = {}) {
     if (!root) return {render(){},dispose(){}};
-    root.innerHTML = `<style>.native-map{height:100%;display:flex;flex-direction:column;min-height:0}.native-map-tools{display:flex;gap:5px;align-items:center;font-size:11px;padding:2px 0 6px}.native-map-tools select{flex:1;min-width:0}.native-map-stage{position:relative;min-height:80px;flex:1;overflow:hidden;border:1px solid #ffffff14;border-radius:4px;touch-action:none}.native-map-stage canvas{display:block;width:100%;height:100%;cursor:grab}.native-map-stage canvas:active{cursor:grabbing}.native-map-message{position:absolute;inset:15px;pointer-events:none;color:#a6b4c8;font-size:12px;line-height:1.5}.native-map-note{font-size:10px;color:#9ba8b8;padding:5px 0 1px}.native-map-route{color:#e8d18b;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.native-map-tools button{font-size:11px;padding:2px 5px}</style><div class="native-map"><div class="native-map-tools"><button data-map-action="fit" title="Fit zone">Fit</button><button data-map-action="reload" title="Reload local map">↻</button><button data-map-action="follow" aria-pressed="true">Follow</button><button data-map-action="zoom-in" aria-label="Zoom in">+</button><button data-map-action="zoom-out" aria-label="Zoom out">−</button><select data-map-floors aria-label="Map floor"><option value="all">All floors</option><option value="near">Near my Z</option></select><button data-map-action="open" title="Open complete Map Explorer">↗</button></div><div class="native-map-stage"><canvas aria-label="Current zone map"></canvas><div class="native-map-message"></div></div><div class="native-map-route"></div><div class="native-map-note"></div></div>`;
+    root.innerHTML = `<style>.native-map{height:100%;display:flex;flex-direction:column;min-height:0}.native-map-tools{display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:11px;padding:2px 0 6px;flex:0 0 auto}.native-map-tools>[data-map-action=open]{margin-left:auto}.native-map-slice{display:flex;flex:1 0 100%;align-items:center;gap:5px;min-width:0}.native-map-slice input[type=range]{flex:1;min-width:40px;accent-color:#d8b75c}.native-map-slice output{font-size:10px;min-width:72px;color:#d8c895;white-space:nowrap}.native-map-slice label{display:flex;align-items:center;gap:3px;color:#9ba8b8}.native-map-slice input[type=number]{width:46px;padding:2px 3px;font-size:10px}.native-map-stage{position:relative;min-height:0;flex:1;overflow:hidden;border:1px solid #ffffff14;border-radius:4px;touch-action:none}.native-map-stage canvas{display:block;width:100%;height:100%;cursor:grab}.native-map-stage canvas:active{cursor:grabbing}.native-map-message{position:absolute;inset:15px;pointer-events:none;color:#a6b4c8;font-size:12px;line-height:1.5}.native-map-note{font-size:10px;color:#9ba8b8;padding:5px 0 1px;overflow-wrap:anywhere;flex:0 0 auto}.native-map-route{color:#e8d18b;font-size:11px;overflow-wrap:anywhere;flex:0 0 auto}.native-map-tools button{font-size:11px;padding:2px 5px}</style><div class="native-map"><div class="native-map-tools"><button data-map-action="fit" title="Fit zone">Fit</button><button data-map-action="reload" title="Reload local map">↻</button><button data-map-action="follow" aria-pressed="true">Follow</button><button data-map-action="zoom-in" aria-label="Zoom in">+</button><button data-map-action="zoom-out" aria-label="Zoom out">−</button><button data-map-action="open" title="Open complete Map Explorer">↗</button><div class="native-map-slice"><output data-map-slice-label for="native-map-z">Z ±25</output><input id="native-map-z" data-map-z type="range" min="-1" max="1" step="1" value="0" aria-label="Map Z slice"><label title="Show known elevations within this distance of the selected Z">± <input data-map-tolerance type="number" min="1" max="250" step="1" value="25" aria-label="Map Z tolerance"></label></div></div><div class="native-map-stage"><canvas aria-label="Current zone map"></canvas><div class="native-map-message"></div></div><div class="native-map-route"></div><div class="native-map-note"></div></div>`;
     const $=selector=>root.querySelector(selector), canvas=$('canvas'),context=canvas.getContext('2d');
-    let data=null,session={},zone='',dataVersion=null,generation=0,disposed=false,follow=true,floor='all',zoom=1,center={x:0,y:0},baseScale=1,drag=null,markers=[];
+    let data=null,session={},zone='',dataVersion=null,generation=0,disposed=false,follow=true,sliceCenter=null,sliceTolerance=25,zoom=1,center={x:0,y:0},baseScale=1,drag=null,markers=[];
     const listeners=[];
     const listen=(node,event,callback,options)=>{node.addEventListener(event,callback,options);listeners.push(()=>node.removeEventListener(event,callback,options));};
     function fit() {
@@ -50,12 +69,19 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
         context.setTransform(dpr,0,0,dpr,0,0);context.clearRect(0,0,width,height);context.fillStyle='#080f19';context.fillRect(0,0,width,height);
         const map=session.map||{},player=map.location?worldToClientMap(map.location):null;
         if(follow&&player)center={x:player.x,y:player.y};
-        const onFloor=z=>floor==='all'||!player||Math.abs(z-player.z)<=30;
+        const elevations=mapElevationBounds(data?.lines,map.npcs,map.location);
+        if(sliceCenter===null&&(knownMapZ(map.location?.z)||data?.status==='ready'))sliceCenter=knownMapZ(map.location?.z)?Number(map.location.z):(elevations.min+elevations.max)/2;
+        const activeZ=sliceCenter??(elevations.min+elevations.max)/2,zInput=$('[data-map-z]');
+        zInput.min=String(Math.min(elevations.min,Math.floor(activeZ)));zInput.max=String(Math.max(elevations.max,Math.ceil(activeZ)));zInput.value=String(activeZ);
+        const sliceText=`Z ${Number(activeZ.toFixed(1))} ±${sliceTolerance}`;$('[data-map-slice-label]').textContent=sliceText;zInput.setAttribute('aria-valuetext',sliceText);zInput.title='Approximate floor slice; mobs without a known Z stay visible';
+        const onFloor=z=>mapSliceContainsZ(z,activeZ,sliceTolerance);
         context.lineWidth=1;
-        for(const line of data?.lines||[]){if(!onFloor((line[2]+line[5])/2))continue;const a=screen({x:line[0],y:line[1]},width,height),b=screen({x:line[3],y:line[4]},width,height);if((a.x<0&&b.x<0)||(a.x>width&&b.x>width)||(a.y<0&&b.y<0)||(a.y>height&&b.y>height))continue;context.strokeStyle=line[6]+line[7]+line[8]<90?'#8a98ac':`rgb(${line[6]},${line[7]},${line[8]})`;context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke();}
-        if(map.route?.points?.length>1){context.strokeStyle='#f0d77f';context.lineWidth=3;context.beginPath();map.route.points.forEach((p,index)=>{const point=screen(worldToClientMap(p),width,height);if(index)context.lineTo(point.x,point.y);else context.moveTo(point.x,point.y);});context.stroke();}
+        for(const line of data?.lines||[]){const clipped=clipMapSegmentToSlice({x:line[0],y:line[1],z:line[2]},{x:line[3],y:line[4],z:line[5]},activeZ,sliceTolerance);if(!clipped)continue;const a=screen(clipped[0],width,height),b=screen(clipped[1],width,height);if((a.x<0&&b.x<0)||(a.x>width&&b.x>width)||(a.y<0&&b.y<0)||(a.y>height&&b.y>height))continue;context.strokeStyle=line[6]+line[7]+line[8]<90?'#8a98ac':`rgb(${line[6]},${line[7]},${line[8]})`;context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke();}
+        if(map.route?.points?.length>1){context.strokeStyle='#f0d77f';context.lineWidth=3;for(let index=1;index<map.route.points.length;index++){const clipped=clipMapSegmentToSlice(map.route.points[index-1],map.route.points[index],activeZ,sliceTolerance);if(!clipped)continue;const a=screen(worldToClientMap(clipped[0]),width,height),b=screen(worldToClientMap(clipped[1]),width,height);context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke();}}
         markers=[];context.font='11px Segoe UI';
-        for(const npc of map.npcs||[]){if(!Array.isArray(npc.loc)||npc.loc.length<2)continue;const world={x:npc.loc[0],y:npc.loc[1],z:npc.loc[2]||0};if(!onFloor(world.z))continue;const point=screen(worldToClientMap(world),width,height);if(point.x<0||point.x>width||point.y<0||point.y>height)continue;const selected=map.selectedNpcId===npc.id;context.fillStyle=npc.raidInstance?'#e79b9b':selected?'#fff0ad':'#d8b75c';context.beginPath();context.arc(point.x,point.y,selected?5:3,0,Math.PI*2);context.fill();markers.push({...npc,screen:point,selected});}
+        // Slice membership uses the source Z before planar projection. A 2D
+        // marker never receives an invented elevation for filtering or bounds.
+        for(const npc of map.npcs||[]){if(!Array.isArray(npc.loc)||npc.loc.length<2||!onFloor(npc.loc[2]))continue;const point=screen(worldToClientMap({x:npc.loc[0],y:npc.loc[1]}),width,height);if(point.x<0||point.x>width||point.y<0||point.y>height)continue;const selected=map.selectedNpcId===npc.id;context.fillStyle=npc.raidInstance?'#e79b9b':selected?'#fff0ad':'#d8b75c';context.beginPath();context.arc(point.x,point.y,selected?5:3,0,Math.PI*2);context.fill();markers.push({...npc,screen:point,selected});}
         const playerScreen=player?screen(player,width,height):null;
         const placed=layoutMapLabels({npcs:markers,npcNames:(map.npcs||[]).map(npc=>npc.name),labels:(data?.labels||[]).filter(label=>onFloor(label.z)).map(label=>({...label,screen:screen(label,width,height)})),width,height,blocked:playerScreen?[{x:playerScreen.x-7,y:playerScreen.y-7,width:14,height:14}]:[],measureText:(text,kind)=>{context.font=`${kind==='npcs'?11:10}px Segoe UI`;return context.measureText(text).width;}});
         context.textBaseline='top';
@@ -68,9 +94,10 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
         $('.native-map-note').textContent=[data?.sourceLabel,player?formatWorldLocationForPlayer(map.location,1):'',map.location?.at&&Date.now()-map.location.at>15000?'Last logged position':''].filter(Boolean).join(' · ');
     }
     async function load(nextZone){const owner=++generation;data=null;draw();try{const result=await bridge.action('session:map-data',{zone:nextZone});if(disposed||owner!==generation)return;data=result;fit();draw();}catch(error){if(disposed||owner!==generation)return;data={status:'error',message:error.message||'Unable to load this map.',lines:[],labels:[]};draw();}}
-    function render(next){session=next||getSession?.()||{};const nextZone=session.map?.zone||session.zone||'',nextVersion=session.map?.dataVersion??0;if(nextZone!==zone||nextVersion!==dataVersion){zone=nextZone;dataVersion=nextVersion;data=null;zoom=1;generation++;if(zone)void load(zone);}draw();}
+    function render(next){session=next||getSession?.()||{};const nextZone=session.map?.zone||session.zone||'',nextVersion=session.map?.dataVersion??0;if(nextZone!==zone||nextVersion!==dataVersion){zone=nextZone;dataVersion=nextVersion;data=null;zoom=1;sliceCenter=null;sliceTolerance=25;$('[data-map-tolerance]').value='25';generation++;if(zone)void load(zone);}draw();}
     listen(root,'click',event=>{const action=event.target.closest?.('[data-map-action]')?.dataset.mapAction;if(!action)return;if(action==='reload'&&zone)void load(zone);if(action==='fit'){follow=false;fit();}if(action==='follow')follow=!follow;if(action==='zoom-in')zoom=Math.min(40,zoom*1.4);if(action==='zoom-out')zoom=Math.max(.25,zoom/1.4);if(action==='open')void bridge.action('session:open',{view:'map'});$('[data-map-action="follow"]').setAttribute('aria-pressed',String(follow));draw();});
-    listen($('[data-map-floors]'),'change',event=>{floor=event.target.value;draw();});
+    listen($('[data-map-z]'),'input',event=>{sliceCenter=Number(event.target.value);draw();});
+    listen($('[data-map-tolerance]'),'change',event=>{sliceTolerance=Math.max(1,Math.min(250,Number(event.target.value)||25));event.target.value=String(sliceTolerance);draw();});
     listen(canvas,'wheel',event=>{event.preventDefault();zoom=Math.max(.25,Math.min(40,zoom*(event.deltaY<0?1.2:1/1.2)));draw();},{passive:false});
     listen(canvas,'pointerdown',event=>{drag={x:event.clientX,y:event.clientY,center:{...center},moved:false};canvas.setPointerCapture?.(event.pointerId);});
     listen(canvas,'pointermove',event=>{if(!drag)return;const dx=event.clientX-drag.x,dy=event.clientY-drag.y;if(Math.hypot(dx,dy)>4)drag.moved=true;if(drag.moved){follow=false;center={x:drag.center.x-dx/(baseScale*zoom),y:drag.center.y-dy/(baseScale*zoom)};draw();}});

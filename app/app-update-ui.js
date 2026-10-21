@@ -31,7 +31,7 @@ export function appUpdatePresentation(state = {}) {
         showProgress:status === 'downloading',
         showLater:supported && ['available', 'ready'].includes(status),
         showBadge:supported && OFFER.has(status),
-        badge:status === 'ready' ? 'Update ready' : status === 'downloading' ? 'Downloading update' : 'App update',
+        badge:status === 'ready' ? 'Update Ready' : status === 'downloading' ? 'Downloading Update' : 'Update Available',
         checkDisabled:!supported || ACTIVE.has(status),
         percent,
         progress:percent === null ? 'Downloading…' : `${percent}% · ${(downloaded / 1048576).toFixed(1)} of ${(total / 1048576).toFixed(1)} MB`
@@ -53,7 +53,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
     let action = '';
     let generation = 0;
     let refreshSequence = 0;
-    let dismissedVersion = null;
+    let deferredVersion = null;
     const listeners = [];
     const listen = (element, name, callback) => {
         element.addEventListener(name, callback);
@@ -64,7 +64,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
     };
     function render() {
         const view = appUpdatePresentation(current);
-        text('app-update-status', view.message);
+        text('app-update-status', view.message + (deferredVersion === current.availableVersion && view.showLater ? ' You can return using Update Available in the header.' : ''));
         text('app-update-detail', view.detail);
         elements['app-update-detail'].hidden = !view.detail;
         for (const [id, shown] of [
@@ -72,6 +72,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
             ['cancel-app-update', view.showCancel], ['later-app-update', view.showLater],
             ['app-update-progress', view.showProgress], ['app-update-progress-label', view.showProgress]
         ]) elements[id].hidden = !shown;
+        if (deferredVersion === current.availableVersion) elements['later-app-update'].hidden = true;
         elements['check-app-update'].disabled = view.checkDisabled || Boolean(action);
         elements['download-app-update'].disabled = Boolean(action);
         elements['install-app-update'].disabled = Boolean(action);
@@ -88,8 +89,9 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
         elements['app-update-notes'].hidden = !notes;
         if (notes) elements['app-update-notes'].href = current.releaseUrl;
         else elements['app-update-notes'].removeAttribute('href');
-        elements['app-update-badge'].hidden = !view.showBadge || dismissedVersion === current.availableVersion;
+        elements['app-update-badge'].hidden = !view.showBadge;
         text('app-update-badge', view.badge);
+        elements['app-update-badge'].title = `${view.message} Open Application updates in Settings.`;
     }
     function schedule() {
         clearTimeout(timer);
@@ -112,7 +114,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
         const owner = ++generation;
         action = name;
         if (name === 'check') {
-            dismissedVersion = null;
+            deferredVersion = null;
             current = { ...current, status:'checking', error:'' };
         } else if (name === 'download') current = { ...current, status:'downloading', downloadedBytes:0, error:'' };
         render();
@@ -132,7 +134,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
     }
     listen(elements['app-update-startup-download'], 'change', event => { void invoke('setStartupDownload', event.currentTarget.checked); });
     listen(elements['later-app-update'], 'click', () => {
-        dismissedVersion = current.availableVersion;
+        deferredVersion = current.availableVersion;
         render();
     });
     listen(elements['app-update-badge'], 'click', () => { void openSettings(); });

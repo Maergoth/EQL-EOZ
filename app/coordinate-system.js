@@ -27,7 +27,10 @@ export function wikiLocationToWorld(location) {
     const logX = Number(location[1]);
     if (!Number.isFinite(logY) || !Number.isFinite(logX)) return null;
     const world = [logX, logY];
-    if (location.length >= 3 && Number.isFinite(Number(location[2]))) world.push(Number(location[2]));
+    const rawZ = location[2];
+    if ((typeof rawZ === 'number' || (typeof rawZ === 'string' && rawZ.trim())) && Number.isFinite(Number(rawZ))) {
+        world.push(Number(rawZ));
+    }
     return world;
 }
 

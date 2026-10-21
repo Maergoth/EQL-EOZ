@@ -1,8 +1,21 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.3-x64.exe`.
+Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.4-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the custom title bar visibly says `v0.8.3`; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.4` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+
+## 0b. Main window and Local Map
+
+1. Resize/move the main window onto a second monitor, restart, and confirm its normal bounds return. Repeat maximized; Restore must return to the prior normal bounds. Pin to top must be absent; the main window must have ordinary stacking behavior.
+2. Enable **Minimize to tray**, minimize, and restore with the existing tray's **Open Eye of Zomm**. With the preference off, minimizing must retain taskbar recovery. Explicit tray Quit must exit all windows.
+3. Enable **Start minimized**, restart, and recover through the tray or taskbar according to Minimize to tray. Both preferences must persist independently. Disable both when finished.
+4. Disconnect the saved monitor, relaunch, and check the complete title bar remains reachable on a connected display. Repeat physical 100/125/150% scaling and monitor moves.
+5. Open Live Map in a short, non-maximized window. The viewer footer/note, route status and controls must fit or scroll into view. Check First/Top/Map and Local Map at each scale.
+6. Zoom the embedded Local Map with +/− and its wheel, reset, move through later `/loc` updates and change views. Native Map zoom must still work independently. Switching zones resets the Local Map zoom.
+7. Change the native Map Z slider and tolerance. Unknown-Z NPCs remain visible on every floor; known-Z NPCs appear within the selected band. Check Raid Zone comes first in Intel without mixing its drops with Normal Zone.
+8. Open **What's new** in Settings. Verify every screenshot loads, Previous/Next and keyboard Escape work, and each Open action goes to the named main page. Follow **Eye of Zomm on GitHub**; it must open the exact repository in the normal browser. Restart must not open the tour automatically.
+
+The automated display/renderer tests complement these physical monitor and game checks; they do not establish them.
 
 ## 0. Application updater acceptance
 

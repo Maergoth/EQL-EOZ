@@ -7,9 +7,19 @@
 <link rel="stylesheet" href="./ext.eqlZoneViewer.css">
 <style>
 html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
-.eqlzv-root{height:100%;min-height:100%}
-.eqlzv-app{height:100%}
+.eqlzv-root{height:100%;min-height:0;margin:0;overflow:hidden}
+.eqlzv-app{height:100%;min-height:0;box-sizing:border-box;border:0;border-radius:0}
 .eqlzv-viewport{flex:1;min-height:0}
+.eqlzv-toolbar,.eqlzv-status{flex:0 0 auto}
+.eqlzv-status{grid-template-columns:minmax(0,1fr) minmax(45px,16%) auto}
+.eqlzv-status-text{min-width:0;overflow-wrap:anywhere}
+.eqlzv-status progress{grid-column:auto;grid-row:auto}
+@media(max-height:400px){.eqlzv-toolbar{box-sizing:border-box;min-height:42px;padding:5px 7px!important}.eqlzv-toolbar .eqlzv-button,.eqlzv-toolbar .eqlzv-select{min-height:30px;font-size:12px}}
+.eqlzv-minimap{pointer-events:auto;max-height:calc(100% - 45px);bottom:36px}
+.eqlzv-minimap-title{display:flex;align-items:center;justify-content:space-between;gap:5px;padding:0 5px}
+.eoz-minimap-controls{display:flex;align-items:center;gap:3px}
+.eoz-minimap-controls button{height:20px;min-width:23px;padding:0 4px;border:1px solid #b591494f;border-radius:3px;background:#15201f;color:#eee6d3;font:600 11px system-ui,sans-serif;cursor:pointer}
+.eoz-minimap-controls button:focus-visible{outline:2px solid #f0d77f;outline-offset:1px}
 /* Eye of Zomm keeps the viewer focused on navigation. Advanced diagnostics
    and display tuning remain in the upstream source but are not exposed here. */
 .eqlzv-source-label,.eqlzv-world-button,.eqlzv-goto-label,.eqlzv-slider-label,
@@ -44,6 +54,7 @@ import { installEstablishedRouteGuard } from '../established-route-guard.js';
 import { deferHiddenViewportFit } from '../viewport-framing.js';
 import { installZoneLoadGuard } from '../zone-load-guard.js';
 import { selectViewerZoneOption } from '../viewer-zone-selection.js';
+import { installMiniMapControls } from '../minimap-controls.js';
 
 globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
@@ -57,6 +68,7 @@ const app = mountZoneViewer(root, {
 configureViewerMovement(app.fp);
 app.fp?.setFly?.(true);
 window.eqlZoneViewer = app;
+installMiniMapControls(app);
 const viewportFraming = deferHiddenViewportFit(app, () => {
     if (lastSyncedGround) focusTopViewAt(lastSyncedGround);
 });

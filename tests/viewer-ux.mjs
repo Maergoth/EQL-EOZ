@@ -1,4 +1,13 @@
 import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import {localMapZoom} from '../app/minimap-controls.js';
+
+assert.equal(localMapZoom(undefined),1);
+assert.equal(localMapZoom(1,1.4),1.4);
+assert.equal(localMapZoom(1.4,1/1.4),1);
+assert.equal(localMapZoom(8,2),8);
+assert.equal(localMapZoom(.25,.5),.25);
+assert.equal(localMapZoom(Infinity,1),1);
 
 const viewer = readFileSync(new URL('../app/zoneviewer/ZoneViewerApp.js', import.meta.url), 'utf8');
 const integration = readFileSync(new URL('../app/zoneviewer/viewer.html', import.meta.url), 'utf8');
@@ -14,7 +23,8 @@ for (const marker of [
     'findSuccorPoint() {',
     'Reset to this zone\\u2019s Succor point.',
     'texture.wrapS = 1000',
-    'texture.wrapT = 1000'
+    'texture.wrapT = 1000',
+    'Number(this.miniMapZoom) || 1'
 ]) {
     if (!viewer.includes(marker)) throw new Error(`Viewer UX contract is missing: ${marker}`);
 }

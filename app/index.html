@@ -5,22 +5,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EQLWiki - Eye of Zomm</title>
 <link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="./whats-new.css">
 </head>
 <body>
-<div id="desktop-titlebar" class="desktop-titlebar">
-    <span>EQLWiki - Eye of Zomm <strong id="titlebar-version" class="titlebar-version">v—</strong></span>
-    <div class="desktop-window-buttons">
-        <button id="window-minimize" type="button" aria-label="Minimize">—</button>
-        <button id="window-maximize" type="button" aria-label="Maximize">□</button>
-        <button id="window-close" class="window-close" type="button" aria-label="Close">×</button>
-    </div>
-</div>
 <div class="app-shell">
     <header class="topbar">
         <div class="brand">
             <div class="brand-mark">EQL</div>
             <div>
-                <div class="brand-title">Eye of Zomm</div>
+                <div class="brand-title">Eye of Zomm <strong id="titlebar-version" class="titlebar-version">v—</strong></div>
             </div>
         </div>
         <form id="wiki-search-form" class="global-search" role="search">
@@ -32,8 +25,7 @@
         </form>
         <datalist id="map-destinations"></datalist>
         <div class="window-controls">
-            <button id="pin-window" class="topbar-control" type="button" aria-pressed="false">◇ Pin to top</button>
-            <button id="app-update-badge" class="topbar-control app-update-badge" type="button" hidden>App update</button>
+            <button id="app-update-badge" class="topbar-control app-update-badge" type="button" hidden>Update Available</button>
             <button id="open-native-overlays" class="topbar-control" type="button" title="Show independent native overlay windows">Overlays</button>
         </div>
         <div class="live-strip">
@@ -273,9 +265,9 @@
                 </article>
                 <article class="panel">
                     <h2>Window</h2>
-                    <div class="settings-actions">
-                        <button id="settings-pin-window" class="secondary-button" type="button">Pin to top</button>
-                    </div>
+                    <label class="check-control"><input id="settings-minimize-to-tray" type="checkbox" disabled> Minimize to tray</label>
+                    <label class="check-control"><input id="settings-start-minimized" type="checkbox" disabled> Start minimized</label>
+                    <p id="settings-window-status" class="settings-helper" role="status">Window settings are available in the desktop app.</p>
                     <label class="check-control"><input id="settings-routing-enabled" type="checkbox"> Enable route controls in overlays</label>
                 </article>
                 <article class="panel">
@@ -313,6 +305,14 @@
                     <h2>Support diagnostics</h2>
                     <p class="settings-helper">Export route, map, and setup state for troubleshooting. Character names, log contents, and filesystem paths are excluded.</p>
                     <button id="export-diagnostics" class="secondary-button" type="button">Export redacted diagnostics</button>
+                </article>
+                <article class="panel">
+                    <h2>About Eye of Zomm</h2>
+                    <p class="settings-helper">See the latest features, report an issue or contribute on GitHub.</p>
+                    <div class="settings-actions">
+                        <button id="open-whats-new" class="primary-button" type="button">What's new</button>
+                        <a id="project-github-link" class="secondary-button" href="https://github.com/Maergoth/EQL-EOZ" target="_blank" rel="noopener noreferrer">Eye of Zomm on GitHub ↗</a>
+                    </div>
                 </article>
             </div>
         </section>

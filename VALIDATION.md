@@ -1,4 +1,39 @@
-# Validation report — v0.8.3
+# Validation report — v0.8.4
+
+## 0.8.4 window and map follow-up
+
+The initial focused checks reproduced the map-footer clipping in the current
+build: at 1024×700 the footer was below the embedded frame. The responsive
+shell and wrapper now fit the footer at 1100×760, 1024×700, 900×600 and emulated
+125/150% renderer scaling. These are renderer measurements, not physical OS DPI
+or second-monitor acceptance. Local Map zoom retains its player-follow basis.
+
+The initial disposable-profile Electron lifecycle check passed native framing,
+Settings IPC/persistence, normal placement behind maximization, immediate Quit
+flush, deferred startup maximization, foreign-renderer denial, and taskbar
+fallback when tray creation fails. Unit coverage checks negative-coordinate
+monitors, removed displays and unrestricted dragging between monitors.
+
+Current routing was separately verified with two actual Mistmoore wall detours,
+including a candidate recovery without an established fallback. Both routes
+passed full decoded-geometry validation with zero violations; see the
+[rejection audit](docs/ROUTE_REJECTION_AUDIT.md). The routing modules are
+unchanged between tagged 0.8.1 and 0.8.3. This is evidence of current detour
+support, not a fix for the unlocated original target.
+
+Later additions cover the native Z slider/tolerance with unknown-Z markers,
+raid-first Intel, the green update header action, Settings repository link and
+the packaged screenshot tour. The source suite, actual Electron lifecycle,
+map-layout, native-overlay and discovery checks are required in GitHub CI;
+the user requested no further local test/build/install runs. Documentation
+captures use a disposable synthetic profile. The release also requires current
+catalog and exact source/image/bootstrap ASAR checks.
+
+Production bootstrap refreshed for this slice:
+`20261021T101150Z-dd346c8cc55d`, 124 zones, 8,679 NPCs and 11,270 items;
+production catalog relevance passed. The dependency audit gate passed without
+adding a runtime dependency. Physical game focus, monitor/DPI changes and live
+movement retain their manual acceptance limits.
 
 ## 0.8.3 map, intel, triggers and inline wiki notices
 

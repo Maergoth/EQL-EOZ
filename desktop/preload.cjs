@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('eyeOfZommWindow', {
     toggleMaximize: () => ipcRenderer.invoke('eye-of-zomm:window', 'toggle-maximize'),
     close: () => ipcRenderer.invoke('eye-of-zomm:window', 'close'),
     isMaximized: () => ipcRenderer.invoke('eye-of-zomm:window', 'is-maximized'),
+    getSettings: () => ipcRenderer.invoke('eye-of-zomm:window', 'get-settings'),
+    setSettings: value => ipcRenderer.invoke('eye-of-zomm:window', 'set-settings', value),
     copyText: text => ipcRenderer.invoke('eye-of-zomm:clipboard', text)
 });
 

@@ -85,6 +85,10 @@ assert(
     JSON.stringify(wikiLocationToWorld([-80, -45])) === JSON.stringify([-45, -80]),
     'wiki Y/X NPC locations normalize to world X/Y before distance and routing'
 );
+for (const missingZ of [null, undefined, '', ' ', false, NaN]) {
+    assert(wikiLocationToWorld([-80, -45, missingZ]).length === 2, 'missing wiki Z remains unknown across map slices');
+}
+assert(wikiLocationToWorld([-80, -45, 0])[2] === 0, 'an explicit zero wiki Z is a known floor');
 assert(
     waypointCommandForWorldLocation(befallenState.location) === '/waypoint -961 -30 -66',
     'waypoint copy converts canonical world X/Y back to EverQuest Y/X/Z order'

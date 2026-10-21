@@ -118,3 +118,31 @@ Worker generation remains off the UI thread; longest observed combined
 generation was 2.63 seconds, with a 287 ms maximum observed frame interval.
 The guarded established-first policy remains. Live gameplay and installer
 acceptance retain the limits in [MAP_VALIDATION.md](MAP_VALIDATION.md).
+
+## Current 0.8.3 detour verification
+
+A follow-up to a report from an older 0.8.1 installation exercised the current
+0.8.3 desktop entry point, viewer wrapper, parser, and bundled browser worker.
+The navigation engine, validator, collision exporter, movement policy, drop
+certifier, and worker client are unchanged between the `v0.8.1` and `v0.8.3`
+tags; this check establishes current behavior, not a new engine correction.
+
+Two synthetic endpoint pairs derived from Mistmoore's decoded terrain were
+submitted through the normal named-destination wrapper. Both direct segments
+cross a solid wall. The freshly decoded scene contained 26,635 collision
+triangles. The resulting 36- and 57-point paths traveled around the obstruction,
+with route lengths 1.215 and 3.194 times their direct planar distances. Both
+passed independent validation against the complete scene with zero violations.
+The first retained a valid established fallback; the second recovered from an
+established no-path result through a ready candidate without drop links.
+Observed candidate generation took approximately 727 and 539 ms.
+
+The check used a hidden isolated desktop profile and synthetic location inputs,
+with external network access disabled and client archives read only. It does
+not prove an arbitrary named target is reachable in live gameplay. The existing
+Befallen wall, Guk/Commonlands stacked-floor, and Mistmoore wall probes still
+reject for their documented body-clearance or incomplete-corridor reasons.
+No new routing defect was established, and collision checks were not relaxed.
+An older application's message alone cannot identify a current failure; a
+repeatable current-version zone/target and redacted rejection status are needed
+to classify any remaining report.

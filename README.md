@@ -1,223 +1,85 @@
-# EQLWiki - Eye of Zomm
+# EQLWiki — Eye of Zomm
 
-**Eye of Zomm** is an open-source, local-first desktop app for **EverQuest Legends** and **EQLWiki**.
+**Eye of Zomm** is a local-first Windows app for **EverQuest Legends**. It reads ordinary game logs, combines them with cached EQLWiki knowledge, and keeps maps, named-mob loot, combat parses and timers in separate desktop windows.
 
-It watches ordinary EverQuest text logs, presents zone/NPC/item information from a locally cached EQLWiki dataset, and embeds a simplified version of the EQL Zone Viewer for navigation. It never hooks the game client or modifies game files.
+[Download latest installer](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-## Core boundary
+## Get started
 
-Eye of Zomm may:
+1. Install the latest `EQLWiki-Eye-of-Zomm-Setup-<version>-x64.exe` from [Releases](https://github.com/Maergoth/EQL-EOZ/releases).
+2. Choose your EverQuest Legends folder on first launch. Enable logging in the game; EoZ follows the newest `eqlog_*.txt` under `Logs`, or a specific file selected in Settings.
+3. Emit `/who` to establish your character's zone, level and classes, and `/loc` to place your position on the map. Later logged locations update it automatically.
+4. Open **Overlays** to arrange Parse, Map, Zone & loot and Timers. Configure them in **Settings → Native overlays**. Reopen **Settings → About Eye of Zomm → What's new** for the illustrated tour.
 
-- read `eqlog_*.txt` files under the user-selected EverQuest folder;
-- follow the most recently modified log automatically, unless a specific file is chosen in Settings;
-- read local zone/map files under that same user-selected folder for the Zone Viewer;
-- download the static EQLWiki dataset mirror from this GitHub repository;
-- open EQLWiki pages/searches in the user's normal browser.
+The installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz://` so EQLWiki can open the app. Beta installers may be unsigned and show a Windows publisher prompt; see [signing status](SIGNING.md).
 
-Eye of Zomm does **not** inspect process memory, inject code, load into the game process, patch game files, automate keyboard/mouse input, or issue game commands. See [SAFETY.md](SAFETY.md).
+## A look around
 
-## Project documentation
+These screenshots show the actual **0.8.4 Electron interface with synthetic log, wiki, map and update-state fixtures**. They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
-- [Product and UX vision](docs/UX_VISION.md): approved experience, user stories, acceptance contracts, and ordered road to v1.
-- [Implementation status](docs/IMPLEMENTATION_STATUS.md): delivered features, evidence gaps, and the exact next task.
-- [Contributor handoff](docs/HANDOFF.md): setup, architecture, safety boundary, data sources, and release procedure.
-- [Navmesh evaluation](docs/NAVMESH_EVALUATION.md): dependency decision, worker boundary, risks, and player-facing route-state contract.
-- [Wiki/map integration audit](docs/INTEGRATION_AUDIT.md): source map, fresh dataset provenance, reproduced defects, fixes, and remaining release checks.
-- [Map validation](docs/MAP_VALIDATION.md): rendered local-archive route/texture/scale results, repaired map defects, and evidence limits.
-- [Destination-only audit](docs/ROUTE_REJECTION_AUDIT.md): classification of the 14 initial rejections, valid ramp/drop repairs, and expanded rendered results.
-- [Validation report](VALIDATION.md) and [Windows/game-client checklist](docs/WINDOWS_MANUAL_TEST.md): automated and proprietary-asset release gates.
-- [Changelog](CHANGELOG.md): versioned user-facing changes.
+### A normal desktop workspace
 
-## What it does
+Move and resize the main window normally. Its size, position and maximized state are remembered, with recovery when a display is unavailable. **Minimize to tray** and **Start minimized** are optional Settings choices. When the tray is unavailable, minimizing keeps the normal taskbar recovery path. The main window has no Pin to top mode; overlays retain their own lock and mouse controls.
 
-- Detects the active character from the log filename.
-- Detects zones from normal zoning output or the current character's Legends `/who` row, using its stable parenthesized short name rather than the changing instance number.
-- Detects level/classes from that same `/who` row and follows later level-up messages while ignoring other listed players.
-- Parses considers, outgoing and incoming damage, DoTs, heals, runes, kills, loot, and recent activity.
-- Groups combat into timestamped encounters using a configurable quiet-period threshold.
-- Records looted items and their sources, with observed drop rates derived from nearby logged kills.
-- Shows current-zone NPCs with EQ-style con labels and color-tinted cards relative to the player's level.
-- Filters items locally by class and **Through era** (cumulative through the selected era, using eras present in the dataset).
-- Applies EQLWiki Item Level Slider scaling locally.
-- Shows item sources and known NPC drops without requesting item/NPC pages from the wiki.
-- Embeds a deliberately simplified EQL Zone Viewer.
-- Prompts for the EverQuest folder on first launch, then selects the newest log under `Logs` automatically.
-- Provides First Person 3D, Top Down 3D, and local Map Overlay views with a compact pop-out Z-depth slicer.
-- Synchronizes logged `/location` output into the selected map view and derives first-person facing from consecutive coordinates.
-- Runs the production line-map route search first, validates it before drawing, then sends a route-local crop of the viewer's decoded collision triangles to a Recast/Detour worker. Only a full, independently collision-validated candidate may replace a safe line; failure leaves a validated route or an honest destination marker.
-- Shows Folder, Log, Zone, and `/loc` readiness separately instead of collapsing setup and live-state problems into one Sync error.
-- Keeps one named destination active, reports path/marker/error state and routed distance, and re-routes from later `/loc` samples.
-- Provides native Map and Intel windows alongside the main Map Explorer; row-level Route actions respect the routing opt-in.
-- Copies a paste-ready `/waypoint Y X [Z]` command when a located NPC name is activated, while retaining a separate explicit Route action.
-- Provides a pin-to-top option that hides the draggable title bar while keeping the app in the Windows taskbar.
-- Groups named-mob/drop intel into Normal Zone and Raid Zone sources. Show More retrieves every matching drop; class-filtered loot excludes statless and weight-only records.
-- Opens Items to recommended current-zone/class loot, with explicit search, slot, sort, class, era, tier, and scope overrides.
-- Checks for new application releases, offers verified downloads and a user-approved Windows installer, and keeps app updates separate from wiki-data synchronization.
-- Offers independent native Parse, Map, Zone & loot and Timers overlays with saved layouts, lock controls, mouse passthrough and tray recovery.
-- Runs countdowns, log-triggered and kill-based reminders, plus a swing bar learned from your outgoing melee hits and misses.
-- Shows keyboard-accessible EQLWiki Itembox-inspired local-data tooltips, including embedded wiki icons and tier/base comparisons.
-- Searches EQLWiki from the global search field and opens exact wiki links from local records.
+![Eye of Zomm workspace and window settings, captured with synthetic fixtures](app/assets/whats-new/workspace.png)
 
-## Data architecture
+### Maps that stay beside the game
 
-The desktop application does **not** crawl EQLWiki.
+The lightweight native Map reads your client text maps and shares the logged position, named destinations and validated route with the main app. Pan, zoom or follow the player; use its Z controls to inspect another elevation. The complete **Map Explorer** offers First Person 3D, Top Down 3D and Map views, a compact Z slicer, Succor reset and a zoomable Local Map.
 
-The data path is:
+Routing is an opt-in. A line appears only after collision checks approve it; a guarded Recast/Detour candidate may refine the established route after the same checks. An unreachable or unverified destination remains a marker. Static archives do not reveal live doors or actors. [Route validation](docs/ROUTE_REJECTION_AUDIT.md) records working detours and remaining limits.
 
-```text
-EQLWiki MediaWiki DB/content
-        |
-        | one low-priority server-side export
-        v
-Eye of Zomm JSON dataset
-        |
-        | gzip + manifest
-        v
-GitHub repository: Maergoth/EQL-EOZ, branch `dataset`
-        |
-        | tiny manifest check on app startup / Sync with Wiki
-        v
-Local cached dataset on each player's PC
-```
+![Native Map with zoom and elevation controls on a synthetic map](app/assets/whats-new/map.png)
 
-### Initial dataset
+### Named mobs, raid sources and complete loot
 
-The production dataset is created on the EQLWiki server by `server/BuildEyeOfZommPack.php`. It uses MediaWiki's local database/content services directly; it does not perform HTTP requests back into the wiki.
+**Zone & loot** separates Normal Zone and Raid Zone sources, with red **Raid Zone** intel shown first. Search by mob or item, filter for your classes, and use **Show More** for all matching drops. Class-filtered loot excludes statless and weight-only records. A logged consider or named kill selects and expands its row with a mild visual/audio cue, without activating the window.
 
-The generated pack currently contains:
+Item details use local wiki icons and Item Level Slider rules. **Through era** includes items through the chosen era. Activating a located NPC name copies a paste-ready `/waypoint Y X [Z]`; row-level Route actions start navigation when routing is enabled.
 
-- the Zone Viewer zone/alias catalog;
-- NPC names, zones, level ranges/averages, race, class, era, wiki title, revision ID, description, and coordinates when available;
-- item names, classes, slots, Itembox display lines/icons, Item Level Slider-relevant stats, era, notes, wiki title, revision ID, and drop/source records.
+![Raid and normal named-mob loot from a synthetic wiki pack](app/assets/whats-new/intel.png)
 
-The app derives NPC loot indexes locally from the item drop/source records.
+### Timers, triggers and combat parses
 
-### Weekly updates
+Create manual countdowns or literal/regex log triggers on the main **Timers** page. Test a match, use named captures, set cooldowns and choose local sound/speech cues. Running timers and the observed swing bar appear in the compact Timers window. You supply reminder durations; EoZ does not know a mob's respawn period.
 
-The recommended production schedule is one low-priority rebuild per week during an off-peak hour. The same script can be run manually after important wiki changes.
+The independent **Parse** window has **Overview / Damage / Healing / Taken / Session** tabs and encounter selection. One shared session reads the log for every panel. The swing bar estimates your outgoing melee rounds from logged hits and misses; one-second log timestamps limit its precision. See [timer behavior](docs/TIMERS.md).
 
-The server refresh process:
+![Timer trigger editor with synthetic match preview](app/assets/whats-new/timers.png)
 
-1. builds the dataset locally with `nice`/`ionice` and a cooperative per-page pause;
-2. validates the JSON before replacing the previous output;
-3. creates `manifest.json` and `eqlwiki-eye-of-zomm-data.json.gz`;
-4. pushes only those two files to the repository's dedicated `dataset` branch.
+Unlock an overlay to move/resize it. Locking leaves its tabs and menus interactive; **Ignore mouse** passes clicks through. Recover from Settings, the tray, or **Ctrl+Shift+O** when registered. Layout, opacity and font scale are saved separately for each panel. Closing the main window while overlays are visible keeps their shared session running; use **Quit Eye of Zomm** in the tray to exit.
 
-The dataset branch is intentionally force-replaced with a single commit on each update. This avoids accumulating a large weekly compressed-data history in the source repository.
+## Your files stay local
 
-### Client synchronization
+EoZ reads logs and supported map/archive files under the folder you choose. It never reads game-process memory, injects code, patches game files, sends game commands or synthesizes gameplay input. See [SAFETY.md](SAFETY.md).
 
-Every Eye of Zomm startup checks:
+When a complete wiki catalog confirms that an encountered NPC or looted item is missing, an inline Timers notice offers **Screenshot** or **Ignore**. Screenshot opens an explicit window/display choice and copies the selected image to your local clipboard. You decide where to paste it; nothing uploads automatically. Notices pause their dismissal timer while hovered or keyboard-focused.
+
+Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards open their exact wiki pages. Ordinary search and filtering use cached data and do not crawl wiki pages.
+
+## Two separate updates
+
+| Update | What it changes | Where to use it |
+| --- | --- | --- |
+| Application update | Installed EoZ code and interface | **Settings → Application updates**: check, download, then explicitly approve the normal Windows installer |
+| Wiki data update | Cached NPCs, items, icons, zone aliases and source records | **Sync with Wiki**, also checked at startup |
+
+Verified application downloads can wait until later. Startup downloading is optional and off by default; installation always requires approval. Settings, folder/log choices and cached wiki data stay in the existing profile. Older builds without the updater need one normal installation of a newer build first.
+
+The wiki data flow is server-side and low priority:
 
 ```text
-https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json
+EQLWiki content → local exporter → gzip + SHA-256 manifest
+               → GitHub dataset branch → verified local cache
 ```
 
-The **Sync with Wiki** button performs the same check on demand.
+Official installers include a production snapshot, so first launch does not reconstruct the wiki corpus. Startup and **Sync with Wiki** check only the small GitHub manifest; a changed version downloads and verifies the pack before replacing the cache. Players do not poll EQLWiki for dataset updates.
 
-If the manifest version matches the cached version, nothing else is downloaded. If it changes, Eye of Zomm downloads the compressed data file from GitHub, verifies its SHA-256, validates the schema, and atomically replaces the local cached copy.
+The producer reads MediaWiki's local content/database services and builds zone aliases, NPC locations/provenance, normal/raid source variants, items and embedded icons. A weekly/manual host job publishes only the filtered manifest and compressed pack to the dedicated `dataset` branch. Installing producer changes and rebuilding the dataset are separate from a desktop release; see [server operations](server/README.md).
 
-**Players do not hit EQLWiki to check for dataset updates.**
+## Development and validation
 
-### Application updates
-
-In the installed Windows x64 app, **Settings → Application updates** checks
-GitHub for newer compatible releases, including the 0.x beta prereleases.
-Choose **Download**, then **Install update…** when ready to close EoZ and open
-the normal Windows installer. **Later** keeps the verified download for another
-time. Automatic startup downloads are optional and default off; installation
-always needs your approval. Settings, log/folder choices and cached wiki data
-stay in the existing application profile.
-
-This feature starts with 0.8.3. Older installations need that first updater
-build installed normally; **Sync with Wiki** updates data rather than app code.
-Unsigned beta installers remain unsigned. See the
-[PNUT UX plan](docs/PNUT_UX_PLAN.md) for implementation boundaries.
-
-### Native overlays and timers
-
-Choose **Overlays** in the header or configure individual panels in
-**Settings → Native overlays**. Parse, Map, Zone & loot and Timers are real
-separate desktop windows. Unlock a panel to move/resize it; locking keeps tabs
-and menus interactive. **Ignore mouse** passes clicks through the panel.
-Restore input from Settings, the tray or **Ctrl+Shift+O** when registered.
-Each panel remembers its layout, opacity and font scale. Closing the main app
-while panels are visible keeps the shared session running; use the tray's
-**Quit Eye of Zomm** to exit. The native Map uses client line maps and shared
-location/route state; the complete 3D Map Explorer opens explicitly. First/Top/Map
-controls appear only on the main Map page.
-
-Intel keeps Normal Zone and Raid Zone drops distinct. Search named mobs and use
-**Show More** to expand all matching drops. Considering or killing a listed named
-mob selects, scrolls and expands its Intel row with a mild flash/blip, without
-activating the window.
-
-The overlay follows PNUT’s compact header and **Overview / Damage / Healing /
-Taken / Session** tabs. The Timers overlay displays only radial countdown rows
-and a thin swing bar. Configure everything on the main **Timers** page.
-
-The main Timers page supports manual/repeating countdowns, saved literal or regex
-log triggers with named captures, match preview, cooldowns, colors and optional
-sound/speech cues, plus target-kill reminders and a one-time reminder from the latest
-logged kill. You supply the duration; EoZ does not know a mob's respawn period.
-Pause, resume, reset or dismiss rows. The overlay’s observed swing bar learns your own
-melee rounds, accepts an optional weapon-delay seed and waits for real attacks.
-EQL's one-second log timestamps make this an estimate. See [timer behavior](docs/TIMERS.md)
-for limits, replay protection and cast handling.
-
-When a complete wiki catalog verifies that an encountered NPC or looted item is
-missing, a notice appears inside Timers/Triggers: the visible interactive native
-Timers window takes priority, with the main Timers page as fallback. **Screenshot** offers a local
-window/display choice and copies the image to the clipboard; an unavailable
-game-window image offers usable alternatives for explicit selection. Paste it yourself
-where needed. Nothing uploads automatically. **Ignore** persists locally.
-Notices fade after 15 visible seconds, pausing on hover or keyboard focus.
-
-## Wiki search / Open in browser
-
-The global **Search EQLWiki** field always opens an EQLWiki `Special:Search` query in the normal browser. Item/NPC cards and the current-zone action still expose direct links to exact wiki pages.
-
-This keeps Eye of Zomm useful without trying to recreate every wiki article inside the desktop application.
-
-## Lightweight Zone Viewer
-
-Eye of Zomm reuses the existing EQL Zone Viewer parsing/rendering code, but exposes a smaller navigation-focused UI.
-
-The app keeps:
-
-- folder-first setup and automatic log selection;
-- current-zone load/sync;
-- First Person 3D, Top Down 3D, and Map Overlay views;
-- fly-first movement and reset-to-Succor behavior;
-- a compact Z-depth slicer for hiding geometry above the chosen elevation;
-- logged `/location` synchronization;
-- path-to-NPC integration;
-- background collision export plus guarded Recast/Detour candidate routing with automatic fallback;
-- local map/minimap functionality needed for navigation.
-
-For WLD/S3D zones, skipped or unresolved material groups still advance their polygon ranges, preventing one missing link from shifting later textures onto the wrong faces. Bitmap aliases and repeating UV sampling are retained. Map Overlay intentionally remains client `.txt` line art; texture checks belong in First and Top views.
-
-Advanced display tuning, performance diagnostics, world-atlas controls, duplicate path-search controls, discrete floor selection, help, and fullscreen UI are not exposed in Eye of Zomm.
-
-## Windows installation
-
-Official builds are normal per-user x64 Windows installers produced by GitHub Actions with Electron Builder/NSIS:
-
-```text
-EQLWiki-Eye-of-Zomm-Setup-<version>-x64.exe
-```
-
-The installer creates Start Menu/Desktop shortcuts and registers the `eqleoz://` protocol so EQLWiki can launch or focus the installed app.
-
-The Windows artifact and release workflows use and verify a trusted Authenticode certificate when configured. The first fully verified `main` build for each new `0.x` package version is also published as a versioned GitHub prerelease; later commits at that same version preserve the existing tag and only refresh the temporary Actions artifact. Until signing is configured, beta installers are unsigned and may show a Windows publisher/SmartScreen prompt. See [SIGNING.md](SIGNING.md).
-
-## Development
-
-Requirements:
-
-- Node.js 22+
-- Windows, macOS or Linux for normal development
-- Windows or GitHub Actions for the production NSIS installer
+Node.js 22+ is required. Normal development works on Windows, macOS or Linux; the production installer targets Windows x64.
 
 ```bash
 npm ci
@@ -225,34 +87,34 @@ npm test
 npm start
 ```
 
-Before promoting a Windows build, run the real-client checks in [docs/WINDOWS_MANUAL_TEST.md](docs/WINDOWS_MANUAL_TEST.md).
-
-Build Windows installer:
-
-```bash
-npm run dist:win
-```
-
-Fetch the current GitHub-mirrored production dataset into the installer:
+Fetch the verified production bootstrap before catalog checks or packaging:
 
 ```bash
 node scripts/fetch-bootstrap-pack.mjs --required
+npm run test:catalog
+npm run test:desktop-worker
+npm run dist:win
+npm run test:artifact
 ```
 
-## Repository layout
+Screenshots can be reproduced from the real Electron synthetic fixture without opening an actual game installation:
 
-```text
-app/                 UI, log parser, local data/filtering, Zone Viewer wrapper
-desktop/             Electron runtime and local loopback bridge
-docs/                Product vision, implementation status, handoff, manual tests
-server/              MediaWiki exporter + GitHub dataset synchronization
-scripts/             Build/bootstrap tooling
-tests/               Parser/scaling tests
-wiki/                Optional EQLWiki launcher integration
-THIRD_PARTY/         Zone Viewer and navigation-engine notices/licenses
-.github/workflows/   CI and Windows installer/release builds
+```bash
+node scripts/test-native-overlays.mjs --screenshots <output-directory>
 ```
 
-## Open source
+Tests with synthetic content do not establish live route quality, physical overlay focus/passthrough, monitor/DPI transitions or installer acceptance. Keep client archives, player logs, database snapshots, settings, generated packs and private diagnostic exports out of Git.
 
-Eye of Zomm is released under the [MIT License](LICENSE). Third-party notices for the Zone Viewer and Recast/Detour worker are retained under `THIRD_PARTY/`.
+| Documentation | Purpose |
+| --- | --- |
+| [Contributor handoff](docs/HANDOFF.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md) | Architecture, source ownership and exact next work |
+| [Product vision](docs/UX_VISION.md) and [PNUT interaction plan](docs/PNUT_UX_PLAN.md) | UX contracts and feature scope |
+| [Window/map follow-up](docs/WINDOW_MAP_POLISH.md) | Current window, map and tour changes |
+| [Map validation](docs/MAP_VALIDATION.md) and [destination-only audit](docs/ROUTE_REJECTION_AUDIT.md) | Real local-archive observations and limits |
+| [Navigation architecture](docs/NAVMESH_EVALUATION.md) | Guarded worker routing and independent collision validation |
+| [Validation report](VALIDATION.md) and [Windows checklist](docs/WINDOWS_MANUAL_TEST.md) | Automated gates and remaining manual acceptance |
+| [Contributing](CONTRIBUTING.md), [security](SECURITY.md) and [signing](SIGNING.md) | Contribution and release boundaries |
+
+The main source areas are `app/` (UI, parsing, maps and local knowledge), `desktop/` (Electron, overlays and file bridge), `server/` (wiki export), `scripts/` (build/validation), `tests/` and `wiki/` (optional launcher integration).
+
+Eye of Zomm is [MIT licensed](LICENSE). Zone Viewer, Recast/Detour and PNUT notices remain under `THIRD_PARTY/`.
