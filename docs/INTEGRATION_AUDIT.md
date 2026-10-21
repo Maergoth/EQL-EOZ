@@ -5,7 +5,10 @@
 Requested on October 21, 2026: compare Eye of Zomm with the current EQLWiki
 application and a fresh production-derived dataset, investigate obvious map
 explorer defects using the local EverQuest installation and EQEmu references,
-and prepare a reviewable Eye of Zomm PR. Do not merge or deploy the application.
+and prepare a reviewable Eye of Zomm PR. The initial audit stopped at review.
+The owner subsequently authorized production promotion, a corrected dataset
+refresh, and the 0.8.1 desktop release; the release observations below record
+those separate steps.
 
 The subsequent [map explorer validation](MAP_VALIDATION.md) records actual
 Electron rendering against local client archives, additional loader/route/
@@ -37,13 +40,42 @@ completion for this audit. It read the production wiki at low priority and
 published only the existing filtered dataset branch. A staging database
 replacement was unnecessary for this integration audit.
 
-Fresh manifest: `20261021T042355Z-2acd4aba91ab`, generated October 21 at
+Pre-correction manifest: `20261021T042355Z-2acd4aba91ab`, generated October 21 at
 04:23:56 UTC; gzip bytes `2765979`; SHA-256
 `b6ea3f925477cc0a4529bec52fc07ba6f190a73a2f9825c7cb9d3c8cee4dfa7a`.
 The build fetch verified that checksum and schema v3: **124 zones, 8,389 NPC
 records, 11,262 items**, with 776 embedded icon IDs. The fresh pack still has
-769 blank NPC zones and 64 non-AMMO items with Range; the producer fixes below
-are proposed source changes, not installed by this refresh.
+769 blank NPC zones and 64 non-AMMO items with Range. That initial refresh
+preceded installation of the producer fixes below.
+
+### Approved production rollout
+
+The owner authorized release after the map rejection audit. Producer PR #35
+was merged to staging and its deployment/health checks passed. Production
+promotion PR #36 applied only the reviewed six-file change on top of current
+`main`; deployment
+[`a00224f`](https://github.com/Maergoth/EQLWiki/actions/runs/39551674805)
+passed. Installed producer/catalog hashes match the reviewed Git contents.
+The previous verified filtered manifest/gzip pair was retained privately.
+
+The existing low-priority export job then rebuilt the live wiki data and
+published dataset commit `81a5c819b2832a580918d3aea4ad35ccb896d2b3`:
+
+- Manifest: `20261021T060010Z-b9ad50c7439d`, published October 21 at 06:00:10 UTC.
+- Gzip: 2,774,048 bytes; SHA-256
+  `f536abd2a755fd1520184b6206eda5cb91afd5556b681c877d0fffd80d6fb363`.
+- Schema v3, **124 zones, 8,426 NPC records, 11,262 items, 776 icons**;
+  metadata counts agree and canonical zone names are unchanged.
+- **750 previously unzoned NPC pages recovered**, leaving 19 unresolved;
+  no previously unzoned page disappeared. All 712 `ALL except` records now
+  carry the explicit class complement, including 703 with listed exclusions.
+  No invalid class codes or unrecognized nonblank NPC zones remain.
+- Public download checksum/schema checks, the 64-result Befallen/MNK catalog
+  check, and a rebuilt Windows ASAR pass. The packaged bootstrap exactly
+  matches the fetched snapshot and reports pack `wiki-20261021T060009Z`.
+
+Only the filtered dataset was published. Database snapshots, account data,
+settings, and client assets remain outside the application release.
 
 ### Ordered work
 
@@ -74,15 +106,14 @@ are proposed source changes, not installed by this refresh.
 | Moving toward the same NPC reused the original start | The vendor target cache keys only the destination. The wrapper now also checks `requestStart`, recalculates after movement, and invalidates the prior spatial candidate before awaiting the line worker. |
 | Cancel could recreate a target through fallback | A stale label-router result returned false and entered wiki fallback. Check the navigation generation before fallback, so Cancel/new-target stays authoritative. |
 | Listed Range differed from the live wiki | 64 non-AMMO records in the initial pack have Range. Live wiki source scales all listed Range by +10/full tier; EoZ now matches bows, throwing weapons, and ammo. |
-| `ALL except` recommended unusable equipment | 712 initial records exported `ALL` plus excluded codes. The exporter now emits allowed classes; the client repairs legacy packs from their preserved Class line. Empty metadata remains unknown; `NONE` explicitly permits no class. |
-| Exact zone aliases discarded NPC context | 769 initial NPC records have blank zones. Replaying their current public pages through the real exporter recovers 750 pages / 751 zone records with 18 exact aliases; 19 remain unresolved. Canonical/viewer names are preserved. Requires the separate producer release and rebuild. |
+| `ALL except` recommended unusable equipment | 712 initial records use this syntax: 703 list excluded classes and nine have incomplete exclusion text. The exporter now emits allowed classes; the client repairs legacy packs from their preserved Class line. Empty metadata remains unknown; `NONE` explicitly permits no class. |
+| Exact zone aliases discarded NPC context | 769 initial NPC records have blank zones. The initial public-page replay recovered 750 pages / 751 zone records with 18 exact aliases. The approved production rebuild above confirms 750 recovered pages and 19 unresolved; canonical/viewer names are preserved. |
 | Sync could claim a corrupt cache was current | Validate the same-version cache before skipping a download; require a valid SHA-256 and preserve the last good cache on failure. Runtime/build reads now bound manifest, gzip, and decoded size; timeouts cover body reads and invalid schemas fall back correctly. |
 | High dependency advisories failed CI | Update Electron from 43.4.0 to 43.8.3 and refresh compatible affected transitive packages. The high-severity audit passes. Eight moderate advisories remain in the builder's `sprintf-js` chain; no builder downgrade or major runtime upgrade is included. |
 
-The fresh export uses the currently installed producer/catalog. The alias and
-producer class repairs in this PR are not installed by that export. Legacy
-class filtering works immediately in the client; blank NPC zones require the
-reviewed server release and another rebuild.
+The pre-correction export used the previous producer/catalog. Legacy class
+filtering also works in the client; the approved production rebuild above
+now includes the producer class and zone-alias repairs.
 
 ### Local game-file observations
 
@@ -137,9 +168,12 @@ Windows build passes, and the ASAR check confirms v0.8.1, production data, and
 the tested runtime source bytes. NSIS installation, Authenticode verification,
 and the interactive in-game matrix were not exercised by this audit.
 
-Before merging: run `npm ci`, `npm test`, `npm run audit:deps`, fetch a verified
-production bootstrap, run `npm run test:catalog`, and package/check the ASAR.
-Review [EQLWiki producer PR #35](https://github.com/Maergoth/EQLWiki/pull/35)
-against `staging`. Owner promotion of
-the producer/catalog and a subsequent refresh are separate steps; see
-[server/README.md](../server/README.md). Merge neither repository automatically.
+Release gates are `npm ci`, `npm test`, `npm run audit:deps`, a verified
+production bootstrap, `npm run test:catalog`, and package/ASAR checks.
+The ASAR check requires the exact fetched bootstrap bytes as well as the tested
+runtime sources, and logs the bundled dataset versions and record counts.
+[EQLWiki producer PR #35](https://github.com/Maergoth/EQLWiki/pull/35) targets
+`staging`; [production promotion #36](https://github.com/Maergoth/EQLWiki/pull/36)
+contains only its reviewed six-file change on top of production. Producer
+deployment and the filtered dataset rebuild remain separate operations; see
+[server/README.md](../server/README.md).

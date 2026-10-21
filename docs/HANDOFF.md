@@ -18,8 +18,10 @@ and the additional repairs. The [destination-only audit](ROUTE_REJECTION_AUDIT.m
 classifies every initial rejection and records verified ramp/stair/drop
 repairs: 36 rendered requests, 20 valid paths, 16 markers, and exact endpoints.
 This patch retains guarded established-first
-routing; both engines are checked before drawing. Its exporter catalog changes
-require a separate reviewed server installation and dataset rebuild.
+routing; both engines are checked before drawing. The reviewed exporter/catalog
+is deployed in production and the rebuilt initial-download snapshot is
+`20261021T060010Z-b9ad50c7439d` (124 zones, 8,426 NPCs, 11,262 items).
+The integration audit records deployment and checksum evidence.
 
 Desktop zone indexing remains metadata-only and hydrates the selected archive on demand. The WLD exporter advances across skipped material groups so later textures stay assigned to their actual polygon ranges; bitmap aliases and repeating UV sampling remain in place. EQEmu's sequential WLD polygon/material assignment independently supports this repair. The local rendered pass now confirms Mistmoore and Commonlands textures; live game comparison remains separate.
 
@@ -105,7 +107,7 @@ Do not start durable history or upgrade scoring from 0.9 until this matrix passe
 
 ## Release path
 
-- Every change must keep `npm test` green. Catalog-affecting changes must also pass `npm run test:catalog` against the verified production pack. Fetch the pack before packaging: `node scripts/fetch-bootstrap-pack.mjs --required`; `npm run test:artifact` now fails if the ASAR lacks a production-scale schema-v3 bootstrap.
+- Every change must keep `npm test` green. Catalog-affecting changes must also pass `npm run test:catalog` against the verified production pack. Fetch the pack before packaging: `node scripts/fetch-bootstrap-pack.mjs --required`; `npm run test:artifact` requires a production-scale schema-v3 bootstrap with bytes identical to that fetched source, and logs its versions and record counts.
 - Pushes to `main` run CI and the Windows build workflow. After all gates, the first successful build for each new `0.x` package version creates a versioned GitHub prerelease; later commits with that same version preserve its tag and only upload the temporary Actions artifact. A matching `vX.Y.Z` tag runs the explicit release workflow, which also classifies `0.x` and semantic prerelease versions as prereleases. Both Windows workflows inspect the built ASAR with `npm run test:artifact`; never publish an installer that has not passed that package/source/version check.
 - Keep `package.json`, `package-lock.json`, CHANGELOG, validation notes, and installer filename expectations on the same version.
 - Trusted Authenticode signing is required for 1.0. Until certificates are configured, workflows may produce a clearly identified unsigned 0.x installer.

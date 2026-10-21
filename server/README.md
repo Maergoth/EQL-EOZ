@@ -122,6 +122,12 @@ then run the existing refresh command once. Check the new manifest version,
 gzip checksum, affected zone NPC coverage, and class-excluded items. The EoZ
 client also understands exclusions in legacy packs while that rebuild is pending.
 
+The October 21, 2026 owner-approved rollout completed staging and production
+deployment via EQLWiki PRs #35/#36, then rebuilt and published manifest
+`20261021T060010Z-b9ad50c7439d`: 124 zones, 8,426 NPC records, 11,262 items.
+The [integration audit](../docs/INTEGRATION_AUDIT.md#approved-production-rollout)
+records the verified checksum, recovered coverage, and initial-download checks.
+
 Keep the old verified manifest/pack as a private recovery pair before rebuilding.
 To recover from incorrect exported data, restore the reviewed producer/catalog
 and rebuild a new dataset version; clients skip an unchanged manifest version.

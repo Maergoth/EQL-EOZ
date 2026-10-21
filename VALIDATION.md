@@ -8,12 +8,14 @@ checks, supported stair flights, certified drops, and exact endpoint guards.
 The regressions reproduced failures before their fixes. Both synthetic route
 corpora remain 8/8; no routing engine promotion is included.
 
-The installed production export completed and published
-`20261021T042355Z-2acd4aba91ab`. Bootstrap SHA-256/schema checks pass for 124
-zones, 8,389 NPC records, and 11,262 items. `npm run test:catalog` passes with
-64 Befallen/MNK items using the corrected class matcher. See the
-[integration audit](docs/INTEGRATION_AUDIT.md) for exact provenance and the
-separate producer deployment/rebuild dependency.
+The corrected producer/catalog passed staging and production deployment.
+The subsequent live-wiki export published
+`20261021T060010Z-b9ad50c7439d`. Bootstrap SHA-256/schema checks pass for 124
+zones, 8,426 NPC records, and 11,262 items. It recovers 750 previously unzoned
+NPC pages (19 remain unresolved) and normalizes all 712 `ALL except` records.
+`npm run test:catalog` passes with 64 Befallen/MNK items. A rebuilt Windows
+ASAR contains exactly the fetched bootstrap bytes and tested runtime sources.
+See the [integration audit](docs/INTEGRATION_AUDIT.md) for exact provenance.
 
 The follow-up [map validation](docs/MAP_VALIDATION.md) uses the actual Electron
 renderer and bundled workers against five local zones. The
