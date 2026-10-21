@@ -1,8 +1,17 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.0-x64.exe`.
+Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.1-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the custom title bar visibly says `v0.8.0`; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the custom title bar visibly says `v0.8.1`; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+
+For the 0.8.1 integration fixes, select a wiki-only named NPC and verify its
+marker and route destination coincide. Move and issue a later `/loc`; the same
+destination must route from the new start. Cancel during calculation, then issue
+another `/loc`; the cancelled destination must stay cleared. Repeat in First,
+Top, and Map. Compare bow/throwing Range tiers against the wiki, and after the
+reviewed server catalog is installed and rebuilt, confirm Kael Drakkel and
+Neriak NPCs populate their current-zone lists. See the
+[integration audit](INTEGRATION_AUDIT.md) for deployment and evidence limits.
 
 ## 1. Continuous `/loc` tracking
 

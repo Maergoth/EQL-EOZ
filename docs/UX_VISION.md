@@ -1,7 +1,7 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.8.0
+Baseline: 0.8.1
 Last updated: 2026-09-05
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
@@ -746,6 +746,11 @@ Committed user stories:
 0.7 exit gate: the Windows script passes continuous movement in First/Top/Map, rare labels stay aligned and routable, minimal mode supports complete loot browsing, and no continuous `/loc` stream can starve position or route updates.
 
 ### 16.3 Version 0.8 — spatial confidence
+
+The 0.8.1 [integration audit](INTEGRATION_AUDIT.md) adds behavioral coverage
+for wiki-to-map destination conversion, movement-driven rerouting, cancellation,
+dataset recovery, and item/export parity. It retains established-first routing
+and the proprietary visual/route acceptance matrix below.
 
 Release thesis: paths must be predictable enough that a player will use them in a multi-floor dungeon without cross-checking every turn.
 

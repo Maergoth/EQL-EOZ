@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.1 - Wiki and map integration corrections
+
+- Convert wiki NPC destinations to the client-map coordinate basis used by named routing, recompute routes after the player moves, and keep cancelled work from restarting a destination through fallback.
+- Apply the wiki's +10 Range per tier to every item with a listed Range, including bows and throwing weapons.
+- Honor `Class: ALL except ...` in existing packs and export the actual allowed classes in future packs, keeping unusable loot out of class-filtered recommendations.
+- Extend the exporter's exact zone aliases so current wiki zone names retain their NPCs. Installing the reviewed server catalog and rebuilding the dataset is a separate operator step.
+- Repair a corrupted local dataset on Sync, require SHA-256 verification, and enforce timeouts and size limits through dataset reads.
+- Update Electron within major version 43 and compatible transitive dependencies so the high-severity dependency audit passes.
+- Record fresh dataset provenance, private local-archive parse observations, regressions, and outstanding real-client validation in the integration audit.
+
 ## 0.8.0 - Guarded real-zone spatial candidate
 
 - Exported the viewer's already-decoded collision meshes as finite `Float32Array`/`Uint32Array` data in its existing right-handed Y-up basis, skipping props and pass-through geometry without introducing another EQ coordinate transform.

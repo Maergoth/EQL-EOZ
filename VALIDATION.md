@@ -1,4 +1,34 @@
-# Validation report — v0.8.0
+# Validation report — v0.8.1
+
+## 0.8.1 integration audit
+
+Checked October 21, 2026 on Windows. `npm test` passes with five new focused
+suites: Range parity, class exclusion parsing/legacy filtering, exact exporter
+zone aliases, real-wrapper map routing, and 14 dataset/runtime/build/renderer
+checks. The regressions reproduced failures before their fixes. Both synthetic
+route corpora remain 8/8; no routing engine promotion is included.
+
+The installed production export completed and published
+`20261021T042355Z-2acd4aba91ab`. Bootstrap SHA-256/schema checks pass for 124
+zones, 8,389 NPC records, and 11,262 items. `npm run test:catalog` passes with
+64 Befallen/MNK items using the corrected class matcher. See the
+[integration audit](docs/INTEGRATION_AUDIT.md) for exact provenance and the
+separate producer deployment/rebuild dependency.
+
+The shipped worker privately decoded Mistmoore, Commons, and Befallen archives.
+This confirms usable GLB output and returned textures, not rendered appearance
+or live route quality. No client files, raw logs, generated geometry, or packs
+are committed. The existing real-client visual/scaling matrix remains open.
+
+Electron 43.8.3 and compatible transitive updates clear all high findings;
+`npm run audit:deps` passes with eight remaining moderate builder-chain
+advisories. `npm ls --all` passes. The packaged-artifact check now additionally
+requires the tested app/map/class/scaling/desktop source bytes in the ASAR.
+The unpacked Windows build and `npm run test:artifact` pass with the fresh
+production bootstrap. This run did not exercise the NSIS installer,
+Authenticode validation, or interactive game-client matrix.
+
+## Prior 0.8.0 validation context
 
 Validated in the build environment on 2026-09-05 UTC.
 

@@ -22,6 +22,7 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - [Implementation status](docs/IMPLEMENTATION_STATUS.md): delivered features, evidence gaps, and the exact next task.
 - [Contributor handoff](docs/HANDOFF.md): setup, architecture, safety boundary, data sources, and release procedure.
 - [Navmesh evaluation](docs/NAVMESH_EVALUATION.md): dependency decision, worker boundary, risks, and player-facing route-state contract.
+- [Wiki/map integration audit](docs/INTEGRATION_AUDIT.md): source map, fresh dataset provenance, reproduced defects, fixes, and remaining release checks.
 - [Validation report](VALIDATION.md) and [Windows/game-client checklist](docs/WINDOWS_MANUAL_TEST.md): automated and proprietary-asset release gates.
 - [Changelog](CHANGELOG.md): versioned user-facing changes.
 

@@ -42,6 +42,14 @@ const recastClient = packagedText('app/recast-route-client.js');
 const recastWorker = packagedText('app/workers/recast-route.worker.js');
 const bootstrap = JSON.parse(packagedText('app/data/eye-of-zomm-pack.bootstrap.json'));
 
+// The integration regressions run against source. Require those exact runtime
+// bytes in the ASAR so a stale package cannot pass on older marker strings.
+for (const relative of ['app/app.js', 'app/item-browse.js', 'app/item-scaling.js', 'app/zoneviewer/viewer.html', 'desktop/main.cjs']) {
+    if (packagedText(relative) !== readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8')) {
+        throw new Error(`Packaged ${relative} differs from the tested source.`);
+    }
+}
+
 for (const [name, content, required] of [
     ['title bar', index, 'id="titlebar-version"'],
     ['runtime version binding', app, "$('#titlebar-version').textContent"],

@@ -1,8 +1,8 @@
 # Eye of Zomm implementation status
 
-Last updated: 2026-09-05
+Last updated: 2026-10-21
 
-Code baseline: 0.8.0
+Code baseline: 0.8.1
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
@@ -18,6 +18,11 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 | 1.0 trusted release | Planned | Quality gate in vision 16.5 | Signing, upgrade path, support/compatibility docs, clean Windows matrix, no S1/S2 defects |
 
 ## Current highest-priority task
+
+Review the [0.8.1 integration audit](INTEGRATION_AUDIT.md), install the reviewed
+exporter alias catalog separately, and rebuild/recheck the affected NPC zones.
+Run its rare-destination, moved-start, and cancellation regressions against a
+real client before promotion.
 
 Validate the carried WLD material-group alignment correction in Mistmoore and one outdoor S3D zone, then run the integrated candidate through the complete outdoor/indoor/stacked/ramp/door/drop Windows matrix. Capture only aggregate schema-v2 diagnostics and interaction observations. The established line-map route remains the first visible authority until that matrix supports promotion; do not reintroduce a renderer-thread collision graph or expose an engine selector.
 

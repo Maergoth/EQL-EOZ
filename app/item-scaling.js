@@ -36,8 +36,10 @@ export function scaleItemStat(key, value, fullLevel, options = {}) {
     }
 
     // Elemental/Bane/Backstab damage intentionally does not match DMG.
-    if (stat === 'RANGE' && options.isAmmo) {
-        return base + (10 * full);
+    // Match the wiki slider: every listed Range scales, including bows and
+    // throwing weapons. Fractional progress adds no extra Range.
+    if (stat === 'RANGE') {
+        return base >= 0 ? base + (10 * full) : base;
     }
 
     if (FLAT.has(stat)) {
@@ -55,10 +57,9 @@ export function scaleItemStat(key, value, fullLevel, options = {}) {
 
 export function scaledItemStats(item, fullLevel) {
     const stats = item && item.stats ? item.stats : {};
-    const isAmmo = Array.isArray(item?.slots) && item.slots.some(slot => String(slot).toUpperCase() === 'AMMO');
     const result = {};
     for (const [key, value] of Object.entries(stats)) {
-        result[key] = scaleItemStat(key, value, fullLevel, { isAmmo });
+        result[key] = scaleItemStat(key, value, fullLevel);
     }
     return result;
 }

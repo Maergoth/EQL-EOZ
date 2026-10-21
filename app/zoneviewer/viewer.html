@@ -36,7 +36,7 @@ import { mountZoneViewer } from './ZoneViewerApp.js';
 import navigationPolicy, { configureViewerMovement } from '../navigation-policy.js';
 import { LocationHeadingTracker } from '../movement-tracking.js';
 import { routeDistanceLabel, routeGuidance } from '../route-guidance.js';
-import { formatWorldLocationForGameMap } from '../coordinate-system.js';
+import { formatWorldLocationForGameMap, worldToClientMap } from '../coordinate-system.js';
 import { RecastRouteClient } from '../recast-route-client.js';
 import { cropCollisionGeometryForRoute, exportViewerCollisionGeometry } from '../collision-geometry.js';
 
@@ -255,15 +255,20 @@ async function pathToWikiLocation(label, location) {
     const hasTrustedElevation = Number.isFinite(rawEqZ);
     const eqZ = hasTrustedElevation ? rawEqZ : 0;
 
-    const start = app.navigationStartPoint();
     const point = app.eqWorldToThree(worldX, worldY, eqZ);
     // A trusted wiki Z identifies a floor. Starting 35 units above it can hit
     // the next floor in stacked dungeons, so only allow the viewer's normal
     // six-unit step tolerance above the reported elevation.
     const searchHeight = hasTrustedElevation ? point.y : app.currentBounds.max.y + 100;
     const ground = app.findGroundPointAt(point.x, point.z, searchHeight) || point.clone();
+    return pathToGroundedLocation(label, point, ground);
+}
+
+async function pathToGroundedLocation(label, point, ground) {
+    const start = app.navigationStartPoint();
     const key = `${label}:${ground.x.toFixed(2)}:${ground.y.toFixed(2)}:${ground.z.toFixed(2)}`;
-    if (app.navigationTarget?.key === key) return true;
+    const previous = app.navigationTarget;
+    if (previous?.key === key && previous.requestStart && start.distanceToSquared(previous.requestStart) < .0001) return true;
 
     app.clearNavigationGuide();
     const token = app.navigationBuildToken;
@@ -291,7 +296,7 @@ async function pathToWikiLocation(label, location) {
         const distance = route.slice(1).reduce((sum, point, index) => sum + point.distanceTo(route[index]), 0);
         app.setStatus(`Path to ${label} ready · ${Math.round(distance).toLocaleString()} units.`, 0);
     } else {
-        app.setStatus(`${label} is marked from its EQLWiki location; no navigable route was found.`, 0);
+        app.setStatus(`${label} is marked; no navigable route was found.`, 0);
     }
     app.updateNavigationOverlay();
     app.requestRender();
@@ -876,11 +881,14 @@ window.eqlEyeOfZommViewer = {
                 active:normalizedNpcName(name) === normalizedNpcName(activeRareMob)
             };
             rareMobMarkers.push(marker);
+            // The viewer's goto catalog stores client-map coordinates even
+            // though wiki records and our marker positions start in world X/Y.
+            const mapPoint = worldToClientMap({ x:location[0], y:location[1], z:resolvedEqZ });
             const gotoEntry = {
                 label:name,
                 rawLabel:name,
                 search:name.toLowerCase(),
-                point:{ x:location[0], y:location[1], z:resolvedEqZ, label:name, size:2 }
+                point:{ ...mapPoint, label:name, size:2 }
             };
             app.gotoNpcEntries.push(gotoEntry);
             rareGotoEntries.push(gotoEntry);
@@ -918,12 +926,34 @@ window.eqlEyeOfZommViewer = {
 
     async pathTo(label, wikiLocation = null) {
         if (!app || !label) return { ok:false };
+        // Invalidate a previous-start candidate before awaiting the line
+        // worker, including when the destination key will stay the same.
+        cancelCandidateRoute('rerouting');
         const wanted = normalizedNpcName(label);
         const hasLocalMapLabel = (app.gotoNpcEntries || []).some(entry =>
             !rareGotoEntries.includes(entry) && normalizedNpcName(entry.label) === wanted
         );
-        const ok = await startRouteWithoutChangingPresentation(() => app.gotoNpcLabel(String(label), { teleport:false }));
+        const previousTarget = app.navigationTarget;
+        const pending = startRouteWithoutChangingPresentation(() => app.gotoNpcLabel(String(label), { teleport:false }));
+        const token = app.navigationBuildToken;
+        let ok;
+        try {
+            ok = await pending;
+        } catch (error) {
+            if (token !== app.navigationBuildToken) return { ok:false, source:'' };
+            throw error;
+        }
+        // A cancelled/superseded map request returns false too. It must not
+        // recreate the old destination through the wiki-location fallback.
+        if (token !== app.navigationBuildToken) return { ok:false, source:'' };
         if (ok) {
+            // The upstream label router caches by destination only. Reuse its
+            // resolved map point, but refresh a cached target from the newest
+            // logged start before scheduling the spatial candidate.
+            if (previousTarget && app.navigationTarget === previousTarget &&
+                !await pathToGroundedLocation(previousTarget.label, previousTarget.point, previousTarget.ground)) {
+                return { ok:false, source:'' };
+            }
             const result = navigationResult(String(label), hasLocalMapLabel ? 'map-label' : 'wiki-location');
             scheduleCandidateRoute(result.label || String(label));
             return result;

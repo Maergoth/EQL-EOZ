@@ -1,7 +1,7 @@
 import { EQLogParser } from './parser.js';
 import { conForLevel } from './con-colors.js';
 import { scaledItemStats } from './item-scaling.js';
-import { itemHasClassStats, itemHasZoneSource, scoreItemForBrowse } from './item-browse.js';
+import { itemHasClassStats, itemHasZoneSource, itemMatchesClasses, scoreItemForBrowse } from './item-browse.js';
 import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
 import { routeDistanceLabel } from './route-guidance.js';
@@ -253,9 +253,7 @@ function itemHoverAttrs(itemOrName) {
 }
 
 function itemMatchesProfile(item, profile) {
-    if (!profile.classes.length) return true;
-    const classes = (item.classes || []).map(c => String(c).toUpperCase());
-    return !classes.length || classes.includes('ALL') || profile.classes.some(c => classes.includes(c));
+    return itemMatchesClasses(item, profile.classes);
 }
 
 function itemDropsInZone(item, zone) {
@@ -304,7 +302,7 @@ async function loadPack() {
             const res = await fetch(url, { cache:'no-store' });
             if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
             const nextPack = await res.json();
-            if (!nextPack || Number(nextPack.meta?.schemaVersion) < 3 || !Array.isArray(nextPack.zones) || !Array.isArray(nextPack.npcs) || !Array.isArray(nextPack.items)) {
+            if (!nextPack || !(Number(nextPack.meta?.schemaVersion) >= 3) || !Array.isArray(nextPack.zones) || !Array.isArray(nextPack.npcs) || !Array.isArray(nextPack.items)) {
                 throw new Error('invalid Eye of Zomm data pack');
             }
             pack = nextPack;

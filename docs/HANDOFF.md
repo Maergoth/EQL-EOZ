@@ -9,7 +9,12 @@ This repository is the source of truth. A new contributor should be able to resu
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.8.0**. Minimal view is intel-first: named/rare mobs are the default surface, with no duplicate destination field, while map and row-level routing are independent opt-in Settings choices that default off. Waypoint copying, considers, pop-under loot, and mob-list filtering remain active without either. Class-filtered loot excludes statless and weight-only items.
+Current code baseline: **0.8.1**. Minimal view is intel-first: named/rare mobs are the default surface, with no duplicate destination field, while map and row-level routing are independent opt-in Settings choices that default off. Waypoint copying, considers, pop-under loot, and mob-list filtering remain active without either. Class-filtered loot excludes statless and weight-only items.
+
+The [wiki/map integration audit](INTEGRATION_AUDIT.md) records the 0.8.1 repairs,
+the fresh export, source locations, and remaining data/visual gates. This patch
+retains the 0.8.0 established-first route policy. Its exporter catalog changes
+require a separate reviewed server installation and dataset rebuild.
 
 Desktop zone indexing remains metadata-only and hydrates the selected archive on demand. The WLD exporter advances across skipped material groups so later textures stay assigned to their actual polygon ranges; bitmap aliases and repeating UV sampling remain in place. EQEmu's sequential WLD polygon/material assignment independently supports this repair, but Mistmoore plus one outdoor proprietary-zone visual check is still required.
 
