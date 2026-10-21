@@ -163,6 +163,21 @@ async function consumeResponse(response, { limit, expectedSize, signal, onChunk 
     } finally { reader.releaseLock(); }
 }
 
+async function assertNormalDirectoryAncestors(directory) {
+    // A Windows 8.3 path is another spelling of a normal directory. Inspect the
+    // components themselves so accepting that spelling never accepts a redirected
+    // cache root or parent (including Windows junctions).
+    for (let current = directory; ; current = path.dirname(current)) {
+        let stat;
+        try { stat = await fsp.lstat(current); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+        if (stat && (!stat.isDirectory() || stat.isSymbolicLink())) {
+            throw new UpdateError('The application update cache must be a normal local directory.');
+        }
+        if (path.dirname(current) === current) break;
+    }
+}
+
 class AppUpdater {
     constructor({ version, cacheDirectory, isPackaged = false, platform = process.platform, arch = process.arch, fetchImpl = globalThis.fetch,
         confirmInstall = async () => false, launchInstaller = async () => 'No installer launcher configured.', onInstallerLaunched = () => {},
@@ -190,11 +205,12 @@ class AppUpdater {
     snapshot() { return { ...this.state }; }
 
     async ensureDirectory() {
+        await assertNormalDirectoryAncestors(this.directory);
         await fsp.mkdir(this.directory, { recursive:true });
-        const stat = await fsp.lstat(this.directory);
-        if (!stat.isDirectory() || stat.isSymbolicLink()) throw new UpdateError('The application update cache is unavailable.');
-        const resolved = await fsp.realpath(this.directory);
-        if (path.relative(resolved, this.directory)) throw new UpdateError('The application update cache must be a normal local directory.');
+        await assertNormalDirectoryAncestors(this.directory);
+        // Pin later record, verification and installer operations to the canonical
+        // directory rather than comparing lexical Windows long/short spellings.
+        this.directory = await fsp.realpath(this.directory);
     }
 
     async readRecord(name) {

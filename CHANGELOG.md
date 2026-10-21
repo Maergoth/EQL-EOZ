@@ -9,6 +9,7 @@
 - Check unknown live NPC/item events against a complete bundled wiki presence index. Show Screenshot/Ignore notices inside Timers/Triggers for 15 seconds, paused on hover; explicit screenshots copy locally and never upload.
 - Make cumulative item-era filtering explicit, offer eras present in the dataset, and keep First/Top/Map controls on the map page.
 - Refresh the release bootstrap from the reviewed production exporter and retain existing log, folder and overlay preferences during upgrade.
+- Accept normal Windows short-path cache aliases while retaining updater link protections; run the complete source suite on Windows before publication.
 
 ## 0.8.2 - Native modular overlays, timers and application updates
 

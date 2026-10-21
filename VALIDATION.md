@@ -44,6 +44,14 @@ timer editor, and native preloads. The installer remains unsigned. Physical
 game/DPI/audio/desktop-capture checks and installed upgrades are distinct from
 these build and synthetic checks. Earlier 0.8.2 observations remain historical.
 
+The first public Windows build stopped before publication when its normal
+8.3 TEMP path was rejected by a lexical cache-path comparison. The updater now
+checks requested directory components for symlinks/junctions and pins normal
+paths to their canonical spelling. Twenty-six updater tests pass on Windows
+Node 22 and Node 25, including a distinct real 8.3 alias, case variants,
+verified handoff, restore and redirected-parent rejection. PR CI now runs the
+entire source suite on Windows as well as Linux before release.
+
 ## 0.8.2 application updates, native overlays and timers
 
 The dependency-free updater has 22 mocked lifecycle/network/IPC checks plus
