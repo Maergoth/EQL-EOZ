@@ -126,6 +126,18 @@ Recognized explicit NPC template zones take precedence and retain every listed
 zone. Categories and article-title suffixes are fallbacks; newly recognized
 categories must not override a field or remove a second spawn zone.
 
+Drop-source names use wiki-link destinations rather than display labels or
+revamp notes. The producer unwraps `VeliousGray` presentation, removes `Era`
+and `Loc` annotations, and recognizes styled zone headings before assigning
+the following NPCs. Real nested NPC links remain sources; coordinate-only
+bullets, file links, and unresolved templates do not become monsters. These
+repairs take effect after the matching wiki producer is deployed and its
+dataset is rebuilt/published; no wiki article or database edit is required.
+Structured `ItemWhereRow` sources use their explicit Zone/NPC fields, including
+piped links and multiline rows; their Area/Loc columns and surrounding
+`ItemWhereTable` wrapper never become NPC identities or change another list's zone.
+Explicit normal/raid zone anchors override the enclosing section for that row.
+
 The October 21, 2026 owner-approved rollout completed staging and production
 deployment via EQLWiki PRs #35/#36 and the explicit-zone precedence follow-up
 #37/#38, then rebuilt and published final manifest

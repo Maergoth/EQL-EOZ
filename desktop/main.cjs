@@ -9,7 +9,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const { URL } = require('node:url');
-const { AppUpdater, isReleaseNotesUrl } = require('./app-updater.cjs');
+const { AppUpdater, isReleaseNotesUrl, launchSilentNsisInstaller } = require('./app-updater.cjs');
 const { OverlayHost } = require('./overlay-host.cjs');
 const { safeMapFile } = require('./overlay-map-policy.cjs');
 const { DiscoveryHost } = require('./discovery-host.cjs');
@@ -55,20 +55,7 @@ function getAppUpdater() {
         version:APP_VERSION,
         cacheDirectory:path.join(userDataDir(), 'app-updates'),
         isPackaged:app.isPackaged,
-        confirmInstall:async version => {
-            const result = await dialog.showMessageBox(windowRef || undefined, {
-                type:'question',
-                title:'Install Eye of Zomm update',
-                message:`Install Eye of Zomm ${version}?`,
-                detail:'Eye of Zomm will close and the Windows installer will open. Your saved settings, wiki data, and logs are kept. Finish the installer to reopen the app.',
-                buttons:['Later', 'Install update'],
-                defaultId:0,
-                cancelId:0,
-                noLink:true
-            });
-            return result.response === 1;
-        },
-        launchInstaller:target => shell.openPath(target),
+        launchInstaller:target => launchSilentNsisInstaller(target, { installDirectory:path.dirname(process.execPath) }),
         onInstallerLaunched:() => app.quit()
     });
     return appUpdater;

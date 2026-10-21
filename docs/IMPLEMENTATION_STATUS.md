@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-21
 
-Code baseline: 0.8.5
+Code baseline: 0.8.6
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
@@ -16,7 +16,7 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 | 0.8 Recast/Detour worker | Guarded real-zone candidate integrated; promotion gated | Pinned 0.43.1 + deterministic module bundle; cooperative decoded-viewer collision export; bounded route crop; transferable buffers; established-first atomic replacement; latest-request-wins cancellation; independent validation; package and notice checks | Pass the full proprietary-zone and responsiveness matrix before making Recast first choice |
 | 0.9 decision intelligence beta | Planned | User stories and data rules in vision 16.4 | Begin only after the 0.8 95% corpus/collision/non-blocking exit gate |
 | 1.0 trusted release | Planned | Quality gate in vision 16.5 | Signing, upgrade path, support/compatibility docs, clean Windows matrix, no S1/S2 defects |
-| 0.8.3 application updater | Implemented; official 0.8.3 installation verified | GitHub beta discovery; verified bounded NSIS staging; explicit native install approval; Electron IPC/UI smoke; prior official installer preserved profile and shortcut targets | Complete a later approved in-app installer handoff; 0.8.4 publication does not change the owner's local installation |
+| Application updater | Implemented; 0.8.6 adds silent upgrade/relaunch after the explicit restart action | GitHub beta discovery; verified bounded NSIS staging; trusted main-window IPC; launch-failure recovery; Electron IPC/UI smoke; prior official installer preserved profile and shortcut targets | Complete a later approved in-app silent upgrade; current publication leaves the owner's local installation unchanged |
 | Native modular overlays | Implemented in 0.8.3 PR; physical game/OS acceptance pending | Parse/Map/Intel/Timers are separate windows; PNUT five tabs, own Taken, one session, bounded complete aggregates, saved layouts, lock/passthrough and recovery; actual Electron smoke; [source map](PNUT_UX_PLAN.md) | Physical passthrough, focus, scaling and monitor/sleep matrix; no duplicate 3D decoder or native docking claimed |
 | Native map and Intel | Implemented with synthetic IPC evidence and production dataset | Client line-map canvas, shared routes, Normal Zone/Raid Zone identity, lazy all-drop Show More, named consider/kill focus/expand/flash/blip without activation; Through era is cumulative; map modes only on main Map page | Live source/location acceptance |
 | PNUT-style timers and swing | Implemented with synthetic log evidence | Main list/editor with literal/regex PNUT captures, preview, cooldown/overlap, warning/end colors and sound/speech, notifications; persisted deadlines/replay guards and observed swing; [rules](TIMERS.md) | Live EQL grammar and timing comparison; timestamps limit precision to one second |

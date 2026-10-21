@@ -747,8 +747,34 @@ class BuildEyeOfZommPack extends Maintenance {
             }
         };
 
-        foreach ( preg_split( '/\r\n|\n|\r/', $dropsFrom ) as $line ) {
-            $line = trim( preg_replace( '/<!--.*?-->/s', '', (string)$line ) );
+        foreach ( $this->dropSourceLines( $dropsFrom ) as $line ) {
+            $row = $this->extractBalancedTemplate( $line, 'ItemWhereRow' );
+            if ( $row !== '' ) {
+                $fields = $this->dropSourceRowFields( $this->stripTemplateWrapper( $row, 'ItemWhereRow' ) );
+                $zoneField = $this->dropSourceMarkup( $fields[1] ?? '' );
+                $zones = $this->detectZonesFromField( $zoneField );
+                $names = $this->dropSourceNames( $this->dropSourceMarkup( $fields[2] ?? '' ) );
+                $rowRaid = $raidInstance;
+                $rowExplicit = $explicit;
+                if ( preg_match( '/\[\[[^|\]]*#(raid|normal|public)[ _]+instances?(?:\||\]\])/i', $zoneField, $anchor ) ) {
+                    $rowRaid = strtolower( $anchor[1] ) === 'raid';
+                    $rowExplicit = true;
+                }
+                // ItemWhereRow is Zone | NPC/Merchant | Area | Loc. Area and
+                // Loc are annotations; a row's zone never changes list scope.
+                if ( count( $zones ) === 1 ) {
+                    foreach ( $names as $name ) {
+                        $key = $this->instanceKey( $zones[0], $name ) . '|' . (int)$rowRaid;
+                        if ( !isset( $seen[$key] ) ) {
+                            $sources[] = [ 'zone' => $zones[0], 'name' => $name, 'raidInstance' => $rowRaid,
+                                'instanceType' => $rowRaid ? 'raid' : 'normal', '_instanceExplicit' => $rowExplicit ];
+                            $seen[$key] = true;
+                        }
+                    }
+                }
+                continue;
+            }
+            $line = $this->dropSourceMarkup( (string)$line );
             if ( $line === '' ) {
                 continue;
             }
@@ -769,32 +795,30 @@ class BuildEyeOfZommPack extends Maintenance {
                     $raidInstance = true;
                     $explicit = true;
                 }
-                $zoneKey = $this->normalizeZone( $zoneTitle );
-                $currentZone = isset( $this->zoneAliasMap[$zoneKey] )
-                    ? (string)( $this->zoneAliasMap[$zoneKey]['name'] ?? $currentHeading )
-                    : '';
+                $zones = $this->detectZonesFromField( $line );
+                $currentZone = $zones[0] ?? '';
+                if ( $currentZone === '' ) {
+                    $currentHeading = $this->dropSourceNames( $line )[0] ?? '';
+                }
                 continue;
             }
 
             if ( preg_match( '/^\*+\s*(.+?)\s*$/', $line, $m ) ) {
                 $headingHadBullets = true;
-                $name = $this->cleanWikiText( $m[1] );
-                if ( $name === '' ) {
-                    continue;
+                foreach ( $this->dropSourceNames( $m[1] ) as $name ) {
+                    $key = $this->instanceKey( $currentZone, $name ) . '|' . (int)$raidInstance;
+                    if ( isset( $seen[$key] ) ) {
+                        continue;
+                    }
+                    $sources[] = [ 'zone' => $currentZone, 'name' => $name, 'raidInstance' => $raidInstance,
+                        'instanceType' => $raidInstance ? 'raid' : 'normal', '_instanceExplicit' => $explicit ];
+                    $seen[$key] = true;
                 }
-                $key = strtolower( $currentZone . '|' . $name ) . '|' . (int)$raidInstance;
-                if ( isset( $seen[$key] ) ) {
-                    continue;
-                }
-                $sources[] = [ 'zone' => $currentZone, 'name' => $name, 'raidInstance' => $raidInstance,
-                    'instanceType' => $raidInstance ? 'raid' : 'normal', '_instanceExplicit' => $explicit ];
-                $seen[$key] = true;
                 continue;
             }
 
             // Conservative fallback for a direct plain-text source line.
-            $name = $this->cleanWikiText( $line );
-            if ( $name !== '' && strlen( $name ) <= 160 ) {
+            foreach ( $this->dropSourceNames( $line ) as $name ) {
                 $key = '|'.strtolower( $name ) . '|' . (int)$raidInstance;
                 if ( !isset( $seen[$key] ) ) {
                     $sources[] = [ 'zone' => '', 'name' => $name, 'raidInstance' => $raidInstance,
@@ -806,6 +830,123 @@ class BuildEyeOfZommPack extends Maintenance {
 
         $flushStandaloneHeading();
         return $sources;
+    }
+
+    private function dropSourceLines( string $text ): array {
+        $text = preg_replace( '/<!--.*?-->/s', '', $text );
+        // Keep balanced structured rows intact even when formatted over
+        // several lines or placed beside another row/table wrapper.
+        $out = [];
+        $offset = 0;
+        while ( preg_match( '/\{\{\s*ItemWhereRow\b/i', $text, $match, PREG_OFFSET_CAPTURE, $offset ) ) {
+            $start = $match[0][1];
+            $row = $this->extractBalancedTemplate( substr( $text, $start ), 'ItemWhereRow' );
+            if ( $row === '' ) {
+                break;
+            }
+            $out = array_merge( $out, preg_split( '/\r\n|\n|\r/', substr( $text, $offset, $start - $offset ) ) );
+            $out[] = $row;
+            $offset = $start + strlen( $row );
+        }
+        return array_merge( $out, preg_split( '/\r\n|\n|\r/', substr( $text, $offset ) ) );
+    }
+
+    private function dropSourceRowFields( string $body ): array {
+        $parts = [];
+        $start = 0;
+        $links = 0;
+        $templates = 0;
+        $length = strlen( $body );
+        for ( $i = 0; $i < $length; $i++ ) {
+            $pair = substr( $body, $i, 2 );
+            if ( $pair === '[[' || $pair === ']]' || $pair === '{{' || $pair === '}}' ) {
+                if ( $pair === '[[' ) { $links++; }
+                elseif ( $pair === ']]' ) { $links = max( 0, $links - 1 ); }
+                elseif ( $pair === '{{' ) { $templates++; }
+                else { $templates = max( 0, $templates - 1 ); }
+                $i++;
+            } elseif ( $body[$i] === '|' && !$links && !$templates ) {
+                $parts[] = trim( substr( $body, $start, $i - $start ) );
+                $start = $i + 1;
+            }
+        }
+        $parts[] = trim( substr( $body, $start ) );
+        if ( ( $parts[0] ?? '' ) === '' ) {
+            array_shift( $parts );
+        }
+        $fields = [];
+        $position = 1;
+        foreach ( $parts as $part ) {
+            if ( preg_match( '/^([1-4])\s*=\s*(.*)$/s', $part, $match ) ) {
+                $fields[(int)$match[1]] = trim( $match[2] );
+            } else {
+                $fields[$position++] = $part;
+            }
+        }
+        return $fields;
+    }
+
+    private function dropSourceMarkup( string $text ): string {
+        $text = preg_replace( '/<!--.*?-->/s', '', $text );
+        // These templates have known source-list semantics. VeliousGray is
+        // transparent presentation; Era and Loc annotate a source, never name
+        // one. Keep unknown templates unresolved instead of inventing an NPC
+        // from an arbitrary argument or a transcluded item's contents.
+        for ( $depth = 0; $depth < 20; $depth++ ) {
+            $next = preg_replace_callback( '/\{\{([^{}]*)\}\}/s', static function ( $match ) {
+                [ $template, $body ] = array_pad( explode( '|', $match[1], 2 ), 2, '' );
+                $template = strtolower( trim( $template ) );
+                if ( $template === 'veliousgray' ) {
+                    return $body;
+                }
+                if ( in_array( $template, [ 'loc', 'location', 'era' ], true ) ) {
+                    return '';
+                }
+                return $match[0];
+            }, $text );
+            if ( $next === $text ) {
+                break;
+            }
+            $text = $next;
+        }
+        return trim( str_replace( [ "'''", "''" ], '', strip_tags( $text ) ) );
+    }
+
+    private function dropSourceNames( string $text ): array {
+        if ( preg_match( '/[{}]/', $text ) ) {
+            return [];
+        }
+        // Link destinations establish identity. Labels and following notes
+        // such as "(Hate 2.0)" must not split a real NPC from its stat page.
+        $remaining = trim( $text );
+        $names = [];
+        while ( preg_match( '/^\[\[\s*([^|\]#]+)(?:#[^|\]]*)?(?:\|[^\]]*)?\]\]/', $remaining, $match ) ) {
+            $names[] = $match[1];
+            $remaining = trim( substr( $remaining, strlen( $match[0] ) ) );
+            // Only an explicit list separator starts another source. Links
+            // in a trailing parenthetical/strategy note are annotations.
+            if ( !preg_match( '/^(?:[,;\/]|(?:and|or)\b)\s*/i', $remaining, $separator ) ) {
+                break;
+            }
+            $remaining = trim( substr( $remaining, strlen( $separator[0] ) ) );
+        }
+        if ( !$names ) {
+            if ( preg_match( '/\[\[|\]\]/', $text ) ) {
+                return [];
+            }
+            $names = [ $this->cleanWikiText( $text ) ];
+        }
+        $out = [];
+        foreach ( $names as $name ) {
+            $name = trim( str_replace( '_', ' ', html_entity_decode( $name, ENT_QUOTES | ENT_HTML5 ) ) );
+            if ( $name === '' || strlen( $name ) > 160 || preg_match( '/[{}\[\]|]/', $name ) ||
+                !preg_match( '/\p{L}/u', $name ) ||
+                preg_match( '/^:?(?:file|image|category|template|special|help):/i', $name ) ) {
+                continue;
+            }
+            $out[strtolower( $name )] = $name;
+        }
+        return array_values( $out );
     }
 
     private function parseLevelRange( string $text ): array {

@@ -15,7 +15,7 @@ The installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz:
 
 ## A look around
 
-These screenshots show the actual **0.8.5 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [GitHub CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39658890201). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+These screenshots show the actual **0.8.6 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [GitHub CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39687241470). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 
@@ -25,7 +25,7 @@ Move and resize the main window normally. Its size, position and maximized state
 
 ### Maps that stay beside the game
 
-The native Map reads your client text maps and shares the logged position, named destinations and validated route with the main app. Reveal its header for **Reset**, Follow, zoom and a button cycling **Map → Top → First person** in this window. Its 3D scene loads only when used. Use Z controls to inspect another elevation; monster names and markers share interactive pointer targets. The complete main **Map Explorer** keeps its own views and zoomable Local Map.
+The native Map reads your client text maps and shares the logged position, named destinations and validated route with the main app. Hover the full zone-title row for **Reset**, Follow, zoom and a button cycling **Map → Top → First person** beside its name. A separate grip moves the unlocked window. Its 3D scene loads only when used. Use Z controls to inspect another elevation; monster names and markers share interactive pointer targets. The complete main **Map Explorer** keeps its own views and zoomable Local Map.
 
 Routing is an opt-in. A line appears only after collision checks approve it; a guarded Recast/Detour candidate may refine the established route after the same checks. An unreachable or unverified destination remains a marker. Static archives do not reveal live doors or actors. [Route validation](docs/ROUTE_REJECTION_AUDIT.md) records working detours and remaining limits.
 
@@ -61,10 +61,10 @@ Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards op
 
 | Update | What it changes | Where to use it |
 | --- | --- | --- |
-| Application update | Installed EoZ code and interface | **Settings → Application updates**: check, download, then explicitly approve the normal Windows installer |
+| Application update | Installed EoZ code and interface | **Settings → Application updates**: check, download, then **Restart to install update** |
 | Wiki data update | Cached NPCs, items, icons, zone aliases and source records | **Sync with Wiki**, also checked at startup |
 
-Verified application downloads can wait until later. Startup downloading is optional and off by default; installation always requires approval. Settings, folder/log choices and cached wiki data stay in the existing profile. Older builds without the updater need one normal installation of a newer build first.
+Verified application downloads can wait until later. Startup downloading is optional and off by default. From 0.8.6, **Restart to install update** authorizes a silent upgrade and automatic relaunch, without the setup wizard or another app confirmation. Windows may still require a security or elevation prompt. Settings, folder/log choices and cached wiki data stay in the existing profile. Older installed builds use their existing installer flow for the first upgrade.
 
 The wiki data flow is server-side and low priority:
 

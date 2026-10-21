@@ -31,7 +31,7 @@ attack bar into HTML/CSS. Retain EQL colors. The pinned MIT license and attribut
 ship under THIRD_PARTY/PNUT; the Python runtime is not bundled.
 The EoZ implementation adds no runtime package dependency.
 
-## Application updates in 0.8.3
+## Application updates (0.8.6 behavior)
 
 Application updates and **Sync with Wiki** have distinct settings, state and
 actions. Startup checks release metadata without blocking first paint. A small
@@ -44,9 +44,11 @@ header badge opens Application updates when a newer release is available.
    startup download is a separate preference and defaults off.
 3. **Later** keeps a verified staged installer available in Settings, including
    after relaunch. It never installs merely because the app is closing or starting.
-4. **Install update…** requires a native confirmation, rechecks the staged
-   executable, opens the normal NSIS installer and quits only after successful
-   handoff. The user completes the normal installer and relaunches EoZ.
+4. **Restart to install update** is the explicit confirmation. The main process
+   rechecks the staged executable, starts NSIS with its silent upgrade/relaunch
+   flags and quits only after Windows accepts the launch. No second EoZ dialog
+   or setup wizard is needed. Windows security/elevation prompts remain possible.
+   Older installed builds use their previous installer flow for the first upgrade.
 
 GitHub's stable `/releases/latest` endpoint does not cover EoZ's 0.x prereleases.
 Use the release collection and require agreement between the release tag,

@@ -27,6 +27,7 @@ try {
         if (appUpdate.supported !== false || appUpdate.isPackaged !== false || appUpdate.status !== 'unsupported') {
             throw new Error('Development desktop updater must be exposed through trusted IPC without offering installation.');
         }
+        if((await window.eyeOfZommUpdates.install()).status!=='unsupported')throw new Error('Development IPC cannot start a silent installer.');
         document.querySelector('[data-view="settings"]').click();
         if (!document.getElementById('check-app-update').disabled || !document.getElementById('install-app-update').hidden) {
             throw new Error('Application update controls must reflect development-mode support.');

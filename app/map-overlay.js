@@ -72,12 +72,19 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     if (!root) return {render(){},setVisible(){},dispose(){}};
     root.innerHTML = `<style>
 .native-map{height:100%;display:flex;flex-direction:column;min-height:0}
-.native-map-header{height:auto!important;min-height:28px!important;flex-wrap:wrap;row-gap:0;outline-offset:-1px}
-.native-map-header>.hover-menu{order:1}.native-map-tools{order:2;display:flex;flex:1 0 100%;flex-wrap:wrap;gap:5px;align-items:center;font-size:11px;max-height:0;opacity:0;overflow:hidden;pointer-events:none;padding:0;-webkit-app-region:no-drag}
-.native-map-header:hover .native-map-tools,.native-map-header:focus-within .native-map-tools{max-height:180px;opacity:1;overflow:visible;pointer-events:auto;padding:2px 0 6px}
+.native-map-header{display:grid!important;grid-template-columns:12px minmax(28px,1fr) auto 18px;grid-template-rows:minmax(36px,auto) auto;column-gap:4px;row-gap:0;height:auto!important;min-height:36px!important;outline-offset:-1px;-webkit-app-region:no-drag!important}
+.native-map-header .native-map-title{grid-column:2;grid-row:1;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:36px;-webkit-app-region:no-drag}
+.native-map-drag-grip{grid-column:1;grid-row:1;display:block;width:12px;height:28px;line-height:28px;text-align:center;color:#8d9aa9;cursor:grab;-webkit-app-region:drag}
+.is-locked .native-map-drag-grip{opacity:.35;cursor:default;-webkit-app-region:no-drag}
+.native-map-header>.hover-menu{grid-column:4;grid-row:1;align-self:center;margin:0}
+.native-map-tools{grid-column:3;grid-row:1;display:flex;flex-wrap:nowrap;gap:3px;align-items:center;min-width:0;max-width:0;visibility:hidden;opacity:0;overflow:hidden;pointer-events:none;padding:0;font-size:11px;-webkit-app-region:no-drag}
+.native-map-header:is(:hover,:focus-visible,.is-controls-open) .native-map-tools,.native-map-header:has(:focus-visible) .native-map-tools{max-width:250px;visibility:visible;opacity:1;overflow:visible;pointer-events:auto}
 .native-map [hidden]{display:none!important}
-.native-map-tools button{font-size:11px;padding:2px 5px}.native-map-tools>[data-map-action=mode]{margin-left:auto}
-.native-map-slice{display:flex;flex:1 0 100%;align-items:center;gap:5px;min-width:0}.native-map-slice input[type=range]{flex:1;min-width:40px;accent-color:#d8b75c}.native-map-slice output{font-size:10px;min-width:72px;color:#d8c895;white-space:nowrap}.native-map-slice label{display:flex;align-items:center;gap:3px;color:#9ba8b8}.native-map-slice input[type=number]{width:46px;padding:2px 3px;font-size:10px}
+.native-map-tools button{flex:0 0 auto;min-width:20px;font-size:11px;line-height:18px;padding:1px 3px;white-space:nowrap}.native-map-tools>[data-map-action=mode]{min-width:30px;max-width:78px;overflow:hidden;text-overflow:ellipsis}
+.native-map-slice{grid-column:1/-1;grid-row:2;display:flex;align-items:center;gap:5px;min-width:0;max-height:0;visibility:hidden;opacity:0;overflow:hidden;pointer-events:none;font-size:11px;-webkit-app-region:no-drag}
+.native-map-header:is(:hover,:focus-visible,.is-controls-open) .native-map-slice,.native-map-header:has(:focus-visible) .native-map-slice{max-height:34px;visibility:visible;opacity:1;overflow:visible;pointer-events:auto;padding:0 0 5px}
+.native-map-slice input[type=range]{flex:1;min-width:40px;accent-color:#d8b75c}.native-map-slice output{font-size:10px;min-width:72px;color:#d8c895;white-space:nowrap}.native-map-slice label{display:flex;align-items:center;gap:3px;color:#9ba8b8}.native-map-slice input[type=number]{width:46px;padding:2px 3px;font-size:10px}
+@media(max-width:360px){.native-map-tools{gap:2px}.native-map-tools button{font-size:10px;padding:1px 2px}.native-map-tools>[data-map-action=mode]{max-width:48px}.native-map-header .native-map-title{font-size:11px}}
 .native-map-stage{position:relative;min-height:0;flex:1;overflow:hidden;border:1px solid #ffffff14;border-radius:4px;touch-action:none}.native-map-stage canvas{display:block;width:100%;height:100%;cursor:grab}.native-map-stage canvas:active{cursor:grabbing}
 .native-map-3d-stage{position:absolute;inset:0;min-height:0}.native-map-3d-stage iframe{width:100%;height:100%;border:0}
 .native-map-message{position:absolute;inset:15px;pointer-events:none;color:#a6b4c8;font-size:12px;line-height:1.5}
@@ -85,18 +92,27 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
 .native-map-npc-links{position:absolute;inset:0;pointer-events:none}.native-map-npc-link{position:absolute;opacity:0;pointer-events:none;padding:0!important;border:0!important;font:11px Segoe UI;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .native-map-npc-link:focus-visible{opacity:1;background:#101722!important;color:#fff0ad;outline:1px solid #f0d77f;min-width:24px;width:max-content!important;max-width:100%;z-index:2}
 </style><div class="native-map"><div class="native-map-local-header"><div class="native-map-tools" role="toolbar" aria-label="Map controls"><button data-map-action="reset" title="Reset to Map, follow player, default zoom and Z slice">Reset</button><button data-map-action="follow" aria-pressed="true">Follow</button><button data-map-action="zoom-in" aria-label="Zoom in">+</button><button data-map-action="zoom-out" aria-label="Zoom out">−</button><button data-map-action="mode" aria-label="Map view: Map; switch to Top 3D">Map</button><div class="native-map-slice"><output data-map-slice-label for="native-map-z">Z ±25</output><input id="native-map-z" data-map-z type="range" min="-1" max="1" step="1" value="0" aria-label="Map Z slice"><label title="Show known elevations within this distance of the selected Z">± <input data-map-tolerance type="number" min="1" max="250" step="1" value="25" aria-label="Map Z tolerance"></label></div></div></div><div class="native-map-stage"><canvas aria-label="Current zone map"></canvas><div class="native-map-npc-links" role="group" aria-label="Named map destinations"></div><div class="native-map-3d-stage" hidden></div><div class="native-map-message"></div></div><div class="native-map-route"></div><div class="native-map-note"></div><div class="native-map-3d-status" role="status"></div></div>`;
-    const tools=root.querySelector('.native-map-tools');
-    const $=selector=>root.querySelector(selector)||tools.querySelector(selector),canvas=$('canvas'),context=canvas.getContext('2d');
+    const tools=root.querySelector('.native-map-tools'),slice=tools.querySelector('.native-map-slice');
+    const $=selector=>root.querySelector(selector)||tools.querySelector(selector)||slice.querySelector(selector),canvas=$('canvas'),context=canvas.getContext('2d');
     const shell=root.closest?.('.overlay-shell') || root;
     const outerHeader=shell.querySelector?.('#overlay-header');
     const header=outerHeader || $('.native-map-local-header');
-    const previousTabindex=header.getAttribute('tabindex'),previousLabel=header.getAttribute('aria-label');
-    header.classList.add('native-map-header');header.tabIndex=0;header.setAttribute('aria-label','Map window; focus to show map controls');shell.classList.add('native-map-host');
+    const title=header.querySelector('#overlay-title')||document.createElement('span');
+    const previousTabindex=header.getAttribute('tabindex'),previousLabel=header.getAttribute('aria-label'),previousTitle=title.getAttribute('title');
+    header.classList.add('native-map-header');header.tabIndex=0;header.setAttribute('aria-label','Map window; hover the zone title or focus this header for map controls');shell.classList.add('native-map-host');title.classList.add('native-map-title');
+    if(!outerHeader){title.textContent='Map';header.prepend(title);}
+    const dragGrip=document.createElement('span');dragGrip.className='native-map-drag-grip';dragGrip.textContent='⠿';dragGrip.title='Drag Map window when unlocked';dragGrip.setAttribute('aria-hidden','true');header.prepend(dragGrip);
     if(outerHeader){outerHeader.insertBefore(tools,outerHeader.querySelector('.hover-menu'));$('.native-map-local-header').hidden=true;}
+    header.append(slice);
+    for(const button of tools.querySelectorAll('button'))if(!button.title)button.title=button.getAttribute('aria-label')||button.textContent;
     const actionStatus=document.createElement('div');actionStatus.className='native-map-action-status';actionStatus.setAttribute('role','status');$('.native-map').append(actionStatus);
     let data=null,session={},zone='',dataVersion=null,generation=0,disposed=false,follow=true,sliceCenter=null,sliceTolerance=25,zoom=1,center={x:0,y:0},baseScale=1,drag=null,targets=[],mode='map',three=null,threeMode=null,modeSerial=0,visible=true,lastFocus='',pendingFocus=null;
-    const listeners=[],npcButtons=new Map();
+    const listeners=[],npcButtons=new Map();let headerCloseTimer=null;
     const listen=(node,event,callback,options)=>{node.addEventListener(event,callback,options);listeners.push(()=>node.removeEventListener(event,callback,options));};
+    const headerKeyboardFocus=()=>header.matches(':focus-visible')||Boolean(header.querySelector(':focus-visible'));
+    const revealHeader=()=>{clearTimeout(headerCloseTimer);headerCloseTimer=null;header.classList.add('is-controls-open');};
+    const deferHeaderClose=()=>{clearTimeout(headerCloseTimer);headerCloseTimer=setTimeout(()=>{headerCloseTimer=null;if(!disposed&&!header.matches(':hover')&&!headerKeyboardFocus())header.classList.remove('is-controls-open');},180);};
+    listen(header,'pointerenter',revealHeader);listen(header,'pointerleave',deferHeaderClose);listen(header,'focusin',()=>{if(headerKeyboardFocus())revealHeader();});listen(header,'focusout',event=>{if(!header.contains(event.relatedTarget))deferHeaderClose();});
     const modes={map:'Map',top:'Top 3D',first:'First Person'};
     const activeSlice=()=>{const elevations=mapElevationBounds(data?.lines,session.map?.npcs,session.map?.location);return sliceCenter??(elevations.min+elevations.max)/2;};
     const isVisible=()=>visible&&!document.hidden;
@@ -118,7 +134,7 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
         three.render(sessionFor3D());three.setFollow?.(follow);three.setSlice?.({center:activeSlice(),tolerance:sliceTolerance});
         if(threeMode!==mode){threeMode=mode;const owner=++modeSerial;void Promise.resolve(three.setMode(mode)).catch(()=>{if(!disposed&&owner===modeSerial)$('.native-map-3d-status').textContent='This 3D view is unavailable. Choose Map or check the selected game folder.';});}
     }
-    function setMode(next){const previous=mode;mode=NATIVE_MAP_MODES.includes(next)?next:'map';const button=$('[data-map-action="mode"]');button.textContent=modes[mode];button.setAttribute('aria-label',`Map view: ${modes[mode]}; switch to ${modes[nextNativeMapMode(mode)]}`);if(mode==='map'&&previous!==mode){update3D();fit({resetZoom:false,resetCenter:false});}draw();}
+    function setMode(next){const previous=mode;mode=NATIVE_MAP_MODES.includes(next)?next:'map';const button=$('[data-map-action="mode"]');button.textContent=modes[mode];button.setAttribute('aria-label',`Map view: ${modes[mode]}; switch to ${modes[nextNativeMapMode(mode)]}`);button.title=button.getAttribute('aria-label');if(mode==='map'&&previous!==mode){update3D();fit({resetZoom:false,resetCenter:false});}draw();}
     async function selectNpc(npc){if(!npc)return;actionStatus.textContent='';try{await bridge.action('session:select-npc',{id:npc.id,npc:npc.name,zone:npc.zone||zone,raidInstance:!!npc.raidInstance});}catch(error){if(!disposed)actionStatus.textContent=error?.message||'This destination is no longer available. Choose a current map marker.';}}
     function renderNpcButtons(){
         const keys=new Set();
@@ -133,6 +149,7 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     const screen=(point,width,height)=>({x:(point.x-center.x)*baseScale*zoom+width/2,y:(point.y-center.y)*baseScale*zoom+height/2});
     function draw(){
         if(disposed)return;
+        title.title=title.textContent||'Map';
         $('[data-map-action="follow"]').setAttribute('aria-pressed',String(follow));
         const map=session.map||{},player=map.location?worldToClientMap(map.location):null,elevations=mapElevationBounds(data?.lines,map.npcs,map.location);
         if(sliceCenter===null&&(knownMapZ(map.location?.z)||data?.status==='ready'))sliceCenter=knownMapZ(map.location?.z)?Number(map.location.z):(elevations.min+elevations.max)/2;
@@ -176,5 +193,5 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     listen(document,'visibilitychange',()=>{if(!isVisible())release3D();else update3D();});
     const observer=globalThis.ResizeObserver?new ResizeObserver(()=>{if(data&&mode==='map'){fit({resetZoom:false,resetCenter:false});draw();}}):null;observer?.observe($('.native-map-stage'));
     render(getSession?.());
-    return {render,setVisible(value){visible=Boolean(value);if(!isVisible())release3D();else update3D();},dispose(){disposed=true;generation++;release3D();listeners.forEach(remove=>remove());observer?.disconnect();tools.remove();header.classList.remove('native-map-header');shell.classList.remove('native-map-host');if(previousLabel===null)header.removeAttribute('aria-label');else header.setAttribute('aria-label',previousLabel);if(previousTabindex===null)header.removeAttribute('tabindex');else header.setAttribute('tabindex',previousTabindex);}};
+    return {render,setVisible(value){visible=Boolean(value);if(!isVisible())release3D();else update3D();},dispose(){disposed=true;generation++;clearTimeout(headerCloseTimer);release3D();listeners.forEach(remove=>remove());observer?.disconnect();tools.remove();slice.remove();dragGrip.remove();header.classList.remove('native-map-header','is-controls-open');title.classList.remove('native-map-title');shell.classList.remove('native-map-host');if(previousTitle===null)title.removeAttribute('title');else title.setAttribute('title',previousTitle);if(previousLabel===null)header.removeAttribute('aria-label');else header.setAttribute('aria-label',previousLabel);if(previousTabindex===null)header.removeAttribute('tabindex');else header.setAttribute('tabindex',previousTabindex);}};
 }

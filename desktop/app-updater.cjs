@@ -5,6 +5,7 @@
 const crypto = require('node:crypto');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const { spawn, execFile } = require('node:child_process');
 
 const REPOSITORY = 'Maergoth/EQL-EOZ';
 const RELEASES_URL = `https://api.github.com/repos/${REPOSITORY}/releases?per_page=100`;
@@ -15,6 +16,82 @@ const DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
 class UpdateError extends Error {}
+
+// Match electron-builder's UUIDv5(appId, ELECTRON_BUILDER_NS_UUID). This is
+// the existing application's NSIS identity, not a new installation identity.
+const registryGuidBytes = crypto.createHash('sha1').update(Buffer.from('50e065bc313411e69bab38c9862bdaf3','hex')).update('com.eqlwiki.eyeofzomm').digest().subarray(0,16);
+registryGuidBytes[6]=(registryGuidBytes[6]&15)|80;registryGuidBytes[8]=(registryGuidBytes[8]&63)|128;
+const registryGuidHex=registryGuidBytes.toString('hex');
+const NSIS_INSTALL_KEY=`Software\\${registryGuidHex.slice(0,8)}-${registryGuidHex.slice(8,12)}-${registryGuidHex.slice(12,16)}-${registryGuidHex.slice(16,20)}-${registryGuidHex.slice(20)}`;
+
+// reg.exe's redirected console text has no UTF-8 contract. Read the Unicode
+// registry value through .NET and explicitly encode stdout as UTF-8 instead.
+// Script source is fixed; the only inputs are our key and an allowlisted hive.
+const NSIS_REGISTRY_READ_SCRIPT = [
+    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+    "$ErrorActionPreference = 'Stop'",
+    "$hive = switch ($env:EOZ_UPDATE_REGISTRY_HIVE) { 'HKCU' { [Microsoft.Win32.RegistryHive]::CurrentUser } 'HKLM' { [Microsoft.Win32.RegistryHive]::LocalMachine } default { throw 'Unsupported registry hive' } }",
+    "$base = [Microsoft.Win32.RegistryKey]::OpenBaseKey($hive, [Microsoft.Win32.RegistryView]::Registry64)",
+    "try { $key = $base.OpenSubKey($env:EOZ_UPDATE_REGISTRY_KEY); if ($null -eq $key) { exit 1 }; try { if ($key.GetValueKind('InstallLocation') -ne [Microsoft.Win32.RegistryValueKind]::String) { exit 1 }; [Console]::Write([string]$key.GetValue('InstallLocation')) } finally { $key.Dispose() } } finally { $base.Dispose() }"
+].join('\n');
+
+function readNsisInstallLocation(hive, { execFileImpl = execFile } = {}) {
+    if(!['HKCU','HKLM'].includes(hive))return Promise.resolve('');
+    return new Promise(resolve => {
+        // Fixed registry keys/values only; no shell and no renderer input.
+        const executable=path.win32.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
+        execFileImpl(executable,['-NoProfile','-NonInteractive','-Command',NSIS_REGISTRY_READ_SCRIPT],
+            { windowsHide:true, timeout:5000, maxBuffer:16384, encoding:'utf8',
+                env:{...process.env,EOZ_UPDATE_REGISTRY_HIVE:hive,EOZ_UPDATE_REGISTRY_KEY:NSIS_INSTALL_KEY} },(error,stdout)=>{
+                if(error){resolve('');return;}
+                resolve(String(stdout||''));
+            });
+    });
+}
+
+async function resolveInstalledNsisScope(installDirectory, { readLocation = readNsisInstallLocation, realpath = fsp.realpath } = {}) {
+    const canonical=async value=>{
+        if(typeof value!=='string'||!path.win32.isAbsolute(value)||/[\x00-\x1f\x7f"]/u.test(value))return '';
+        const resolved=await realpath(value).catch(()=>value);
+        return path.win32.normalize(resolved).replace(/\\+$/,'').toLowerCase();
+    };
+    const [userLocation,machineLocation]=await Promise.all([readLocation('HKCU'),readLocation('HKLM')]);
+    const [current,user,machine]=await Promise.all([canonical(installDirectory),canonical(userLocation),canonical(machineLocation)]);
+    if(current&&current===user&&current!==machine)return 'currentuser';
+    if(current&&current===machine&&current!==user){
+        // Stock NSIS consolidates HKCU into HKLM during an all-users install.
+        // Do not silently remove a separate per-user copy during this update.
+        if(userLocation)throw new UpdateError('Both per-user and machine-wide installs were detected. Use the release download to update the machine-wide copy manually.');
+        return 'allusers';
+    }
+    throw new UpdateError('The installed app could not be matched to its Windows registration. Use the release download to reinstall it.');
+}
+
+// electron-builder 26.15.3's assisted NSIS template starts the installed app
+// when /S and --force-run are combined. --updated keeps upgrade semantics and
+// gives the old process time to exit before replacing its files. /D must be
+// the final, unquoted argument; pass it verbatim, with no command shell.
+async function launchSilentNsisInstaller(target, { installDirectory, spawnImpl = spawn, resolveScope = resolveInstalledNsisScope } = {}) {
+    const invalid = value => typeof value !== 'string' || /[\x00-\x1f\x7f"]/u.test(value);
+    if (invalid(target) || invalid(installDirectory) || !path.win32.isAbsolute(installDirectory) ||
+        !(path.isAbsolute(target) || path.win32.isAbsolute(target)) || !/\.exe$/i.test(target)) {
+        throw new UpdateError('Windows could not start the update installer. Try again.');
+    }
+    const scope=await resolveScope(installDirectory);
+    if(!['currentuser','allusers'].includes(scope))throw new UpdateError('The installed app could not be matched to its Windows registration. Use the release download to reinstall it.');
+    return new Promise((resolve, reject) => {
+        let child;
+        const failure = () => reject(new UpdateError('Windows could not start the update installer. Try again.'));
+        try {
+            child = spawnImpl(target, ['/S', '--updated', '--force-run', `/${scope}`, `/D=${installDirectory}`], {
+                shell:false, detached:true, stdio:'ignore', windowsHide:true,
+                windowsVerbatimArguments:true, argv0:`"${target}"`
+            });
+        } catch { failure(); return; }
+        child.once('error', failure);
+        child.once('spawn', () => { child.unref(); resolve(''); });
+    });
+}
 
 function parseVersion(value) {
     if (typeof value !== 'string' || value.length > 100) throw new UpdateError('The release version is unsupported.');
@@ -180,14 +257,13 @@ async function assertNormalDirectoryAncestors(directory) {
 
 class AppUpdater {
     constructor({ version, cacheDirectory, isPackaged = false, platform = process.platform, arch = process.arch, fetchImpl = globalThis.fetch,
-        confirmInstall = async () => false, launchInstaller = async () => 'No installer launcher configured.', onInstallerLaunched = () => {},
+        launchInstaller = async () => 'No installer launcher configured.', onInstallerLaunched = () => {},
         now = () => new Date(), metadataTimeoutMs = METADATA_TIMEOUT_MS, downloadTimeoutMs = DOWNLOAD_TIMEOUT_MS }) {
         parseVersion(version);
         this.version = version;
         this.directory = path.resolve(cacheDirectory);
         this.supported = Boolean(isPackaged && platform === 'win32' && arch === 'x64');
         this.fetch = fetchImpl;
-        this.confirmInstall = confirmInstall;
         this.launchInstaller = launchInstaller;
         this.onInstallerLaunched = onInstallerLaunched;
         this.now = now;
@@ -391,7 +467,6 @@ class AppUpdater {
         if (!this.supported || this.active || !this.pending || this.state.status !== 'ready') return this.snapshot();
         const operation = this.begin('install', this.downloadTimeoutMs);
         try {
-            if (!await this.confirmInstall(this.pending.version)) return this.snapshot();
             this.state.status = 'installing';
             this.state.error = '';
             let target;
@@ -426,5 +501,5 @@ class AppUpdater {
     shutdown() { this.active?.controller.abort(); }
 }
 
-module.exports = { AppUpdater, UpdateError, RELEASES_URL, MAX_METADATA_BYTES, MAX_INSTALLER_BYTES, parseVersion, compareVersions,
+module.exports = { AppUpdater, UpdateError, launchSilentNsisInstaller, resolveInstalledNsisScope, readNsisInstallLocation, NSIS_INSTALL_KEY, NSIS_REGISTRY_READ_SCRIPT, RELEASES_URL, MAX_METADATA_BYTES, MAX_INSTALLER_BYTES, parseVersion, compareVersions,
     selectRelease, isReleaseNotesUrl, trustedDownloadRedirect, consumeResponse };

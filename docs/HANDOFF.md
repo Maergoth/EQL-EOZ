@@ -9,7 +9,7 @@ This repository is the source of truth. A new contributor should be able to resu
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.8.5**. Four independent native windows provide Parse, Map, Zone & loot and Timers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
+Current code baseline: **0.8.6**. Four independent native windows provide Parse, Map, Zone & loot and Timers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
 
 [Overlay workspace follow-up](OVERLAY_MAP_WORKSPACE.md) is the 0.8.5 continuation
 index. Native Map has a collapsing control header and Map/Top/First cycle;
@@ -39,10 +39,12 @@ classifies every initial rejection and records verified ramp/stair/drop
 repairs: 36 rendered requests, 20 valid paths, 16 markers, and exact endpoints.
 This patch retains guarded established-first
 routing; both engines are checked before drawing. The reviewed exporter/catalog
-is deployed in production and the rebuilt initial-download snapshot is
-`20261021T101150Z-dd346c8cc55d` (124 zones, 8,679 NPCs, 11,270 items,
-117 raid variants and a complete public entity catalog).
-The integration audit records deployment and checksum evidence.
+is deployed separately from the desktop; official installers fetch and verify
+the current [dataset manifest](https://github.com/Maergoth/EQL-EOZ/blob/dataset/manifest.json)
+before packaging. The 0.8.6 producer repair resolves styled drop-source links
+and excludes location annotations. Wiki PRs #43/#44 record that correction;
+#45/#46 retain valid structured item-source rows. The filtered dataset must be rebuilt and audited before desktop
+release. The integration audit preserves the earlier export/checksum history.
 
 Desktop zone indexing remains metadata-only and hydrates the selected archive on demand. The WLD exporter advances across skipped material groups so later textures stay assigned to their actual polygon ranges; bitmap aliases and repeating UV sampling remain in place. EQEmu's sequential WLD polygon/material assignment independently supports this repair. The local rendered pass now confirms Mistmoore and Commonlands textures; live game comparison remains separate.
 
@@ -78,8 +80,9 @@ The 0.8.3 candidate adds application releases independently of wiki-data Sync.
 `desktop/app-updater.cjs` owns release selection, bounded download/verification,
 saved staging and explicit NSIS handoff. `desktop/preload.cjs` exposes a fixed
 API only to the main local application frame; `app/app-update-ui.js` presents
-status, Download, Later and Install update… in Settings and a compact badge.
-Downloads on startup are opt-in; installation is never automatic. App ID,
+status, Download, Later and Restart to install update in Settings and a compact badge.
+Downloads on startup are opt-in. From 0.8.6 the explicit restart action uses a
+silent upgrade and automatic relaunch; startup/exit alone never install. App ID,
 profile paths and the game-read boundary stay intact.
 
 [PNUT_UX_PLAN.md](PNUT_UX_PLAN.md) retains the pinned PNUT reference, implementation

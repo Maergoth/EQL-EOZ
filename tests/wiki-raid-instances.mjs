@@ -54,6 +54,23 @@ const fixtures = {
     'Synthetic statless item':{ text:'{{Itempage\n|itemname=Synthetic alternate item\n|dropsfrom=\n}}', revision:206 },
     'Synthetic skipped item':{ text:'A categorized public item page without its template.', itemCandidate:true, revision:207 }
 };
+// Hate-shaped markup, synthetic entities: presentation wrappers/notes must not
+// become source identities or carry a preceding zone into the next mob list.
+const hateNpc = 'Synthetic Grandmaster R`Tal';
+Object.assign(fixtures, {
+    'Plane of Hate':{text:'= Raid Instance =\n! Raid Boss NPCs\n|[['+hateNpc+']]\n|-',revision:503},
+    [hateNpc]:{text:'{{Namedmobpage\n|zone=[[Plane of Hate]]\n|level=54\n|location=(-12,34,56)\n}}',revision:301},
+    'Synthetic styled Hate gem':{text:item('Synthetic styled Hate gem','[[Plane of Hate]]\n* {{VeliousGray| [['+hateNpc+'|Unrelated display label]] (Hate 2.0)}}\n** {{Loc|Plane of Hate|-12,+34,56|(-12,+34,56)}}\n== Raid Instance ==\n[[Plane of Hate]]\n* {{VeliousGray| [['+hateNpc+']] (Hate 2.0)}}'),revision:302},
+    'Synthetic ground book':{text:item('Synthetic ground book','[[Plane of Hate]]\n* Ground Spawn\n** {{Loc|Plane of Hate|-12,+34,56|(-12,+34,56)}}'),revision:303},
+    'Synthetic wrapped zones':{text:item('Synthetic wrapped zones',"[[West Karana]]\n* [[Synthetic western NPC]]\n{{VeliousGray| [[The Warrens]] }}\n* {{VeliousGray| [[Synthetic warrens NPC]] }}\n[[Timorous Deep]] {{Era|Kunark}}\n* [[Synthetic ocean NPC|Display name]] {{Era|Kunark}} (see [[Synthetic false note]])\n** [[Synthetic nested NPC]]\n** {{UnknownSource|[[Synthetic false NPC]]}}\n** [[File:Map Icon.png]]"),revision:304}
+});
+const structuredNpc = 'Synthetic mischievous batling';
+Object.assign(fixtures, {
+    'The Warrens':{text:'= Raid Instance =\n! Types of Monsters\n|[['+structuredNpc+']]\n|-',revision:504},
+    [structuredNpc]:{text:'{{Namedmobpage\n|zone=[[The Warrens]]\n|level=12\n}}',revision:305},
+    'Synthetic anchored shuriken':{text:item('Synthetic anchored shuriken','{{ItemWhereRow|[[The Warrens#Raid_Instance|The Warrens]]|[['+structuredNpc+']]|Behind Muglwump|()}}\n= Raid Instance =\n{{ItemWhereRow|[[The Warrens#Normal_Instance|The Warrens]]|[['+structuredNpc+']]|Behind Muglwump|()}}'),revision:307},
+    'Synthetic structured shuriken':{text:item('Synthetic structured shuriken','= Normal Instance =\n[[West Karana]]\n* [[Synthetic western NPC]]\n{{ItemWhereTable|\n{{ItemWhereRow\n | [[The Warrens|Displayed zone]]\n | [['+structuredNpc+'|Displayed merchant]]\n | Behind [[Synthetic false area]]\n | {{Loc|The Warrens|-15,40|location label}}\n}}\n}}\n* [[Synthetic trailing western NPC]]\n{{ItemWhereRow|Unmapped place|[[Synthetic false NPC]]|Area|()}}\n= Raid Instance =\n{{ItemWhereTable|{{ItemWhereRow|1=[[The Warrens]]|2=[['+structuredNpc+']]|3=Behind Muglwump|4=()}}}}'),revision:306}
+});
 const php = `<?php
 class Maintenance {}
 class Title {
@@ -128,16 +145,26 @@ $many = '[[' . ${JSON.stringify(zone)} . "]]\\n";
 for ($index=0;$index<30;$index++) $many .= '* [[Synthetic normal ' . $index . "]]\\n";
 $many .= "= Raid Instance =\\n[[" . ${JSON.stringify(zone)} . "]]\\n";
 for ($index=0;$index<30;$index++) $many .= '* [[Synthetic raid ' . $index . "]]\\n";
-echo json_encode(['npcs'=>$npcs,'items'=>$items,'bounded'=>$call('parseDropSources', $many),'wikiEntities'=>$call('wikiEntityIndex')]);
+$commentRows = $call('parseDropSourceLines', "<!-- Hidden structured row\\n{{ItemWhereRow|[[The Warrens]]|[[Synthetic comment ghost]]|Area|()}}\\n-->", false, false);
+echo json_encode(['npcs'=>$npcs,'items'=>$items,'bounded'=>$call('parseDropSources', $many),'wikiEntities'=>$call('wikiEntityIndex'),'commentRows'=>$commentRows]);
 `;
 const result = spawnSync('php', [], { input:php, encoding:'utf8', env:{ ...process.env,
     EOZ_EXPORTER_SOURCE:sourcePath, EOZ_CATALOG_PATH:catalogPath, EOZ_RAID_FIXTURES:JSON.stringify(fixtures) } });
 if (result.error?.code === 'ENOENT') throw new Error('Raid exporter checks require PHP.');
 assert.equal(result.status, 0, result.stderr || 'Actual exporter raid fixture harness must complete.');
 const actual = JSON.parse(result.stdout);
+assert.deepEqual(actual.commentRows,[],'Multiline HTML comments are removed before structured-row tokenization, even when the line parser is called directly');
 const records = name => actual.npcs.filter(record => record.name === name);
 const sources = name => actual.items.find(record => record.name === name).dropSources;
 const raid = name => records(name).filter(record => record.raidInstance);
+assert.deepEqual(sources('Synthetic styled Hate gem').map(source=>[source.zone,source.name,source.raidInstance]),[['Plane of Hate',hateNpc,false],['Plane of Hate',hateNpc,true]],'Styled link destinations retain exact normal/raid NPC identity, without labels or revamp annotations');
+for (const source of sources('Synthetic styled Hate gem')) assert(records(source.name).some(record=>record.zone===source.zone&&record.raidInstance===source.raidInstance),'Every styled Hate drop joins its actual exported NPC variant');
+assert.deepEqual(sources('Synthetic ground book').map(source=>[source.zone,source.name]),[['Plane of Hate','Ground Spawn']],'A nested Loc annotation is not a second monster or a drop source');
+assert.deepEqual(sources('Synthetic wrapped zones').map(source=>[source.zone,source.name]),[['West Karana','Synthetic western NPC'],['The Warrens','Synthetic warrens NPC'],['Timorous Deep','Synthetic ocean NPC'],['Timorous Deep','Synthetic nested NPC']],'Styled/era headings reset the source zone; real nested NPC links remain; unknown templates and file links do not invent sources');
+assert(actual.items.flatMap(item=>item.dropSources).every(source=>!/[{}\[\]|]/.test(source.name)),'Exported source names contain resolved identities, not raw wikitext');
+assert.deepEqual(sources('Synthetic structured shuriken').map(source=>[source.zone,source.name,source.raidInstance]),[['West Karana','Synthetic western NPC',false],['The Warrens',structuredNpc,false],['West Karana','Synthetic trailing western NPC',false],['The Warrens',structuredNpc,true]],'Balanced ItemWhereRow supports multiline/piped/numeric positional fields, ignores area/Loc and unknown zones, and does not leak its zone into surrounding lists');
+for (const drop of sources('Synthetic structured shuriken').filter(source=>source.name===structuredNpc)) assert.equal(records(drop.name).filter(record=>record.zone===drop.zone&&record.raidInstance===drop.raidInstance).length,1,'Structured normal/raid source joins exactly one NPC variant');
+assert.deepEqual(sources('Synthetic anchored shuriken').map(source=>[source.zone,source.name,source.raidInstance]),[['The Warrens',structuredNpc,true],['The Warrens',structuredNpc,false]],'Explicit row zone anchors preserve their normal/raid identity even inside an opposite section');
 assert.deepEqual(records('King Tranix').map(record => record.raidInstance), [true], 'An explicit zone Raid Instance Only reference makes the boss raid-only.');
 assert.deepEqual(records('Synthetic future raid NPC').map(record => [record.zone,record.raidInstance]), [['Synthetic future zone',true]], 'A newly categorized zone and nested Raid Instance heading require no hardcoded zone list.');
 assert.deepEqual(records('Synthetic future public NPC').map(record => [record.zone,record.raidInstance]), [['Synthetic future zone',false]], 'A same-level normal sibling ends the nested raid scope.');

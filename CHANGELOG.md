@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.6 - Reliable maps, clean Intel names and simpler updates
+
+- Put the zone title and primary Map controls on one row, with a full-width hover target and a separate unlocked drag grip.
+- Keep controls reachable while moving from the title to buttons; retain keyboard access and collapse them after leaving the header.
+- Repair the overlay file-policy mismatch that rejected required archive support files when switching to Top or First Person.
+- Exercise the real configured-folder and archive-file hydration path in Windows CI, alongside native pointer input over the title.
+- Parse styled wiki drop-source links and structured item-table rows as exact source names; exclude location annotations and reward-item transclusions while preserving zone/normal/raid associations.
+- Make **Restart to install update** silently upgrade and relaunch EoZ after verifying the staged installer, without a second app confirmation or setup wizard.
+
 ## 0.8.5 - Map modes and compact overlay controls
 
 - Collapse native Map controls when its header is idle; replace Fit with Reset and remove Reload.

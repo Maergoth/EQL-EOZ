@@ -27,6 +27,11 @@ EQLWiki - Eye of Zomm is intentionally designed around a narrow, auditable bound
 
 The desktop service binds only to `127.0.0.1`. Renderer polling therefore stays on the user's own PC.
 
+The native Map's archive bridge admits client maps, supported archives and only
+the root text sidecars required by the decoder (`mp3index.txt`, `*_assets.txt`).
+It excludes arbitrary root text, logs, settings and mutation endpoints. An
+asset-list reference does not grant permission to read another file type.
+
 Native overlays are separate transparent app windows, never injected into the
 game. One main renderer owns log parsing and timers; sandboxed panels receive
 bounded local snapshots without raw lines, paths or installer access. The host
@@ -52,6 +57,9 @@ Remote structured knowledge arrives from GitHub as a static gzip data pack origi
 
 Application updates use a separate bounded release check and SHA-256-verified
 installer staged only in Eye of Zomm's own user-data directory. Automatic
-downloads are opt-in. Launching that installer requires an explicit native
-confirmation; checking, downloading, closing and starting EoZ never silently
-install an update. The normal installer upgrades Eye of Zomm, not game files.
+downloads are opt-in. The explicit **Restart to install update** action
+revalidates the staged package, hands it to NSIS in silent upgrade mode and
+closes EoZ only after Windows accepts the launch. NSIS relaunches the installed
+app afterward. Checking, downloading, closing and starting EoZ alone never
+install an update. Windows security/elevation prompts remain under OS control.
+The installer upgrades Eye of Zomm, preserving the existing profile and game files.

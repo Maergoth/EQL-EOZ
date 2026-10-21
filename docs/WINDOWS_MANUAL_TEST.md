@@ -1,14 +1,14 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.5-x64.exe`.
+Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.6-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.5` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.6` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
 
 ## 0c. Overlay map and anchored Intel
 
-1. Hover or keyboard-focus the Map header to reveal Reset, Follow, view cycle and zoom. Move onto the canvas: controls collapse. Verify no Reload remains and Reset restores the default Map/follow/zoom state.
+1. Move onto the zone title anywhere across the Map header: Reset, Follow, view cycle and zoom reveal on the same row as the title. Move to each button without losing controls, then leave for the canvas and confirm collapse. Repeat locked/unlocked and at narrow widths/largest text. The explicit drag grip moves only an unlocked window. Keyboard focus must also reveal controls. Verify no Reload remains and Reset restores the default Map/follow/zoom state.
 2. Hover/click a monster's actual drawn name, including a name far from its dot. The pointer cursor and selected source must agree. Repeat using its keyboard target.
-3. Cycle Map → Top → First inside the same native window. Navigate the first-person viewer, exit pointer lock with Escape and return to Map. Hiding Map must release the extra scene; showing it remains recoverable.
+3. Cycle Map → Top → First inside the same native window using an installation containing normal archive support files, including `mp3index.txt` and an EQG asset-list file. No required support file may produce Failed to fetch. Navigate the first-person viewer, exit pointer lock with Escape and return to Map. Hiding Map must release the extra scene; showing it remains recoverable.
 4. In Intel, scroll a long list while Item Level Slider and My Class remain visible. Changing tier updates the same saved main-app slider and drop stats. Dragging must survive session heartbeats.
 5. Hover/focus a mob name, move onto its actions and activate Details/Route/Copy/Wiki/Map. Controls stay reachable across the gap. Each Map action opens the correct normal/raid source in first person without moving the logged player marker or route start. No global Intel Map button remains.
 6. Change zones/folders while 3D loads, reload/hide/show the panel and enable/restore Ignore mouse. No stale camera target or scene may appear. Compare known-Z and unknown-Z markers against the selected slice.
@@ -30,8 +30,9 @@ The automated display/renderer tests complement these physical monitor and game 
 
 ## 0. Application updater acceptance
 
-The 0.8.3 candidate adds Application updates separately from Sync with Wiki.
-An existing 0.8.1 installation needs the first updater build installed normally.
+Application updates are separate from Sync with Wiki. From 0.8.6 the explicit
+restart action uses a silent NSIS upgrade and automatic relaunch. An older
+installed build retains its own installer flow for the first upgrade.
 Record its folder/log choices, preferences and cached wiki-data state; verify
 those are retained after the normal NSIS upgrade. A future approved newer build
 is needed to prove the complete in-app updater path without changing production
@@ -40,10 +41,12 @@ release metadata for a test.
 In a controlled Windows test, check that the correct new version is offered,
 Release notes opens only this repository, download progress/cancellation work,
 Later preserves the staged package after relaunch, and no installer runs on
-startup or exit. Automatic download defaults off. Cancel the native install
-confirmation first; EoZ must remain open. Approve only when ready to test the
-actual upgrade: verify NSIS opens, EoZ closes after handoff, installation finishes,
-the correct version relaunches and the same profile/cache/log choices remain.
+startup or exit. Automatic download defaults off. When ready to upgrade from
+0.8.6 or newer, choose **Restart to install update**: no extra app confirmation
+or setup wizard should appear. EoZ closes after Windows accepts the installer
+launch, the silent upgrade finishes, and the correct version relaunches with
+the same profile/cache/log choices and install directory. Test a directory
+containing spaces. Windows may still show its own security/elevation prompt.
 Use disposable EoZ test profiles to test changed/missing staged installer recovery
 and Windows launch failure. Game files must never change. Hash verification does
 not establish Authenticode signing; record signature status separately.
