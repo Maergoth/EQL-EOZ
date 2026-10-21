@@ -16,13 +16,29 @@ changed or published. Execution remains in GitHub CI per owner preference,
 with physical game input and complete proprietary-zone acceptance separate.
 
 The Intel screenshot also exposed raw `Loc` and `VeliousGray` templates in item
-drop sources, which Intel projects into mob rows. The current production pack
-contains 145 template-shaped drop sources (64 location notes and 68 styled
+drop sources, which Intel projects into mob rows. The reported 0.8.5 pack
+contained 145 template-shaped drop sources (64 location notes and 68 styled
 labels among them), while its actual NPC records have no template-shaped names.
 The producer must interpret supported style/link syntax, exclude annotation
 templates and resolve styled zone headings before associating drops. The live
 producer and filtered dataset require their separate reviewed deployment and
 refresh; changing the desktop alone does not repair existing cached records.
+
+[GitHub CI 39687241470](https://github.com/Maergoth/EQL-EOZ/actions/runs/39687241470)
+passed source and Windows native checks on `aca75f6`. The Map test uses trusted
+Electron pointer input over the title at 260/460px in both lock states, checks
+same-row geometry and Follow clicks/exit collapse, then checks real Tab focus.
+The loader test restores the actual configured folder, hydrates S3D/EQG support
+files over the restricted bridge and delivers native Files to the shipped parser
+Worker. Empty synthetic archives deliberately produce no geometry; camera/WebGL
+assertions then use synthetic geometry. No proprietary archive render is claimed.
+Current tour/README images were collected by that run and visually reviewed.
+
+The matching producer passed both PHP source harnesses in wiki PR #43 and the
+isolated production promotion #44. Production deployment
+[39687256914](https://github.com/Maergoth/EQLWiki/actions/runs/39687256914)
+passed; the installed producer hash matched the reviewed source. Dataset rebuild,
+before/after filtered-pack audit and publication remain separate release gates.
 
 ## 0.8.5 native Map and Intel workspace
 
