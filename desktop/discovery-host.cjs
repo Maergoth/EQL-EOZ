@@ -63,7 +63,16 @@ class DiscoveryHost {
             if (value.sourceId !== undefined && (typeof value.sourceId !== 'string' || !choices.some(source => source.id === value.sourceId))) throw new Error('Choose a currently available window or display.');
             const source = value.sourceId !== undefined ? choices.find(source => source.id === value.sourceId) : games.length === 1 ? games[0] : null;
             if (!source) return { choices:choices.map(source => ({ id:source.id, name:source.name.slice(0, 160) })) };
-            if (!source.thumbnail || typeof source.thumbnail.isEmpty !== 'function' || source.thumbnail.isEmpty()) throw new Error('That window could not be captured. Try a display or run EverQuest in windowed mode.');
+            const usableThumbnail = candidate => candidate.thumbnail && typeof candidate.thumbnail.isEmpty === 'function' && !candidate.thumbnail.isEmpty();
+            if (!usableThumbnail(source)) {
+                // A minimized/exclusive-fullscreen game can have no thumbnail.
+                // Offer usable alternatives without silently copying a display.
+                if (value.sourceId === undefined) {
+                    const alternatives = choices.filter(candidate => candidate !== source && usableThumbnail(candidate));
+                    if (alternatives.length) return { choices:alternatives.map(candidate => ({ id:candidate.id, name:candidate.name.slice(0, 160) })) };
+                }
+                throw new Error('That window could not be captured. Try a display or run EverQuest in windowed mode.');
+            }
             this.electron.clipboard.writeImage(source.thumbnail);
             return { captured:true, message:'Paste your clipboard into discord!' };
         } finally { if (this.captureGeneration === generation) { this.capturing = false; this.captureId = null; } }
