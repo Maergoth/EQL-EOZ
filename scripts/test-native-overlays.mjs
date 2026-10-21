@@ -225,6 +225,7 @@ try {
                 const geometry=await execute(intelWindow,()=>{
                     const list=document.querySelector('#intel-body'),summary=list.querySelector('.npc-summary'),name=summary.querySelector('.npc-name'),actions=summary.querySelector('.row-actions'),outside=document.querySelector('.intel-controls');
                     document.activeElement?.blur();summary.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:outside}));
+                    summary.scrollIntoView({block:'nearest',inline:'nearest'});
                     const measure=()=>({height:list.scrollHeight,summary:summary.getBoundingClientRect().toJSON(),heading:summary.querySelector('.npc-heading').getBoundingClientRect().toJSON(),drops:summary.nextElementSibling.getBoundingClientRect().toJSON()});
                     const before=measure();name.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse'}));const after=measure(),bar=actions.getBoundingClientRect().toJSON();
                     const map=actions.querySelector('[data-npc-action="map"]');map.focus();const button=map.getBoundingClientRect().toJSON(),strip=actions.getBoundingClientRect().toJSON();
@@ -235,6 +236,7 @@ try {
                 assert.deepEqual(geometry.before,geometry.after,`Tier 7 hover never changes list height, mob geometry or drop position: ${detail}`);
                 assert(geometry.bar.top>=geometry.after.heading.top-1&&geometry.bar.bottom<=geometry.after.heading.bottom+1,`Action strip stays inside the original name row: ${detail}`);
                 assert(geometry.focused&&geometry.button.left>=geometry.strip.left-1&&geometry.button.right<=geometry.strip.right+1,`The last action scrolls horizontally into keyboard view at narrow widths: ${detail}`);
+                assert(geometry.button.top>=geometry.strip.top&&geometry.button.bottom<=geometry.strip.bottom,`The final action has full vertical clearance without a scrollbar consuming its row: ${detail}`);
             }
             intelWindow.setBounds(intelOriginalBounds);await action('intel','font-scale',1);
             const tooltipHover=await execute(intelWindow,async()=>{

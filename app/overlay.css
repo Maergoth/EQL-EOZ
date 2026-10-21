@@ -24,7 +24,9 @@ body[data-panel=intel] #panel-content{display:flex;flex-direction:column;overflo
 .npc-summary .npc-heading{min-height:calc(26px * var(--font-scale))}
 .npc-heading .npc-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:transparent;border:0;padding:0;color:var(--con);font-size:1em;font-weight:600;text-align:left}
 .npc-heading .npc-name:hover{color:var(--con);text-decoration:underline;text-underline-offset:2px}
-.npc-summary .row-actions{display:none;position:absolute;left:0;right:0;top:0;height:calc(26px * var(--font-scale));max-width:100%;margin:0;padding:0 2px;gap:3px;align-items:center;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;border:1px solid #d8b75c50;border-radius:4px;background:#0c121d;z-index:5;scroll-margin-block:5px}
+.npc-summary .row-actions{display:none;position:absolute;left:0;right:0;top:0;height:calc(26px * var(--font-scale));max-width:100%;margin:0;padding:1px 4px;gap:3px;align-items:center;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-padding-inline:6px;border:1px solid #d8b75c50;border-radius:4px;background:#0c121d;z-index:5;scroll-margin-block:5px}
+.npc-summary .row-actions::-webkit-scrollbar{display:none}
+.npc-summary .row-actions::after{content:"";display:block;flex:0 0 6px;height:1px}
 .npc-summary.is-actions-open .row-actions,.npc-summary:focus-within .row-actions{display:flex}
 .npc-summary .row-actions button{font-size:.74em;padding:2px 4px;flex:0 0 auto;white-space:nowrap}
 .intel-group>h2{display:block;padding:0;border:0}
