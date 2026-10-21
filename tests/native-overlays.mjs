@@ -81,6 +81,29 @@ test('stored preferences are bounded and contain no session/log data', () => {
     assert.equal(normalizePreferences({}, [display()]).panels.timers.visible, false);
 });
 
+test('upgrading a visible Consider panel enables Map with fresh defaults and preserves explicit choices', () => {
+    const screens=[display()], defaults=normalizePreferences({},screens);
+    const parse={visible:true,locked:false,backgroundOpacity:0.65,bounds:{x:120,y:100,width:460,height:390}};
+    const migrated=normalizePreferences({panels:{parse,consider:{visible:true,locked:false,passThrough:true,
+        backgroundOpacity:0.3,fontScale:1.6,bounds:{x:900,y:600,width:300,height:180}}}},screens);
+    assert.deepEqual(migrated.panels.map,{...defaults.panels.map,visible:true},'Only visibility transfers from the retired panel');
+    assert.deepEqual(migrated.panels.parse,normalizePreferences({panels:{parse}},screens).panels.parse);
+    assert.equal(migrated.panels.consider,undefined);
+    assert.deepEqual(Object.keys(migrated.panels),PANEL_IDS);
+    assert.deepEqual(normalizePreferences(migrated,screens),migrated,'Saving normalized preferences makes migration stable');
+    assert.equal(normalizePreferences({panels:{consider:{visible:true},map:{visible:false}}},screens).panels.map.visible,false);
+    assert(Object.values(defaults.panels).every(panel=>panel.visible===false),'New profiles keep every native panel opt-in');
+});
+
+test('persisting upgraded preferences removes the retired Consider panel', () => fixture(async ({host,writes}) => {
+    assert.equal(host.preferences.panels.map.visible,true);
+    assert.equal(host.windows.has('map'),true);
+    assert.equal(host.windows.has('consider'),false);
+    await host.save();
+    assert.equal(writes.at(-1).panels.consider,undefined);
+    assert.equal(writes.at(-1).panels.map.visible,true);
+}, {saved:{panels:{consider:{visible:true}}}}));
+
 test('bounds stay on the correct monitor and recover after disconnection', () => {
     assert.deepEqual(clampBounds({ x:2200, y:100, width:400, height:500 }, [display(), display(1920)]), { x:2200, y:100, width:400, height:500 });
     assert.deepEqual(clampBounds({ x:2200, y:100, width:400, height:500 }, [display()]), { x:1520, y:100, width:400, height:500 });

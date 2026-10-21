@@ -50,6 +50,9 @@ function clampBounds(input, displays, fallback = { x:40, y:40, width:380, height
 function normalizePreferences(raw, displays) {
     const primary = displays[0]?.workArea || { x:0, y:0, width:1280, height:720 };
     const panels = {};
+    // The retired Consider panel becomes Map on upgrade. Transfer only its
+    // enabled state; Map needs its own defaults and any explicit choice wins.
+    const legacyMapVisible = !Object.hasOwn(raw?.panels || {}, 'map') && raw?.panels?.consider?.visible === true;
     const margin = 24;
     const columnWidth = Math.max(260, Math.floor((primary.width - 3 * margin) / 2));
     const rowHeight = Math.max(160, Math.floor((primary.height - 3 * margin) / 2));
@@ -65,7 +68,7 @@ function normalizePreferences(raw, displays) {
             y:primary.y + (bottom ? primary.height - margin - height : margin), width, height };
         if (id === 'timers') fallback.y = primary.y + margin + Math.min(SIZES.parse[1], rowHeight) + 6;
         panels[id] = {
-            visible:saved.visible === true, locked:saved.locked !== false,
+            visible:saved.visible === true || (id === 'map' && legacyMapVisible), locked:saved.locked !== false,
             passThrough:saved.passThrough === true,
             backgroundOpacity:clamp(finite(saved.backgroundOpacity, 0.9), 0.15, 1),
             fontScale:clamp(finite(saved.fontScale, 1), 0.75, 1.75),
