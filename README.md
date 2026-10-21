@@ -15,7 +15,7 @@ The installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz:
 
 ## A look around
 
-These screenshots show the actual **0.8.4 Electron interface with synthetic log, wiki, map and update-state fixtures**. They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+These screenshots show the actual **0.8.5 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [GitHub CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39658890201). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 

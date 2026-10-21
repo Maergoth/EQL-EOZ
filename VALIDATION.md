@@ -20,6 +20,17 @@ are collected by GitHub's synthetic Electron fixture and reviewed before
 packaging. All existing source, native-window, worker, discovery, catalog and
 exact ASAR source/image/bootstrap gates remain required.
 
+[GitHub CI run 39658890201](https://github.com/Maergoth/EQL-EOZ/actions/runs/39658890201)
+passed on `f5df94e`: Linux/Windows source suites, production bootstrap/catalog,
+desktop worker/CSP, window lifecycle, map sizing, native Map WebGL/cameras/file
+isolation, native overlay session/UI and inline discovery checks. Its real
+Electron captures were visually inspected and copied into the README and tour.
+The name-target check observes actual canvas text and dispatches renderer
+pointer events because its native windows stay hidden; it does not establish
+physical OS input or foreground-game compositing. The Intel check covers
+name-only action activation, pointer travel, keyboard focus and anchored
+filters while the list scrolls. Final packaged contents remain a release gate.
+
 ## 0.8.4 window and map follow-up
 
 The initial focused checks reproduced the map-footer clipping in the current
