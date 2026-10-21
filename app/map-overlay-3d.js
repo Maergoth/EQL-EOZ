@@ -47,7 +47,7 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
                 if(!result?.ok)throw Error(result?.message||'No matching local 3D archive was found for this zone.');
                 loaded=key;
             }
-            if(appliedMode!==mode){api.setView(mode);appliedMode=mode;}
+            if(appliedMode!==mode){api.setView(mode);appliedMode=mode;if(follow)lastLocation='';}
             const map=session.map||{},markers=JSON.stringify(map.npcs||[]),route=JSON.stringify(map.route?.points||[]);
             if(markers!==lastMarkers){api.setRareMobs(map.npcs||[]);lastMarkers=markers;}
             api.setOverlaySelection?.(map.selectedNpcId||'');

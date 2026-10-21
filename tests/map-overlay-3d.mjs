@@ -23,9 +23,11 @@ try{
     assert.equal(f.frames.length,0,'Ordinary Map never decodes an archive or opens a 3D iframe');
     await f.controller.setMode('top');assert.equal(f.frames.length,1);assert.equal(f.frames[0].src,'./zoneviewer/viewer.html?overlay=1');assert.deepEqual(f.modes,['top']);assert.equal(f.locations.length,1);
     await f.controller.setMode('first');assert.equal(f.frames.length,1);assert.equal(f.modes.at(-1),'first');
+    assert.equal(f.locations.length,2,'Switching from Top to First while following re-centers the unchanged logged location');
+    const playerSyncsBeforeFocus=f.locations.length;
     const focus={id:'raid',sequence:9,name:'Synthetic Keeper',zone:'Synthetic Zone',loc:[3,4,5],mode:'first'};
     f.controller.render({...f.session,map:{...f.session.map,focus}});await tick();
-    assert.deepEqual(f.focuses,[[3,4,5]]);assert.deepEqual(f.applied,[focus]);assert.equal(f.locations.length,1,'NPC focus does not call the logged-player synchronization API');
+    assert.deepEqual(f.focuses,[[3,4,5]]);assert.deepEqual(f.applied,[focus]);assert.equal(f.locations.length,playerSyncsBeforeFocus,'NPC focus does not call the logged-player synchronization API');
     f.controller.render({...f.session,map:{...f.session.map,focus}});await tick();assert.equal(f.focuses.length,1,'One focus sequence is applied once');
     await f.controller.setMode('map');assert.equal(f.frames[0].removed,true,'Returning to Map releases the decoder/camera iframe');
 }finally{f.controller.dispose();}
