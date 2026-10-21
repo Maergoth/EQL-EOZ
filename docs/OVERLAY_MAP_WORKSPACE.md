@@ -55,3 +55,10 @@ comfort, monitor/DPI transitions and route quality remain manual evidence.
 The 0.8.5 release merged as `4787890`. The 0.8.6 repair starts there on
 `codex/map-header-fetch-fix`. This file is the continuation index if task
 context is compacted.
+
+The same 0.8.6 release also updates `desktop/app-updater.cjs`, its main-process
+wiring and `app/app-update-ui.js`: the explicit restart action verifies the
+staged installer and uses the pinned NSIS silent-upgrade/automatic-run contract.
+The application updater remains separate from wiki-pack refresh. Windows
+security prompts and a complete installed-upgrade acceptance remain distinct
+from CI launch mocks; do not install locally against the owner's preference.

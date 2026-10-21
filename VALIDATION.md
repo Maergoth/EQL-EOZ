@@ -18,7 +18,8 @@ with physical game input and complete proprietary-zone acceptance separate.
 The Intel screenshot also exposed raw `Loc` and `VeliousGray` templates in item
 drop sources, which Intel projects into mob rows. The reported 0.8.5 pack
 contained 145 template-shaped drop sources (64 location notes and 68 styled
-labels among them), while its actual NPC records have no template-shaped names.
+labels among them), and 173 sources with raw template/link markup in total,
+while its actual NPC records have no template-shaped names.
 The producer must interpret supported style/link syntax, exclude annotation
 templates and resolve styled zone headings before associating drops. The live
 producer and filtered dataset require their separate reviewed deployment and
@@ -37,8 +38,10 @@ Current tour/README images were collected by that run and visually reviewed.
 The matching producer passed both PHP source harnesses in wiki PR #43 and the
 isolated production promotion #44. Production deployment
 [39687256914](https://github.com/Maergoth/EQLWiki/actions/runs/39687256914)
-passed; the installed producer hash matched the reviewed source. Dataset rebuild,
-before/after filtered-pack audit and publication remain separate release gates.
+passed; the installed producer hash matched the reviewed source. The structured
+follow-up in #45/#46 also passed its PHP checks and isolated staging/production
+deployments; the final installed SHA-256 was
+`f2335fffc7704a3546666c0fd99462bde7920796fcbcf04ec8cfc307c1dce9bb`.
 
 The complete source audit found one valid structured `ItemWhereRow` association
 among the remaining malformed entries. Narrow positional parsing preserves its
@@ -49,6 +52,46 @@ PRs #45/#46 carry the isolated follow-up and matching PHP regression fixtures.
 The production-catalog gate also rejects raw template/link markup in NPC and
 item-source names. An older cached production pack must fail this gate before
 an installer can publish; a successful source-only fixture is insufficient.
+
+The existing low-priority host refresh rebuilt the full filtered pack. A
+before/after read-only audit found zero raw template/link NPC or source names
+(previously 173 malformed sources), preserved all NPC identities/locations and
+confirmed the Book of Souls, Slowstone Amber and Tiny Brass Shuriken associations.
+Exact same-zone/instance NPC source joins increased from 18,350 to 18,915. Two
+existing normalized NPC alias collisions are unchanged. The item metadata flags
+were reviewed against 90 public revisions: all 45 old/new item pairs reproduced
+exactly through the installed producer. Newer wiki edits and two existing
+redirect consolidations explain every difference; no article edits were made.
+
+The reviewed [public dataset manifest](https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json)
+is `20261021T225644Z-29f86651a9b9`: 124 zones, 8,679 NPC records and 11,270 items.
+GitHub API and raw delivery agreed; the published 3,155,997-byte gzip matched
+SHA-256 `5aea0f63f5942f29ffd37f27ab060e53734392442884f32579a5187568e74109`.
+Installer bootstrap/catalog and exact packaged-content checks remain required
+on the final release commit.
+
+## 0.8.6 explicit silent restart/update
+
+The explicit **Restart to install update** action replaces the second native
+confirmation and normal setup wizard. Source inspection of the pinned
+electron-builder 26.15.3 NSIS templates establishes `/S`, `--updated` and
+`--force-run`, with the unquoted `/D` argument last. The launcher uses no shell,
+preserves the running installation directory, and matches its canonical path
+to the existing application's fixed HKCU/HKLM registration before choosing scope.
+An ambiguous registration, or a machine upgrade that would remove a separate
+user copy, keeps EoZ running with manual recovery guidance.
+
+Regression coverage checks registry identity against the pinned builder, scope
+selection, custom paths with spaces, fixed launch arguments, accepted-spawn
+ordering, failed-launch retry, re-verification and duplicate click suppression.
+The main-frame-only IPC boundary remains intact. A disposable Windows CI
+fixture roundtrips a real non-ASCII HKCU install path through the fixed UTF-8
+registry reader and canonical resolver; it refuses existing values and cleans
+up its own value/key. Ordinary local runs skip that fixture. Other coverage
+uses launch/registry mocks and Electron UI/IPC checks, not an executed installation.
+OS security/elevation prompts, cancellation after process handoff and a complete
+installed silent upgrade remain separate Windows acceptance. The owner's local
+build and profile have not been upgraded or used for these checks.
 
 ## 0.8.5 native Map and Intel workspace
 

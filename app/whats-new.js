@@ -2,7 +2,7 @@
 // are captures of the current app with synthetic data, bundled with the app.
 export const WHATS_NEW_STEPS = Object.freeze([
     Object.freeze({title:'A normal desktop workspace',image:'workspace',view:'settings',action:'Open Settings',
-        copy:'The main app remembers its size, position and maximized state in a standard Windows frame. Choose Minimize to tray and Start minimized in Settings. A green Update available button appears in the header when a newer release is offered; Settings also links to the project on GitHub.',
+        copy:'The main app remembers its size, position and maximized state in a standard Windows frame. Choose Minimize to tray and Start minimized in Settings. A green Update available button appears for newer releases. Download, then choose Restart to install update for a silent upgrade and automatic relaunch. Settings also links to GitHub.',
         alt:'Eye of Zomm main workspace showing the current desktop layout and settings.',caption:'Current app capture with a disposable demonstration profile.'}),
     Object.freeze({title:'Keep the map in view',image:'map',view:'map',action:'Open Map',
         copy:'Hover the zone-title row to reveal Reset, Follow, zoom and the Map, Top and navigable First person cycle beside its name. Use the separate grip to move an unlocked window. Z and tolerance choose nearby floors; unknown-height markers stay visible. Monster names are interactive.',

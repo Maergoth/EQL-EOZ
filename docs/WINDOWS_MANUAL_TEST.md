@@ -30,8 +30,9 @@ The automated display/renderer tests complement these physical monitor and game 
 
 ## 0. Application updater acceptance
 
-The 0.8.3 candidate adds Application updates separately from Sync with Wiki.
-An existing 0.8.1 installation needs the first updater build installed normally.
+Application updates are separate from Sync with Wiki. From 0.8.6 the explicit
+restart action uses a silent NSIS upgrade and automatic relaunch. An older
+installed build retains its own installer flow for the first upgrade.
 Record its folder/log choices, preferences and cached wiki-data state; verify
 those are retained after the normal NSIS upgrade. A future approved newer build
 is needed to prove the complete in-app updater path without changing production
@@ -40,10 +41,12 @@ release metadata for a test.
 In a controlled Windows test, check that the correct new version is offered,
 Release notes opens only this repository, download progress/cancellation work,
 Later preserves the staged package after relaunch, and no installer runs on
-startup or exit. Automatic download defaults off. Cancel the native install
-confirmation first; EoZ must remain open. Approve only when ready to test the
-actual upgrade: verify NSIS opens, EoZ closes after handoff, installation finishes,
-the correct version relaunches and the same profile/cache/log choices remain.
+startup or exit. Automatic download defaults off. When ready to upgrade from
+0.8.6 or newer, choose **Restart to install update**: no extra app confirmation
+or setup wizard should appear. EoZ closes after Windows accepts the installer
+launch, the silent upgrade finishes, and the correct version relaunches with
+the same profile/cache/log choices and install directory. Test a directory
+containing spaces. Windows may still show its own security/elevation prompt.
 Use disposable EoZ test profiles to test changed/missing staged installer recovery
 and Windows launch failure. Game files must never change. Hash verification does
 not establish Authenticode signing; record signature status separately.

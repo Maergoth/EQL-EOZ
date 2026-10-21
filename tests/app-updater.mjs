@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -10,7 +11,7 @@ import { promisify } from 'node:util';
 
 const require = createRequire(import.meta.url);
 const { AppUpdater, RELEASES_URL, MAX_METADATA_BYTES, MAX_INSTALLER_BYTES, compareVersions, selectRelease,
-    isReleaseNotesUrl, trustedDownloadRedirect } = require('../desktop/app-updater.cjs');
+    isReleaseNotesUrl, trustedDownloadRedirect, launchSilentNsisInstaller, resolveInstalledNsisScope, readNsisInstallLocation, NSIS_INSTALL_KEY, NSIS_REGISTRY_READ_SCRIPT } = require('../desktop/app-updater.cjs');
 const installer = Buffer.from('MZ synthetic installer fixture; never executed.');
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const jsonResponse = value => new Response(JSON.stringify(value));
@@ -27,17 +28,16 @@ const test = (name, run) => tests.push({ name, run });
 
 async function withUpdater(testBody, options = {}) {
     const directory = await mkdtemp(path.join(tmpdir(), 'eoz-app-update-'));
-    const calls = [], launches = [], confirmations = [];
+    const calls = [], launches = [];
     let quits = 0;
     const defaults = {
         version:'0.8.1', cacheDirectory:directory, isPackaged:true, platform:'win32', arch:'x64',
         fetchImpl:async (url, request) => { calls.push({ url, request }); return url === RELEASES_URL ? jsonResponse([release()]) : new Response(installer); },
-        confirmInstall:async version => { confirmations.push(version); return true; },
         launchInstaller:async target => { launches.push(target); return ''; },
         onInstallerLaunched:() => { quits += 1; }
     };
     const updater = new AppUpdater({ ...defaults, ...options });
-    try { await testBody({ updater, directory, calls, launches, confirmations, quits:() => quits, defaults }); }
+    try { await testBody({ updater, directory, calls, launches, quits:() => quits, defaults }); }
     finally { updater.shutdown(); await rm(directory, { recursive:true, force:true }); }
 }
 
@@ -103,7 +103,7 @@ test('development and unsupported platforms never access the update network or c
 });
 
 test('quiet startup only checks metadata by default, then manual download verifies bytes', async () => {
-    await withUpdater(async ({ updater, calls, launches, confirmations, directory }) => {
+    await withUpdater(async ({ updater, calls, launches, directory }) => {
         const available = await updater.startup();
         assert.equal(available.status, 'available');
         assert.equal(available.availableVersion, '0.8.2');
@@ -118,7 +118,6 @@ test('quiet startup only checks metadata by default, then manual download verifi
         assert.deepEqual(await readFile(path.join(directory, release().assets[0].name)), installer);
         assert.equal(JSON.parse(await readFile(path.join(directory, 'ready.json'))).release.version, '0.8.2');
         assert.equal(launches.length, 0);
-        assert.equal(confirmations.length, 0);
         assert.equal(JSON.stringify(ready).includes(directory), false);
     });
 });
@@ -193,13 +192,12 @@ test('a parent redirected after initialization is rejected on the next cache ope
 });
 
 test('an opt-in survives relaunch, downloads on startup, and never starts an installer', async () => {
-    await withUpdater(async ({ updater, defaults, launches, confirmations }) => {
+    await withUpdater(async ({ updater, defaults, launches }) => {
         assert.equal((await updater.setStartupDownload(true)).automaticDownload, true);
         const relaunched = new AppUpdater(defaults);
         assert.equal((await relaunched.startup()).status, 'ready');
         assert.equal((await relaunched.getStatus()).automaticDownload, true);
         assert.equal(launches.length, 0);
-        assert.equal(confirmations.length, 0);
         await relaunched.setStartupDownload(false);
         assert.equal((await relaunched.getStatus()).automaticDownload, false);
     });
@@ -217,18 +215,143 @@ test('a verified ready installer survives quitting without auto execution and is
     });
 });
 
-test('Later keeps the app running; explicit confirmed install hands off only the verified local package', async () => {
-    let accept = false;
+test('Later keeps the app running; one explicit restart request hands off only the verified local package', async () => {
     await withUpdater(async ({ updater, launches, directory, quits }) => {
         await updater.check(); await updater.download();
-        assert.equal((await updater.install()).status, 'ready');
+        assert.equal((await updater.getStatus()).status, 'ready');
         assert.equal(launches.length, 0);
         assert.equal(quits(), 0);
-        accept = true;
         assert.equal((await updater.install()).status, 'installing');
         assert.deepEqual(launches, [path.join(await realpath(directory), release().assets[0].name)]);
         assert.equal(quits(), 1);
-    }, { confirmInstall:async () => accept });
+        await updater.install();assert.equal(launches.length,1,'A successful handoff cannot be launched twice');
+    });
+});
+
+test('a restart request keeps the owner alive until installer process creation is accepted', async () => {
+    let started,accept;
+    const launching=new Promise(resolve=>{started=resolve;}),handoff=new Promise(resolve=>{accept=resolve;});
+    await withUpdater(async ({updater,quits})=>{
+        await updater.check();await updater.download();
+        const result=updater.install();await launching;
+        assert.equal(quits(),0);assert.equal((await updater.getStatus()).status,'installing');
+        accept('');assert.equal((await result).status,'installing');assert.equal(quits(),1);
+    },{launchInstaller:async()=>{started();return handoff;}});
+});
+
+test('silent NSIS handoff uses fixed upgrade/restart flags and preserves a custom installed path without a shell', async () => {
+    const target='C:\\Users\\Fixture Profile\\app-updates\\EQLWiki-Eye-of-Zomm-Setup-0.8.2-x64.exe';
+    const installDirectory='C:\\Program Files\\Eye of Zomm & Fixtures',child=new EventEmitter(),calls=[];
+    let unrefs=0,settled=false;child.unref=()=>{unrefs++;};
+    const resolveScope=async()=>'currentuser';
+    const pending=launchSilentNsisInstaller(target,{installDirectory,resolveScope,spawnImpl:(...args)=>{calls.push(args);return child;}}).then(result=>{settled=true;return result;});
+    await Promise.resolve();assert.equal(settled,false,'Returning a child object is not an accepted process creation');
+    assert.deepEqual(calls,[[target,['/S','--updated','--force-run','/currentuser',`/D=${installDirectory}`],{
+        shell:false,detached:true,stdio:'ignore',windowsHide:true,windowsVerbatimArguments:true,argv0:`"${target}"`
+    }]]);
+    child.emit('spawn');assert.equal(await pending,'');assert.equal(unrefs,1);
+    for(const spawnImpl of [()=>{throw Error('private path diagnostic');},()=>{const failed=new EventEmitter();queueMicrotask(()=>failed.emit('error',Error('private path diagnostic')));return failed;}]){
+        await assert.rejects(launchSilentNsisInstaller(target,{installDirectory,resolveScope,spawnImpl}),error=>/Windows could not start/.test(error.message)&&!error.message.includes('private'));
+    }
+    for(const directory of ['relative-folder','C:\\bad" /S','C:\\bad\npath']){
+        await assert.rejects(launchSilentNsisInstaller(target,{installDirectory:directory,spawnImpl:()=>{throw Error('Must not spawn invalid arguments');}}),/Windows could not start/);
+    }
+});
+
+test('silent update scope matches the running install rather than choosing the other registered installation', async () => {
+    const user='C:\\Users\\Fixture\\Programs\\Eye of Zomm',machine='C:\\Program Files\\Eye of Zomm';
+    const settings={readLocation:async hive=>hive==='HKCU'?user:machine,realpath:async value=>value};
+    assert.equal(await resolveInstalledNsisScope(user,settings),'currentuser','A dual install must not elevate/uninstall the machine install when updating the user install');
+    assert.equal(await resolveInstalledNsisScope(machine.toUpperCase()+'\\',{...settings,readLocation:async hive=>hive==='HKLM'?machine:''}),'allusers','A machine-only install retains its scope, with case and trailing-separator tolerance');
+    await assert.rejects(resolveInstalledNsisScope(machine,settings),/Both per-user and machine-wide installs/,'Stock NSIS must not silently consolidate another user copy during a machine-wide update');
+    const short='C:\\Users\\FIXTUR~1\\Programs\\Eye of Zomm';
+    assert.equal(await resolveInstalledNsisScope(short,{...settings,realpath:async value=>value===short?user:value}),'currentuser','Canonical paths reconcile Windows short aliases');
+    for(const locations of [{HKCU:user,HKLM:user},{HKCU:'',HKLM:''},{HKCU:machine,HKLM:''}]){
+        await assert.rejects(resolveInstalledNsisScope(user,{...settings,readLocation:async hive=>locations[hive]}),/Windows registration/);
+    }
+    const calls=[];
+    const location=await readNsisInstallLocation('HKCU',{execFileImpl:(file,args,options,callback)=>{
+        calls.push({file,args,options});callback(null,user);
+    }});
+    assert.equal(location,user);assert.equal(calls.length,1);
+    assert.deepEqual(calls[0].args,['-NoProfile','-NonInteractive','-Command',NSIS_REGISTRY_READ_SCRIPT]);
+    assert.equal(calls[0].options.env.EOZ_UPDATE_REGISTRY_HIVE,'HKCU');assert.equal(calls[0].options.env.EOZ_UPDATE_REGISTRY_KEY,NSIS_INSTALL_KEY);
+    assert.equal(calls[0].options.windowsHide,true);assert.equal(calls[0].options.timeout,5000);assert.equal(calls[0].options.encoding,'utf8');assert.equal(path.win32.basename(calls[0].file).toLowerCase(),'powershell.exe');
+    assert(NSIS_REGISTRY_READ_SCRIPT.includes('[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)'));
+    assert(NSIS_REGISTRY_READ_SCRIPT.includes('[Microsoft.Win32.RegistryView]::Registry64'));
+    assert.equal(await readNsisInstallLocation('HKCU',{execFileImpl:(_file,_args,_options,callback)=>callback(Error('private registry text'))}), '');
+    assert.equal(await readNsisInstallLocation('OTHER',{execFileImpl:()=>{throw Error('Invalid hives cannot run a process');}}),'');
+    await withUpdater(async({updater,quits})=>{
+        await updater.check();await updater.download();const result=await updater.install();
+        assert.equal(result.status,'ready');assert.match(result.error,/Windows registration/);assert.equal(quits(),0);
+    },{launchInstaller:target=>launchSilentNsisInstaller(target,{installDirectory:user,resolveScope:()=>resolveInstalledNsisScope(user,{...settings,readLocation:async()=>''}),spawnImpl:()=>{throw Error('An unmatched install cannot launch');}})});
+    await withUpdater(async({updater,quits})=>{
+        await updater.check();await updater.download();const result=await updater.install();
+        assert.equal(result.status,'ready');assert.match(result.error,/Both per-user and machine-wide installs/);assert.equal(quits(),0);
+    },{launchInstaller:target=>launchSilentNsisInstaller(target,{installDirectory:machine,resolveScope:()=>resolveInstalledNsisScope(machine,settings),spawnImpl:()=>{throw Error('A consolidating install cannot launch');}})});
+});
+
+test('Windows CI registry reader roundtrips non-ASCII installation paths without overwriting an existing profile', async () => {
+    // Never write a developer's registry during ordinary local npm test runs.
+    if(process.platform!=='win32'||process.env.CI!=='true')return;
+    const directory=await mkdtemp(path.join(tmpdir(),'eoz-unicode-update-registry-'));
+    const installDirectory=path.join(directory,'Eye of Zomm-é-Ω-語-玩家');
+    await mkdir(installDirectory);
+    const executable=path.win32.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
+    const fixtureScript=[
+        "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+        "$ErrorActionPreference = 'Stop'",
+        "$base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser, [Microsoft.Win32.RegistryView]::Registry64)",
+        "$key = $null",
+        "try {",
+        "  $key = $base.OpenSubKey($env:EOZ_UPDATE_REGISTRY_KEY, $true)",
+        "  if ($env:EOZ_UPDATE_REGISTRY_FIXTURE_ACTION -eq 'prepare') {",
+        "    $created = $null -eq $key",
+        "    if ($null -ne $key -and $key.GetValueNames() -contains 'InstallLocation') { throw 'Refusing to overwrite an existing EoZ InstallLocation' }",
+        "    if ($created) { $key = $base.CreateSubKey($env:EOZ_UPDATE_REGISTRY_KEY) }",
+        "    $key.SetValue('InstallLocation', $env:EOZ_UPDATE_REGISTRY_FIXTURE_LOCATION, [Microsoft.Win32.RegistryValueKind]::String)",
+        "    [Console]::Write($(if ($created) { 'created-key' } else { 'existing-key' }))",
+        "  } elseif ($env:EOZ_UPDATE_REGISTRY_FIXTURE_ACTION -eq 'cleanup') {",
+        "    if ($null -ne $key -and $key.GetValueNames() -contains 'InstallLocation') {",
+        "      if ([string]::Equals([string]$key.GetValue('InstallLocation'), $env:EOZ_UPDATE_REGISTRY_FIXTURE_LOCATION, [StringComparison]::Ordinal)) {",
+        "        $key.DeleteValue('InstallLocation')",
+        "        if ($env:EOZ_UPDATE_REGISTRY_FIXTURE_CREATED_KEY -eq 'true' -and $key.ValueCount -eq 0 -and $key.SubKeyCount -eq 0) { $key.Dispose(); $key = $null; $base.DeleteSubKey($env:EOZ_UPDATE_REGISTRY_KEY) }",
+        "      }",
+        "    }",
+        "  } else { throw 'Unsupported fixture action' }",
+        "} finally { if ($null -ne $key) { $key.Dispose() }; $base.Dispose() }"
+    ].join('\n');
+    let createdKey=false;
+    const fixture=action=>promisify(execFile)(executable,['-NoProfile','-NonInteractive','-Command',fixtureScript],{
+        windowsHide:true,timeout:10000,maxBuffer:16384,encoding:'utf8',env:{...process.env,
+            EOZ_UPDATE_REGISTRY_KEY:NSIS_INSTALL_KEY,EOZ_UPDATE_REGISTRY_FIXTURE_ACTION:action,
+            EOZ_UPDATE_REGISTRY_FIXTURE_LOCATION:installDirectory,EOZ_UPDATE_REGISTRY_FIXTURE_CREATED_KEY:String(createdKey)}
+    });
+    try{
+        const prepared=await fixture('prepare');createdKey=prepared.stdout==='created-key';
+        assert(['created-key','existing-key'].includes(prepared.stdout));
+        assert.equal(await readNsisInstallLocation('HKCU'),installDirectory,'The real fixed UTF-8 reader retains every Unicode character');
+        assert.equal(await resolveInstalledNsisScope(installDirectory),'currentuser','The actual reader and canonical scope resolver match a Unicode install directory');
+        await assert.rejects(fixture('prepare'),/Refusing to overwrite an existing EoZ InstallLocation/,'Even the disposable CI fixture refuses an existing value');
+        assert.equal(await readNsisInstallLocation('HKCU'),installDirectory,'A refused overwrite leaves the original fixture value intact');
+    }finally{
+        try{await fixture('cleanup');}finally{await rm(directory,{recursive:true,force:true});}
+    }
+});
+
+test('pinned NSIS templates support silent assisted upgrade, custom path and automatic relaunch', async () => {
+    const builderRoot=path.dirname(require.resolve('app-builder-lib/package.json'));
+    const template=async name=>(await readFile(path.join(builderRoot,'templates','nsis',name),'utf8')).replace(/\r\n/g,'\n');
+    assert.equal(JSON.parse(await readFile(path.join(builderRoot,'package.json'),'utf8')).version,'26.15.3');
+    const {UUID}=createRequire(path.join(builderRoot,'package.json'))('builder-util-runtime');
+    const pkg=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
+    assert.equal(NSIS_INSTALL_KEY,`Software\\${UUID.v5(pkg.build.appId,UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3'))}`,'Registry identity matches the pinned builder and existing appId');
+    assert((await template('installSection.nsh')).includes('${if} ${isForceRun}\n  ${andIf} ${Silent}\n    !insertmacro doStartApp'),'Assisted silent installers honor --force-run');
+    const multi=await template('multiUser.nsh');
+    assert(multi.includes('The /D parameter is special in NSIS - it must be the last parameter and cannot have quotes'));
+    assert(multi.includes('StrCpy $R9 $R8 "" $R6'),'The installed directory consumes the raw final /D argument, including spaces');
+    assert((await template('include/installUtil.nsh')).includes('/S /KEEP_APP_DATA $0'),'The upgrade preserves existing application data');
+    assert((await template('include/allowOnlyOneInstallerInstance.nsh')).includes('# allow app to exit without explicit kill'));
 });
 
 test('an edited installer fails re-verification and permits a verified replacement download', async () => {
@@ -409,13 +532,15 @@ test('preload exposes only the fixed updater actions and main rejects iframe or 
     const mainPath = new URL('../desktop/main.cjs', import.meta.url);
     const nativeRequire = createRequire(mainPath);
     const handlers = {};
+    const updaterOptions=[],silentLaunches=[];let nativeQuits=0;
     const mainFrame = { url:'http://127.0.0.1:53147/' };
     const contents = { mainFrame };
     const testWindow = { isDestroyed:() => false, webContents:contents };
     const context = vm.createContext({
-        require:name => name === 'electron' ? { app:{ getVersion:() => '0.8.1', getPath:() => tmpdir(), requestSingleInstanceLock:() => false, quit() {}, on() {} },
+        require:name => name === 'electron' ? { app:{ getVersion:() => '0.8.1', getPath:() => tmpdir(), requestSingleInstanceLock:() => false, quit() {nativeQuits++;}, on() {} },
             ipcMain:{ handle:(name, handler) => { handlers[name] = handler; } } } : name === './app-updater.cjs' ? {
-                AppUpdater:class { getStatus() { return { status:'mocked' }; } }, isReleaseNotesUrl
+                AppUpdater:class { constructor(options){updaterOptions.push(options);} getStatus() { return { status:'mocked' }; } install(){return {status:'installing'};} }, isReleaseNotesUrl,
+                launchSilentNsisInstaller:async(target,options)=>{silentLaunches.push({target,...options});return '';}
             } : nativeRequire(name),
         __dirname:path.dirname(mainPath.pathname.replace(/^\/(\w:)/, '$1')), process, console, Buffer, URL, testWindow
     });
@@ -424,6 +549,11 @@ test('preload exposes only the fixed updater actions and main rejects iframe or 
     const handler = handlers['eye-of-zomm:app-update'];
     const trusted = { sender:contents, senderFrame:mainFrame };
     assert.equal((await handler(trusted, 'get-status')).status, 'mocked');
+    assert.equal('confirmInstall' in updaterOptions[0],false,'The explicit trusted restart click is not followed by another native confirmation');
+    assert.equal((await handler(trusted,'install')).status,'installing');
+    await updaterOptions[0].launchInstaller('verified-local-installer.exe');
+    assert.deepEqual(silentLaunches,[{target:'verified-local-installer.exe',installDirectory:path.dirname(process.execPath)}],'The main process supplies its own installed directory, never an IPC path');
+    const beforeQuit=nativeQuits;updaterOptions[0].onInstallerLaunched();assert.equal(nativeQuits,beforeQuit+1);
     await assert.rejects(handler({ sender:{}, senderFrame:mainFrame }, 'download'), /unavailable/);
     await assert.rejects(handler({ sender:contents, senderFrame:{ url:mainFrame.url } }, 'install'), /unavailable/);
     await assert.rejects(handler(trusted, 'arbitrary-action'), /Unknown/);

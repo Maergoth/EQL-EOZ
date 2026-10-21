@@ -80,8 +80,9 @@ The 0.8.3 candidate adds application releases independently of wiki-data Sync.
 `desktop/app-updater.cjs` owns release selection, bounded download/verification,
 saved staging and explicit NSIS handoff. `desktop/preload.cjs` exposes a fixed
 API only to the main local application frame; `app/app-update-ui.js` presents
-status, Download, Later and Install update… in Settings and a compact badge.
-Downloads on startup are opt-in; installation is never automatic. App ID,
+status, Download, Later and Restart to install update in Settings and a compact badge.
+Downloads on startup are opt-in. From 0.8.6 the explicit restart action uses a
+silent upgrade and automatic relaunch; startup/exit alone never install. App ID,
 profile paths and the game-read boundary stay intact.
 
 [PNUT_UX_PLAN.md](PNUT_UX_PLAN.md) retains the pinned PNUT reference, implementation

@@ -12,7 +12,7 @@ export function appUpdatePresentation(state = {}) {
         available:`Eye of Zomm ${version} is available.`,
         downloading:`Downloading Eye of Zomm ${version}…`,
         ready:`Eye of Zomm ${version} is ready to install.`,
-        installing:'Opening the update installer…',
+        installing:'Restarting to install the update…',
         unavailable:'Application updates are unavailable. Try again later.',
         unsupported:'Application updates are available in the installed Windows x64 app.'
     };
@@ -39,7 +39,7 @@ export function appUpdatePresentation(state = {}) {
 }
 
 // This renderer only presents native updater state. Download verification and
-// installer approval stay in the isolated desktop process.
+// the explicit restart/install handoff stay in the isolated desktop process.
 export function mountAppUpdates({ document = globalThis.document, bridge = globalThis.eyeOfZommUpdates,
     openSettings = () => {}, setTimeout = globalThis.setTimeout, clearTimeout = globalThis.clearTimeout } = {}) {
     const ids = ['app-update-status', 'app-update-detail', 'app-update-progress', 'app-update-progress-label',
@@ -80,7 +80,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
         elements['app-update-startup-download'].disabled = !view.supported || Boolean(action);
         elements['app-update-startup-download'].checked = Boolean(current.automaticDownload);
         text('download-app-update', `Download ${view.version}`);
-        text('install-app-update', action === 'install' ? 'Waiting for confirmation…' : 'Install update…');
+        text('install-app-update', action === 'install' ? 'Restarting to install…' : 'Restart to install update');
         text('app-update-progress-label', view.progress);
         if (view.percent === null) elements['app-update-progress'].removeAttribute('value');
         else elements['app-update-progress'].value = view.percent;

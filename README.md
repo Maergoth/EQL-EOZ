@@ -61,10 +61,10 @@ Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards op
 
 | Update | What it changes | Where to use it |
 | --- | --- | --- |
-| Application update | Installed EoZ code and interface | **Settings → Application updates**: check, download, then explicitly approve the normal Windows installer |
+| Application update | Installed EoZ code and interface | **Settings → Application updates**: check, download, then **Restart to install update** |
 | Wiki data update | Cached NPCs, items, icons, zone aliases and source records | **Sync with Wiki**, also checked at startup |
 
-Verified application downloads can wait until later. Startup downloading is optional and off by default; installation always requires approval. Settings, folder/log choices and cached wiki data stay in the existing profile. Older builds without the updater need one normal installation of a newer build first.
+Verified application downloads can wait until later. Startup downloading is optional and off by default. From 0.8.6, **Restart to install update** authorizes a silent upgrade and automatic relaunch, without the setup wizard or another app confirmation. Windows may still require a security or elevation prompt. Settings, folder/log choices and cached wiki data stay in the existing profile. Older installed builds use their existing installer flow for the first upgrade.
 
 The wiki data flow is server-side and low priority:
 
