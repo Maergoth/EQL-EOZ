@@ -62,9 +62,19 @@ try {
                 await execute(owner,()=>document.getElementById('settings-start-minimized').click());
                 await until(async()=> (await state()).startMinimized,'startup checkbox persistence');
                 const area=screen.getPrimaryDisplay().workArea;
-                const bounds={x:area.x+40,y:area.y+30,width:Math.min(1200,area.width-80),height:Math.min(760,area.height-60)};
-                owner.setBounds(bounds);owner.maximize();await until(()=>owner.isMaximized(),'native maximize');
-                console.log('EOZ_WINDOW_LIFECYCLE='+JSON.stringify({ok:true,scenario,bounds:owner.getNormalBounds(),maximized:true,settings:await state()}));
+                const [minimumWidth,minimumHeight]=owner.getMinimumSize();
+                // Small CI desktops can be narrower than the preferred size.
+                // Choose a legal rectangle from the native constraints, then
+                // center it inside the actual work area before maximizing.
+                const width=Math.min(area.width,Math.max(minimumWidth,Math.min(1200,area.width-80)));
+                const height=Math.min(area.height,Math.max(minimumHeight,Math.min(760,area.height-60)));
+                const bounds={x:area.x+Math.floor((area.width-width)/2),y:area.y+Math.floor((area.height-height)/2),width,height};
+                owner.setBounds(bounds);
+                await until(()=>Object.entries(bounds).every(([key,value])=>owner.getNormalBounds()[key]===value),'native normal bounds before maximize');
+                const normalBounds=owner.getNormalBounds();
+                assert(normalBounds.x>=area.x&&normalBounds.y>=area.y&&normalBounds.x+normalBounds.width<=area.x+area.width&&normalBounds.y+normalBounds.height<=area.y+area.height);
+                owner.maximize();await until(()=>owner.isMaximized(),'native maximize');
+                console.log('EOZ_WINDOW_LIFECYCLE='+JSON.stringify({ok:true,scenario,bounds:normalBounds,maximized:true,settings:await state()}));
             }else if(scenario==='restore'){
                 const settings=await state();
                 if(settings.trayAvailable){assert.equal(owner.isVisible(),false);assert.equal(callsById.get(owner.id).show,0);assert.equal(owner.isMaximized(),false,'Hidden startup defers maximization');}
