@@ -237,16 +237,37 @@ try {
             await execute(panels().map, () => document.activeElement?.blur());
             await wait(100); // Allow header collapse to resize/repaint the real canvas before targeting its text.
             const labelHit = await execute(panels().map, () => {
+                const canvas=document.querySelector('canvas'),context=canvas.getContext('2d'),texts=[],markers=[];
+                const fillText=context.fillText,arc=context.arc;
+                // Observe the actual paint, independently of the accessibility
+                // button's bounds: a decluttered marker is not a text fixture.
+                context.fillText=function(text,x,y,...rest){texts.push({text,x,y,width:context.measureText(text).width});return fillText.call(this,text,x,y,...rest);};
+                context.arc=function(x,y,radius,...rest){markers.push({x,y,radius});return arc.call(this,x,y,radius,...rest);};
+                try{document.querySelector('[data-map-z]').dispatchEvent(new Event('input',{bubbles:true}));}
+                finally{context.fillText=fillText;context.arc=arc;}
                 const button=[...document.querySelectorAll('.native-map-npc-link')].find(node=>node.getAttribute('aria-label').includes('Synthetic Keeper · Raid Zone'));
-                const rect=button.getBoundingClientRect();
-                // The right side of the actual placed text lies outside the
-                // old 12-pixel marker target. Hover and click share that box.
-                return{x:Math.round(rect.right-3),y:Math.round(rect.top+rect.height/2),width:rect.width};
+                const names=texts.filter(entry=>entry.text==='Synthetic Keeper'),paint=names[0],rect=canvas.getBoundingClientRect();
+                const diagnostic={texts,markers,canvas:rect.toJSON(),button:button?{id:button.dataset.mapNpc,rect:button.getBoundingClientRect().toJSON()}:null,headerExpanded:document.querySelector('.native-map-tools').getBoundingClientRect().height};
+                if(names.length!==1||!button)return{...diagnostic,valid:false,reason:'Expected exactly one painted raid name and its destination button'};
+                const point={x:paint.x+paint.width-2,y:paint.y+6},client={x:rect.left+point.x,y:rect.top+point.y};
+                const markerDistance=Math.min(...markers.map(marker=>Math.hypot(marker.x-point.x,marker.y-point.y)));
+                const element=document.elementFromPoint(client.x,client.y);
+                const valid=paint.width>40&&markerDistance>12&&element===canvas;
+                if(valid){
+                    const event=type=>new PointerEvent(type,{clientX:client.x,clientY:client.y,pointerId:1,pointerType:'mouse',isPrimary:true,bubbles:true});
+                    // Hidden native windows do not promise OS input delivery.
+                    // Dispatch through the real renderer handlers. DOM events
+                    // have no active native pointer to capture; capture is
+                    // unrelated to this stationary name selection.
+                    canvas.dispatchEvent(event('pointermove'));
+                    const capture=canvas.setPointerCapture;
+                    try{canvas.setPointerCapture=()=>{};canvas.dispatchEvent(event('pointerdown'));canvas.dispatchEvent(event('pointerup'));}
+                    finally{canvas.setPointerCapture=capture;}
+                }
+                return{...diagnostic,valid,point,client,markerDistance,cursor:getComputedStyle(canvas).cursor,inlineCursor:canvas.style.cursor,element:element?{tag:element.tagName,className:element.className}:null,id:button.dataset.mapNpc};
             });
-            panels().map.webContents.sendInputEvent({type:'mouseMove',x:labelHit.x,y:labelHit.y});
-            assert(labelHit.width>40&&await execute(panels().map, () => document.querySelector('canvas').style.cursor==='pointer'),'Actual placed NPC name text advertises its click target');
-            panels().map.webContents.sendInputEvent({type:'mouseDown',x:labelHit.x,y:labelHit.y,button:'left',clickCount:1});
-            panels().map.webContents.sendInputEvent({type:'mouseUp',x:labelHit.x,y:labelHit.y,button:'left',clickCount:1});
+            assert(labelHit.valid&&labelHit.cursor==='pointer',`Actual placed NPC name text advertises its click target: ${JSON.stringify(labelHit)}`);
+            await until(async () => (await state()).snapshot.session.map.selectedNpcId===labelHit.id,'Canvas name click selects the exact painted raid source id');
             await until(async () => execute(panels().intel, () => Boolean(document.querySelector('[data-intel-section="raid"] .npc-row.is-focused'))),'map selection focuses the raid variant in Intel');
             const accessibleTarget=await execute(panels().map, () => {const button=[...document.querySelectorAll('.native-map-npc-link')].find(node=>node.getAttribute('aria-label').startsWith('Unknown Elevation Watcher'));button.focus();const focusable=document.activeElement===button&&button.tabIndex>=0&&button.type==='button';button.click();return focusable;});
             assert(accessibleTarget,'Unknown-height destinations remain reachable as actual keyboard focusable buttons');
