@@ -27,9 +27,10 @@ try {
     await writeFile(join(profile, 'data', 'eye-of-zomm-pack.json'), JSON.stringify({
         meta:{ schemaVersion:3, version:'native-overlay-synthetic', currentEra:'Classic', sample:true },
         zones:[{ name:'Mistmoore Castle', viewerName:'Mistmoore Castle', aliases:['mistmoore', 'The Castle of Mistmoore'] }],
-        npcs:[false,true].map(raidInstance => ({name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance,avgLevel:26,levelMin:26,levelMax:26,era:'Classic',loc:raidInstance ? [30,20,50] : [10,20,0]})),
+        npcs:[...[false,true].map(raidInstance => ({name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance,avgLevel:26,levelMin:26,levelMax:26,era:'Classic',loc:raidInstance ? [30,20,50] : [10,20,0]})),{name:'Unknown Elevation Watcher',zone:'Mistmoore Castle',avgLevel:30,levelMin:30,levelMax:30,era:'Classic',loc:[60,40]}],
         items:[...Array.from({length:12},(_,index) => ({name:`Synthetic Charm ${index + 1}`,era:'Classic',classes:['MNK','SHM','BER'],slots:['NECK'],stats:{HP:index + 1},iconId:'fixture',dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false}]})),
             ...Array.from({length:2},(_,index) => ({name:`Raid Charm ${index + 1}`,era:'Classic',classes:['MNK','SHM','BER'],slots:['NECK'],stats:{HP:50 + index},iconId:'fixture',dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true}]})),
+            {name:'Synthetic Wayfarer Ring',era:'Classic',classes:['MNK','SHM','BER'],slots:['FINGER'],stats:{HP:2},dropSources:[{name:'Unknown Elevation Watcher',zone:'Mistmoore Castle'}]},
             ...['Classic','Kunark','Velious'].map(era => ({name:`Era fixture ${era}`,era,classes:['MNK','SHM','BER'],slots:['FINGER'],stats:{HP:1},dropSources:[]}))],
         icons:{ fixture:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAATklEQVR4nGNgGAWjgObg6saw//gwTQwl2zJcGjkEpLFikiwixlBi5LBaQo5riVFHtAWkBN3gtIDiIKJ5JNMlmRJj0YDkarIMHQWjgCQAAOw009RU8GzvAAAAAElFTkSuQmCC' }
     }));
@@ -162,6 +163,7 @@ try {
             assert.equal(focusCalls(),beforeConsiderFocus,'a consider scrolls the Intel list without activating any OS window');
             assert.equal(await execute(panels().intel, () => Boolean(document.querySelector('#overlay').dataset.focusSequence)),true);
             const variants = await execute(panels().intel, () => ({normal:document.querySelector('[data-intel-section="normal"]').textContent,raid:document.querySelector('[data-intel-section="raid"]').textContent}));
+            assert.equal(await execute(panels().intel, () => document.querySelector('[data-intel-section]')?.dataset.intelSection),'raid','Raid Zone is the first Intel section');
             assert.match(variants.normal,/Synthetic Charm 12/); assert.doesNotMatch(variants.normal,/Raid Charm/);
             assert.match(variants.raid,/Raid Charm/); assert.doesNotMatch(variants.raid,/Synthetic Charm/);
             const completeDrops = await action('intel','session:intel-drops',{npc:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false});
@@ -182,9 +184,26 @@ try {
             assert.equal(mapData.status,'ready'); assert.equal(mapData.lines.length,5); assert.equal(mapData.labels.length,1);
             await until(async () => execute(panels().map, () => document.querySelector('.native-map-note')?.textContent.includes('Default maps')),'native canvas draws local map layers');
             assert(await execute(panels().map, () => document.querySelector('canvas').width > 100 && document.querySelector('canvas').height > 100));
+            const slice = await execute(panels().map, () => {
+                const z=document.querySelector('[data-map-z]'),tolerance=document.querySelector('[data-map-tolerance]'),context=document.querySelector('canvas').getContext('2d'),arc=context.arc;
+                const initialPlayerZ=Number(z.value);let count=0;context.arc=function(...args){count++;return arc.apply(this,args);};
+                tolerance.value='10';tolerance.dispatchEvent(new Event('change',{bubbles:true}));
+                z.value='25';count=0;z.dispatchEvent(new Event('input',{bubbles:true}));const betweenFloors=count;
+                z.value='0';count=0;z.dispatchEvent(new Event('input',{bubbles:true}));const zeroFloor=count;
+                z.value='50';count=0;z.dispatchEvent(new Event('input',{bubbles:true}));const upperFloor=count;
+                context.arc=arc;
+                return{min:Number(z.min),max:Number(z.max),initialPlayerZ,betweenFloors,zeroFloor,upperFloor,oldSelector:Boolean(document.querySelector('[data-map-floors]'))};
+            });
+            assert(slice.min<=0&&slice.max>=50&&!slice.oldSelector,'Z slider derives its bounds from line/NPC/player elevations');
+            assert.equal(slice.initialPlayerZ,0,'Initial floor slice uses the logged player Z');
+            assert.equal(slice.betweenFloors,2,'Unknown-Z NPC and player remain visible between known floors');
+            assert.equal(slice.zeroFloor,3,'Explicit zero-Z NPC is visible only inside its band');assert.equal(slice.upperFloor,3,'Upper-floor NPC uses the selected elevation tolerance');
+            await wait(1250);
+            assert.deepEqual(await execute(panels().map,()=>({z:Number(document.querySelector('[data-map-z]').value),tolerance:Number(document.querySelector('[data-map-tolerance]').value)})),{z:50,tolerance:10},'Heartbeat snapshots preserve the selected Z and tolerance');
             await execute(panels().map, () => document.querySelector('[data-map-action="zoom-in"]').click());
             await action('map','session:select-npc',{npc:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true});
             await until(async () => execute(panels().intel, () => Boolean(document.querySelector('[data-intel-section="raid"] .npc-row.is-focused'))),'map selection focuses the raid variant in Intel');
+            await execute(panels().intel, () => { document.querySelector('#panel-content').scrollTop = 0; });
             await screenshot(panels().intel,'intel-raid');
             const beforeKillSequence=(await state()).snapshot.session.intel.focusSequence;
             const beforeKillFocus=focusCalls();
@@ -204,6 +223,8 @@ try {
                 document.querySelector('#timer-settings [data-timer-action="test"]').click();
             });
             await until(async () => execute(owner, () => document.querySelector('#timer-settings [data-test-result]').textContent.includes('who=Keeper')), 'isolated regex test preview supports PNUT named captures');
+            await execute(owner, () => { document.querySelector('.content').scrollTop = 85; });
+            await screenshot(owner, 'timers-editor');
             const draft = await execute(owner, () => document.querySelector('#timer-settings [data-timer-editor]').elements.namedItem('label').value);
             await new Promise(resolve => setTimeout(resolve, 1250));
             assert.equal(await execute(owner, () => document.querySelector('#timer-settings [data-timer-editor]').elements.namedItem('label').value), draft, 'main editor draft survives session heartbeat');
@@ -269,6 +290,20 @@ try {
             await execute(owner, () => { document.querySelector('[data-view="settings"]').click(); document.querySelector('#overlay-controller').scrollIntoView({block:'center'}); });
             assert.equal(await execute(owner, () => document.querySelector('[data-view-panel="settings"]').classList.contains('is-active')), true);
             await screenshot(owner, 'main-controller');
+            // Tour/README media uses the real update presenter with a clearly
+            // synthetic metadata offer. No download or installer is invoked.
+            await execute(owner, async () => {
+                const { mountAppUpdates } = await import('/app-update-ui.js');
+                window.__tourUpdatePresenter = mountAppUpdates({ bridge:{ getStatus:async () => ({
+                    supported:true, status:'available', availableVersion:'0.8.5',
+                    releaseUrl:'https://github.com/Maergoth/EQL-EOZ/releases/tag/v0.8.5'
+                }) } });
+                await window.__tourUpdatePresenter.refresh();
+                [...document.querySelectorAll('.settings-grid h2')].find(heading => heading.textContent === 'Window')
+                    .closest('article').scrollIntoView({ block:'start' });
+            });
+            await screenshot(owner, 'workspace');
+            await execute(owner, () => { window.__tourUpdatePresenter.dispose(); delete window.__tourUpdatePresenter; });
             await execute(owner, () => document.querySelector('[data-view="timers"]').click());
             await screenshot(owner, 'main-timers');
             for (const [name, window] of Object.entries(panels())) await screenshot(window, name);

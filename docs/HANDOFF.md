@@ -9,7 +9,21 @@ This repository is the source of truth. A new contributor should be able to resu
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.8.3**. Four independent native windows provide Parse, Map, Zone & loot and Timers. Intel separates Normal Zone/Raid Zone sources, preserves class filters and expands every matching drop through Show More. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset; First/Top/Map controls belong only to the main Map page.
+Current code baseline: **0.8.4**. Four independent native windows provide Parse, Map, Zone & loot and Timers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset; First/Top/Map controls belong only to the main Map page.
+
+[Window/map follow-up](WINDOW_MAP_POLISH.md) records the report from 0.8.1,
+confirmed current gaps, source ownership and verification. The main window now
+uses the native frame and saves normal bounds/maximized state in
+`eye-of-zomm-window.json`. Minimize to tray and Start minimized are independent
+settings, both off by default; failed tray creation retains taskbar recovery.
+Pin to top is removed from the main window. Independent overlays keep lock and
+mouse passthrough. Embedded Local Map zoom is distinct from native Map zoom;
+native Map uses a Z slider with a tolerance band and keeps unknown-Z NPCs visible.
+Settings includes the exact GitHub project link and a manually opened visual
+tour; `app/assets/whats-new` contains actual synthetic-data captures reused by
+README. The header keeps a green Update Available action while an offer exists,
+including after Later. The user requested GitHub verification/publication
+without further local testing or changing their installed build.
 
 The [wiki/map integration audit](INTEGRATION_AUDIT.md) records the 0.8.1 repairs,
 the fresh export, source locations, and remaining data/visual gates. The
@@ -20,7 +34,8 @@ repairs: 36 rendered requests, 20 valid paths, 16 markers, and exact endpoints.
 This patch retains guarded established-first
 routing; both engines are checked before drawing. The reviewed exporter/catalog
 is deployed in production and the rebuilt initial-download snapshot is
-`20261021T062421Z-830bd5a89bfa` (124 zones, 8,645 NPCs, 11,262 items).
+`20261021T101150Z-dd346c8cc55d` (124 zones, 8,679 NPCs, 11,270 items,
+117 raid variants and a complete public entity catalog).
 The integration audit records deployment and checksum evidence.
 
 Desktop zone indexing remains metadata-only and hydrates the selected archive on demand. The WLD exporter advances across skipped material groups so later textures stay assigned to their actual polygon ranges; bitmap aliases and repeating UV sampling remain in place. EQEmu's sequential WLD polygon/material assignment independently supports this repair. The local rendered pass now confirms Mistmoore and Commonlands textures; live game comparison remains separate.

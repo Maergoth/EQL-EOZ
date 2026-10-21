@@ -26,10 +26,10 @@ for (const file of files) {
 }
 
 const html = readFileSync(join(root, 'app/index.html'), 'utf8');
-for (const required of ['id="top-classes"', 'data-map-mode="first"', 'data-map-mode="top"', 'data-map-mode="map"', 'id="map-source-status"', 'id="map-readiness"', 'id="map-destination"', 'id="route-status"', 'id="settings-routing-enabled"', 'id="overlay-controller"', 'id="settings-eq-root"', 'id="settings-map-status"', 'id="export-diagnostics"', 'id="item-current-zone"', 'id="item-slot"', 'id="item-sort"', 'id="item-context"', 'id="desktop-titlebar"', 'id="titlebar-version"', 'id="toast-region"']) {
+for (const required of ['id="top-classes"', 'data-map-mode="first"', 'data-map-mode="top"', 'data-map-mode="map"', 'id="map-source-status"', 'id="map-readiness"', 'id="map-destination"', 'id="route-status"', 'id="settings-routing-enabled"', 'id="overlay-controller"', 'id="settings-eq-root"', 'id="settings-map-status"', 'id="export-diagnostics"', 'id="item-current-zone"', 'id="item-slot"', 'id="item-sort"', 'id="item-context"', 'id="settings-minimize-to-tray"', 'id="settings-start-minimized"', 'id="titlebar-version"', 'id="toast-region"']) {
     if (!html.includes(required)) throw new Error(`Required UI element is missing: ${required}`);
 }
-for (const removed of ['id="minimal-route-form"', 'id="minimal-map-destination"', 'id="minimal-start-route"', 'id="minimal-clear-route"']) {
+for (const removed of ['id="minimal-route-form"', 'id="minimal-map-destination"', 'id="minimal-start-route"', 'id="minimal-clear-route"', 'id="pin-window"', 'id="settings-pin-window"', 'id="desktop-titlebar"']) {
     if (html.includes(removed)) throw new Error(`Removed minimal route search is still present: ${removed}`);
 }
 for (const removed of ['CURRENT TARGET', 'Last /location', 'id="settings-server"']) {
@@ -37,10 +37,10 @@ for (const removed of ['CURRENT TARGET', 'Last /location', 'id="settings-server"
 }
 
 const desktop = readFileSync(join(root, 'desktop/main.cjs'), 'utf8');
-for (const required of ['frame: false', 'skipTaskbar: false', "setSkipTaskbar(false)", "'screen-saver'"]) {
-    if (!desktop.includes(required)) throw new Error(`Pinned-window behavior is missing: ${required}`);
+for (const required of ['frame: true', 'skipTaskbar: false']) {
+    if (!desktop.includes(required)) throw new Error(`Normal main-window behavior is missing: ${required}`);
 }
-if (/setSkipTaskbar\((?:true|enabled)/.test(desktop)) throw new Error('Pinned mode must remain in the taskbar.');
+if (/setAlwaysOnTop|always-on-top/.test(desktop)) throw new Error('Main-window pin behavior must remain removed.');
 
 const viewer = readFileSync(join(root, 'app/zoneviewer/viewer.html'), 'utf8');
 for (const required of ['setView(mode)', 'installZoneLoadGuard(app, {', 'zoneLoadGuard.isReady(selected)', 'app.currentZoneRecord.id !== selected.id', 'app.currentZoneRecord.format !== selected.format', 'selectViewerZoneOption(select.options, zoneName)', 'selectedFloorIndices?.clear?.()', 'app.eqWorldToThree', 'lastSyncedLocation', 'lastSyncedGround', 'findGroundPointAt(point.x, point.z, point.y)', 'focusTopViewAt(lastSyncedGround)', 'headingTracker.push', 'setRareMobs(records = [])', 'eoz-rare-mob-selected', 'eyeOfZommHasZoneArchives', "reason:'no-zone-archives'", 'routeGuidance', 'renderRouteGuidance', 'navigationResult', 'clearPath()']) {

@@ -408,7 +408,13 @@ class OverlayHost {
             this.tray.setToolTip('Eye of Zomm overlays');
             this.tray.on('double-click', () => this.showMain());
             this.updateTray();
-        } catch (error) { this.warn('[Eye of Zomm] overlay tray unavailable:', error?.message); }
+        } catch (error) {
+            // Construction can succeed before tooltip/menu initialization
+            // fails. A partial tray cannot serve as a recovery control.
+            const failedTray=this.tray;this.tray=null;
+            try { failedTray?.destroy(); } catch {}
+            this.warn('[Eye of Zomm] overlay tray unavailable:', error?.message);
+        }
     }
     updateTray() {
         if (!this.tray || this.disposed) return;

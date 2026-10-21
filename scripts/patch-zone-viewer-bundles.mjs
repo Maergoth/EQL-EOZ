@@ -46,8 +46,8 @@ function drawMiniMap() {
         return;
     }
 
-    const width = Math.max(160, panel.clientWidth || 260);
-    const height = Math.max(130, (panel.clientHeight || 220) - 24);
+    const width = Math.max(1, panel.clientWidth || 260);
+    const height = Math.max(1, (panel.clientHeight || 220) - 24);
     const pixelRatio = Math.min(2, Math.max(1, devicePixelRatio || 1));
     const bitmapWidth = Math.round(width * pixelRatio);
     const bitmapHeight = Math.round(height * pixelRatio);
@@ -67,7 +67,8 @@ function drawMiniMap() {
     const pose = this.lastFirstPersonPose;
     const focus = pose?.position?.clone?.() || center;
     const zoneRadius = Math.max(size.x, size.z, 1) * .5;
-    const visibleRadius = Math.min(Math.max(250, Ie(zoneRadius * .22, 350, 1500)), Math.max(250, zoneRadius));
+    const zoom = Math.min(8, Math.max(.25, Number(this.miniMapZoom) || 1));
+    const visibleRadius = Math.min(Math.max(250, Ie(zoneRadius * .22, 350, 1500)), Math.max(250, zoneRadius)) / zoom;
     const padding = 10;
     const scale = Math.min((width - padding * 2) / (visibleRadius * 2), (height - padding * 2) / (visibleRadius * 2));
 

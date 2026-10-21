@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.4 - Window recovery and Local Map controls
+
+- Remember the main window's size, monitor position and maximized state; recover saved windows when a display is removed.
+- Add Minimize to tray and Start minimized preferences with taskbar recovery when the tray is unavailable.
+- Remove Pin to top and restore normal Windows title-bar controls. Independent overlays keep their own lock and mouse settings.
+- Keep the main map and its footer visible in shorter windows; add zoom controls and mouse-wheel zoom to the embedded Local Map.
+- Replace the native Map floor selector with a Z slider and adjustable tolerance; NPCs with unknown Z remain visible on every floor.
+- Prioritize Raid Zone above Normal Zone in the Intel list.
+- Add the GitHub project link and a screenshot tour in Settings; refresh README screenshots from the current interface.
+- Show a green glowing Update Available header button while an app update is available, including after choosing Later.
+
 ## 0.8.3 - Map overlay, raid intel and PNUT triggers
 
 - Add an independent lightweight client-map overlay with logged position, named destinations, floor filtering and validated route guidance; remove Minimal view and the Consider window.

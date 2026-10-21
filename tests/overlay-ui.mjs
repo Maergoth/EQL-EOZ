@@ -81,6 +81,7 @@ const intel = {zone:'Fixture Zone',packVersion:'pack1',profileKey:'MNK|base|Clas
 const key = intelNpcKey(intel.npcs[0],intel);
 const collapsed = renderIntel(intel);
 assert.match(collapsed,/Normal Zone/); assert.match(collapsed,/Raid Zone/);
+assert(collapsed.indexOf('data-intel-section="raid"') < collapsed.indexOf('data-intel-section="normal"'), 'Raid Zone is listed before Normal Zone');
 assert.match(collapsed,/raid-source-badge/);
 assert.match(collapsed,/Show More \(22\)/);
 assert.match(renderIntel({npcs:[{id:'budgeted',name:'Small omitted preview',drops:[],dropCount:2}]}),/Show More \(2\)/,'Snapshot budget can omit even a small preview without losing access to its drops');

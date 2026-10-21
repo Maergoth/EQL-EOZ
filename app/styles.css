@@ -6,22 +6,22 @@
  font-family:Inter,Segoe UI,system-ui,-apple-system,sans-serif;color-scheme:dark
 }
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:
+html,body{margin:0;height:100%;min-height:0;background:
  radial-gradient(circle at 72% 0%,rgba(68,92,124,.18),transparent 32%),
  linear-gradient(180deg,#0a0d14,#06090e 58%,#05070b);color:var(--text)}
 button,input,select{font:inherit}
 button,a{touch-action:manipulation}
 a{color:inherit}
-.app-shell{min-height:100vh;display:grid;grid-template-columns:220px minmax(0,1fr);grid-template-rows:72px minmax(0,1fr)}
+.app-shell{height:100%;min-height:0;display:grid;grid-template-columns:220px minmax(0,1fr);grid-template-rows:72px minmax(0,1fr)}
 .topbar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--line);background:rgba(7,11,18,.94);backdrop-filter:blur(14px);position:sticky;top:0;z-index:20;gap:12px}
 .brand{display:flex;align-items:center;gap:13px}.brand-mark{font:700 29px/1 Georgia,serif;color:#8198ff;text-shadow:0 0 18px rgba(103,125,255,.22)}.brand-title{font:700 18px Georgia,serif;color:var(--gold2);letter-spacing:.06em}
 .global-search{position:relative;z-index:30;flex:1;min-width:240px;max-width:560px;margin:0 12px}.global-search-box{height:38px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;border:1px solid rgba(216,183,92,.34);background:#090f17;border-radius:9px;overflow:hidden;box-shadow:inset 0 1px rgba(255,255,255,.025)}.global-search-icon{padding-left:12px;color:var(--gold);font-size:18px;pointer-events:none}.global-search input{position:relative;z-index:1;min-width:0;width:100%;height:100%;border:0;outline:0;background:transparent;color:#eef2f6;padding:0 10px;font-size:12px;pointer-events:auto}.global-search input::placeholder{color:#6f7d8e}.global-search button{align-self:stretch;border:0;border-left:1px solid rgba(216,183,92,.26);padding:0 13px;background:linear-gradient(180deg,#6f5928,#4e3d19);color:#fff0b1;font-weight:700;font-size:11px;cursor:pointer}.global-search button:hover{filter:brightness(1.12)}
 .window-controls{display:flex;align-items:center;gap:6px;flex:0 0 auto}.topbar-control{border:1px solid rgba(216,183,92,.27);border-radius:7px;background:#101722;color:#c9b571;padding:7px 9px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap}.topbar-control:hover,.topbar-control.is-active{border-color:#b89a4d;color:#fff0b1;background:rgba(216,183,92,.13)}
 .live-strip{display:flex;align-items:center;gap:18px}.live-item{display:flex;flex-direction:column;gap:2px;min-width:72px}.live-item span{font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#78879a}.live-item strong{font-size:12px;font-weight:600;max-width:210px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .status-pill{border:1px solid var(--line-soft);border-radius:999px;padding:6px 9px;font-size:11px;font-weight:700}.status-ok{color:#8cdfa3;border-color:rgba(83,181,108,.4);background:rgba(83,181,108,.1)}.status-warn{color:#e8ca71;background:rgba(216,183,92,.08)}.status-bad{color:#ef8585;background:rgba(220,91,91,.1);border-color:rgba(220,91,91,.35)}
-.sidebar{grid-row:2;padding:18px 12px;border-right:1px solid var(--line-soft);background:rgba(8,12,19,.72);display:flex;flex-direction:column;gap:6px;position:sticky;top:72px;height:calc(100vh - 72px)}
+.sidebar{grid-row:2;min-height:0;padding:18px 12px;border-right:1px solid var(--line-soft);background:rgba(8,12,19,.72);display:flex;flex-direction:column;gap:6px;overflow:auto}
 .nav-button{border:0;background:transparent;color:#b5c0cf;text-align:left;padding:11px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:10px}.nav-button:hover{background:rgba(255,255,255,.04);color:#fff}.nav-button.is-active{background:linear-gradient(90deg,rgba(216,183,92,.14),rgba(216,183,92,.04));color:var(--gold2);box-shadow:inset 2px 0 var(--gold)}.nav-button span{width:16px;text-align:center;color:var(--gold)}
-.content{grid-column:2;grid-row:2;min-width:0;padding:24px;overflow:hidden}.view{display:none;animation:fade .16s ease}.view.is-active{display:block}.map-view.is-active{display:flex;flex-direction:column;height:calc(100vh - 120px);min-height:560px}@keyframes fade{from{opacity:.5;transform:translateY(3px)}to{opacity:1;transform:none}}
+.content{grid-column:2;grid-row:2;min-width:0;min-height:0;padding:24px;overflow:auto}.view{display:none;animation:fade .16s ease}.view.is-active{display:block}.map-view.is-active{display:flex;flex-direction:column;height:100%;min-height:0}@keyframes fade{from{opacity:.5;transform:translateY(3px)}to{opacity:1;transform:none}}
 .hero{min-height:190px;border:1px solid var(--line);border-radius:14px;padding:28px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;background:
  linear-gradient(110deg,rgba(15,22,34,.97),rgba(13,20,31,.78)),
  radial-gradient(circle at 78% 20%,rgba(107,134,172,.18),transparent 36%);box-shadow:var(--shadow)}
@@ -59,7 +59,7 @@ a{color:inherit}
 /* Rich local item hover cards. */
 .item-hover{cursor:help;text-decoration:underline dotted rgba(216,183,92,.38);text-underline-offset:3px}.item-tooltip{position:fixed;z-index:1000;width:min(360px,calc(100vw - 24px));pointer-events:none;border:1px solid rgba(216,183,92,.48);border-radius:9px;background:rgba(6,10,16,.985);box-shadow:0 18px 55px rgba(0,0,0,.62);padding:12px;color:#dce3eb}.item-tooltip h3{margin:0;color:#f0dc94;font:700 16px Georgia,serif}.item-tooltip .tooltip-meta{margin-top:5px;color:#8f9daf;font-size:10px}.item-tooltip .tooltip-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:9px}.item-tooltip .tooltip-stat{border-radius:5px;background:rgba(255,255,255,.04);padding:5px}.item-tooltip .tooltip-stat span{display:block;color:#78879a;font-size:8px;text-transform:uppercase}.item-tooltip .tooltip-stat strong{font-size:11px}.item-tooltip .tooltip-source{margin-top:8px;color:#b2bfcd;font-size:10px;line-height:1.4}
 
-@media(max-width:900px){.window-controls .topbar-control:first-of-type{display:none}.encounter-layout{grid-template-columns:1fr}.drop-row{grid-template-columns:1fr 1fr}}
+@media(max-width:900px){.encounter-layout{grid-template-columns:1fr}.drop-row{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){.drop-row{grid-template-columns:1fr}}
 
 /* Focused overview */
@@ -69,25 +69,15 @@ a{color:inherit}
 /* EQLWiki Itembox-inspired hover card */
 .item-tooltip{width:min(390px,calc(100vw - 24px));border:1px solid #444;border-radius:0;background:#111;padding:0;color:#ddd;font:12px/1.35 "Segoe UI",Arial,sans-serif}.itembox-title{display:flex;align-items:center;justify-content:center;gap:8px;border-bottom:1px solid #363636;background:linear-gradient(#191919,#0d0d0d);padding:5px 10px;color:#5ac33c;text-align:center;font-weight:700}.itembox-tier{border:1px solid #665823;background:#28220d;color:#e9d479;padding:1px 5px;font-size:9px;text-transform:uppercase;letter-spacing:.06em}.itembox-body{padding:10px 11px 12px}.itembox-summary{display:grid;grid-template-columns:44px minmax(0,1fr);gap:9px}.itembox-icon{width:40px;height:40px;object-fit:contain;border:1px solid #3d3d3d;background:#080808}.item-icon-placeholder{display:grid;place-items:center;color:#81744d;background:#090909;border:1px solid #3d3d3d}.tooltip-scale-label{margin-top:10px;color:#d6c16f;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}.item-tooltip .tooltip-stats{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:18px;row-gap:2px;margin-top:4px;padding-top:7px;border-top:1px solid #2d2d2d}.item-tooltip .tooltip-stat{display:flex;justify-content:space-between;gap:8px;min-width:0;background:transparent;padding:0}.item-tooltip .tooltip-stat span{color:#c9c9c9;text-transform:none;font-size:11px}.item-tooltip .tooltip-stat strong{color:#eee;font-weight:500}.item-tooltip .tooltip-source{padding-top:8px;border-top:1px solid #2d2d2d;color:#bababa;font-size:11px}.item-tooltip .tooltip-source strong{color:#d7d7d7}
 
-/* Frameless desktop chrome. Pinned mode hides only this draggable title bar;
-   the app intentionally remains visible in the Windows taskbar. */
-.desktop-titlebar{height:32px;display:flex;align-items:center;justify-content:space-between;padding-left:12px;background:#070a10;border-bottom:1px solid rgba(255,255,255,.07);color:#8e9aaa;font-size:11px;user-select:none;-webkit-app-region:drag}
+/* The native Windows frame owns window controls; the version stays in-app. */
 .titlebar-version{margin-left:5px;color:var(--gold2);font:700 10px/1 system-ui,sans-serif;letter-spacing:.04em}
-.desktop-window-buttons{height:100%;display:flex;-webkit-app-region:no-drag}.desktop-window-buttons button{width:44px;height:100%;border:0;background:transparent;color:#aeb8c5;cursor:pointer}.desktop-window-buttons button:hover{background:rgba(255,255,255,.08);color:#fff}.desktop-window-buttons .window-close:hover{background:#b73535}
-.app-shell{min-height:calc(100vh - 32px)}
-.sidebar{top:104px;height:calc(100vh - 104px)}
-.map-view.is-active{height:calc(100vh - 152px)}
-body.pinned-mode .desktop-titlebar{display:none}
-body.pinned-mode .app-shell{min-height:100vh}
-body.pinned-mode .sidebar{top:72px;height:calc(100vh - 72px)}
-body.pinned-mode .map-view.is-active{height:calc(100vh - 120px)}
 
 .map-mode-switch{display:flex;align-items:center;border:1px solid rgba(216,183,92,.25);border-radius:7px;overflow:hidden}.map-mode-button{height:34px;border:0;border-right:1px solid rgba(216,183,92,.18);background:#0d141e;color:#9ca9b8;padding:0 10px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap}.map-mode-button:last-child{border-right:0}.map-mode-button:hover,.map-mode-button.is-active{background:rgba(216,183,92,.15);color:#f0dc94}
 .single-metric{grid-template-columns:minmax(260px,520px)}
 .con-light-blue{color:var(--lightblue)}
 .npc-con-light-blue{border-color:rgba(114,201,232,.46);background:linear-gradient(135deg,rgba(114,201,232,.19),rgba(10,15,23,.96) 62%)}
 
-.setup-overlay{position:fixed;top:32px;right:0;bottom:0;left:0;z-index:2000;display:grid;place-items:center;padding:24px;background:rgba(2,5,9,.82);backdrop-filter:blur(8px)}.setup-overlay[hidden]{display:none}.setup-card{width:min(520px,100%);border:1px solid rgba(216,183,92,.45);border-radius:14px;background:#0d131d;padding:28px;box-shadow:0 28px 80px rgba(0,0,0,.65)}.setup-card h1{margin:0;color:#f0dc94;font:700 29px/1.15 Georgia,serif}.setup-card p{color:#a3afbd;line-height:1.55;margin:13px 0 20px}
+.setup-overlay{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:24px;background:rgba(2,5,9,.82);backdrop-filter:blur(8px)}.setup-overlay[hidden]{display:none}.setup-card{width:min(520px,100%);border:1px solid rgba(216,183,92,.45);border-radius:14px;background:#0d131d;padding:28px;box-shadow:0 28px 80px rgba(0,0,0,.65)}.setup-card h1{margin:0;color:#f0dc94;font:700 29px/1.15 Georgia,serif}.setup-card p{color:#a3afbd;line-height:1.55;margin:13px 0 20px}
 
 /* A consider is useful for a few seconds{position:fixed;z-index:700;left:92px;right:14px;bottom:0;display:grid;grid-template-columns:minmax(190px,270px) minmax(0,1fr);gap:14px;min-height:116px;max-height:190px;padding:13px 14px;border:1px solid rgba(216,183,92,.5);border-bottom:0;border-radius:12px 12px 0 0;background:rgba(8,13,21,.97);box-shadow:0 -14px 42px rgba(0,0,0,.58);backdrop-filter:blur(14px)}.consider-drop-card{display:grid;grid-template-columns:40px 126px;align-items:center;gap:8px;flex:0 0 auto;min-width:182px;max-width:210px;padding:8px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.035);color:inherit;text-decoration:none}.consider-drop-card:hover{border-color:rgba(216,183,92,.48);background:rgba(216,183,92,.09)}.consider-drop-card img,.consider-drop-icon{width:40px;height:40px;object-fit:contain;border:1px solid #3d3d3d;background:#080808}.consider-drop-icon{display:grid;place-items:center;color:#81744d}.consider-drop-card strong{display:block;color:#e6d287;font:700 11px/1.25 Georgia,serif}.consider-drop-card small{display:block;margin-top:4px;color:#8795a6;font-size:8px;text-transform:uppercase}.consider-empty{align-self:center;color:#9aa7b6;font-size:11px;line-height:1.45}
 
@@ -134,8 +124,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[t
 .toast .toast-close{width:25px;height:25px;padding:0;background:transparent;color:#8995a3;font-size:16px}
 
 @media(max-width:1100px){.route-field{min-width:300px}.route-status{flex-basis:100%;order:5}.map-route-bar{flex-wrap:wrap}}
-@media(max-width:950px){.topbar{gap:7px}.map-active .brand{display:none}}
+@media(max-width:950px){.topbar{gap:7px}.map-active .brand{display:flex}.map-active .brand-mark{display:none}.map-active .brand-title{font-size:0;letter-spacing:0}.map-active .brand-title .titlebar-version{font-size:10px}}
 @media(max-width:760px){.route-field{min-width:0;flex:1}.map-route-bar{gap:5px}.readiness-steps{flex-wrap:wrap}}
+/* Fit the map to the native window's client area, including short/DPI-scaled
+   windows. Keep status text in flow; the canvas gives up space before notes do. */
+.map-toolbar>div:first-child{min-width:0;flex:1 1 220px}.map-title-row{flex-wrap:wrap}.map-actions{min-width:0;flex:1 1 260px;max-width:360px}
+@media(max-height:650px){
+    .content{padding:10px 12px}.map-toolbar.panel{padding:8px 10px;margin-bottom:8px;gap:8px;flex-direction:row;align-items:flex-start}
+    .map-toolbar p{font-size:10px}.map-toolbar .map-actions{gap:5px;justify-content:flex-start;flex-basis:240px}
+    .map-toolbar .map-actions>.map-mode-switch{justify-content:flex-start}.map-toolbar .primary-button,.map-toolbar .secondary-button{font-size:10px;padding:6px 8px}
+    .map-toolbar .map-mode-button{height:28px;padding:0 7px}.readiness-steps{margin-top:5px}.readiness-steps span{padding:2px 5px}
+    .map-route-bar{min-height:0;padding:6px 8px;margin-bottom:8px}.map-route-bar .primary-button,.map-route-bar .secondary-button{padding:6px 8px;font-size:11px}
+}
 @media(prefers-reduced-motion:reduce){.view{animation:none}}
 
 /* NPC names copy a paste-ready game command; routing remains a separate action. */
@@ -153,5 +153,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[t
 .app-update-progress{display:block;width:100%;height:10px;margin:10px 0;accent-color:var(--gold)}
 .app-update-progress[hidden]{display:none}
 .app-update-preference{margin-top:14px;align-items:flex-start;line-height:1.5}
-.app-update-badge{color:var(--gold2);border-color:var(--gold)}
+.app-update-badge{color:#a0efb7;border-color:#5fc980;background:#10291b;box-shadow:0 0 8px #5fc98035;animation:update-available-glow 3s ease-in-out infinite}
+.app-update-badge:hover,.app-update-badge:focus-visible,.app-update-badge.is-active{color:#d3ffe0;border-color:#8bf4ac;background:#183f28}
+@keyframes update-available-glow{0%,100%{box-shadow:0 0 7px #5fc98030}50%{box-shadow:0 0 13px #5fc98070}}
+@media(prefers-reduced-motion:reduce){.app-update-badge{animation:none;box-shadow:0 0 8px #5fc98050}}
+@media(max-width:950px){.global-search{min-width:60px;margin:0 5px}.topbar{padding-left:12px;padding-right:12px}}
+@media(max-width:760px){.brand-mark{display:none}.brand-title{font-size:0;letter-spacing:0}.brand-title .titlebar-version{font-size:10px}.window-controls{gap:5px}.topbar-control{padding:7px}}
 .settings-actions #app-update-notes{font-size:11px;align-self:center}

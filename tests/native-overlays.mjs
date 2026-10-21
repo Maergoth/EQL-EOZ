@@ -25,6 +25,7 @@ class Window extends EventEmitter {
     setAlwaysOnTop(...args) { this.nativeCalls.push(['top', ...args]); }
     setSkipTaskbar() {}
     isMinimized() { return false; }
+    isMaximized() { return false; }
     restore() {}
     show() { this.visible = true; }
     focus() {}
@@ -38,8 +39,8 @@ class Window extends EventEmitter {
     async loadURL(url) { this.loadedUrls ||= []; this.loadedUrls.push(url); this.webContents.mainFrame.url = url; queueMicrotask(() => this.webContents.emit('did-finish-load')); }
 }
 
-async function fixture(run, { saved = {}, shortcut = true, tray = true } = {}) {
-    const handlers = new Map(), writes = [], nativeWindows = [], commands = [], warnings = [];
+async function fixture(run, { saved = {}, shortcut = true, tray = true, trayFailure = null } = {}) {
+    const handlers = new Map(), writes = [], nativeWindows = [], nativeTrays = [], commands = [], warnings = [];
     const screen = new EventEmitter(); screen.displays = [display(), display(1920)]; screen.getAllDisplays = () => screen.displays;
     const main = new Window(); main.webContents.mainFrame.url = 'http://127.0.0.1:53147/';
     main.webContents.send = (...args) => commands.push(args);
@@ -49,7 +50,7 @@ async function fixture(run, { saved = {}, shortcut = true, tray = true } = {}) {
         BrowserWindow:class extends Window { constructor(options) { super(options); nativeWindows.push(this); } },
         ipcMain:{ handle:(channel, handler) => handlers.set(channel, handler), removeHandler:channel => handlers.delete(channel) },
         nativeImage:{ createFromDataURL:value => value },
-        Tray:class extends EventEmitter { constructor() { super(); if (!tray) throw new Error('No system tray'); } setToolTip() {} setContextMenu(menu) { this.menu = menu; } destroy() { this.destroyed = true; } },
+        Tray:class extends EventEmitter { constructor() { super(); if (!tray) throw new Error('No system tray');nativeTrays.push(this); } setToolTip() {if(trayFailure==='tooltip')throw Error('Synthetic tooltip failure');} setContextMenu(menu) {if(trayFailure==='menu')throw Error('Synthetic menu failure');this.menu = menu; } destroy() { this.destroyed = true; } },
         Menu:{ buildFromTemplate:value => value },
         globalShortcut:{ register:(name, handler) => { assert.equal(name, RECOVERY_SHORTCUT); shortcutHandler = handler; return shortcut; }, unregister:name => { unregister = name; } }
     };
@@ -60,7 +61,7 @@ async function fixture(run, { saved = {}, shortcut = true, tray = true } = {}) {
     await host.initialize();
     const mainEvent = { sender:main.webContents, senderFrame:main.webContents.mainFrame };
     const overlayEvent = id => { const win = host.windows.get(id); return { sender:win.webContents, senderFrame:win.webContents.mainFrame }; };
-    try { await run({ host, electron, main, mainEvent, overlayEvent, writes, commands, nativeWindows, handlers, screen, warnings,
+    try { await run({ host, electron, main, mainEvent, overlayEvent, writes, commands, nativeWindows, nativeTrays, handlers, screen, warnings,
         shown:() => shown, quit:() => quit, recover:() => shortcutHandler(), setNow:value => { now = value; } }); }
     finally { host.dispose(); await host.writeQueue; if (shortcut) assert.equal(unregister, RECOVERY_SHORTCUT); }
 }
@@ -407,6 +408,15 @@ test('when both recovery controls fail, saved click-through is cleared and enabl
     assert(warnings.some(value => String(value).includes('click-through is disabled')));
 }, { shortcut:false, tray:false, saved:{ panels:{ parse:{ visible:true, passThrough:true } } } }));
 
+test('a tray that fails after construction is destroyed and cannot claim recovery availability', async () => {
+    for(const trayFailure of ['tooltip','menu'])await fixture(async({host,nativeTrays})=>{
+        assert.equal(nativeTrays.length,1);assert.equal(nativeTrays[0].destroyed,true);
+        assert.equal(host.tray,null);assert.equal(host.hasRecoveryControl(),false);
+        assert.equal(host.preferences.panels.parse.passThrough,false);
+        await assert.rejects(host.control('pass-through','parse',true),/working tray/);
+    },{trayFailure,shortcut:false,saved:{panels:{parse:{visible:true,passThrough:true}}}});
+});
+
 test('session loss is explicit, keeps the last display, and rejects stale session actions', () => fixture(async ({ host, mainEvent, overlayEvent }) => {
     await host.control('show', 'parse'); await publish(host, mainEvent);
     host.markSessionUnavailable();
@@ -433,7 +443,7 @@ test('the session window hides only while recoverable panels remain and otherwis
         fixtureHost:{ hasVisiblePanels:() => state.visible, hasRecoveryControl:() => state.recovery, markSessionUnavailable() {}, noteSessionRestart:() => { state.restarts += 1; } }
     });
     vm.runInContext(await readFile(mainPath, 'utf8'), context);
-    vm.runInContext('overlayHost = fixtureHost; createWindow({});', context);
+    vm.runInContext('atomicWriteJson = async () => {}; overlayHost = fixtureHost; createWindow({});', context);
     const win = windows[0];
     assert.equal(win.options.webPreferences.backgroundThrottling, false);
     win.webContents.emit('render-process-gone');

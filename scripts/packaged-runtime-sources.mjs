@@ -7,6 +7,8 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/index.html',
     'app/styles.css',
     'app/app.js',
+    'app/whats-new.js',
+    'app/whats-new.css',
     'app/map-overlay.js',
     'app/map-overlay-data.js',
     'app/timer-alerts.js',
@@ -18,6 +20,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'desktop/discovery-host.cjs',
     'app/app-update-ui.js',
     'app/parser.js',
+    'app/coordinate-system.js',
     'app/timer-engine.js',
     'app/timer-settings.js',
     'THIRD_PARTY/PNUT/MIT.txt',
@@ -31,6 +34,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/item-scaling.js',
     'app/zone-identity.js',
     'app/viewer-zone-selection.js',
+    'app/minimap-controls.js',
     'app/zone-load-guard.js',
     'app/viewport-framing.js',
     'app/established-route-guard.js',
@@ -47,11 +51,22 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/zoneviewer/navigation.worker.js',
     'app/workers/recast-route.worker.js',
     'desktop/main.cjs',
+    'desktop/window-placement.cjs',
     'desktop/preload.cjs',
     'desktop/app-updater.cjs',
     'desktop/overlay-host.cjs',
     'desktop/overlay-preload.cjs'
 ]);
+
+export const PACKAGED_RUNTIME_IMAGES=Object.freeze(['workspace','map','intel','timers'].map(name=>`app/assets/whats-new/${name}.png`));
+
+export function verifyPackagedRuntimeImages(packagedBytes,sourceBytes){
+    for(const relative of PACKAGED_RUNTIME_IMAGES){
+        let packaged;
+        try{packaged=packagedBytes(relative);}catch{throw new Error(`Packaged ${relative} is missing.`);}
+        if(!Buffer.from(packaged).equals(Buffer.from(sourceBytes(relative))))throw new Error(`Packaged ${relative} differs from the reviewed image.`);
+    }
+}
 
 export function verifyPackagedRuntimeSources(packagedText, sourceText) {
     for (const relative of PACKAGED_RUNTIME_SOURCES) {

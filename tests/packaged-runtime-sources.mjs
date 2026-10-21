@@ -3,11 +3,12 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import asar from '@electron/asar';
-import { PACKAGED_RUNTIME_SOURCES, verifyPackagedRuntimeSources } from '../scripts/packaged-runtime-sources.mjs';
+import { PACKAGED_RUNTIME_SOURCES, PACKAGED_RUNTIME_IMAGES, verifyPackagedRuntimeSources, verifyPackagedRuntimeImages } from '../scripts/packaged-runtime-sources.mjs';
 
 const bootstrapPath = 'app/data/eye-of-zomm-pack.bootstrap.json';
 const requiredModules = [
     bootstrapPath,
+    'app/whats-new.js','app/whats-new.css','desktop/window-placement.cjs',
     'app/map-overlay.js', 'app/map-overlay-data.js', 'app/wiki-discovery.js', 'app/wiki-discovery-ui.js',
     'app/trigger-match-core.js', 'app/trigger-matcher.js', 'app/workers/trigger-match.worker.js',
     'app/timer-alerts.js', 'desktop/discovery-host.cjs', 'desktop/overlay-host.cjs', 'desktop/overlay-preload.cjs',
@@ -17,6 +18,7 @@ const requiredModules = [
 for (const relative of requiredModules) assert(PACKAGED_RUNTIME_SOURCES.includes(relative), `Package gate omits ${relative}`);
 const checker = await readFile(new URL('../scripts/check-packaged-artifact.mjs', import.meta.url), 'utf8');
 assert(checker.includes('verifyPackagedRuntimeSources(packagedText,'), 'Artifact verification must execute the source-byte gate');
+assert(checker.includes('verifyPackagedRuntimeImages(packagedBytes,'), 'Artifact verification must compare actual image bytes');
 
 const directory = await mkdtemp(join(tmpdir(), 'eoz-packaged-contract-'));
 try {
@@ -37,6 +39,8 @@ try {
         await mkdir(dirname(path), { recursive:true });
         await writeFile(path, contents);
     }
+    const images=new Map(PACKAGED_RUNTIME_IMAGES.map(relative=>[relative,Buffer.from([0x89,0x50,0x4e,0x47,0xff])]));
+    for(const [relative,bytes] of images){const path=join(fixture,relative);await mkdir(dirname(path),{recursive:true});await writeFile(path,bytes);}
     const sourceText = relative => sources.get(relative);
     const packagedText = relative => {
         try { return asar.extractFile(archive, relative).toString('utf8'); }
@@ -45,8 +49,19 @@ try {
             return asar.extractFile(archive, relative.replaceAll('/', '\\')).toString('utf8');
         }
     };
+    const packagedBytes=relative=>{try{return asar.extractFile(archive,relative);}catch(error){if(process.platform!=='win32')throw error;return asar.extractFile(archive,relative.replaceAll('/','\\'));}};
     await asar.createPackage(fixture, archive);
     verifyPackagedRuntimeSources(packagedText, sourceText);
+    verifyPackagedRuntimeImages(packagedBytes,relative=>images.get(relative));
+    for(const relative of PACKAGED_RUNTIME_IMAGES){
+        await rm(join(fixture,relative));await asar.createPackage(fixture,archive);asar.uncache(archive);
+        assert.throws(()=>verifyPackagedRuntimeImages(packagedBytes,path=>images.get(path)),error=>error.message===`Packaged ${relative} is missing.`);
+        // 0xff/0xfe both decode to a UTF-8 replacement character. A text-only
+        // comparison would miss this corruption; the image gate must not.
+        await writeFile(join(fixture,relative),Buffer.from([0x89,0x50,0x4e,0x47,0xfe]));await asar.createPackage(fixture,archive);asar.uncache(archive);
+        assert.throws(()=>verifyPackagedRuntimeImages(packagedBytes,path=>images.get(path)),error=>error.message===`Packaged ${relative} differs from the reviewed image.`);
+        await writeFile(join(fixture,relative),images.get(relative));
+    }
 
     // Verify each newly required runtime module against a real, incomplete ASAR.
     for (const relative of requiredModules) {

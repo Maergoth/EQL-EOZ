@@ -5,7 +5,9 @@
 Requested October 21, 2026: add an application update flow comparable to PNUT,
 then implement actual modular native overlays and timers while retaining
 Eye of Zomm's custom tools. The updater, four native windows and timer engine
-are implemented in the 0.8.3 PR candidate, which is not yet merged or released.
+shipped in 0.8.3. The 0.8.4 follow-up adds normal main-window placement and
+startup settings, map sizing/zoom and native Z slicing; see
+[the continuation index](WINDOW_MAP_POLISH.md).
 Elitist/Carebear controls and Revenge are outside this design.
 
 Reference PNUT commit:

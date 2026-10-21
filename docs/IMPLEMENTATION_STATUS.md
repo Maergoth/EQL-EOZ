@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-21
 
-Code baseline: 0.8.3
+Code baseline: 0.8.4
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
@@ -16,11 +16,12 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 | 0.8 Recast/Detour worker | Guarded real-zone candidate integrated; promotion gated | Pinned 0.43.1 + deterministic module bundle; cooperative decoded-viewer collision export; bounded route crop; transferable buffers; established-first atomic replacement; latest-request-wins cancellation; independent validation; package and notice checks | Pass the full proprietary-zone and responsiveness matrix before making Recast first choice |
 | 0.9 decision intelligence beta | Planned | User stories and data rules in vision 16.4 | Begin only after the 0.8 95% corpus/collision/non-blocking exit gate |
 | 1.0 trusted release | Planned | Quality gate in vision 16.5 | Signing, upgrade path, support/compatibility docs, clean Windows matrix, no S1/S2 defects |
-| 0.8.3 application updater | Implemented; installed upgrade acceptance pending | GitHub beta discovery; verified bounded NSIS staging; explicit native install approval; mocked lifecycle and renderer tests; actual Electron IPC/UI smoke | Controlled Windows upgrade preserves profile and verifies installer/relaunch behavior |
+| 0.8.3 application updater | Implemented; official 0.8.3 installation verified | GitHub beta discovery; verified bounded NSIS staging; explicit native install approval; Electron IPC/UI smoke; prior official installer preserved profile and shortcut targets | Complete a later approved in-app installer handoff; 0.8.4 publication does not change the owner's local installation |
 | Native modular overlays | Implemented in 0.8.3 PR; physical game/OS acceptance pending | Parse/Map/Intel/Timers are separate windows; PNUT five tabs, own Taken, one session, bounded complete aggregates, saved layouts, lock/passthrough and recovery; actual Electron smoke; [source map](PNUT_UX_PLAN.md) | Physical passthrough, focus, scaling and monitor/sleep matrix; no duplicate 3D decoder or native docking claimed |
-| Native map and Intel | Implemented with synthetic IPC evidence | Client line-map canvas, shared routes, Normal Zone/Raid Zone identity, lazy all-drop Show More, named consider/kill focus/expand/flash/blip without activation; Through era is cumulative; map modes only on main Map page | Fresh raid-aware producer pack and live source/location acceptance |
+| Native map and Intel | Implemented with synthetic IPC evidence and production dataset | Client line-map canvas, shared routes, Normal Zone/Raid Zone identity, lazy all-drop Show More, named consider/kill focus/expand/flash/blip without activation; Through era is cumulative; map modes only on main Map page | Live source/location acceptance |
 | PNUT-style timers and swing | Implemented with synthetic log evidence | Main list/editor with literal/regex PNUT captures, preview, cooldown/overlap, warning/end colors and sound/speech, notifications; persisted deadlines/replay guards and observed swing; [rules](TIMERS.md) | Live EQL grammar and timing comparison; timestamps limit precision to one second |
 | Missing wiki suggestions | Implemented; explicit clipboard capture acceptance pending | Complete-catalog membership guard, shared inline main/native Timers notices, 15 visible seconds with hover/focus pause, Screenshot source choices/clipboard and persistent Ignore; no popup/upload | Fresh complete catalog, physical capture/source selection and local clipboard check |
+| Main window and map controls | Implemented in 0.8.4; physical monitor acceptance pending | Native main frame; saved placement/maximized state; tray/start preferences; responsive map footer; embedded minimap zoom; native Z slider with unknown-Z markers; Raid Zone first; [continuation index](WINDOW_MAP_POLISH.md) | Physical monitor removal/DPI and live game interaction |
 
 ## Current highest-priority task
 
@@ -33,10 +34,10 @@ probes from recovered valid ramps/drops; keep
 the guarded engine policy and conservative clearance checks.
 
 Next verify known-walkable ramp/drop/door coverage and live movement/heading,
-OS-wide DPI changes, and installer behavior. The reviewed producer/catalog is
-deployed for the prior bootstrap; dataset `20261021T062421Z-830bd5a89bfa` was
-published and passed exact-byte ASAR checks. The 0.8.3 raid/catalog producer is a
-separate deployment and rebuild gate; verify its new pack before release. Capture only
+OS-wide DPI changes, and installer behavior. The reviewed raid/catalog producer
+is deployed; dataset `20261021T101150Z-dd346c8cc55d` includes 117 raid variants
+and complete public presence indexes. The current release fetches and checks
+that production snapshot independently of application publication. Capture only
 aggregate schema-v2 diagnostics. Both established and candidate paths must
 validate before display; do not introduce a renderer-thread collision graph
 or expose an engine selector.

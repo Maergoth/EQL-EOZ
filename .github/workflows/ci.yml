@@ -35,5 +35,7 @@ jobs:
       - name: Test full Windows source suite
         run: npm test
       - run: npm run test:desktop-worker
+      - run: npm run test:window-lifecycle
+      - run: npm run test:map-layout
       - run: npm run test:native-overlays
       - run: npm run test:discovery-notices

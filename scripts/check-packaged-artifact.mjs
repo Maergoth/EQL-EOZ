@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import asar from '@electron/asar';
-import { verifyPackagedRuntimeSources } from './packaged-runtime-sources.mjs';
+import { verifyPackagedRuntimeSources, verifyPackagedRuntimeImages } from './packaged-runtime-sources.mjs';
 
 const packageRoot = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const archivePath = [
@@ -15,16 +15,18 @@ if (!archivePath) {
     throw new Error('Packaged app.asar was not found. Build an unpacked desktop app before this check.');
 }
 
-function packagedText(relativePath) {
+function packagedBytes(relativePath) {
     try {
-        return asar.extractFile(archivePath, relativePath).toString('utf8');
+        return asar.extractFile(archivePath, relativePath);
     } catch (error) {
         // @electron/asar 4 resolves archive entries with the host separator.
         // Linux accepts POSIX paths; Windows runners require backslashes.
         if (process.platform !== 'win32') throw error;
-        return asar.extractFile(archivePath, relativePath.replaceAll('/', '\\')).toString('utf8');
+        return asar.extractFile(archivePath, relativePath.replaceAll('/', '\\'));
     }
 }
+
+function packagedText(relativePath) { return packagedBytes(relativePath).toString('utf8'); }
 
 const packagedPackage = JSON.parse(packagedText('package.json'));
 if (packagedPackage.version !== packageRoot.version) {
@@ -46,9 +48,10 @@ const bootstrap = JSON.parse(packagedText('app/data/eye-of-zomm-pack.bootstrap.j
 // The integration regressions run against source. Require those exact runtime
 // bytes in the ASAR so a stale package cannot pass on older marker strings.
 verifyPackagedRuntimeSources(packagedText, relative => readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8'));
+verifyPackagedRuntimeImages(packagedBytes, relative => readFileSync(new URL(`../${relative}`, import.meta.url)));
 
 for (const [name, content, required] of [
-    ['title bar', index, 'id="titlebar-version"'],
+    ['header version', index, 'id="titlebar-version"'],
     ['runtime version binding', app, "$('#titlebar-version').textContent"],
     ['/who zone parser', parser, "source:'who'"],
     ['/who canonical zone resolution', app, 'event.zoneShortName || event.zone'],

@@ -1,7 +1,7 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.8.3
+Baseline: 0.8.4
 Last updated: 2026-10-21
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
@@ -190,7 +190,6 @@ The persistent header contains only cross-cutting state and actions:
 - zone;
 - log readiness;
 - Search EQLWiki;
-- Pin to top;
 - Overlays.
 
 Parse, Map, Intel and Timers are independent native windows with separately saved
@@ -369,15 +368,18 @@ User stories:
 
 - As a player, I want character, classes, level, and zone in one line so I can verify the app is following the correct session.
 - As a player, I want global wiki search to remain typeable and predictable so I can research without navigating to another app tab first.
-- As a player, I want pinning and compact mode available everywhere so window management does not depend on the current feature.
+- As a player, I want a normal main window that remembers its location, with independent overlays for use beside the game.
 - As a keyboard user, I want visible focus and Enter behavior on search and buttons.
 
 Requirements:
 
 - Search is strictly EQLWiki `Special:Search` and opens the system browser.
 - The search field cannot be covered by an invisible overlay or lose pointer events.
-- Pinned mode hides only the custom draggable title bar and remains present in the taskbar.
+- The main window uses normal Windows title-bar controls, saves its size/location/maximized state and stays in the taskbar unless Minimize to tray is enabled and a tray icon is available.
+- Minimize to tray and Start minimized are independent saved settings, both off by default; a missing tray must retain taskbar recovery.
 - Window controls remain reachable in every mode.
+- A green glowing **Update Available** header action opens Application updates when a release is offered. Later preserves that recovery path; reduced-motion mode uses a static glow.
+- Settings links to the exact GitHub project and opens a manual screenshot walkthrough with Previous/Next, keyboard dismissal and links into the featured tools.
 - Product copy uses “Eye of Zomm”; retired naming never appears.
 
 ### 9.2 Overview
@@ -648,7 +650,7 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 - Two different `/loc` values orient first person along the observed trajectory.
 - First, Top, and Map remain centered on the same location.
 - Switching window modes does not remove map-mode controls or change the chosen map mode.
-- All floors appear by default after loading a zone.
+- The full Map Explorer starts without a floor restriction. The native Map uses a center-Z slider with an adjustable tolerance, initially near the logged player height; unknown-Z NPCs remain visible across every slice, while known Z=0 is a real floor.
 - When several map folders contain the zone, Eye of Zomm uses the root `maps` family that corresponds to the game's `default` selection and names the active map set in sync status. A future explicit map-set selector may override it; file size must never choose a custom set silently.
 
 ### Named events and loot
@@ -877,9 +879,9 @@ Deferred beyond 1.0 unless evidence changes the priority:
 
 ## 17. Product decisions and approval points
 
-### Implemented decisions, updated for 0.8.3
+### Implemented decisions, updated for 0.8.4
 
-1. **Remember presentation.** Preserve First/Top/Map, the main destination and each native panel's visibility/layout independently.
+1. **Remember presentation.** Preserve First/Top/Map, the main destination, main window placement/maximized state and each native panel's visibility/layout independently.
 2. **Search overrides contextual item scope.** Empty query is current-zone/class; deliberate search is global unless Current zone was explicitly selected.
 3. **Make Auto visible.** Detected classes appear selected while Auto remains the explicit source of truth.
 4. **Keep named attention calm.** Select and expand Intel once per consider/kill with a mild flash/blip; no popup or automatic collapse timer.

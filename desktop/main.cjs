@@ -12,6 +12,7 @@ const { URL } = require('node:url');
 const { AppUpdater, isReleaseNotesUrl } = require('./app-updater.cjs');
 const { OverlayHost } = require('./overlay-host.cjs');
 const { DiscoveryHost } = require('./discovery-host.cjs');
+const { normalizeWindowPlacement, WindowPlacement } = require('./window-placement.cjs');
 const {
     inferEqRootPath,
     isEqLogName,
@@ -41,6 +42,12 @@ let overlayHost = null;
 let discoveryHost = null;
 let quitting = false;
 let sessionNeedsReload = false;
+let windowPlacement = null;
+let pendingInitialMaximize = false;
+let desktopSettings = { minimizeToTray:false, startMinimized:false };
+let configWriteQueue = Promise.resolve();
+let quitFlush = null;
+let quitReady = false;
 
 function getAppUpdater() {
     if (!appUpdater) appUpdater = new AppUpdater({
@@ -90,7 +97,14 @@ function overlayPreferencesPath() {
     return path.join(userDataDir(), 'eye-of-zomm-overlays.json');
 }
 
-function showMainWindow() {
+function windowPlacementPath() { return path.join(userDataDir(),'eye-of-zomm-window.json'); }
+
+function windowSettings(config = desktopSettings) {
+    return { minimizeToTray:config.minimizeToTray === true, startMinimized:config.startMinimized === true,
+        trayAvailable:Boolean(overlayHost?.tray) };
+}
+
+function showMainWindow(focus = true) {
     if (!windowRef || windowRef.isDestroyed()) return;
     if (sessionNeedsReload) {
         sessionNeedsReload = false;
@@ -105,8 +119,10 @@ function showMainWindow() {
         });
     }
     if (windowRef.isMinimized()) windowRef.restore();
+    windowPlacement?.restoreBounds();
+    if (pendingInitialMaximize) { pendingInitialMaximize=false;windowRef.maximize(); }
     windowRef.show();
-    windowRef.focus();
+    if (focus) windowRef.focus();
 }
 
 function productionPackPath() {
@@ -137,28 +153,29 @@ async function atomicWriteJson(filePath, value) {
 }
 
 async function readConfig() {
+    const raw=await readJson(configPath(),{});
+    const saved=raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const { alwaysOnTop:_retiredPin, ...current }=saved;
     return {
         eqRootPath: '',
         logPath: '',
         logSelection: 'automatic',
-        alwaysOnTop: false,
-        ...(await readJson(configPath(), {}))
+        ...current,
+        minimizeToTray:saved.minimizeToTray === true,
+        startMinimized:saved.startMinimized === true
     };
 }
 
-async function updateConfig(values) {
-    const config = await readConfig();
-    const next = { ...config, ...values };
-    await atomicWriteJson(configPath(), next);
-    return next;
-}
-
-async function setAlwaysOnTop(enabled) {
-    enabled = Boolean(enabled);
-    windowRef?.setAlwaysOnTop(enabled, enabled ? 'screen-saver' : 'normal');
-    windowRef?.setSkipTaskbar(false);
-    await updateConfig({ alwaysOnTop: enabled });
-    return enabled;
+function updateConfig(values) {
+    const operation=configWriteQueue.catch(()=>{}).then(async()=>{
+        const config=await readConfig(), next={...config,...values};
+        delete next.alwaysOnTop;
+        await atomicWriteJson(configPath(),next);
+        desktopSettings=windowSettings(next);
+        return next;
+    });
+    configWriteQueue=operation;
+    return operation;
 }
 
 async function resolveLogPath() {
@@ -548,9 +565,7 @@ async function apiInfo() {
         safety: 'log/local-file reads only; optional static wiki data pack',
         dataPack: state,
         productionPack: fs.existsSync(productionPackPath()),
-        windowState: {
-            alwaysOnTop: Boolean(windowRef?.isAlwaysOnTop() ?? config.alwaysOnTop),
-        },
+        windowState: windowSettings(config),
         desktop: true
     };
 }
@@ -578,7 +593,7 @@ async function requestHandler(req, res) {
         const pathname = url.pathname;
         const isMutation = [
             '/api/select-eq-root', '/api/select-log', '/api/log/automatic',
-            '/api/window/always-on-top', '/api/update-pack'
+            '/api/update-pack'
         ].includes(pathname);
         if (isMutation && !trustedMutation(req, pathname)) {
             return sendJson(res, req.method === 'POST' ? 403 : 405, { error: 'Trusted POST required' });
@@ -606,11 +621,6 @@ async function requestHandler(req, res) {
         if (pathname === '/api/log/automatic') {
             await useAutomaticLogSelection();
             return sendJson(res, 200, await apiInfo());
-        }
-        if (pathname === '/api/window/always-on-top') {
-            const enabled = url.searchParams.get('enabled') === '1';
-            await setAlwaysOnTop(enabled);
-            return sendJson(res, 200, { ok: true, enabled });
         }
         if (pathname === '/api/update-pack') {
             return sendJson(res, 200, await updateStaticDataPack(url.searchParams.get('force') === '1'));
@@ -654,14 +664,17 @@ async function startServer() {
     port = server.address().port;
 }
 
-function createWindow(config = {}) {
+function createWindow(config = {}, savedPlacement = {}) {
+    desktopSettings=windowSettings(config);
+    const placement=normalizeWindowPlacement(savedPlacement,electron.screen?.getAllDisplays?.() || []);
+    pendingInitialMaximize=placement.maximized;
     windowRef = new BrowserWindow({
-        width: 1440,
-        height: 900,
-        minWidth: 1024,
-        minHeight: 700,
+        ...placement.bounds,
+        minWidth: Math.min(1024,placement.bounds.width),
+        minHeight: Math.min(700,placement.bounds.height),
+        title:`EQLWiki - Eye of Zomm v${APP_VERSION}`,
         backgroundColor: '#08101b',
-        frame: false,
+        frame: true,
         autoHideMenuBar: true,
         skipTaskbar: false,
         show: false,
@@ -677,13 +690,16 @@ function createWindow(config = {}) {
             backgroundThrottling: false
         }
     });
-    windowRef.setAlwaysOnTop(Boolean(config.alwaysOnTop), config.alwaysOnTop ? 'screen-saver' : 'normal');
     windowRef.setSkipTaskbar(false);
+    windowPlacement=new WindowPlacement({window:windowRef,screen:electron.screen,initial:placement,
+        getMaximized:()=>pendingInitialMaximize || windowRef?.isMaximized(),
+        write:value=>atomicWriteJson(windowPlacementPath(),value)});
 
     const openApprovedExternalUrl = url => {
         try {
             const target = new URL(url);
-            if ((target.protocol === 'https:' && ['eqlwiki.com', 'www.eqlwiki.com'].includes(target.hostname.toLowerCase())) || isReleaseNotesUrl(url)) {
+            if ((target.protocol === 'https:' && ['eqlwiki.com', 'www.eqlwiki.com'].includes(target.hostname.toLowerCase())) ||
+                url === 'https://github.com/Maergoth/EQL-EOZ' || url === 'https://github.com/Maergoth/EQL-EOZ/' || isReleaseNotesUrl(url)) {
                 void shell.openExternal(target.toString());
             }
         } catch {}
@@ -702,8 +718,22 @@ function createWindow(config = {}) {
         }
     });
 
-    windowRef.once('ready-to-show', () => windowRef.show());
+    windowRef.once('ready-to-show', () => {
+        if (desktopSettings.startMinimized) {
+            if (desktopSettings.minimizeToTray && overlayHost?.tray) windowRef.hide();
+            else windowRef.minimize();
+        } else showMainWindow(false);
+    });
+    windowRef.on('minimize', event => {
+        if (desktopSettings.minimizeToTray && overlayHost?.tray) { event?.preventDefault?.();windowRef.hide(); }
+    });
+    windowRef.on('restore', () => {
+        // A taskbar restore can bypass Open main. Consume the saved initial
+        // maximization here too, without adding a separate show/focus action.
+        if (pendingInitialMaximize) { pendingInitialMaximize=false;windowRef.maximize(); }
+    });
     windowRef.on('close', event => {
+        void windowPlacement?.flush().catch(error=>console.warn('[Eye of Zomm] window placement:',error?.message));
         if (!quitting && overlayHost?.hasVisiblePanels() && overlayHost.hasRecoveryControl()) {
             event.preventDefault();
             windowRef.hide();
@@ -720,7 +750,7 @@ function createWindow(config = {}) {
     windowRef.webContents.on('did-start-loading', () => overlayHost?.markSessionUnavailable());
     // Hidden overlay windows still count as open Electron windows. Once the
     // session window really closes, quit rather than leaving orphaned panels.
-    windowRef.on('closed', () => { windowRef = null; if (!quitting) app.quit(); });
+    windowRef.on('closed', () => { void windowPlacement?.dispose().catch(error=>console.warn('[Eye of Zomm] window placement:',error?.message));windowRef = null; if (!quitting) app.quit(); });
     void windowRef.loadURL(`http://${HOST}:${port}/`);
 }
 
@@ -731,9 +761,6 @@ async function bootstrap() {
     if (!config.eqRootPath || !fs.existsSync(config.eqRootPath)) {
         await selectEqRoot({ firstRun: true });
         config = await readConfig();
-        if ((!config.eqRootPath || !fs.existsSync(config.eqRootPath)) && config.alwaysOnTop) {
-            config = await updateConfig({ alwaysOnTop: false });
-        }
     }
 
     // Never delay first paint on remote data. The cached/bootstrap pack loads immediately;
@@ -750,7 +777,7 @@ async function bootstrap() {
     await overlayHost.initialize();
     discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
         isTimerPanel:event=>overlayHost.overlaySender(event)==='timers'});
-    createWindow(config);
+    createWindow(config,await readJson(windowPlacementPath(),{}));
     // Metadata checks are quiet. Application downloads require an explicit
     // request or the saved opt-in; a staged installer never runs on startup.
     void getAppUpdater().startup().catch(() => console.warn('[Eye of Zomm] application update check unavailable.'));
@@ -774,8 +801,17 @@ ipcMain.handle('eye-of-zomm:app-update', async (event, action, value) => {
     throw new Error('Unknown application update request.');
 });
 
-ipcMain.handle('eye-of-zomm:window', (_event, action) => {
-    if (!windowRef || windowRef.isDestroyed()) return false;
+ipcMain.handle('eye-of-zomm:window', async (event, action, value) => {
+    if (!windowRef || windowRef.isDestroyed() || event.sender !== windowRef.webContents ||
+        event.senderFrame !== windowRef.webContents.mainFrame || event.senderFrame?.url !== `http://${HOST}:${port}/`) {
+        throw new Error('Window request is unavailable.');
+    }
+    if (action === 'get-settings') return windowSettings(await readConfig());
+    if (action === 'set-settings') {
+        if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key=>
+            !['minimizeToTray','startMinimized'].includes(key) || typeof value[key] !== 'boolean')) throw new Error('Invalid window settings.');
+        return windowSettings(await updateConfig(value));
+    }
     if (action === 'minimize') windowRef.minimize();
     else if (action === 'toggle-maximize') windowRef.isMaximized() ? windowRef.unmaximize() : windowRef.maximize();
     else if (action === 'close') windowRef.close();
@@ -810,10 +846,14 @@ app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', event => {
+    if (quitReady) return;
+    event.preventDefault();
+    if (quitFlush) return;
     quitting = true;
     overlayHost?.dispose();
     discoveryHost?.dispose();
     appUpdater?.shutdown();
     try { server?.close(); } catch {}
+    quitFlush=Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue]).finally(()=>{quitReady=true;app.quit();});
 });
