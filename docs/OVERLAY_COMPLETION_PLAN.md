@@ -78,7 +78,12 @@ Wiki #39 and its separate main promotion #40 are merged. Production deployment
 `cc70c432` succeeded, and the installed exporter matches reviewed Git bytes.
 The existing host refresh job saved its prior filtered output and published
 `20261021T095417Z-c7004672e0f3`: 124 zones, 8,679 NPCs, 11,270 items, 117 raid
-variants, complete public wiki presence. This verified pack is the local 0.8.3
-bootstrap. Full source tests, actual Electron worker/native/discovery smokes,
+variants, complete public wiki presence. The ordering follow-up through wiki
+#41/#42 (`c1fe84d2`) preserved all content while restoring normal coordinates
+in legacy clients. Final bootstrap is `20261021T101150Z-dd346c8cc55d`.
+Full source tests, actual Electron worker/native/discovery smokes,
 catalog relevance, NSIS build and exact-source ASAR gate pass. Complete EoZ
 PR #2 publication and local installed-upgrade/shortcut verification next.
+PR #2 merged as `5c6939c8`; the first public build stopped before publication
+on Windows 8.3 cache aliases. PR #3 fixes that guard and adds full Windows source
+CI plus legacy-data release gates; no 0.8.3 tag/asset existed before this retry.

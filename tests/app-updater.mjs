@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
+import { promisify } from 'node:util';
 
 const require = createRequire(import.meta.url);
 const { AppUpdater, RELEASES_URL, MAX_METADATA_BYTES, MAX_INSTALLER_BYTES, compareVersions, selectRelease,
@@ -121,6 +123,75 @@ test('quiet startup only checks metadata by default, then manual download verifi
     });
 });
 
+test('normal cache directories pin their canonical path for verified install handoff', async () => {
+    await withUpdater(async ({ updater, directory, launches }) => {
+        await updater.check();
+        assert.equal((await updater.download()).status, 'ready');
+        assert.equal(updater.directory, await realpath(directory));
+        assert.equal((await updater.install()).status, 'installing');
+        assert.deepEqual(launches, [path.join(await realpath(directory), release().assets[0].name)]);
+    });
+});
+
+test('Windows short and case-variant paths support preferences, download, restore and install', async () => {
+    if (process.platform !== 'win32') return;
+    await withUpdater(async ({ directory, defaults, launches }) => {
+        // The hosted Windows runner can expose TEMP through a RUNNER~1 parent.
+        // Obtain a genuine 8.3 alias without interpolating paths into shell code.
+        const { stdout } = await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+            '(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:EOZ_TEST_CACHE_PATH).ShortPath'],
+        { env:{ ...process.env, EOZ_TEST_CACHE_PATH:directory }, windowsHide:true });
+        const shortPath = stdout.trim();
+        assert(shortPath, 'Windows must return a valid folder spelling');
+        const canonical = await realpath(directory);
+        const spellings = [shortPath, canonical.toUpperCase()];
+        if (path.relative(canonical, shortPath) === '') console.log('  note: this volume does not expose a distinct 8.3 cache alias');
+        for (const spelling of spellings) {
+            const cacheDirectory = path.join(spelling, 'new-cache');
+            const updater = new AppUpdater({ ...defaults, cacheDirectory });
+            const restored = new AppUpdater({ ...defaults, cacheDirectory });
+            try {
+                assert.equal((await updater.setStartupDownload(true)).automaticDownload, true);
+                await updater.check();
+                assert.equal((await updater.download()).status, 'ready');
+                assert.equal((await restored.getStatus()).status, 'ready');
+                assert.equal((await restored.getStatus()).automaticDownload, true);
+                assert.equal((await restored.install()).status, 'installing');
+                assert.equal(launches.at(-1), path.join(await realpath(cacheDirectory), release().assets[0].name));
+            } finally { updater.shutdown(); restored.shutdown(); }
+        }
+    });
+});
+
+test('cache leaf and ancestor symlinks or junctions are rejected before creating descendants', async () => {
+    await withUpdater(async ({ directory, defaults }) => {
+        const target = path.join(directory, 'target');
+        const redirected = path.join(directory, 'redirected');
+        await mkdir(target);
+        await symlink(target, redirected, process.platform === 'win32' ? 'junction' : 'dir');
+        for (const cacheDirectory of [redirected, path.join(redirected, 'not-created')]) {
+            const updater = new AppUpdater({ ...defaults, cacheDirectory });
+            try { await assert.rejects(updater.ensureDirectory(), /normal local directory/); }
+            finally { updater.shutdown(); }
+        }
+        assert.deepEqual(await readdir(target), []);
+    });
+});
+
+test('a parent redirected after initialization is rejected on the next cache operation', async () => {
+    await withUpdater(async ({ directory, defaults }) => {
+        const parent = path.join(directory, 'parent');
+        const moved = path.join(directory, 'moved');
+        const updater = new AppUpdater({ ...defaults, cacheDirectory:path.join(parent, 'cache') });
+        try {
+            await updater.ensureDirectory();
+            await rename(parent, moved);
+            await symlink(moved, parent, process.platform === 'win32' ? 'junction' : 'dir');
+            await assert.rejects(updater.ensureDirectory(), /normal local directory/);
+        } finally { updater.shutdown(); }
+    });
+});
+
 test('an opt-in survives relaunch, downloads on startup, and never starts an installer', async () => {
     await withUpdater(async ({ updater, defaults, launches, confirmations }) => {
         assert.equal((await updater.setStartupDownload(true)).automaticDownload, true);
@@ -155,7 +226,7 @@ test('Later keeps the app running; explicit confirmed install hands off only the
         assert.equal(quits(), 0);
         accept = true;
         assert.equal((await updater.install()).status, 'installing');
-        assert.deepEqual(launches, [path.join(directory, release().assets[0].name)]);
+        assert.deepEqual(launches, [path.join(await realpath(directory), release().assets[0].name)]);
         assert.equal(quits(), 1);
     }, { confirmInstall:async () => accept });
 });
