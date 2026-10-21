@@ -9,6 +9,18 @@ if (!Array.isArray(pack.items) || pack.items.length < 1000) {
 }
 if (pack.meta?.wikiEntitiesComplete !== true || !['npcs','items','titles'].every(key => pack.wikiEntities?.[key]?.length > 0) ||
     !pack.npcs?.some(npc => npc.raidInstance === true)) throw new Error('The production catalog requires the refreshed raid and public wiki presence export.');
+// Item sources also become Intel rows. Reject stale/incorrect exports before
+// packaging, even when their stat records and aggregate counts look healthy.
+const markup = /\{\{|\}\}|\[\[|\]\]/;
+const malformed = [];
+for (const npc of pack.npcs) if (markup.test(String(npc.name || ''))) malformed.push(`NPC: ${npc.name}`);
+let sourceCount = 0;
+for (const item of pack.items) for (const source of item.dropSources || []) {
+    sourceCount++;
+    if (markup.test(String(source.name || ''))) malformed.push(`${item.name}: ${source.name}`);
+}
+if (malformed.length) throw new Error(`Production catalog has ${malformed.length} unresolved wiki identities; rebuild with the reviewed producer. ${malformed.slice(0,3).join('; ')}`);
+console.log(`Catalog source identities passed: ${pack.npcs.length} NPCs, ${sourceCount} drop sources, no raw wiki markup.`);
 const npcKey = npc => JSON.stringify([String(npc.zone).toLowerCase(),String(npc.name).toLowerCase()]);
 const legacyNpcs = new Map(pack.npcs.map(npc => [npcKey(npc),npc]));
 if (pack.npcs.some(npc => !npc.raidInstance && legacyNpcs.get(npcKey(npc))?.raidInstance)) {

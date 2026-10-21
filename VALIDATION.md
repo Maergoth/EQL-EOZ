@@ -46,6 +46,9 @@ Zone/NPC fields, including balanced multiline/piped/numeric arguments and explic
 instance anchors. Area/Loc links, commented rows and unrelated transclusions do
 not establish sources; a row cannot change the surrounding list's zone. Wiki
 PRs #45/#46 carry the isolated follow-up and matching PHP regression fixtures.
+The production-catalog gate also rejects raw template/link markup in NPC and
+item-source names. An older cached production pack must fail this gate before
+an installer can publish; a successful source-only fixture is insufficient.
 
 ## 0.8.5 native Map and Intel workspace
 
