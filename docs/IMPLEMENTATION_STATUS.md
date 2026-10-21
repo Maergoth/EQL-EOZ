@@ -1,25 +1,39 @@
 # Eye of Zomm implementation status
 
-Last updated: 2026-09-05
+Last updated: 2026-10-21
 
-Code baseline: 0.8.0
+Code baseline: 0.8.1
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
 | Vision area | Status | Evidence | Next condition |
 |---|---|---|---|
 | 0.6 usable loop | Implemented | Folder/log/zone/`/loc` readiness, persistent mode/destination, relevant item defaults, live tier details, non-modal recovery; `npm test` | Retain all [Windows/manual gates](WINDOWS_MANUAL_TEST.md) |
-| 0.7 replacement map | Implemented; real-client gate required | Explicit coordinate adapters, intel-first Minimal defaults with no destination field, optional map/row routing, NPC waypoint copy, fly-first controls, Succor reset, Z slicer, worker-first routes, persistent cancel, lazy archive hydration, WLD material-group alignment | Pass sections 1–5 and the UI/texture checks on the 0.8.0 installer |
+| 0.7 replacement map | Implemented; local rendering checked | Explicit coordinate adapters, exact/serialized loads, accurate logged HUD, hidden framing, intel-first defaults, optional map/routing, persistent cancel, WLD texture alignment; 27 view/scale captures | Complete live-client sections 1–5 and OS-wide DPI checks on a current build |
 | 0.8 live route guidance | Implemented in 0.7.1; real-client gate required | Pure projection/remaining-distance/turn/facing/off-route tests; cue HUD in First/Top/Map; route summary updates from `/loc` | Verify cue direction and readability while moving in all three modes |
-| 0.8 redacted diagnostics | Schema v2 implemented | Allow-list snapshot retains aggregate collision/candidate identity, counts, timings, outcome, validation count, and fallback reason while tests exclude character, target, worker detail, log name, paths, and future unknown settings | Manually inspect one real-zone export before attaching it to a test issue |
-| 0.8 route corpus contract | Implemented in 0.7.3 | Reference and candidate both pass 8/8 shared triangle expectations; invalid surface exits and reversed drops are rejected | Extend the same boundary to decoded proprietary real-zone geometry |
+| 0.8 redacted diagnostics | Schema v2 implemented; actual export inspected | Allow-list retains aggregate collision/established/candidate status, counts, timings, and reasons; regressions and actual renderer export exclude private fields | Retain redaction when adding diagnostic fields |
+| 0.8 route corpus contract | Implemented; decoded local geometry checked | Both corpora pass 8/8; expanded 36-case rendered matrix has 20 valid paths/16 markers and exact endpoints; supported stair and certified drop regressions | Extend complex stair/door/alternate-itinerary coverage without weakening validation |
 | 0.8 Recast/Detour worker | Guarded real-zone candidate integrated; promotion gated | Pinned 0.43.1 + deterministic module bundle; cooperative decoded-viewer collision export; bounded route crop; transferable buffers; established-first atomic replacement; latest-request-wins cancellation; independent validation; package and notice checks | Pass the full proprietary-zone and responsiveness matrix before making Recast first choice |
 | 0.9 decision intelligence beta | Planned | User stories and data rules in vision 16.4 | Begin only after the 0.8 95% corpus/collision/non-blocking exit gate |
 | 1.0 trusted release | Planned | Quality gate in vision 16.5 | Signing, upgrade path, support/compatibility docs, clean Windows matrix, no S1/S2 defects |
 
 ## Current highest-priority task
 
-Validate the carried WLD material-group alignment correction in Mistmoore and one outdoor S3D zone, then run the integrated candidate through the complete outdoor/indoor/stacked/ramp/door/drop Windows matrix. Capture only aggregate schema-v2 diagnostics and interaction observations. The established line-map route remains the first visible authority until that matrix supports promotion; do not reintroduce a renderer-thread collision graph or expose an engine selector.
+Review the [0.8.1 integration audit](INTEGRATION_AUDIT.md) and
+[rendered map validation](MAP_VALIDATION.md). The local-archive pass now covers
+five zones, 36 route probes, 27 view/scale captures, and actual Electron worker
+execution. Twenty routes validate and sixteen remain destination-only. The
+[rejection audit](ROUTE_REJECTION_AUDIT.md) distinguishes original uncertified
+probes from recovered valid ramps/drops; keep
+the guarded engine policy and conservative clearance checks.
+
+Next verify known-walkable ramp/drop/door coverage and live movement/heading,
+OS-wide DPI changes, and installer behavior. The reviewed producer/catalog is
+deployed; rebuilt dataset `20261021T062421Z-830bd5a89bfa` is published and the
+initial-download bootstrap passes exact-byte ASAR checks. Capture only
+aggregate schema-v2 diagnostics. Both established and candidate paths must
+validate before display; do not introduce a renderer-thread collision graph
+or expose an engine selector.
 
 Acceptance for the completed topology slice:
 
@@ -48,7 +62,7 @@ Acceptance for the completed integration slice:
 
 - the viewer exports one finite typed collision buffer in its existing right-handed Y-up basis;
 - zone changes cancel/restart candidate work and stale zone/location/destination results are ignored;
-- the existing golden path is available immediately and remains visible until a validated candidate replacement is ready;
+- the established golden path is validated before its first draw and remains visible until a validated candidate replacement is ready;
 - candidate projection/validation happens before any path reaches First/Top/Map or the cue HUD;
 - real-zone diagnostics report only redacted zone/archive identity, timings, outcome, and fallback reason;
 - Windows checks prove no camera, floor, zoom, destination, minimal/full, or input-responsiveness regression.

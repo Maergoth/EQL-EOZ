@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 
-const expectedSha256 = 'b552cc4fe149cadb42c040ebc4b52a745f01d23b2350a0baf47c10dfccb2e361';
+const expectedSha256 = 'dee6e2d5882d24ede3823da4b5eb12bbbe84aec0c980ea94f68eda9e662a3a0d';
 const parts = [
   new URL('../vendor/zoneviewer/ZoneViewerApp.part01', import.meta.url),
   new URL('../vendor/zoneviewer/ZoneViewerApp.part02', import.meta.url),

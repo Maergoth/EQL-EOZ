@@ -49,8 +49,10 @@ function addQuad(positions, indices, corners) {
  * landings, closed connections stay separate, and drops become directed links.
  */
 export function buildFixtureGeometry(fixture, options = {}) {
-    const landingSize = Number(options.landingSize) || 2;
-    const corridorWidth = Number(options.corridorWidth) || 2;
+    // The real actor is 4.5 units wide. A two-unit-wide synthetic hallway
+    // cannot represent its legal routes once radius is enforced consistently.
+    const landingSize = Number(options.landingSize) || 6;
+    const corridorWidth = Number(options.corridorWidth) || 6;
     const landingHalf = landingSize / 2;
     const corridorHalf = corridorWidth / 2;
     const nodes = nodeMap(fixture);
@@ -68,7 +70,7 @@ export function buildFixtureGeometry(fixture, options = {}) {
             offMeshConnections.push({
                 from:{ x:Number(from.x), y:Number(from.y), z:Number(from.z) },
                 to:{ x:Number(to.x), y:Number(to.y), z:Number(to.z) },
-                radius:Number(edge.radius) || 1,
+                radius:Number(edge.radius) || landingHalf,
                 bidirectional:false,
                 kind:'drop'
             });
@@ -80,9 +82,8 @@ export function buildFixtureGeometry(fixture, options = {}) {
         corridorNodes.add(edge.to);
     }
 
-    // Corridor strips already cover their endpoints. Adding coplanar landing
-    // quads there creates overlapping raster spans and artificial seams in the
-    // generated navmesh, especially where a ramp meets a floor.
+    // Strips extend beyond their node centers, so actor-sized end clearance
+    // does not require coplanar/overhanging landing quads on ramps.
     for (const node of nodes.values()) {
         if (corridorNodes.has(node.id)) continue;
         addQuad(positions, indices, [
@@ -100,12 +101,23 @@ export function buildFixtureGeometry(fixture, options = {}) {
         if (planarLength < .0001) continue;
         const px = -dz / planarLength * corridorHalf;
         const pz = dx / planarLength * corridorHalf;
-        addQuad(positions, indices, [
-            { x:Number(from.x) + px, y:from.y, z:Number(from.z) + pz },
-            { x:Number(from.x) - px, y:from.y, z:Number(from.z) - pz },
-            { x:Number(to.x) - px, y:to.y, z:Number(to.z) - pz },
-            { x:Number(to.x) + px, y:to.y, z:Number(to.z) + pz }
-        ]);
+        const sections = from.y !== to.y && planarLength > corridorWidth
+            ? [[-corridorHalf, from.y], [corridorHalf, from.y], [planarLength - corridorHalf, to.y], [planarLength + corridorHalf, to.y]]
+            : [[-corridorHalf, from.y], [planarLength + corridorHalf, to.y]];
+        for (let index = 1; index < sections.length; index += 1) {
+            const [start, startY] = sections[index - 1];
+            const [end, endY] = sections[index];
+            const startX = Number(from.x) + dx / planarLength * start;
+            const startZ = Number(from.z) + dz / planarLength * start;
+            const endX = Number(from.x) + dx / planarLength * end;
+            const endZ = Number(from.z) + dz / planarLength * end;
+            addQuad(positions, indices, [
+                { x:startX + px, y:startY, z:startZ + pz },
+                { x:startX - px, y:startY, z:startZ - pz },
+                { x:endX - px, y:endY, z:endZ - pz },
+                { x:endX + px, y:endY, z:endZ + pz }
+            ]);
+        }
     }
 
     return {
@@ -255,7 +267,7 @@ export const ROUTE_CORPUS = Object.freeze([
     },
     {
         id:'closed-door', category:'door',
-        nodes:[{ id:'outside', x:0, y:0, z:0 }, { id:'inside', x:5, y:0, z:0 }],
+        nodes:[{ id:'outside', x:0, y:0, z:0 }, { id:'inside', x:12, y:0, z:0 }],
         edges:[{ from:'outside', to:'inside', collisionValid:false }],
         expectations:[{ from:'outside', to:'inside', path:false }]
     },

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { itemHasZoneSource, scoreItemForBrowse } from '../app/item-browse.js';
+import { itemHasZoneSource, itemMatchesClasses, scoreItemForBrowse } from '../app/item-browse.js';
 
 const packPath = fileURLToPath(new URL('../app/data/eye-of-zomm-pack.bootstrap.json', import.meta.url));
 const pack = JSON.parse(readFileSync(packPath, 'utf8'));
@@ -10,8 +10,7 @@ if (!Array.isArray(pack.items) || pack.items.length < 1000) {
 
 const items = pack.items
     .filter(item => {
-        const classes = (item.classes || []).map(value => String(value).toUpperCase());
-        return (!classes.length || classes.includes('ALL') || classes.includes('MNK')) &&
+        return itemMatchesClasses(item, ['MNK']) &&
             itemHasZoneSource(item, 'Befallen');
     });
 const scores = new Map(items.map(item => [item, scoreItemForBrowse(item, { zone:'Befallen' })]));

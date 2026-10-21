@@ -62,15 +62,15 @@ const repeatedWhoZone = whoZone.parse('[Thu Sep 03 00:00:02 2026] [26 MNK/SHM/BE
 assert(repeatedWhoZone?.type === 'profile', 'repeated /who rows do not churn the active zone');
 
 const befallenLocation = new EQLogParser();
-befallenLocation.parse('[Thu Sep 03 00:00:00 2026] Your Location is -30, -961, -66');
+befallenLocation.parse('[Thu Sep 03 00:00:00 2026] Your Location is -961, -30, -66');
 const befallenState = befallenLocation.snapshot();
 assert(
-    befallenState.location.x === -961 && befallenState.location.y === -30 && befallenState.location.z === -66,
+    befallenState.location.x === -30 && befallenState.location.y === -961 && befallenState.location.z === -66,
     'Befallen /loc normalizes from displayed Y/X to world X/Y'
 );
 const befallenMapAnchor = worldToClientMap(befallenState.location);
 assert(
-    befallenMapAnchor.x === 961 && befallenMapAnchor.y === 30 && befallenMapAnchor.z === -66,
+    befallenMapAnchor.x === 30 && befallenMapAnchor.y === 961 && befallenMapAnchor.z === -66,
     'Befallen /loc converts to client-map -X/-Y without swapping axes'
 );
 const befallenViewerFromWorld = worldToViewer(befallenState.location);
@@ -86,7 +86,7 @@ assert(
     'wiki Y/X NPC locations normalize to world X/Y before distance and routing'
 );
 assert(
-    waypointCommandForWorldLocation(befallenState.location) === '/waypoint -30 -961 -66',
+    waypointCommandForWorldLocation(befallenState.location) === '/waypoint -961 -30 -66',
     'waypoint copy converts canonical world X/Y back to EverQuest Y/X/Z order'
 );
 assert(
@@ -262,6 +262,9 @@ const diagnostic = buildDiagnosticSnapshot({
         textures:{ available:42, materials:28, resolved:24 },
         navigation:{ ok:true, routed:true, source:'wiki-location', distance:100, guidance:straightGuidance },
         spatial:{
+            established:{ status:'rejected', reason:'validation-failed', violationCount:2,
+                detail:'Private established failure', path:[{ x:-961, y:-30, z:-66 }], target:'Private established target',
+                location:{ x:-961, y:-30, z:-66 }, localPath:'Private established local path' },
             collision:{ status:'ready', zone:'befallen', format:'s3d', buildMs:18, sourceMeshes:7, vertices:900, triangles:300, skippedTriangles:2, localPath:'C:\\EverQuest\\befallen.s3d' },
             candidate:{ status:'fallback', reason:'validation-failed', engine:'recast-navigation', engineVersion:'0.43.1', fallbackAvailable:true, cropMs:5, sourceTriangles:300, selectedTriangles:120, corridorMargin:96, generationMs:20, queryMs:2, totalMs:27, violationCount:1, detail:'Maergoth at -961,-30,-66', path:[{ x:-961, y:-30, z:-66 }], target:'Maergoth' }
         },
@@ -276,6 +279,11 @@ assert(diagnostic.session.characterDetected && !('character' in diagnostic.sessi
 assert(diagnostic.session.locationDetected && !('location' in diagnostic.session), 'diagnostics retain location readiness without coordinates');
 assert(diagnostic.route.lastRoutedLocationDetected && !('lastRoutedLocation' in diagnostic.route), 'diagnostics retain reroute readiness without coordinates');
 assert(diagnostic.viewer.textures.available === 42 && diagnostic.viewer.textures.resolved === 24, 'diagnostics retain aggregate texture resolution evidence');
+assert(JSON.stringify(diagnostic.viewer.spatial.established) === JSON.stringify({ status:'rejected', reason:'validation-failed', violationCount:2 }),
+    'established diagnostics retain only status, reason, and finite aggregate violation count');
+assert(!diagnosticText.includes('Private established'), 'established diagnostics exclude raw failures and target identities');
+const invalidEstablishedMetric = buildDiagnosticSnapshot({ viewerStatus:{ spatial:{ established:{ status:'idle', violationCount:Infinity } } } });
+assert(invalidEstablishedMetric.viewer.spatial.established.violationCount === null, 'established diagnostics reject non-finite violation counts');
 assert(diagnostic.viewer.spatial.candidate.engine === 'recast-navigation' && diagnostic.viewer.spatial.candidate.violationCount === 1, 'diagnostics retain aggregate candidate evidence');
 assert(diagnostic.viewer.navigation.guidance.distanceToTurn === null, 'diagnostics do not turn missing metrics into measured zeroes');
 for (const secret of ['Maergoth', 'C:\\\\EverQuest', 'eqlog_', '"path"', '"detail"', '"target"', '-961']) assert(!diagnosticText.includes(secret), `diagnostics redact ${secret}`);

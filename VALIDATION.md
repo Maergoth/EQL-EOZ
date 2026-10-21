@@ -1,4 +1,55 @@
-# Validation report — v0.8.0
+# Validation report — v0.8.1
+
+## 0.8.1 integration audit
+
+Checked October 21, 2026 on Windows. `npm test` passes, including Range/class
+parity, exporter zone aliases, actual-wrapper routing, 15 dataset/runtime
+checks, supported stair flights, certified drops, and exact endpoint guards.
+The regressions reproduced failures before their fixes. Both synthetic route
+corpora remain 8/8; no routing engine promotion is included.
+
+The corrected producer/catalog passed staging and production deployment.
+The subsequent live-wiki export published
+`20261021T062421Z-830bd5a89bfa`. Bootstrap SHA-256/schema checks pass for 124
+zones, 8,645 NPC records, and 11,262 items. It recovers 750 previously unzoned
+NPC pages (19 remain unresolved) and normalizes all 712 `ALL except` records.
+`npm run test:catalog` passes with 64 Befallen/MNK items. A rebuilt Windows
+ASAR contains exactly the fetched bootstrap bytes and tested runtime sources.
+Direct final-data checks confirm the repaired explicit/multiple-zone records;
+all represented NPC pages and revision IDs are preserved. See the
+[integration audit](docs/INTEGRATION_AUDIT.md) for exact provenance.
+
+The follow-up [map validation](docs/MAP_VALIDATION.md) uses the actual Electron
+renderer and bundled workers against five local zones. The
+[destination-only audit](docs/ROUTE_REJECTION_AUDIT.md) repeats the original
+14 paths/14 markers and adds eight verified probes: **36 requests, 20 valid
+paths, 16 markers, zero displayed violations, and exact endpoint matches**.
+It recovers real Mistmoore/Kurn drops, corrects ramp candidate completion, and
+tests supported stair flights. Twenty-seven view/scale captures cover
+Mistmoore, Commonlands, and Befallen at emulated 100/125/150% renderer scale.
+Loader, readiness, body-clearance, stale route, hidden framing, and browser
+WASM-policy regressions are repaired. No client files, raw logs, generated
+geometry, or packs are committed. These results do not establish live game
+movement, dynamic doors, complete safe-route coverage, or OS-wide DPI behavior.
+
+`npm run test:desktop-worker` runs the real desktop response policy and browser
+worker in isolated Electron: a synthetic route succeeds with zero violations
+while JavaScript string evaluation remains blocked. Windows CI and installer
+build workflows enforce this check. Focused regressions cover queued loads,
+exact archive selection, async app/route ownership, deferred viewport fitting,
+walls/ceilings/narrow passages/drop clearance, and redacted rejection reasons.
+
+Electron 43.8.3 and compatible transitive updates clear all high findings;
+`npm run audit:deps` passes with eight remaining moderate builder-chain
+advisories. `npm ls --all` passes. The packaged-artifact check now additionally
+requires the tested app/map/class/scaling/desktop source bytes in the ASAR.
+The unpacked Windows build, NSIS compilation, and `npm run test:artifact` pass with the fresh
+production bootstrap, all new runtime modules, and the 759 KiB worker checked
+against current source. The generated installer reports `NotSigned` under
+`Get-AuthenticodeSignature`; installation and the interactive game-client
+matrix were not exercised.
+
+## Prior 0.8.0 validation context
 
 Validated in the build environment on 2026-09-05 UTC.
 
@@ -67,7 +118,7 @@ Observed parsed events:
 
 ## Real-client checks still required
 
-The repository cannot ship or inspect a player's proprietary S3D/EQG archives. Signed coordinate placement, stacked-floor selection, S3D texture fidelity, rare-label alignment, live heading, candidate responsiveness, and route quality therefore also use [`docs/WINDOWS_MANUAL_TEST.md`](docs/WINDOWS_MANUAL_TEST.md). Automated tests prevent known transform, material-cursor, and movement-policy regressions; they do not substitute for the final visual check against the game.
+The repository cannot redistribute proprietary S3D/EQG archives. Authorized local inspection and rendering are recorded in [MAP_VALIDATION.md](docs/MAP_VALIDATION.md). Live coordinate placement, heading, dynamic doors, and route quality still use [`docs/WINDOWS_MANUAL_TEST.md`](docs/WINDOWS_MANUAL_TEST.md). Automated and local rendered tests do not substitute for comparison against the running game.
 
 ## Desktop packaging note
 

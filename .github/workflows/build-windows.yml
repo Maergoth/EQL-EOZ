@@ -29,6 +29,8 @@ jobs:
         run: npm run audit:deps
       - name: Test
         run: npm test
+      - name: Test actual desktop CSP and browser worker
+        run: npm run test:desktop-worker
       - name: Fetch production bootstrap data
         shell: bash
         run: node scripts/fetch-bootstrap-pack.mjs --required

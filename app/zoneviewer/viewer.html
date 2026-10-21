@@ -36,9 +36,14 @@ import { mountZoneViewer } from './ZoneViewerApp.js';
 import navigationPolicy, { configureViewerMovement } from '../navigation-policy.js';
 import { LocationHeadingTracker } from '../movement-tracking.js';
 import { routeDistanceLabel, routeGuidance } from '../route-guidance.js';
-import { formatWorldLocationForGameMap } from '../coordinate-system.js';
+import { formatWorldLocationForGameMap, worldToClientMap } from '../coordinate-system.js';
 import { RecastRouteClient } from '../recast-route-client.js';
 import { cropCollisionGeometryForRoute, exportViewerCollisionGeometry } from '../collision-geometry.js';
+import { certifyDirectDrop } from '../drop-certification.js';
+import { installEstablishedRouteGuard } from '../established-route-guard.js';
+import { deferHiddenViewportFit } from '../viewport-framing.js';
+import { installZoneLoadGuard } from '../zone-load-guard.js';
+import { selectViewerZoneOption } from '../viewer-zone-selection.js';
 
 globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
@@ -52,6 +57,9 @@ const app = mountZoneViewer(root, {
 configureViewerMovement(app.fp);
 app.fp?.setFly?.(true);
 window.eqlZoneViewer = app;
+const viewportFraming = deferHiddenViewportFit(app, () => {
+    if (lastSyncedGround) focusTopViewAt(lastSyncedGround);
+});
 
 function simplifyViewerUi() {
     root.querySelectorAll('.eqlzv-toolbar .eqlzv-button').forEach(button => {
@@ -66,36 +74,9 @@ simplifyViewerUi();
 
 app.els?.pathCancel?.addEventListener('click', () => {
     cancelCandidateRoute('cancelled');
+    establishedRouteState = { status:'cancelled' };
     window.parent?.postMessage({ type:'eoz-route-cancelled' }, window.location.origin);
 });
-
-const zoneAliases = new Map(Object.entries({
-    'the northern desert of ro': 'North Ro',
-    'northern desert of ro': 'North Ro',
-    'north ro': 'North Ro',
-    'the southern desert of ro': 'South Ro',
-    'southern desert of ro': 'South Ro',
-    'south ro': 'South Ro',
-    'the oasis of marr': 'Oasis of Marr',
-    'oasis of marr': 'Oasis of Marr',
-    'the plane of sky': 'Plane of Sky',
-    'plane of sky': 'Plane of Sky',
-    'new sebilis expedition': 'New Sebilis Expedition',
-    "nagafen's lair": "Nagafen's Lair (Sol B)"
-}));
-
-function norm(text) {
-    return String(text || '')
-        .replace(/\s+\d+\s+\([^)]*\)\s*$/,'')
-        .replace(/\s+/g,' ')
-        .trim()
-        .toLowerCase();
-}
-
-function viewerName(zoneName) {
-    const cleaned = String(zoneName || '').replace(/\s+\d+\s+\([^)]*\)\s*$/,'').trim();
-    return zoneAliases.get(norm(cleaned)) || cleaned;
-}
 
 function playerMapSetLabel(sourceLabel) {
     const source = String(sourceLabel || 'maps').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
@@ -240,10 +221,23 @@ function restorePresentation(mode) {
 
 function startRouteWithoutChangingPresentation(start) {
     const presentation = currentPresentation();
+    const syncedLocation = lastSyncedLocation;
+    const ground = syncedNavigationGround();
+    const loggedPose = ground ? {
+        position:ground,
+        forward:app.lastFirstPersonPose?.forward?.clone?.() || ground.clone().set(0, 0, -1)
+    } : null;
     const pending = start();
     const status = app.els?.statusText?.textContent || '';
     const progress = app.els?.progress?.hasAttribute?.('value') ? app.els.progress.value : null;
     restorePresentation(presentation);
+    // The upstream label action temporarily enters First and uses lastPick
+    // as its spawn. Keep that internal camera transition from moving the
+    // player's arrow or the next route start to the previous destination.
+    if (loggedPose && lastSyncedLocation === syncedLocation && syncedNavigationGround()) {
+        app.lastFirstPersonPose = loggedPose;
+        app.lastPick = loggedPose.position.clone();
+    }
     if (status) app.setStatus(status, progress);
     return pending;
 }
@@ -255,15 +249,20 @@ async function pathToWikiLocation(label, location) {
     const hasTrustedElevation = Number.isFinite(rawEqZ);
     const eqZ = hasTrustedElevation ? rawEqZ : 0;
 
-    const start = app.navigationStartPoint();
     const point = app.eqWorldToThree(worldX, worldY, eqZ);
     // A trusted wiki Z identifies a floor. Starting 35 units above it can hit
     // the next floor in stacked dungeons, so only allow the viewer's normal
     // six-unit step tolerance above the reported elevation.
     const searchHeight = hasTrustedElevation ? point.y : app.currentBounds.max.y + 100;
     const ground = app.findGroundPointAt(point.x, point.z, searchHeight) || point.clone();
+    return pathToGroundedLocation(label, point, ground);
+}
+
+async function pathToGroundedLocation(label, point, ground) {
+    const start = app.navigationStartPoint();
     const key = `${label}:${ground.x.toFixed(2)}:${ground.y.toFixed(2)}:${ground.z.toFixed(2)}`;
-    if (app.navigationTarget?.key === key) return true;
+    const previous = app.navigationTarget;
+    if (previous?.key === key && previous.requestStart && start.distanceToSquared(previous.requestStart) < .0001) return true;
 
     app.clearNavigationGuide();
     const token = app.navigationBuildToken;
@@ -291,7 +290,7 @@ async function pathToWikiLocation(label, location) {
         const distance = route.slice(1).reduce((sum, point, index) => sum + point.distanceTo(route[index]), 0);
         app.setStatus(`Path to ${label} ready · ${Math.round(distance).toLocaleString()} units.`, 0);
     } else {
-        app.setStatus(`${label} is marked from its EQLWiki location; no navigable route was found.`, 0);
+        app.setStatus(`${label} is marked; no navigable route was found.`, 0);
     }
     app.updateNavigationOverlay();
     app.requestRender();
@@ -346,6 +345,26 @@ async function waitForZoneSelect(timeout = 15000) {
 let lastSyncedLocation = null;
 let lastSyncedGround = null;
 let loadedZoneIdentity = '';
+function syncedNavigationGround() {
+    const identity = `${app.currentZoneRecord?.id || ''}:${app.currentZoneRecord?.format || ''}`;
+    return lastSyncedLocation && loadedZoneIdentity && loadedZoneIdentity === identity && lastSyncedGround?.clone
+        ? lastSyncedGround.clone()
+        : null;
+}
+
+const originalNavigationStartPoint = app.navigationStartPoint.bind(app);
+app.navigationStartPoint = (...args) => syncedNavigationGround() || originalNavigationStartPoint(...args);
+
+// The camera is grounded for collision/navigation, but the player's readout
+// must retain the exact logged elevation in every view and after camera pans.
+const originalUpdateCoordinateHud = app.updateCoordinateHud?.bind(app);
+app.updateCoordinateHud = (...args) => {
+    originalUpdateCoordinateHud?.(...args);
+    const identity = `${app.currentZoneRecord?.id || ''}:${app.currentZoneRecord?.format || ''}`;
+    if (lastSyncedLocation && loadedZoneIdentity === identity && app.els?.coord) {
+        app.els.coord.textContent = `Map ${formatWorldLocationForGameMap(lastSyncedLocation)}`;
+    }
+};
 const headingTracker = new LocationHeadingTracker();
 const rareLayer = document.createElement('div');
 rareLayer.className = 'eoz-rare-layer';
@@ -373,6 +392,13 @@ let collisionGeometryPromise = null;
 let candidateRouteSerial = 0;
 let collisionGeometryState = { status:'idle' };
 let candidateRouteState = { status:'idle' };
+let establishedRouteState = { status:'idle' };
+
+installEstablishedRouteGuard(app, {
+    getGeometry:() => collisionGeometry || collisionGeometryPromise,
+    getZoneIdentity:() => loadedZoneIdentity,
+    onState:state => { establishedRouteState = state; }
+});
 
 function finiteMetric(value) {
     if (value === null || value === undefined || value === '') return null;
@@ -411,6 +437,7 @@ function resetSpatialRouteState() {
     collisionGeometryPromise = null;
     collisionGeometryState = { status:'idle' };
     candidateRouteState = { status:'idle' };
+    establishedRouteState = { status:'idle' };
 }
 
 function cancelCandidateRoute(reason = 'cancelled') {
@@ -460,6 +487,25 @@ function startCollisionGeometryExport(zoneIdentity) {
         return null;
     });
 }
+
+const zoneLoadGuard = installZoneLoadGuard(app, {
+    onRequest() {
+        resetSpatialRouteState();
+        loadedZoneIdentity = '';
+        lastSyncedLocation = null;
+        lastSyncedGround = null;
+        headingTracker.reset();
+        clearRareMobs();
+        routeGuidanceLayer.hidden = true;
+    },
+    onReady() {
+        loadedZoneIdentity = `${app.currentZoneRecord.id || ''}:${app.currentZoneRecord.format || ''}`;
+        app.selectedFloorIndices?.clear?.();
+        root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
+        app.applyFloorSelection?.();
+        startCollisionGeometryExport(loadedZoneIdentity);
+    }
+});
 
 function removeRenderedPath() {
     const group = app?.navigationGuideGroup;
@@ -529,9 +575,9 @@ function scheduleCandidateRoute(label) {
         }
         const cropStartedAt = performance.now();
         const cropped = await cropCollisionGeometryForRoute(fullGeometry, guidePoints, {
-            // A direct start/goal marker is useful for the crop but is not
-            // evidence that a drop is exposed. Only the established,
-            // collision-approved line may authorize one-way drop links.
+            // A marker cannot authorize a drop. Established lines have already
+            // passed collision checks; otherwise a separate certificate below
+            // must prove an exposed descent before any link reaches Recast.
             dropPath:fallbackPath,
             shouldCancel:() => serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey
         });
@@ -546,6 +592,12 @@ function scheduleCandidateRoute(label) {
             });
             return;
         }
+        const certifiedDrop = fallbackPath.length < 2
+            ? await certifyDirectDrop(cropped.geometry, start, goal, {
+                shouldCancel:() => serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey
+            })
+            : { ok:false };
+        if (serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey) return;
         candidateRouteState = {
             ...candidateRouteState,
             status:'calculating',
@@ -554,15 +606,31 @@ function scheduleCandidateRoute(label) {
             selectedTriangles:finiteMetric(cropped.stats?.selectedTriangles),
             corridorMargin:finiteMetric(cropped.stats?.margin)
         };
-        const result = await recastRouteClient.route({
+        let result = await recastRouteClient.route({
             geometry:cropped.geometry,
             start,
             goal
         }, {
             rerouting:fallbackPath.length >= 2,
-            transferGeometry:true
+            // Retain the original buffers only for a certified, bounded retry.
+            transferGeometry:!certifiedDrop.ok
         });
         if (serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey) return;
+        // Preserve a successful ordinary detour. A certified link gets one
+        // retry only when an ordinary path is unreachable or independently
+        // rejected; worker failures and generation limits keep their fallback.
+        if (certifiedDrop.ok && !result.ok && ['goal-unreachable', 'validation-failed'].includes(result.reason)) {
+            const first = result;
+            result = await recastRouteClient.route({
+                geometry:{ ...cropped.geometry, offMeshConnections:[...(cropped.geometry.offMeshConnections || []), certifiedDrop.connection] },
+                start,
+                goal
+            }, { transferGeometry:true });
+            if (serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey) return;
+            for (const metric of ['generationMs', 'queryMs', 'totalMs']) {
+                result[metric] = (Number(first[metric]) || 0) + (Number(result[metric]) || 0);
+            }
+        }
         candidateRouteState = candidateStateFrom(result, candidateRouteState);
         if (result.ok && !replacePathWithCandidate(result, label)) {
             candidateRouteState = candidateStateFrom({ status:'fallback', reason:'candidate-render-failed' }, candidateRouteState);
@@ -712,13 +780,7 @@ window.eqlEyeOfZommViewer = {
         if (!select) return { ok:false, reason:'select-eq-folder-first' };
         if (select.disabled || select.options.length <= 1) return { ok:false, reason:'select-eq-folder-first' };
 
-        const wanted = norm(viewerName(zoneName));
-        let option = Array.from(select.options).find(o => norm(o.textContent) === wanted);
-        if (!option) {
-            option = Array.from(select.options).find(o =>
-                norm(o.textContent).includes(wanted) || wanted.includes(norm(o.textContent))
-            );
-        }
+        const option = selectViewerZoneOption(select.options, zoneName);
         if (!option) return { ok:false, reason:'zone-not-found', zone:zoneName };
 
         if (select.value !== option.value) {
@@ -728,38 +790,22 @@ window.eqlEyeOfZommViewer = {
         }
 
         const selected = app.selectedZoneRecord?.();
-        const alreadyLoaded = app.currentZoneRecord && selected &&
+        const alreadyLoaded = zoneLoadGuard.isReady(selected) && app.currentZoneRecord && selected &&
             app.currentZoneRecord.id === selected.id && app.currentZoneRecord.format === selected.format;
         if (!alreadyLoaded) {
-            // Stop exporting/querying the previous zone before the viewer
-            // begins replacing its scene graph, not only after the new load.
-            resetSpatialRouteState();
-            loadedZoneIdentity = '';
-            await app.loadSelectedZone();
+            const result = await app.loadSelectedZone();
+            if (result?.reason === 'superseded') return { ok:false, reason:'superseded' };
         }
-        if (!app.currentZoneRecord) {
+        if (!selected || !zoneLoadGuard.isReady(selected) || !app.currentZoneRecord ||
+            app.currentZoneRecord.id !== selected.id || app.currentZoneRecord.format !== selected.format) {
             return {
                 ok:false,
                 reason:'load-failed',
                 message:app.els?.statusText?.textContent || `Unable to load ${zoneName}.`
             };
         }
-        const zoneIdentity = `${app.currentZoneRecord.id || ''}:${app.currentZoneRecord.format || ''}`;
-        const changedZone = zoneIdentity !== loadedZoneIdentity;
-        if (changedZone) {
-            resetSpatialRouteState();
-            lastSyncedLocation = null;
-            lastSyncedGround = null;
-            headingTracker.reset();
-            clearRareMobs();
-            routeGuidanceLayer.hidden = true;
-            loadedZoneIdentity = zoneIdentity;
-            app.selectedFloorIndices?.clear?.();
-            root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
-            app.applyFloorSelection?.();
-            startCollisionGeometryExport(zoneIdentity);
-        } else if (!collisionGeometryPromise) {
-            startCollisionGeometryExport(zoneIdentity);
+        if (!collisionGeometryPromise) {
+            startCollisionGeometryExport(loadedZoneIdentity);
         }
         return {
             ok:true,
@@ -876,11 +922,14 @@ window.eqlEyeOfZommViewer = {
                 active:normalizedNpcName(name) === normalizedNpcName(activeRareMob)
             };
             rareMobMarkers.push(marker);
+            // The viewer's goto catalog stores client-map coordinates even
+            // though wiki records and our marker positions start in world X/Y.
+            const mapPoint = worldToClientMap({ x:location[0], y:location[1], z:resolvedEqZ });
             const gotoEntry = {
                 label:name,
                 rawLabel:name,
                 search:name.toLowerCase(),
-                point:{ x:location[0], y:location[1], z:resolvedEqZ, label:name, size:2 }
+                point:{ ...mapPoint, label:name, size:2 }
             };
             app.gotoNpcEntries.push(gotoEntry);
             rareGotoEntries.push(gotoEntry);
@@ -917,13 +966,35 @@ window.eqlEyeOfZommViewer = {
     },
 
     async pathTo(label, wikiLocation = null) {
-        if (!app || !label) return { ok:false };
+        if (!app?.currentZoneRecord || !label) return { ok:false };
+        // Invalidate a previous-start candidate before awaiting the line
+        // worker, including when the destination key will stay the same.
+        cancelCandidateRoute('rerouting');
         const wanted = normalizedNpcName(label);
         const hasLocalMapLabel = (app.gotoNpcEntries || []).some(entry =>
             !rareGotoEntries.includes(entry) && normalizedNpcName(entry.label) === wanted
         );
-        const ok = await startRouteWithoutChangingPresentation(() => app.gotoNpcLabel(String(label), { teleport:false }));
+        const previousTarget = app.navigationTarget;
+        const pending = startRouteWithoutChangingPresentation(() => app.gotoNpcLabel(String(label), { teleport:false }));
+        const token = app.navigationBuildToken;
+        let ok;
+        try {
+            ok = await pending;
+        } catch (error) {
+            if (token !== app.navigationBuildToken) return { ok:false, source:'' };
+            throw error;
+        }
+        // A cancelled/superseded map request returns false too. It must not
+        // recreate the old destination through the wiki-location fallback.
+        if (token !== app.navigationBuildToken) return { ok:false, source:'' };
         if (ok) {
+            // The upstream label router caches by destination only. Reuse its
+            // resolved map point, but refresh a cached target from the newest
+            // logged start before scheduling the spatial candidate.
+            if (previousTarget && app.navigationTarget === previousTarget &&
+                !await pathToGroundedLocation(previousTarget.label, previousTarget.point, previousTarget.ground)) {
+                return { ok:false, source:'' };
+            }
             const result = navigationResult(String(label), hasLocalMapLabel ? 'map-label' : 'wiki-location');
             scheduleCandidateRoute(result.label || String(label));
             return result;
@@ -938,6 +1009,7 @@ window.eqlEyeOfZommViewer = {
     clearPath() {
         if (!app) return { ok:false };
         cancelCandidateRoute('cleared');
+        establishedRouteState = { status:'idle' };
         app.clearNavigationGuide?.();
         app.updateNavigationOverlay?.();
         app.drawMiniMap?.();
@@ -962,6 +1034,7 @@ window.eqlEyeOfZommViewer = {
             },
             navigation:navigationResult('', app?.navigationTarget ? 'active' : ''),
             spatial:{
+                established:{ ...establishedRouteState },
                 collision:{ ...collisionGeometryState },
                 candidate:{ ...candidateRouteState }
             },
@@ -970,7 +1043,7 @@ window.eqlEyeOfZommViewer = {
     },
 
     resize() {
-        app?.resize?.();
+        viewportFraming.resize();
         return { ok:Boolean(app) };
     }
 };

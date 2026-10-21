@@ -21,7 +21,9 @@ const DEFAULT_PORT = 53147;
 const INITIAL_TAIL_BYTES = 512 * 1024;
 const MAX_READ_BYTES = 2 * 1024 * 1024;
 const PACK_MANIFEST_URL = 'https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json';
+const MAX_PACK_MANIFEST_BYTES = 64 * 1024;
 const MAX_PACK_DOWNLOAD_BYTES = 128 * 1024 * 1024;
+const MAX_PACK_JSON_BYTES = 512 * 1024 * 1024;
 const MAX_API_REQUEST_BYTES = 64 * 1024;
 const MAX_EQ_FILE_BYTES = 128 * 1024 * 1024;
 const MAX_EQ_FILE_COUNT = 50000;
@@ -192,11 +194,11 @@ async function savePackState(state) {
     await atomicWriteJson(packStatePath(), state);
 }
 
-async function fetchWithTimeout(url, timeoutMs) {
+async function fetchWithTimeout(url, timeoutMs, readResponse) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        return await fetch(url, {
+        const response = await fetch(url, {
             signal: controller.signal,
             cache: 'no-store',
             headers: {
@@ -204,8 +206,39 @@ async function fetchWithTimeout(url, timeoutMs) {
                 'Cache-Control': 'no-cache'
             }
         });
+        // fetch resolves when headers arrive; keep the deadline active until
+        // the caller has consumed the response body as well.
+        return await readResponse(response);
     } finally {
         clearTimeout(timer);
+    }
+}
+
+async function readResponseBytes(response, maxBytes) {
+    const contentLength = Number(response.headers.get('content-length') || 0);
+    if (contentLength > maxBytes) {
+        void response.body?.cancel().catch(() => {});
+        throw new Error('Eye of Zomm data download is unexpectedly large.');
+    }
+    if (!response.body) return Buffer.alloc(0);
+
+    const reader = response.body.getReader();
+    const chunks = [];
+    let size = 0;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > maxBytes) {
+                void reader.cancel().catch(() => {});
+                throw new Error('Eye of Zomm data download exceeded the size limit.');
+            }
+            chunks.push(Buffer.from(value));
+        }
+        return Buffer.concat(chunks, size);
+    } finally {
+        reader.releaseLock();
     }
 }
 
@@ -227,9 +260,11 @@ async function updateStaticDataPack(force = false) {
     state.lastCheckUtc = now.toISOString();
 
     try {
-        const manifestResponse = await fetchWithTimeout(PACK_MANIFEST_URL, 8000);
-        if (!manifestResponse.ok) throw new Error(`Manifest HTTP ${manifestResponse.status}`);
-        const manifest = await manifestResponse.json();
+        const manifest = await fetchWithTimeout(PACK_MANIFEST_URL, 8000, async response => {
+            if (!response.ok) throw new Error(`Manifest HTTP ${response.status}`);
+            const bytes = await readResponseBytes(response, MAX_PACK_MANIFEST_BYTES);
+            return JSON.parse(bytes.toString('utf8'));
+        });
 
         if (!manifest?.version || !manifest?.pack) {
             throw new Error('Eye of Zomm dataset manifest is missing version or pack.');
@@ -238,10 +273,13 @@ async function updateStaticDataPack(force = false) {
         if (!/^[A-Za-z0-9._-]+\.json\.gz$/.test(packName)) {
             throw new Error('Eye of Zomm dataset manifest contains an invalid pack filename.');
         }
+        if (!/^[a-f0-9]{64}$/i.test(String(manifest.sha256 || ''))) {
+            throw new Error('Eye of Zomm dataset manifest is missing a valid SHA-256 checksum.');
+        }
 
         if (!fs.existsSync(productionPackPath()) && fs.existsSync(bundledBootstrapPath())) {
             const bundled = await readJson(bundledBootstrapPath(), null);
-            if (String(bundled?.meta?.manifestVersion || '') === String(manifest.version)) {
+            if (validatePack(bundled) && String(bundled.meta?.manifestVersion || '') === String(manifest.version)) {
                 state.version = String(manifest.version);
                 state.lastStatus = 'bundled-current';
                 state.lastError = '';
@@ -254,30 +292,27 @@ async function updateStaticDataPack(force = false) {
             String(state.version || '') === String(manifest.version) &&
             fs.existsSync(productionPackPath())
         ) {
-            state.lastStatus = 'current';
-            state.lastError = '';
-            await savePackState(state);
-            return { ok: true, skipped: true, status: 'current', version: state.version, productionPack: true };
-        }
-
-        const packUrl = new URL(packName, PACK_MANIFEST_URL).toString();
-        const response = await fetchWithTimeout(packUrl, 45000);
-        if (!response.ok) throw new Error(`Pack HTTP ${response.status}`);
-
-        const contentLength = Number(response.headers.get('content-length') || 0);
-        if (contentLength > MAX_PACK_DOWNLOAD_BYTES) throw new Error('Eye of Zomm data pack is unexpectedly large.');
-
-        const compressed = Buffer.from(await response.arrayBuffer());
-        if (compressed.length > MAX_PACK_DOWNLOAD_BYTES) throw new Error('Eye of Zomm data pack exceeded the size limit.');
-
-        if (manifest.sha256) {
-            const actual = crypto.createHash('sha256').update(compressed).digest('hex');
-            if (actual.toLowerCase() !== String(manifest.sha256).toLowerCase()) {
-                throw new Error('Downloaded Eye of Zomm data pack failed SHA-256 verification.');
+            const cached = await readJson(productionPackPath(), null);
+            if (validatePack(cached) && String(cached.meta?.manifestVersion || '') === String(manifest.version)) {
+                state.lastStatus = 'current';
+                state.lastError = '';
+                await savePackState(state);
+                return { ok: true, skipped: true, status: 'current', version: state.version, productionPack: true };
             }
         }
 
-        const jsonBuffer = zlib.gunzipSync(compressed);
+        const packUrl = new URL(packName, PACK_MANIFEST_URL).toString();
+        const compressed = await fetchWithTimeout(packUrl, 45000, async response => {
+            if (!response.ok) throw new Error(`Pack HTTP ${response.status}`);
+            return readResponseBytes(response, MAX_PACK_DOWNLOAD_BYTES);
+        });
+
+        const actual = crypto.createHash('sha256').update(compressed).digest('hex');
+        if (actual.toLowerCase() !== String(manifest.sha256).toLowerCase()) {
+            throw new Error('Downloaded Eye of Zomm data pack failed SHA-256 verification.');
+        }
+
+        const jsonBuffer = zlib.gunzipSync(compressed, { maxOutputLength:MAX_PACK_JSON_BYTES });
         const decoded = JSON.parse(jsonBuffer.toString('utf8'));
         if (!validatePack(decoded)) throw new Error('Downloaded Eye of Zomm data pack has an invalid schema.');
         decoded.meta = { ...(decoded.meta || {}), manifestVersion: String(manifest.version), cachedByDesktop: true };
@@ -447,7 +482,7 @@ function sendBuffer(req, res, status, contentType, body, cacheControl = 'no-stor
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'SAMEORIGIN',
         'Referrer-Policy': 'no-referrer',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     });
     if (req.method === 'HEAD') res.end();
     else res.end(body);

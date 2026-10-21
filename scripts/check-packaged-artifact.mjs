@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import asar from '@electron/asar';
+import { verifyPackagedRuntimeSources } from './packaged-runtime-sources.mjs';
 
 const packageRoot = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const archivePath = [
@@ -42,6 +43,10 @@ const recastClient = packagedText('app/recast-route-client.js');
 const recastWorker = packagedText('app/workers/recast-route.worker.js');
 const bootstrap = JSON.parse(packagedText('app/data/eye-of-zomm-pack.bootstrap.json'));
 
+// The integration regressions run against source. Require those exact runtime
+// bytes in the ASAR so a stale package cannot pass on older marker strings.
+verifyPackagedRuntimeSources(packagedText, relative => readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8'));
+
 for (const [name, content, required] of [
     ['title bar', index, 'id="titlebar-version"'],
     ['runtime version binding', app, "$('#titlebar-version').textContent"],
@@ -73,3 +78,4 @@ if (Number(bootstrap?.meta?.schemaVersion) < 3 || bootstrap?.meta?.sample === tr
 }
 
 console.log(`Packaged app verified as v${packagedPackage.version} with production data and current coordinate, texture, and spatial-candidate code.`);
+console.log(`Bundled dataset verified against freshly fetched source: manifest ${bootstrap.meta.manifestVersion}, pack ${bootstrap.meta.version}; ${bootstrap.zones.length} zones, ${bootstrap.npcs.length} NPCs, ${bootstrap.items.length} items.`);

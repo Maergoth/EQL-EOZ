@@ -133,6 +133,7 @@
           },
           "classes": {
             "type": "array",
+            "description": "Allowed playable class codes; ALL is unrestricted, NONE permits no class, and an empty array is unknown. ALL except is exported as its allowed-class complement.",
             "items": {
               "type": "string"
             }

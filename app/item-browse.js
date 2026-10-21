@@ -11,6 +11,31 @@ function defaultNamedSource(value) {
     return Boolean(name && !/^(?:a|an|some)\s+/i.test(name) && !/^the\s+[a-z]/.test(name));
 }
 
+const PLAYABLE_CLASSES = new Set([
+    'WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD',
+    'ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'
+]);
+
+export function itemMatchesClasses(item, selectedClasses = []) {
+    const selected = selectedClasses.map(value => String(value).trim().toUpperCase())
+        .filter(code => PLAYABLE_CLASSES.has(code));
+    if (!selected.length) return true;
+    const classes = (item?.classes || []).map(value => String(value).trim().toUpperCase());
+    if (classes.includes('NONE')) return false;
+    if (classes.includes('ALL')) {
+        // Older schema-v3 packs exported ALL plus the excluded codes as if
+        // every class were allowed. Repair only that signature; an explicit
+        // allowed-class list from a newer exporter remains authoritative.
+        const exclusionLine = (item?.displayLines || []).find(line => /^\s*Class:\s*ALL\s+EXCEPT\b/i.test(line));
+        if (!exclusionLine) return true;
+        const tail = exclusionLine.replace(/^\s*Class:\s*ALL\s+EXCEPT\b/i, '').toUpperCase();
+        const excluded = new Set((tail.match(/\b[A-Z]{3}\b/g) || []).filter(code => PLAYABLE_CLASSES.has(code)));
+        return selected.some(code => !excluded.has(code));
+    }
+    const allowed = classes.filter(code => PLAYABLE_CLASSES.has(code));
+    return !allowed.length || selected.some(code => allowed.includes(code));
+}
+
 export function itemHasZoneSource(item, zone, normalizeZone = defaultZoneKey) {
     if (!zone) return false;
     const wanted = normalizeZone(zone);

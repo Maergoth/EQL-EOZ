@@ -6,6 +6,13 @@ No player/client requests are involved in this process, and the exporter itself 
 
 ## Files
 
+EQLWiki's deployed producer lives in its application repository at
+`maintenance/BuildEyeOfZommPack.php` and `maintenance/zone-catalog.json`.
+The files here mirror that contract. Review matching producer changes in both
+repositories; merging an EoZ PR alone does not install a wiki exporter or
+publish a new dataset. EQLWiki contribution PRs target `staging`, and promotion
+of those reviewed commits to production is a separate owner action.
+
 Copy to MediaWiki `maintenance/`:
 
 - `BuildEyeOfZommPack.php`
@@ -99,7 +106,37 @@ The schema-v3 exporter also reads each unique `File:Item_<lucy_img_ID>.png` from
 
 Schema v3 changes only the exported JSON pack. It does not require SQL, a MediaWiki database migration, or table changes.
 
+Item `classes` contains allowed playable class codes, `ALL` for unrestricted
+equipment, or `NONE` when no class can equip the item. An empty array means
+missing/unknown class metadata. `ALL except ...` expands to the complement of
+the 16 playable classes; never export `ALL` alongside excluded classes.
+
 Run the same command manually after major wiki changes whenever you want an immediate dataset update.
+
+### Applying the 0.8.1 producer corrections
+
+The [integration audit](../docs/INTEGRATION_AUDIT.md) records missing exact zone
+aliases and `Class: ALL except ...` parsing errors. After review, promote the
+matching EQLWiki producer/catalog commits through its normal release process,
+then run the existing refresh command once. Check the new manifest version,
+gzip checksum, affected zone NPC coverage, and class-excluded items. The EoZ
+client also understands exclusions in legacy packs while that rebuild is pending.
+
+Recognized explicit NPC template zones take precedence and retain every listed
+zone. Categories and article-title suffixes are fallbacks; newly recognized
+categories must not override a field or remove a second spawn zone.
+
+The October 21, 2026 owner-approved rollout completed staging and production
+deployment via EQLWiki PRs #35/#36 and the explicit-zone precedence follow-up
+#37/#38, then rebuilt and published final manifest
+`20261021T062421Z-830bd5a89bfa`: 124 zones, 8,645 NPC records, 11,262 items.
+The [integration audit](../docs/INTEGRATION_AUDIT.md#approved-production-rollout)
+records the verified checksum, recovered coverage, and initial-download checks.
+
+Keep the old verified manifest/pack as a private recovery pair before rebuilding.
+To recover from incorrect exported data, restore the reviewed producer/catalog
+and rebuild a new dataset version; clients skip an unchanged manifest version.
+Never substitute a database dump or game-file archive for the filtered pack.
 
 ## What the clients hit
 

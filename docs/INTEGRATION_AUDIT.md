@@ -1,0 +1,197 @@
+# Wiki and map integration audit
+
+## Scope and execution plan
+
+Requested on October 21, 2026: compare Eye of Zomm with the current EQLWiki
+application and a fresh production-derived dataset, investigate obvious map
+explorer defects using the local EverQuest installation and EQEmu references,
+and prepare a reviewable Eye of Zomm PR. The initial audit stopped at review.
+The owner subsequently authorized production promotion, a corrected dataset
+refresh, and the 0.8.1 desktop release; the release observations below record
+those separate steps.
+
+The subsequent [map explorer validation](MAP_VALIDATION.md) records actual
+Electron rendering against local client archives, additional loader/route/
+clearance/CSP fixes, and the remaining live-client acceptance limits. Use that
+page for final map results; the initial parse-only observations below are
+retained as audit history.
+
+Baseline: EoZ `76f02e3` (0.8.0). EQLWiki is a separate MediaWiki application;
+its Git repository does **not** contain the live database. Wiki content,
+account data, uploads, client archives, and generated packs must stay outside
+this PR. The desktop reads logs/maps and downloads the filtered public pack;
+it must retain its read-only game boundary and avoid client wiki crawling.
+
+### Context to retain when resuming
+
+| Question | Authoritative sources |
+| --- | --- |
+| Desktop architecture and unresolved map acceptance gates | [HANDOFF.md](HANDOFF.md), [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md), [WINDOWS_MANUAL_TEST.md](WINDOWS_MANUAL_TEST.md), [NAVMESH_EVALUATION.md](NAVMESH_EVALUATION.md) |
+| Wiki data producer and schedule | EQLWiki `maintenance/BuildEyeOfZommPack.php`, `maintenance/zone-catalog.json`, `ops/host-bin/eoz-*.sh`, `PROJECT.md` section Existing scheduled jobs; EoZ [server/README.md](../server/README.md) |
+| Dataset consumer and cache | [desktop/main.cjs](../desktop/main.cjs), [fetch-bootstrap-pack.mjs](../scripts/fetch-bootstrap-pack.mjs), GitHub `dataset` branch manifest and pack |
+| Item calculations | Current wiki `extensions/ItemLevelSlider/itemlevelslider.js` and `ops/test-item-level-slider.cjs`; EoZ [item-scaling.js](../app/item-scaling.js), [app.js](../app/app.js) |
+| Coordinate and destination contracts | [coordinate-system.js](../app/coordinate-system.js), [viewer.html](../app/zoneviewer/viewer.html), vendored `gotoNpcLabel` and `pathToWikiLocation` in the generated viewer |
+| Geometry and route ownership | [collision-geometry.js](../app/collision-geometry.js), [recast-route-client.js](../app/recast-route-client.js), [route-validation.js](../app/route-validation.js), [route-corpus.js](../app/route-corpus.js) |
+| Independent format/navigation references | [EQEmu WLD reader](https://github.com/EQEmu/EQEmu/blob/master/utils/deprecated/azone2/wld.cpp), [map collision](https://github.com/EQEmu/EQEmu/blob/master/zone/map.cpp), [Detour pathfinder](https://github.com/EQEmu/EQEmu/blob/master/zone/pathfinder_nav_mesh.cpp) |
+
+The initial manifest was `20261019T042526Z-33a2a5dd67ab` (October 19 UTC).
+The installed weekly export job was confirmed over SSH and manually run to
+completion for this audit. It read the production wiki at low priority and
+published only the existing filtered dataset branch. A staging database
+replacement was unnecessary for this integration audit.
+
+Pre-correction manifest: `20261021T042355Z-2acd4aba91ab`, generated October 21 at
+04:23:56 UTC; gzip bytes `2765979`; SHA-256
+`b6ea3f925477cc0a4529bec52fc07ba6f190a73a2f9825c7cb9d3c8cee4dfa7a`.
+The build fetch verified that checksum and schema v3: **124 zones, 8,389 NPC
+records, 11,262 items**, with 776 embedded icon IDs. The fresh pack still has
+769 blank NPC zones and 64 non-AMMO items with Range. That initial refresh
+preceded installation of the producer fixes below.
+
+### Approved production rollout
+
+The owner authorized release after the map rejection audit. Producer PR #35
+was merged to staging and its deployment/health checks passed. Production
+promotion PR #36 applied only the reviewed six-file change on top of current
+`main`; deployment
+[`a00224f`](https://github.com/Maergoth/EQLWiki/actions/runs/39551674805)
+passed. Installed producer/catalog hashes match the reviewed Git contents.
+The previous verified filtered manifest/gzip pair was retained privately.
+
+The first rebuilt snapshot (`20261021T060010Z-b9ad50c7439d`) exposed stale
+categories overriding explicit NPC zones or discarding a second spawn zone.
+Follow-up PR #37 passed staging; scoped production promotion #38 and deployment
+[`3f65f4c`](https://github.com/Maergoth/EQLWiki/actions/runs/39554124791)
+passed. The installed producer hash matches that reviewed correction.
+The existing low-priority job rebuilt the live wiki again and published the
+final dataset commit `a97e2c8e1fea4f2a33cc65a83b94fabeceec7857`:
+
+- Manifest: `20261021T062421Z-830bd5a89bfa`, published October 21 at 06:24:21 UTC.
+- Gzip: 2,788,522 bytes; SHA-256
+  `6ea087bd6162b62a52545e81f1b16ab9f3b58436cce633ddffb8b3da9576dc61`.
+- Schema v3, **124 zones, 8,645 NPC records, 11,262 items, 776 icons**;
+  metadata counts agree and canonical zone names are unchanged.
+- **750 previously unzoned NPC pages recovered**, leaving 19 unresolved;
+  no previously unzoned page disappeared. All 712 `ALL except` records now
+  carry the explicit class complement, including 703 with listed exclusions.
+  No invalid class codes or unrecognized nonblank NPC zones remain.
+- All 7,959 represented NPC pages and NPC/item revision IDs are unchanged.
+  The final precedence correction changes zone records on 307 pages, adding
+  288 article/zone pairs and removing 69 for a net 219 over the interim snapshot,
+  with no duplicate pairs. NPC
+  fields outside zones are unchanged; item records and icons match the interim
+  snapshot. The three reported zone regressions and the preserved explicit
+  field of the internally inconsistent fourth article pass direct checks.
+- Public download checksum/schema checks, the 64-result Befallen/MNK catalog
+  check, and a rebuilt Windows ASAR pass. The packaged bootstrap exactly
+  matches the fetched snapshot and reports pack `wiki-20261021T062421Z`.
+
+Only the filtered dataset was published. Database snapshots, account data,
+settings, and client assets remain outside the application release.
+
+### Ordered work
+
+1. Gather baseline docs, branch/release policy, exporter deployment evidence,
+   dataset provenance, item calculations, map coordinate boundaries, and
+   dependency audit results. Preserve unrelated dirty wiki files.
+2. Complete the fresh export, verify the gzip hash/schema, and inspect aggregate
+   catalog coverage without committing data or game assets.
+3. Fix reproducible integration defects with behavioral regressions: wiki NPC
+   destinations entering a client-map coordinate API, moved-start rerouting and
+   cancellation, item Range scaling, class exclusions, missing exact zone aliases,
+   and failed dataset recovery/verification. Prepare matching producer fixes in
+   an isolated EQLWiki branch against `staging`; deployment/rebuild stays separate.
+4. Exercise representative local archives/maps privately where feasible;
+   distinguish parse/coordinate evidence from real in-game visual validation.
+   Preserve established-first routing and the real-client promotion gate.
+5. Run relevant tests, production-catalog checks, dependency audit, and packaging
+   checks when affected. Record observations, remaining limitations, and follow-up
+   tasks here and in the handoff. Push a feature branch and open an EoZ PR.
+
+## Findings and results
+
+### Reproduced defects and proposed repairs
+
+| Finding | Evidence and resulting behavior |
+| --- | --- |
+| Wiki NPC route mirrored away from its marker | The wrapper injected world X/Y into `gotoNpcLabel`, which accepts negated client-map X/Y. Convert through `worldToClientMap`; marker and route now converge. |
+| Moving toward the same NPC reused the original start | The vendor target cache keys only the destination. The wrapper now also checks `requestStart`, recalculates after movement, and invalidates the prior spatial candidate before awaiting the line worker. |
+| Cancel could recreate a target through fallback | A stale label-router result returned false and entered wiki fallback. Check the navigation generation before fallback, so Cancel/new-target stays authoritative. |
+| Listed Range differed from the live wiki | 64 non-AMMO records in the initial pack have Range. Live wiki source scales all listed Range by +10/full tier; EoZ now matches bows, throwing weapons, and ammo. |
+| `ALL except` recommended unusable equipment | 712 initial records use this syntax: 703 list excluded classes and nine have incomplete exclusion text. The exporter now emits allowed classes; the client repairs legacy packs from their preserved Class line. Empty metadata remains unknown; `NONE` explicitly permits no class. |
+| Exact zone aliases discarded NPC context | 769 initial NPC records have blank zones. The initial public-page replay recovered 750 pages / 751 zone records with 18 exact aliases. The approved production rebuild above confirms 750 recovered pages and 19 unresolved; canonical/viewer names are preserved. |
+| Newly recognized categories overrode explicit spawn zones | Public-article checks of the first corrected export exposed stale category overrides and lost second zones. The producer now gives recognized explicit template zones precedence, retaining every listed zone; category and title matching are fallbacks. Actual `buildNpcRecords` regressions cover conflicts, multi-zone fields, deduplication, and fallbacks. |
+| Sync could claim a corrupt cache was current | Validate the same-version cache before skipping a download; require a valid SHA-256 and preserve the last good cache on failure. Runtime/build reads now bound manifest, gzip, and decoded size; timeouts cover body reads and invalid schemas fall back correctly. |
+| High dependency advisories failed CI | Update Electron from 43.4.0 to 43.8.3 and refresh compatible affected transitive packages. The high-severity audit passes. Eight moderate advisories remain in the builder's `sprintf-js` chain; no builder downgrade or major runtime upgrade is included. |
+
+The pre-correction export used the previous producer/catalog. Legacy class
+filtering also works in the client; the approved production rebuild above
+now includes the producer class and zone-alias repairs.
+
+### Local game-file observations
+
+The shipped parser worker decoded three privately supplied S3D zone families
+without writing game files or persisting generated geometry:
+
+| Zone | GLB primitives | Returned textures | Parse time in this harness |
+| --- | ---: | ---: | ---: |
+| Mistmoore | 58 | 127 | 930 ms |
+| Commons | 41 | 115 | 475 ms |
+| Befallen | 18 | 69 | 826 ms |
+
+These are decoder observations from a Node harness, not WebGL rendering,
+texture fidelity, or real walking/route evidence. EQEmu references corroborate
+coordinate/ground/partial-path/material concepts; no EQEmu implementation is
+copied and no renderer/parser replacement is justified by this evidence.
+
+### Follow-up work kept out of this patch
+
+- **Conflicting article metadata:** the producer preserves recognized explicit
+  template zones. Ungia's template says Grobb while its category/description
+  point to Neriak Foreign Quarter. This remains a wiki-content question; do not
+  introduce NPC-specific exporter exceptions or silently edit the article as
+  part of a code release.
+- **NPC game names versus article titles:** 227 initial NPC records have
+  parenthesized disambiguators. Export the actual template name plus separate
+  wikiTitle/aliases, and match names with zone context; stripping every suffix
+  in the client risks merging distinct identities.
+- **Itembox-derived fields:** raw-template export omits generated damage bonus,
+  Backstab, and tier SV VOID. Initial pack inference finds 1,444 weapons meeting
+  damage-bonus prerequisites, 228 possible generated Backstab fields, and 3,323
+  items qualifying for tier SV VOID. Preserve explicit overrides and distinguish
+  base values from generated contributions before adding them. These are
+  inferred coverage counts, not verified rendered output for every article.
+- **Typed drop sources and zone matching:** plain annotations can become source
+  names, and name-only fallback can combine drops across zones. Export source
+  title/name/annotation separately and constrain fallback when a zone is known.
+- **Effects:** 1,528 initial items retain Effect text; there is no structured
+  spell/proc corpus, and separate focus-effect template fields need review.
+  Full wiki links remain the detailed reference.
+- **Spatial release gate:** rendered local-archive and emulated-scale results
+  are now recorded in [MAP_VALIDATION.md](MAP_VALIDATION.md). Complete live
+  movement, known-walkable drop/door coverage, and OS-wide DPI acceptance.
+  Keep guarded established-first routing until that evidence supports promotion.
+
+### Verification and release procedure
+
+Baseline and updated `npm test` pass, including both 8/8 synthetic route corpora.
+New behavioral regressions failed before the corresponding fixes. Exporter
+fixtures execute actual PHP methods with synthetic inputs; map tests execute
+the real wrapper and shipped label router with synthetic geometry. Dataset
+tests exercise the runtime, build script, and renderer with temporary caches
+and a local fixture server. They do not imply live game validation.
+
+The fresh production catalog check passes (64 Befallen/MNK items), the unpacked
+Windows build passes, and the ASAR check confirms v0.8.1, production data, and
+the tested runtime source bytes. NSIS installation, Authenticode verification,
+and the interactive in-game matrix were not exercised by this audit.
+
+Release gates are `npm ci`, `npm test`, `npm run audit:deps`, a verified
+production bootstrap, `npm run test:catalog`, and package/ASAR checks.
+The ASAR check requires the exact fetched bootstrap bytes as well as the tested
+runtime sources, and logs the bundled dataset versions and record counts.
+[EQLWiki producer PR #35](https://github.com/Maergoth/EQLWiki/pull/35) targets
+`staging`; [production promotion #36](https://github.com/Maergoth/EQLWiki/pull/36)
+contains only its reviewed six-file change on top of production. Producer
+deployment and the filtered dataset rebuild remain separate operations; see
+[server/README.md](../server/README.md).
