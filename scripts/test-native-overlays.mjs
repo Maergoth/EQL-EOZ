@@ -166,6 +166,22 @@ try {
             assert.equal(await execute(panels().intel, () => document.querySelector('[data-intel-section]')?.dataset.intelSection),'raid','Raid Zone is the first Intel section');
             assert.match(variants.normal,/Synthetic Charm 12/); assert.doesNotMatch(variants.normal,/Raid Charm/);
             assert.match(variants.raid,/Raid Charm/); assert.doesNotMatch(variants.raid,/Synthetic Charm/);
+            const intelPointerPath = await execute(panels().intel, () => {
+                const summary=document.querySelector('[data-intel-section="raid"] .npc-summary'),name=summary.querySelector('.npc-name'),metadata=summary.querySelector('.npc-meta'),map=summary.querySelector('[data-npc-action="map"]'),outside=document.querySelector('.intel-controls');
+                const point=(node,type,relatedTarget)=>node.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerType:'mouse',relatedTarget}));
+                const open=()=>getComputedStyle(summary.querySelector('.row-actions')).display!=='none';
+                document.activeElement?.blur();point(summary,'pointerout',outside);
+                // Hidden native windows exercise the actual delegated pointer
+                // handlers without assuming foreground OS mouse delivery.
+                point(metadata,'pointerover',outside);const metadataOnly=open();
+                point(name,'pointerover',metadata);const nameEntered=open();
+                point(name,'pointerout',metadata);point(metadata,'pointerover',name);const nameToMetadata=open();
+                point(metadata,'pointerout',map);point(map,'pointerover',metadata);const metadataToAction=open();
+                point(map,'pointerout',outside);const leftSummary=open();
+                name.focus();const keyboardFocus=open();name.blur();const focusLeft=open();
+                return{metadataOnly,nameEntered,nameToMetadata,metadataToAction,leftSummary,keyboardFocus,focusLeft};
+            });
+            assert.deepEqual(intelPointerPath,{metadataOnly:false,nameEntered:true,nameToMetadata:true,metadataToAction:true,leftSummary:false,keyboardFocus:true,focusLeft:false},'Only the actual NPC name arms pointer actions; its metadata/buttons retain them until the pointer leaves, and keyboard focus remains supported');
             const stickyIntel = await execute(panels().intel, () => {
                 const list=document.querySelector('#intel-body'),controls=document.querySelector('.intel-controls'),tier=document.querySelector('#intel-item-tier'),filter=document.querySelector('#class-filter');
                 const before=[controls,tier,filter].map(node=>node.getBoundingClientRect().top);
