@@ -54,6 +54,16 @@ const fixtures = {
     'Synthetic statless item':{ text:'{{Itempage\n|itemname=Synthetic alternate item\n|dropsfrom=\n}}', revision:206 },
     'Synthetic skipped item':{ text:'A categorized public item page without its template.', itemCandidate:true, revision:207 }
 };
+// Hate-shaped markup, synthetic entities: presentation wrappers/notes must not
+// become source identities or carry a preceding zone into the next mob list.
+const hateNpc = 'Synthetic Grandmaster R`Tal';
+Object.assign(fixtures, {
+    'Plane of Hate':{text:'= Raid Instance =\n! Raid Boss NPCs\n|[['+hateNpc+']]\n|-',revision:503},
+    [hateNpc]:{text:'{{Namedmobpage\n|zone=[[Plane of Hate]]\n|level=54\n|location=(-12,34,56)\n}}',revision:301},
+    'Synthetic styled Hate gem':{text:item('Synthetic styled Hate gem','[[Plane of Hate]]\n* {{VeliousGray| [['+hateNpc+'|Unrelated display label]] (Hate 2.0)}}\n** {{Loc|Plane of Hate|-12,+34,56|(-12,+34,56)}}\n== Raid Instance ==\n[[Plane of Hate]]\n* {{VeliousGray| [['+hateNpc+']] (Hate 2.0)}}'),revision:302},
+    'Synthetic ground book':{text:item('Synthetic ground book','[[Plane of Hate]]\n* Ground Spawn\n** {{Loc|Plane of Hate|-12,+34,56|(-12,+34,56)}}'),revision:303},
+    'Synthetic wrapped zones':{text:item('Synthetic wrapped zones',"[[West Karana]]\n* [[Synthetic western NPC]]\n{{VeliousGray| [[The Warrens]] }}\n* {{VeliousGray| [[Synthetic warrens NPC]] }}\n[[Timorous Deep]] {{Era|Kunark}}\n* [[Synthetic ocean NPC|Display name]] {{Era|Kunark}} (see [[Synthetic false note]])\n** [[Synthetic nested NPC]]\n** {{UnknownSource|[[Synthetic false NPC]]}}\n** [[File:Map Icon.png]]"),revision:304}
+});
 const php = `<?php
 class Maintenance {}
 class Title {
@@ -138,6 +148,11 @@ const actual = JSON.parse(result.stdout);
 const records = name => actual.npcs.filter(record => record.name === name);
 const sources = name => actual.items.find(record => record.name === name).dropSources;
 const raid = name => records(name).filter(record => record.raidInstance);
+assert.deepEqual(sources('Synthetic styled Hate gem').map(source=>[source.zone,source.name,source.raidInstance]),[['Plane of Hate',hateNpc,false],['Plane of Hate',hateNpc,true]],'Styled link destinations retain exact normal/raid NPC identity, without labels or revamp annotations');
+for (const source of sources('Synthetic styled Hate gem')) assert(records(source.name).some(record=>record.zone===source.zone&&record.raidInstance===source.raidInstance),'Every styled Hate drop joins its actual exported NPC variant');
+assert.deepEqual(sources('Synthetic ground book').map(source=>[source.zone,source.name]),[['Plane of Hate','Ground Spawn']],'A nested Loc annotation is not a second monster or a drop source');
+assert.deepEqual(sources('Synthetic wrapped zones').map(source=>[source.zone,source.name]),[['West Karana','Synthetic western NPC'],['The Warrens','Synthetic warrens NPC'],['Timorous Deep','Synthetic ocean NPC'],['Timorous Deep','Synthetic nested NPC']],'Styled/era headings reset the source zone; real nested NPC links remain; unknown templates and file links do not invent sources');
+assert(actual.items.flatMap(item=>item.dropSources).every(source=>!/[{}\[\]|]/.test(source.name)),'Exported source names contain resolved identities, not raw wikitext');
 assert.deepEqual(records('King Tranix').map(record => record.raidInstance), [true], 'An explicit zone Raid Instance Only reference makes the boss raid-only.');
 assert.deepEqual(records('Synthetic future raid NPC').map(record => [record.zone,record.raidInstance]), [['Synthetic future zone',true]], 'A newly categorized zone and nested Raid Instance heading require no hardcoded zone list.');
 assert.deepEqual(records('Synthetic future public NPC').map(record => [record.zone,record.raidInstance]), [['Synthetic future zone',false]], 'A same-level normal sibling ends the nested raid scope.');

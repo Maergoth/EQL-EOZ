@@ -238,7 +238,9 @@ try {
             await execute(mapWindow, () => {
                 window.__eozHeaderPointer=[];
                 window.__eozHeaderPointerListener=event=>window.__eozHeaderPointer.push({type:event.type,key:event.key||'',id:event.target.id,action:event.target.dataset?.mapAction||'',trusted:event.isTrusted});
-                for(const type of ['pointerover','click','keydown'])document.addEventListener(type,window.__eozHeaderPointerListener);
+                // Toolbar clicks intentionally stop bubbling. Observe native
+                // delivery in capture phase without changing that behavior.
+                for(const type of ['pointerover','click','keydown'])document.addEventListener(type,window.__eozHeaderPointerListener,true);
             });
             try{
                 for(const width of [260,460])for(const locked of [false,true]){
@@ -266,11 +268,24 @@ try {
                     await until(async () => execute(mapWindow,()=>window.__eozHeaderPointer.some(event=>event.action==='mode'&&event.trusted)&&getComputedStyle(document.querySelector('.native-map-tools')).visibility==='visible'),'Pointer can traverse from title to its same-row controls');
                     const follow=geometry.buttons.find(button=>button.action==='follow'),followPoint={x:Math.round(follow.left+follow.width/2),y:Math.round(follow.top+follow.height/2)};
                     mapWindow.webContents.sendInputEvent({type:'mouseMove',...followPoint});
+                    const followBefore=await execute(mapWindow,()=>document.querySelector('[data-map-action="follow"]').getAttribute('aria-pressed'));
                     for(let click=0;click<2;click++){
                         mapWindow.webContents.sendInputEvent({type:'mouseDown',...followPoint,button:'left',clickCount:1});
                         mapWindow.webContents.sendInputEvent({type:'mouseUp',...followPoint,button:'left',clickCount:1});
+                        const expectedFollow=click===0?String(followBefore!=='true'):followBefore;
+                        let clickDiagnostic;
+                        try{
+                            await until(async () => {
+                                clickDiagnostic=await execute(mapWindow,point=>{
+                                    const button=document.querySelector('[data-map-action="follow"]'),target=document.elementFromPoint(point.x,point.y);
+                                    return{events:window.__eozHeaderPointer,clicks:window.__eozHeaderPointer.filter(event=>event.type==='click'&&event.action==='follow'&&event.trusted).length,
+                                        pressed:button.getAttribute('aria-pressed'),button:button.getBoundingClientRect().toJSON(),visibility:getComputedStyle(document.querySelector('.native-map-tools')).visibility,
+                                        target:target?{tag:target.tagName,action:target.dataset?.mapAction||'',region:getComputedStyle(target).webkitAppRegion}:null};
+                                },followPoint);
+                                return clickDiagnostic.clicks>=click+1&&clickDiagnostic.pressed===expectedFollow;
+                            },'Trusted primary control click toggles Follow without becoming a drag');
+                        }catch(error){throw new Error(`${error.message}: ${JSON.stringify({width,locked,click:click+1,followPoint,expectedFollow,...clickDiagnostic})}`);}
                     }
-                    await until(async () => execute(mapWindow,()=>window.__eozHeaderPointer.filter(event=>event.type==='click'&&event.action==='follow'&&event.trusted).length===2),'Trusted primary control clicks reach the window without becoming a drag');
                     mapWindow.webContents.sendInputEvent({type:'mouseMove',...outside});
                     assert.equal(await execute(mapWindow,()=>getComputedStyle(document.querySelector('.native-map-tools')).visibility),'visible','A short exit grace prevents accidental collapse while traversing controls');
                     await until(async () => execute(mapWindow,()=>getComputedStyle(document.querySelector('.native-map-tools')).visibility==='hidden'),'A mouse-clicked primary control does not pin the header after pointer exit');
@@ -284,7 +299,7 @@ try {
                 await until(async () => execute(mapWindow,()=>window.__eozHeaderPointer.some(event=>event.type==='keydown'&&event.key==='Tab'&&event.trusted)&&document.activeElement.id==='overlay-header'&&document.activeElement.matches(':focus-visible')&&getComputedStyle(document.querySelector('.native-map-tools')).visibility==='visible'),'Real Tab focus reveals controls and retains them while the pointer is outside the header');
                 await execute(mapWindow,()=>{if(window.__eozBodyTabindex===null)document.body.removeAttribute('tabindex');else document.body.setAttribute('tabindex',window.__eozBodyTabindex);delete window.__eozBodyTabindex;});
             }finally{
-                await execute(mapWindow,()=>{for(const type of ['pointerover','click','keydown'])document.removeEventListener(type,window.__eozHeaderPointerListener);delete window.__eozHeaderPointerListener;delete window.__eozHeaderPointer;});
+                await execute(mapWindow,()=>{for(const type of ['pointerover','click','keydown'])document.removeEventListener(type,window.__eozHeaderPointerListener,true);delete window.__eozHeaderPointerListener;delete window.__eozHeaderPointer;});
                 await action('map','lock',false);mapWindow.setBounds(mapBoundsBeforeHeader);mapWindow.hide();
             }
             assert.equal(headerHoverCases.length,4,'Native header input covers narrow/normal windows, each locked and unlocked');
