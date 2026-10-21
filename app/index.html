@@ -32,15 +32,7 @@
         </form>
         <datalist id="map-destinations"></datalist>
         <div class="window-controls">
-            <span id="minimal-zone-title" class="minimal-zone-title">Waiting for zone</span>
-            <div class="map-mode-switch minimal-map-mode-switch" role="group" aria-label="Map view">
-                <button class="map-mode-button is-active" type="button" data-map-mode="first" title="First Person 3D">First</button>
-                <button class="map-mode-button" type="button" data-map-mode="top" title="Top Down 3D">Top</button>
-                <button class="map-mode-button" type="button" data-map-mode="map" title="Map Overlay">Map</button>
-            </div>
-            <button id="minimal-intel-toggle" class="topbar-control minimal-only-control" type="button" aria-pressed="true">Hide intel</button>
             <button id="pin-window" class="topbar-control" type="button" aria-pressed="false">◇ Pin to top</button>
-            <button id="minimal-mode" class="topbar-control" type="button" aria-pressed="false">Minimal</button>
             <button id="app-update-badge" class="topbar-control app-update-badge" type="button" hidden>App update</button>
             <button id="open-native-overlays" class="topbar-control" type="button" title="Show independent native overlay windows">Overlays</button>
         </div>
@@ -124,6 +116,11 @@
                     </div>
                 </div>
                 <div class="map-actions">
+                    <div class="map-mode-switch" role="group" aria-label="Map view">
+                        <button class="map-mode-button" data-map-mode="first">First person</button>
+                        <button class="map-mode-button" data-map-mode="top">Top down</button>
+                        <button class="map-mode-button" data-map-mode="map">Map</button>
+                    </div>
                     <button id="sync-zone" class="secondary-button">Reload zone</button>
                     <button id="sync-location" class="primary-button">Center on last /loc</button>
                 </div>
@@ -140,23 +137,6 @@
                 <div class="viewer-frame-wrap">
                     <iframe id="zone-viewer" class="viewer-frame" src="./zoneviewer/viewer.html" title="EQL Zone Viewer"></iframe>
                 </div>
-                <aside class="minimal-drop-panel panel">
-                    <div class="minimal-fight">
-                        <span>Current fight</span>
-                        <strong id="minimal-fight-dps">0 DPS</strong>
-                        <small id="minimal-fight-name">No active fight</small>
-                    </div>
-                    <div class="panel-heading">
-                        <div><span class="eyebrow">CURRENT ZONE</span><h2>Named &amp; rare mobs</h2></div>
-                    </div>
-                    <div class="minimal-filters">
-                        <label class="check-control"><input id="minimal-my-class" type="checkbox" checked> My Class</label>
-                        <label class="check-control"><input id="minimal-named-only" type="checkbox" checked> Named only</label>
-                    </div>
-                    <input id="minimal-rare-search" class="search-input minimal-rare-search" type="search" autocomplete="off" placeholder="Find mob or loot">
-                    <p class="loc-tracking-tip">Live heading uses consecutive <code>/loc</code> updates. Bind <code>/loc</code> to your movement keys for continuous tracking.</p>
-                    <div id="minimal-zone-drops" class="minimal-zone-drops empty-state">Waiting for a zone.</div>
-                </aside>
             </div>
         </section>
 
@@ -204,7 +184,7 @@
                             <option value="name">Name</option>
                         </select>
                     </label>
-                    <label class="compact-field">Era
+                    <label class="compact-field">Through era
                         <select id="era-select"></select>
                     </label>
                     <button id="reset-item-filters" class="text-button" type="button">Reset</button>
@@ -260,6 +240,7 @@
         <section class="view" data-view-panel="timers">
             <div class="section-heading"><div><span class="eyebrow">COUNTDOWNS &amp; LOG TRIGGERS</span><h1>Timers</h1></div></div>
             <div id="timer-settings" class="panel"></div>
+            <div id="wiki-discovery-notices" aria-label="Wiki discoveries"></div>
         </section>
 
         <section class="view" data-view-panel="settings">
@@ -294,14 +275,8 @@
                     <h2>Window</h2>
                     <div class="settings-actions">
                         <button id="settings-pin-window" class="secondary-button" type="button">Pin to top</button>
-                        <button id="settings-minimal-mode" class="secondary-button" type="button">Minimal view</button>
                     </div>
-                    <div class="minimal-content-settings">
-                        <span class="filter-label">Minimal view content</span>
-                        <label class="check-control"><input id="settings-minimal-map" type="checkbox"> Show map</label>
-                        <label class="check-control"><input id="settings-minimal-routing" type="checkbox"> Show path controls</label>
-                        <p class="settings-helper">Named and rare mobs are always shown. Waypoint copying, consider detection, and loot remain available without the map.</p>
-                    </div>
+                    <label class="check-control"><input id="settings-routing-enabled" type="checkbox"> Enable route controls in overlays</label>
                 </article>
                 <article class="panel">
                     <h2>Combat encounters</h2>
@@ -343,21 +318,6 @@
         </section>
     </main>
 </div>
-<section id="consider-loot-tray" class="consider-loot-tray" aria-live="polite" hidden>
-    <div class="consider-tray-heading">
-        <div>
-            <span class="eyebrow">CONSIDERED</span>
-            <h2 id="consider-tray-name">—</h2>
-            <small id="consider-tray-meta"></small>
-        </div>
-        <div class="consider-tray-actions">
-            <label class="check-control"><input id="consider-my-class" type="checkbox" checked> My Class</label>
-            <button id="consider-path" class="secondary-button path-npc" type="button">Path</button>
-            <button id="consider-close" class="consider-close" type="button" aria-label="Close considered loot">×</button>
-        </div>
-    </div>
-    <div id="consider-tray-drops" class="consider-tray-drops"></div>
-</section>
 <div id="setup-overlay" class="setup-overlay" hidden>
     <div class="setup-card">
         <span class="eyebrow">FIRST RUN</span>

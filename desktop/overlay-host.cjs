@@ -2,20 +2,22 @@
 
 const path = require('node:path');
 
-const PANEL_IDS = Object.freeze(['parse', 'intel', 'consider', 'timers']);
-const PANEL_NAMES = Object.freeze({ parse:'Combat parse', intel:'Zone intel', consider:'Consider loot', timers:'Timers' });
+const PANEL_IDS = Object.freeze(['parse', 'map', 'intel', 'timers']);
+const PANEL_NAMES = Object.freeze({ parse:'Combat parse', map:'Map & intel', intel:'Zone intel', timers:'Timers' });
 const IPC_MAIN = 'eye-of-zomm:overlays';
 const IPC_OVERLAY = 'eye-of-zomm:overlay';
 const RECOVERY_SHORTCUT = 'CommandOrControl+Shift+O';
 const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 const MAX_COMMAND_BYTES = 16 * 1024;
+const MAX_REPLY_BYTES = 8 * 1024 * 1024;
 const SESSION_ACTIONS = new Set([
     'session:open', 'session:route', 'session:copy-waypoint', 'session:class-filter', 'session:wiki',
-    'timer:save-definition', 'timer:remove-definition', 'timer:start', 'timer:pause', 'timer:resume',
+    'session:map-data', 'session:intel-drops', 'session:select-npc', 'session:cancel-route',
+    'timer:fire-definition', 'timer:save-definition', 'timer:remove-definition', 'timer:start', 'timer:pause', 'timer:resume',
     'timer:reset', 'timer:cancel', 'timer:delete', 'timer:create-spawn', 'timer:reset-swing',
     'timer:set-zone', 'timer:cancel-all', 'timer:set-swing-enabled', 'timer:set-swing-delay'
 ]);
-const SIZES = { parse:[420, 220], intel:[400, 420], consider:[380, 360], timers:[420, 64] };
+const SIZES = { parse:[420, 220], map:[520, 380], intel:[520, 420], timers:[420, 64] };
 // A small gold eye is embedded so the packaged tray never depends on build resources.
 const TRAY_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAATklEQVR4nGNgGAWjgObg6saw//gwTQwl2zJcGjkEpLFikiwixlBi5LBaQo5riVFHtAWkBN3gtIDiIKJ5JNMlmRJj0YDkarIMHQWjgCQAAOw009RU8GzvAAAAAElFTkSuQmCC';
 
@@ -55,8 +57,8 @@ function normalizePreferences(raw, displays) {
         const saved = raw?.panels?.[id] || {};
         const width = Math.min(SIZES[id][0], columnWidth);
         const height = Math.min(SIZES[id][1], rowHeight);
-        const right = id === 'intel' || id === 'consider';
-        const bottom = id === 'timers' || id === 'consider';
+        const right = id === 'intel' || id === 'map';
+        const bottom = id === 'timers' || id === 'intel';
         // Fresh layouts keep the center clear. Each panel gets one corner;
         // saved positions are used directly and only clamped to live screens.
         const fallback = { x:primary.x + (right ? primary.width - margin - width : margin),
@@ -87,10 +89,12 @@ function sessionCommand(action, payload) {
     if (action === 'session:open' && !['map', 'items', 'npcs', 'combat', 'timers', 'settings'].includes(value.view)) throw new Error('Unknown application view.');
     if (action === 'session:open' && ['npc', 'item'].some(key => value[key] !== undefined &&
         (typeof value[key] !== 'string' || value[key].length > 240))) throw new Error('Invalid application selection.');
-    if (['session:route', 'session:copy-waypoint', 'session:wiki'].includes(action) &&
+    if (['session:route', 'session:copy-waypoint', 'session:wiki', 'session:intel-drops', 'session:select-npc'].includes(action) &&
         (typeof value.npc !== 'string' || !value.npc.trim() || value.npc.length > 240 ||
         (value.zone !== undefined && (typeof value.zone !== 'string' || value.zone.length > 160)))) throw new Error('Invalid NPC action.');
-    if (action === 'session:class-filter' && (!['intel', 'consider'].includes(value.panel) || typeof value.enabled !== 'boolean')) throw new Error('Invalid class filter.');
+    if (value.raidInstance !== undefined && typeof value.raidInstance !== 'boolean') throw new Error('Invalid NPC variant.');
+    if (action === 'session:map-data' && (typeof value.zone !== 'string' || value.zone.length > 160)) throw new Error('Invalid map zone.');
+    if (action === 'session:class-filter' && (value.panel !== 'intel' || typeof value.enabled !== 'boolean')) throw new Error('Invalid class filter.');
     return value;
 }
 
@@ -106,7 +110,10 @@ class OverlayHost {
         this.now = now;
         this.warn = warn;
         this.windows = new Map();
+        this.pendingReplies = new Map();
+        this.nextRequestId = 0;
         this.ready = new Set();
+        this.crashed = new Set();
         this.preferences = null;
         this.snapshot = null;
         this.snapshotAt = 0;
@@ -169,6 +176,17 @@ class OverlayHost {
     async handleMainRequest(event, action, value) {
         if (!this.isMain(event)) throw new Error('Overlay control is unavailable.');
         if (action === 'get-state') return this.getState();
+        if (action === 'reply') {
+            const pending = this.pendingReplies.get(value?.requestId);
+            if (!pending) return { ok:false };
+            this.pendingReplies.delete(value.requestId); clearTimeout(pending.timeout);
+            if (value.error) pending.reject(new Error(String(value.error).slice(0, 240)));
+            else {
+                try { pending.resolve(jsonObject(value.result || {}, MAX_REPLY_BYTES)); }
+                catch (error) { pending.reject(error); }
+            }
+            return { ok:true };
+        }
         if (action === 'publish') {
             const snapshot = jsonObject(value, MAX_SNAPSHOT_BYTES);
             if (snapshot.schemaVersion !== 1 || !snapshot.session || typeof snapshot.session !== 'object') throw new Error('Invalid overlay snapshot.');
@@ -187,6 +205,10 @@ class OverlayHost {
         const id = this.overlaySender(event);
         if (!id) throw new Error('Overlay request is unavailable.');
         if (action === 'get-state') return this.getState(id);
+        if (action === 'content-height') {
+            if (id !== 'timers' || typeof payload !== 'number' || !Number.isFinite(payload) || payload < 36 || payload > 2400) throw new Error('Invalid timer content height.');
+            this.timerContentHeight = Math.min(1200,Math.ceil(payload)); this.fitTimerWindow(); return {ok:true};
+        }
         if (action === 'show-main') { this.showMain(); return { ok:true }; }
         if (['hide', 'lock', 'pass-through', 'opacity', 'font-scale'].includes(action)) {
             await this.control(action, id, payload);
@@ -195,6 +217,16 @@ class OverlayHost {
         const value = sessionCommand(action, payload);
         const main = this.getMainWindow();
         if (!this.sessionAvailable || !main || main.isDestroyed()) throw new Error('The application session is unavailable. Open Eye of Zomm to reconnect.');
+        if (['session:map-data', 'session:intel-drops'].includes(action)) {
+            if (this.pendingReplies.size >= 8) throw new Error('Please wait for the current overlay request.');
+            const requestId = `overlay-request-${++this.nextRequestId}`;
+            return new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => { this.pendingReplies.delete(requestId); reject(new Error('Overlay data request timed out. Retry from the panel.')); }, 10000);
+                timeout.unref?.();
+                this.pendingReplies.set(requestId, { resolve, reject, timeout, panel:id });
+                main.webContents.send('eye-of-zomm:overlay-command', { panel:id, action, payload:value, requestId });
+            });
+        }
         main.webContents.send('eye-of-zomm:overlay-command', { panel:id, action, payload:value });
         if (action === 'session:open') this.showMain();
         return { ok:true };
@@ -223,11 +255,12 @@ class OverlayHost {
         win.webContents.on('will-navigate', (event, url) => { if (url !== this.panelUrl(id)) event.preventDefault(); });
         win.webContents.on('will-attach-webview', event => event.preventDefault());
         win.webContents.on('did-finish-load', () => {
+            this.crashed.delete(id);
             this.ready.add(id);
             if (prefs.visible) win.showInactive();
             this.broadcast(false);
         });
-        win.webContents.on('render-process-gone', () => { this.ready.delete(id); });
+        win.webContents.on('render-process-gone', () => { this.ready.delete(id); this.crashed.add(id); });
         win.on('will-move', event => { if (prefs.locked) event.preventDefault(); });
         win.on('will-resize', event => { if (prefs.locked) event.preventDefault(); });
         const saveBounds = () => {
@@ -242,9 +275,21 @@ class OverlayHost {
             event.preventDefault();
             void this.control('hide', id).catch(this.warn);
         });
-        win.on('closed', () => { this.windows.delete(id); this.ready.delete(id); });
+        win.on('closed', () => { this.windows.delete(id); this.ready.delete(id); this.crashed.delete(id); });
         void win.loadURL(this.panelUrl(id)).catch(error => this.warn('[Eye of Zomm] overlay load unavailable:', error?.message));
         return win;
+    }
+
+    recoverPanel(id) {
+        const win = this.windows.get(id);
+        if (!this.crashed.has(id) || !win || win.isDestroyed() || this.disposed) return;
+        // Explicit Show is the recovery boundary. Clock ticks, monitor changes,
+        // and preference updates must not cause a renderer crash/reload loop.
+        this.crashed.delete(id);
+        void win.loadURL(this.panelUrl(id)).catch(error => {
+            if (!this.disposed && this.windows.get(id) === win && !win.isDestroyed()) this.crashed.add(id);
+            this.warn('[Eye of Zomm] overlay recovery unavailable:', error?.message);
+        });
     }
 
     async control(action, panel, value) {
@@ -260,6 +305,7 @@ class OverlayHost {
                 if (action === 'unlock-all') prefs.locked = false;
                 if (action === 'restore-mouse') prefs.passThrough = false;
                 if (action === 'reset-layout') { prefs.bounds = defaults.panels[id].bounds; prefs.locked = false; prefs.passThrough = false; }
+                if (action === 'show-all') this.recoverPanel(id);
                 this.apply(id);
             }
         } else {
@@ -277,6 +323,7 @@ class OverlayHost {
             else if (action === 'opacity' && typeof value === 'number' && Number.isFinite(value)) prefs.backgroundOpacity = clamp(value, 0.15, 1);
             else if (action === 'font-scale' && typeof value === 'number' && Number.isFinite(value)) prefs.fontScale = clamp(value, 0.75, 1.75);
             else throw new Error('Unknown overlay action or invalid value.');
+            if (prefs.visible && (action === 'show' || action === 'toggle')) this.recoverPanel(id);
             this.apply(id);
         }
         this.broadcast();
@@ -307,14 +354,21 @@ class OverlayHost {
         const timers = this.snapshot?.session?.timers || {};
         const count = Math.min(8, (timers.timers || []).filter(timer => timer.visible !== false).length);
         const swingHeight = timers.swing?.enabled === false ? 0 : 22;
-        const height = Math.max(36, Math.ceil(10 + count * (30 * prefs.fontScale + 3) + swingHeight * prefs.fontScale));
+        const notificationsHeight = Math.min(4,timers.notifications?.length || 0) * 24 + (timers.matchingStatus ? 22 : 0);
+        const discoveryHeight = Math.min(4,this.snapshot?.session?.discovery?.length || 0) * 90;
+        const height = this.timerContentHeight || Math.max(36, Math.ceil(10 + count * (30 * prefs.fontScale + 3) + (swingHeight + notificationsHeight + discoveryHeight) * prefs.fontScale));
         prefs.bounds = clampBounds({ ...prefs.bounds, height }, this.displays(), prefs.bounds, 36);
         this.apply('timers');
     }
 
     hasVisiblePanels() { return Boolean(this.preferences && PANEL_IDS.some(id => this.preferences.panels[id].visible)); }
     hasRecoveryControl() { return Boolean(this.tray || this.recoveryShortcutRegistered); }
-    markSessionUnavailable() { this.sessionAvailable = false; if (this.preferences) this.broadcast(); }
+    markSessionUnavailable() {
+        this.sessionAvailable = false;
+        for (const pending of this.pendingReplies.values()) { clearTimeout(pending.timeout); pending.reject(new Error('The shared session is unavailable. Retry after reconnecting.')); }
+        this.pendingReplies.clear();
+        if (this.preferences) this.broadcast();
+    }
     noteSessionRestart() { this.sessionRestartCount += 1; this.markSessionUnavailable(); }
     restoreBounds() {
         if (!this.preferences || this.disposed) return;
@@ -368,6 +422,7 @@ class OverlayHost {
     dispose() {
         if (this.disposed) return;
         this.disposed = true;
+        this.markSessionUnavailable();
         clearInterval(this.staleTimer);
         clearTimeout(this.saveTimer);
         void this.save().catch(this.warn);
@@ -378,6 +433,7 @@ class OverlayHost {
         this.tray?.destroy();
         for (const win of this.windows.values()) if (!win.isDestroyed()) win.destroy();
         this.windows.clear();
+        this.crashed.clear();
     }
 }
 

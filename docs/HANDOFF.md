@@ -9,7 +9,7 @@ This repository is the source of truth. A new contributor should be able to resu
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.8.2**. Minimal view is intel-first: named/rare mobs are the default surface, with no duplicate destination field, while map and row-level routing are independent opt-in Settings choices that default off. Waypoint copying, considers, pop-under loot, and mob-list filtering remain active without either. Class-filtered loot excludes statless and weight-only items.
+Current code baseline: **0.8.3**. Four independent native windows provide Parse, Map, Zone & loot and Timers. Intel separates Normal Zone/Raid Zone sources, preserves class filters and expands every matching drop through Show More. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset; First/Top/Map controls belong only to the main Map page.
 
 The [wiki/map integration audit](INTEGRATION_AUDIT.md) records the 0.8.1 repairs,
 the fresh export, source locations, and remaining data/visual gates. The
@@ -53,7 +53,7 @@ Do not commit proprietary S3D/EQG archives, player logs, exported diagnostics, o
 
 ## Application updates, native overlays and timers
 
-The 0.8.2 candidate adds application releases independently of wiki-data Sync.
+The 0.8.3 candidate adds application releases independently of wiki-data Sync.
 `desktop/app-updater.cjs` owns release selection, bounded download/verification,
 saved staging and explicit NSIS handoff. `desktop/preload.cjs` exposes a fixed
 API only to the main local application frame; `app/app-update-ui.js` presents
@@ -62,8 +62,8 @@ Downloads on startup are opt-in; installation is never automatic. App ID,
 profile paths and the game-read boundary stay intact.
 
 [PNUT_UX_PLAN.md](PNUT_UX_PLAN.md) retains the pinned PNUT reference, implementation
-map and acceptance gates. Four actual native windows (Parse, Zone & loot,
-Consider, Timers) share the existing main renderer's single log/parser/route
+map and acceptance gates. Four actual native windows (Parse, Map, Zone & loot,
+Timers) share the existing main renderer's single log/parser/route
 session. `app/overlay-session.js` owns timer persistence and bounded snapshots;
 `desktop/overlay-host.cjs` owns window layout, restricted IPC, tray and shortcut
 recovery. Lightweight renderers have no log, filesystem or updater API.
@@ -72,15 +72,27 @@ Layout lock preserves keyboard/menu interaction; mouse passthrough is separate.
 The main window hides on close while recoverable panels remain; tray Quit exits
 all windows. Explicit Open main reloads a crashed owner; parse history rebuilds
 from the tail while saved timer deadlines survive. Timers include manual/repeat,
-literal log triggers, user-duration kill reminders and an observed melee swing
+literal/regex log triggers, named captures and preview, cooldowns, display/cue
+actions, user-duration kill reminders and an observed melee swing
 estimate. Only fresh appended timestamps drive them. Read [TIMERS.md](TIMERS.md)
-for precision/replay rules. The single Map Explorer remains in the main app.
+for precision/replay rules. Regex matching runs in a bounded isolated worker.
+The native Map draws client line geometry and shares owner route/location state;
+the single heavy 3D Map Explorer remains in the main app.
 The native Parse UI directly translates PNUT's compact header, flat meter
 rows and exact Overview/Damage/Healing/Taken/Session tabs. Taken uses own incoming
 melee/spell/DoT events; rune grants remain capacity, not observed absorption.
 The timer window is display-only radial rows plus a thin swing bar, fitted to
 its contents. All timer configuration and actions live on the main Timers page.
 The PNUT MIT notice ships under THIRD_PARTY/PNUT.
+
+`app/wiki-discovery.js` requires a complete public entity catalog before claiming
+absence. `app/wiki-discovery-ui.js` mounts the same Screenshot/Ignore notices
+inside main Timers and native Timers, with a visible 15-second queue and hover/focus
+pause. Only one surface owns the visible notices: native Timers while visible
+and interactive, otherwise main Timers. `desktop/discovery-host.cjs` authenticates explicit screenshot requests,
+offers source choices and copies to the local clipboard; it creates no popup and
+uploads nothing. Ignore persists locally. Raid/catalog producer changes require
+the reviewed wiki deployment and a fresh pack; a source push alone proves neither.
 
 Preserve player-only parses and rune-capacity semantics; Revenge and
 Elitist/Carebear remain excluded.

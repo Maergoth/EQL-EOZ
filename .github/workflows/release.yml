@@ -44,6 +44,8 @@ jobs:
         run: npm run test:desktop-worker
       - name: Test actual native overlay windows and shared session
         run: npm run test:native-overlays
+      - name: Test inline wiki discovery and explicit clipboard capture
+        run: npm run test:discovery-notices
       - name: Fetch production bootstrap data
         shell: bash
         run: node scripts/fetch-bootstrap-pack.mjs --required

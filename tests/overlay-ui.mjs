@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { TABS, parseView, renderParseContent, renderIntel, renderConsider, renderItem, durationLabel, timerView, renderTimerRows, renderSwing, escapeHtml } from '../app/overlay.js';
+import { TABS, parseView, renderParseContent, renderIntel, renderItem, durationLabel, timerView, renderTimerRows, renderTimerNotifications, renderSwing, escapeHtml, intelNpcKey, isRaidSource } from '../app/overlay.js';
 import { overlayControllerPresentation } from '../app/overlay-controller.js';
 
 const event = (type, amount, source = 'Slash') => ({ type, amount, source, victim:'a skeleton' });
@@ -56,6 +56,10 @@ assert.match(renderTimerRows([{...countdown,status:'ended',remainingMs:0}],25000
 assert.match(renderTimerRows([countdown],25000),/timer-ring/);
 assert.match(renderTimerRows([countdown],25000),/--remaining:75\.0%/);
 assert.match(renderTimerRows([countdown],25000),/estimated/);
+assert.match(renderTimerRows([{...countdown,color:'#123456',warningColor:'#abcdef',warningSeconds:50,lowSeconds:2}],25000),/--timer-color:#abcdef/);
+assert.match(renderTimerRows([{...countdown,lowColor:'#fedcba',lowSeconds:50}],25000),/--timer-color:#fedcba/);
+assert.equal(renderTimerNotifications([{label:'Expired',expiresAt:100}],101),'');
+assert.match(renderTimerNotifications([{label:'Notice <safe>',expiresAt:1500}],1000),/Notice &lt;safe&gt;/);
 assert.doesNotMatch(renderSwing({enabled:true,lastAt:10000,intervalMs:2500,status:'tracking'},11000),/<button|<input|<select/);
 assert.match(renderSwing({enabled:true,lastAt:10000,intervalMs:2500,status:'tracking'},11000),/Observed 2\.5s/);
 assert.equal(renderSwing({enabled:false},11000),'');
@@ -66,12 +70,35 @@ assert.doesNotMatch(renderItem({name:injection,icon:'javascript:alert(1)',stats:
 assert.doesNotMatch(renderItem({name:'Test',icon:'https://untrusted.invalid/track.png'}),/<img/,'Overlay items never initiate arbitrary image requests');
 assert.match(renderItem({name:'Test',icon:'data:image/png;base64,YQ=='}),/<img/);
 assert.match(renderItem({name:'Sword',tier:3,slots:['Primary'],stats:{HP:10}}),/Tier 3/);
-assert.match(renderConsider({name:injection,drops:[]}),/&lt;img/);
-assert.match(renderConsider({name:'Target',myClassOnly:true,drops:[]}),/Turn off My Class/);
 assert.match(renderIntel({npcs:[{name:'Named',named:true,waypoint:'1,2,3',drops:[]}],canRoute:false}),/disabled title="Enable maps/);
 assert.doesNotMatch(renderIntel({npcs:[{name:'Named',waypoint:'1,2,3',drops:[]}],canRoute:true}),/disabled/);
 assert.match(renderIntel({npcs:[{name:'Named',drops:[{name:'One'},{name:'Two'},{name:'Three'},{name:'Four'}],dropCount:8}]}),/8 known drops · 3 shown/);
-assert.match(renderConsider({name:'Target',drops:[{name:'One'}],dropCount:20}),/20 known drops · 1 shown/);
+const allDrops = Array.from({length:25},(_,index) => ({name:`Synthetic drop ${index + 1}`}));
+const intel = {zone:'Fixture Zone',packVersion:'pack1',profileKey:'MNK|base|Classic',myClassOnly:true,npcs:[
+    {id:'normal-keeper',name:'Synthetic Keeper',raidInstance:false,drops:allDrops.slice(0,3),dropCount:25},
+    {id:'raid-keeper',name:'Synthetic Keeper',raidInstance:true,drops:[{name:'Raid-only item'}],dropCount:1}
+]};
+const key = intelNpcKey(intel.npcs[0],intel);
+const collapsed = renderIntel(intel);
+assert.match(collapsed,/Normal Zone/); assert.match(collapsed,/Raid Zone/);
+assert.match(collapsed,/raid-source-badge/);
+assert.match(collapsed,/Show More \(22\)/);
+assert.match(renderIntel({npcs:[{id:'budgeted',name:'Small omitted preview',drops:[],dropCount:2}]}),/Show More \(2\)/,'Snapshot budget can omit even a small preview without losing access to its drops');
+assert.doesNotMatch(collapsed,/Synthetic drop 25/,'Heartbeat snapshot holds only a small preview');
+const expanded = renderIntel(intel,{expanded:new Set([key]),dropCache:new Map([[key,{items:allDrops,total:25}]])});
+assert.match(expanded,/Synthetic drop 25/,'Expanded mob reveals every returned drop, beyond old 3/5 limits');
+assert.match(expanded,/Show Less/);
+assert.match(expanded,/25 known class drops/);
+assert.doesNotMatch(expanded,/3 shown/,'The displayed-drop count uses the full lazy response when expanded');
+assert.match(renderIntel(intel,{query:'keeper'}),/data-npc-index="1"/,'Grouping and filtering preserve original source indices');
+assert.doesNotMatch(renderIntel(intel,{query:'not found'}),/Synthetic Keeper/);
+assert.match(renderIntel({...intel,focusedNpcId:'raid-keeper'}),/aria-current="true"/);
+assert.notEqual(key,intelNpcKey(intel.npcs[1],intel),'Raid and normal versions of the same name keep independent expansion state');
+for (const changed of [{myClassOnly:false},{packVersion:'pack2'},{profileKey:'WAR|tier1|Classic'},{zone:'Other Zone'}]) assert.notEqual(key,intelNpcKey(intel.npcs[0],{...intel,...changed}),'Changed context invalidates cached class, tier, era, zone or dataset results');
+assert.equal(isRaidSource({instanceType:'raid'}),true);
+assert.equal(isRaidSource({raidInstance:'false'}),false);
+assert.match(renderIntel(intel,{expanded:new Set([key]),loading:new Set([key])}),/aria-busy="true"/);
+assert.match(renderIntel(intel,{expanded:new Set([key]),errors:new Map([[key,injection]])}),/&lt;img/);
 assert.equal(overlayControllerPresentation({supported:false}).supported,false);
 const controller = overlayControllerPresentation({panels:{parse:{visible:true,locked:true,passThrough:false}},recoveryShortcutRegistered:false});
 assert.equal(controller.panels[0].visible,true);

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { TimerEngine } from '../app/timer-engine.js';
 import { EQLogParser } from '../app/parser.js';
+import { Worker as NodeWorker } from 'node:worker_threads';
+import { TriggerMatcher } from '../app/trigger-matcher.js';
 
 let clock = Date.parse('2026-10-21T12:00:00Z');
 const fresh = options => new TimerEngine({ now:() => clock, ...options });
@@ -231,5 +233,127 @@ engine = fresh({ state:engine.exportState() });
 assert.equal(engine.snapshot().swing.enabled, false);
 assert.equal(engine.snapshot().swing.delayTenths, 60);
 assert.throws(() => engine.command('set-swing-delay', { delayTenths:-1 }), /Weapon delay/);
+
+// Exercise the actual shipped module worker, including a pathological regex.
+// Browser Worker semantics are adapted to Node's isolated thread for this test.
+const workerSource = `import { parentPort, workerData } from 'node:worker_threads';
+globalThis.self = { postMessage:value => parentPort.postMessage(value) };
+parentPort.on('message', data => self.onmessage?.({ data }));
+await import(workerData.url);`;
+let createdWorkers = 0, terminatedWorkers = 0;
+const createWorker = () => {
+    createdWorkers++;
+    const thread = new NodeWorker(new URL(`data:text/javascript,${encodeURIComponent(workerSource)}`), {
+        workerData:{ url:new URL('../app/workers/trigger-match.worker.js', import.meta.url).href }
+    });
+    const adapter = { postMessage:value => thread.postMessage(value), terminate() { terminatedWorkers++; return thread.terminate(); } };
+    thread.on('message', data => adapter.onmessage?.({ data })); thread.on('error', error => adapter.onerror?.(error));
+    return adapter;
+};
+const matcher = new TriggerMatcher({ createWorker, timeoutMs:150 });
+let match = await matcher.match({ mode:'regex', pattern:'(?P<target>.+?) takes (?<damage>\\d+) damage', line:'a synthetic rat takes 154 damage' });
+assert.equal(match.matched, true);
+assert.equal(match.groups.target, 'a synthetic rat');
+assert.equal(match.groups.damage, '154');
+assert.match((await matcher.match({ mode:'regex', pattern:'[', line:'test' })).error, /Invalid regular expression/);
+let responsiveTicks = 0;
+const responsiveness = setInterval(() => responsiveTicks++, 10);
+match = await matcher.match({ mode:'regex', pattern:'(a+)+$', line:'a'.repeat(5000) + '!' });
+clearInterval(responsiveness);
+assert.equal(match.timedOut, true);
+assert.ok(responsiveTicks >= 3, 'pathological matching leaves the owner event loop responsive');
+assert.ok(terminatedWorkers >= 1, 'timed-out regex worker is terminated');
+assert.equal((await matcher.match({ mode:'regex', pattern:'healthy', line:'healthy after timeout' })).matched, true);
+assert.ok(createdWorkers >= 2, 'a clean worker handles later expressions');
+matcher.close();
+
+let regexClock = clock;
+const regexEngine = new TimerEngine({ now:() => regexClock, matcher:new TriggerMatcher({ createWorker, timeoutMs:150 }) });
+regexEngine.command('save-definition', { label:'Damage trigger', type:'text', match:'regex', trigger:'(?P<target>.+?) takes (?<damage>\\d+) damage',
+    displayLabel:'{target}: {damage} damage', durationSeconds:30, zone:'First Zone', overlap:'add', cooldownSeconds:2,
+    action:'speak', speech:'Hit for {damage}', warningSeconds:5, warningAction:'sound', warningSound:'Tick', endAction:'sound', endSound:'Bell' });
+const regexId = regexEngine.snapshot().definitions[0].id;
+const regexStart = regexClock;
+const firstRegex = regexEngine.consume(null, { at:regexClock, live:true, logId:'regex-test', zone:'First Zone', text:'a synthetic rat takes 154 damage' });
+regexClock += 1000;
+const secondRegex = regexEngine.consume(null, { at:regexClock, live:true, logId:'regex-test', zone:'First Zone', text:'a synthetic bat takes 25 damage' });
+// Changing zone while a match is in flight cannot change the event-time filter.
+regexEngine.consume({ type:'zone', zone:'Second Zone', at:regexClock + 1000 }, { live:true, logId:'regex-test', zone:'Second Zone' });
+await Promise.all([firstRegex, secondRegex]);
+assert.equal(regexEngine.snapshot().timers.length, 1, 'event-order cooldown suppresses the later queued trigger');
+assert.equal(regexEngine.snapshot().timers[0].label, 'a synthetic rat: 154 damage');
+assert.equal(regexEngine.snapshot().timers[0].startedAt, regexStart);
+assert.equal(regexEngine.snapshot().timers[0].visible, false, 'queued regex retains its event-time zone after zoning');
+let cues = regexEngine.drainCues();
+assert.equal(cues.length, 1);
+assert.equal(cues[0].text, 'Hit for 154');
+assert.equal(cues[0].action, 'speak');
+assert.equal(regexEngine.drainCues().length, 0);
+regexClock = regexStart + 25000;
+regexEngine.snapshot(); cues = regexEngine.drainCues();
+assert.equal(cues[0].kind, 'warning');
+assert.equal(cues[0].sound, 'Tick');
+regexEngine.snapshot(); assert.equal(regexEngine.drainCues().length, 0, 'warning cue fires only once per cycle');
+regexClock = regexStart + 30000;
+regexEngine.snapshot(); assert.equal(regexEngine.drainCues()[0].kind, 'end');
+const preview = await regexEngine.preview(regexEngine.snapshot().definitions[0], 'a synthetic frog takes 42 damage');
+assert.equal(preview.label, 'a synthetic frog: 42 damage');
+assert.equal(regexEngine.snapshot().timers.length, 1, 'test preview never starts a timer or cue');
+assert.equal(regexEngine.drainCues().length, 0);
+regexEngine.command('set-zone', { zone:'First Zone' });
+await regexEngine.command('fire-definition', { id:regexId, line:'a synthetic frog takes 42 damage' });
+assert.equal(regexEngine.snapshot().timers.at(-1).label, 'a synthetic frog: 42 damage');
+regexEngine.command('save-definition', { label:'Notification only', type:'text', match:'regex', trigger:'Ready (?<who>\\w+)', displayLabel:'{who} ready',
+    timerEnabled:false, durationSeconds:30, notificationSeconds:4, action:'sound', sound:'Chime' });
+regexClock += 1000;
+await regexEngine.consume(null, { at:regexClock, live:true, logId:'regex-test', zone:'First Zone', text:'Ready Synthetic' });
+assert.equal(regexEngine.snapshot().notifications.at(-1).label, 'Synthetic ready');
+assert.equal(regexEngine.snapshot().timers.length, 2, 'notification-only trigger creates no countdown');
+regexClock += 4000; assert.equal(regexEngine.snapshot().notifications.length, 0);
+regexEngine.close();
+
+const quarantined = new TimerEngine({ now:() => regexClock, matcher:new TriggerMatcher({ createWorker, timeoutMs:150 }) });
+quarantined.command('save-definition', { label:'Unsafe expression', type:'text', match:'regex', trigger:'(a+)+$', durationSeconds:30 });
+quarantined.command('save-definition', { label:'Healthy expression', type:'text', match:'regex', trigger:'^a+!', durationSeconds:30 });
+await quarantined.consume(null, { at:regexClock, live:true, text:'a'.repeat(5000) + '!', zone:'Test' });
+assert.equal(quarantined.snapshot().definitions[0].enabled, false, 'timed-out live expression is quarantined');
+assert.match(quarantined.snapshot().definitions[0].error, /time limit/);
+assert.equal(quarantined.snapshot().timers[0].label, 'Healthy expression', 'one bounded recovery pass lets healthy expressions see the batch');
+assert.match(quarantined.snapshot().matchingStatus, /time limit/);
+quarantined.close();
+
+const pendingBatches = [];
+const burst = new TimerEngine({ now:() => regexClock, matcher:{
+    batch(definitions, lines) { return new Promise(resolve => pendingBatches.push({ definitions, lines, resolve })); }, close() {}
+} });
+burst.command('save-definition', { label:'Burst {match}', type:'text', match:'regex', trigger:'Message', timerEnabled:false, durationSeconds:30 });
+const burstWork = [];
+for (let i = 0; i < 300; i++) burstWork.push(burst.consume(null, { live:true, at:regexClock + i, text:`Message ${i}`, lineId:i }));
+assert.ok(burst.regexQueue.length <= 256);
+assert.match(burst.snapshot().matchingStatus, /busy/);
+await Promise.resolve();
+assert.equal(pendingBatches[0].lines.length, 128);
+while (pendingBatches.length) {
+    const batch = pendingBatches.shift();
+    batch.resolve({ results:batch.lines.map(line => ({ lineId:line.id, definitionId:batch.definitions[0].id, result:{ matched:true, line:line.text, match:line.text, groups:{} } })) });
+    await new Promise(resolve => setImmediate(resolve));
+}
+await Promise.all(burstWork);
+assert.equal(burst.snapshot().notifications.length, 4, 'burst notifications stay bounded');
+assert.equal(burst.snapshot().notifications.at(-1).label, 'Burst Message 255', 'batch results are applied in log event order before visible backpressure drops excess');
+burst.close();
+
+let finishEdited;
+const edited = new TimerEngine({ now:() => regexClock, matcher:{
+    batch(definitions, lines) { return new Promise(resolve => { finishEdited = () => resolve({ results:[{ lineId:lines[0].id, definitionId:definitions[0].id, result:{ matched:true, line:'Old', match:'Old', groups:{} } }] }); }); }, close() {}
+} });
+edited.command('save-definition', { label:'Editable', type:'text', match:'regex', trigger:'Old', durationSeconds:30 });
+const editingId = edited.snapshot().definitions[0].id;
+const oldWork = edited.consume(null, { live:true, at:regexClock, text:'Old' });
+await Promise.resolve();
+edited.command('save-definition', { id:editingId, label:'Editable', type:'text', match:'regex', trigger:'New', durationSeconds:30 });
+finishEdited(); await oldWork;
+assert.equal(edited.snapshot().timers.length, 0, 'editing a queued expression prevents stale matching results from firing');
+edited.close();
 
 console.log('Timer engine: manual/repeating timers, literal triggers, spawn deadlines, persistence/replay guards, parser enrichment and observed swing estimates passed.');

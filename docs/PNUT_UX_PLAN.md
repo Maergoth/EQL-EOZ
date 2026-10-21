@@ -5,7 +5,7 @@
 Requested October 21, 2026: add an application update flow comparable to PNUT,
 then implement actual modular native overlays and timers while retaining
 Eye of Zomm's custom tools. The updater, four native windows and timer engine
-are implemented in the 0.8.2 PR candidate, which is not yet merged or released.
+are implemented in the 0.8.3 PR candidate, which is not yet merged or released.
 Elitist/Carebear controls and Revenge are outside this design.
 
 Reference PNUT commit:
@@ -29,7 +29,7 @@ attack bar into HTML/CSS. Retain EQL colors. The pinned MIT license and attribut
 ship under THIRD_PARTY/PNUT; the Python runtime is not bundled.
 The EoZ implementation adds no runtime package dependency.
 
-## Application updates in 0.8.2
+## Application updates in 0.8.3
 
 Application updates and **Sync with Wiki** have distinct settings, state and
 actions. Startup checks release metadata without blocking first paint. A small
@@ -61,7 +61,7 @@ build installed normally; it cannot acquire new application code through wiki
 data synchronization. Unsigned beta installers remain unsigned; hash verification
 does not turn them into Authenticode-signed releases.
 
-## Native overlay workspace in 0.8.2
+## Native overlay workspace in 0.8.3
 
 Four transparent, frameless, always-on-top Electron BrowserWindows live outside
 the main application window. Choose **Overlays** in the header or use
@@ -73,8 +73,8 @@ numbers and hover/click/focus menus apply throughout.
 | Native window | Interactions and retained content |
 | --- | --- |
 | Parse | Overview, Damage, Healing, Taken and Session tabs; Live, Previous, Session and saved encounters; complete ability aggregates with a bounded recent feed |
-| Zone & loot | Named/rare NPCs, con colors, distance, class filter, tier-scaled drops, wiki links, waypoint copying and opt-in routing |
-| Consider | Current considered target, con, class filter and known drops; opens full item/NPC views |
+| Zone & loot | Normal Zone/Raid Zone named/rare sources, search, con/distance/class filter, all-drop Show More, wiki/waypoint/opt-in routing; considers/kills focus and expand with a mild flash/blip |
+| Map | Independent native client line-map canvas, shared location/floor/route state, follow/zoom and explicit full Map Explorer action |
 | Timers | Display-only PNUT ring/label/countdown rows and a thin observed swing bar; edits and actions live on the main Timers page |
 
 The parse header embeds its encounter dropdown and duration/total/rate; there
@@ -87,10 +87,14 @@ input, checkbox or per-row action buttons. It fits up to eight rows plus a
 22px swing bar (36px minimum), with controls available on hover. New/reset
 layouts place it beneath Parse. All configuration, countdown actions, trigger
 editing and swing preferences are on the main app's Timers page. Timer deadlines
-and rules are unchanged.
+are restored from absolute deadlines. The main editor supports literal and regex
+matching, PNUT named captures, preview, cooldown/overlap/enable rules, warning/end
+colors and optional sound/speech, plus notifications without a countdown. Regex
+work runs in an isolated deadline-limited worker.
 
 The main app retains the complete item browser and the single heavy Map
-Explorer. A panel's Map Explorer or Route action opens it explicitly. Opening
+Explorer. The lightweight native Map shares its owner data; a Map Explorer action
+opens the full viewer explicitly. Intel Route stays in the overlay. Opening
 panels never enables map/routing preferences that the player left off. This
 slice adds no duplicate 3D window, archive decoder, meshes or route worker.
 Native docking and layout presets are not implemented.
@@ -135,8 +139,10 @@ precision limits are documented in [TIMERS.md](TIMERS.md).
 Snapshots omit raw lines, paths and the full pack. The latest 20 encounters have
 complete aggregates before raw feeds are bounded to 120 events each. Session
 aggregates cover every retained encounter; the recent session feed has 60 events.
-Intel previews up to 50 NPCs and five drops each; considers show 16 drops, with
-full drop counts. Item icons share a 240 KiB budget. Host snapshots are ephemeral
+Intel sends three-drop previews with full counts. Authenticated lazy requests
+retrieve every matching drop, keyed by zone, source variant, class/profile and
+pack version; repeated heartbeats retain expansion. Item icons share a 240 KiB
+snapshot budget. Host snapshots are ephemeral
 and stay in local app processes. The metrics remain player outgoing damage,
 healing and incoming Taken damage. Rune **capacity granted** remains a separate
 session value and never counts as observed absorption. No group leaderboard is inferred.
@@ -150,6 +156,9 @@ added. Revenge and Elitist/Carebear controls remain excluded.
 | Native lifecycle, trust, layout and rescue | `desktop/overlay-host.cjs`, `desktop/overlay-preload.cjs`, `desktop/main.cjs`; `tests/native-overlays.mjs` |
 | Sole session, bounded summaries, timer persistence | `app/overlay-session.js`, `app/app.js`; `tests/overlay-session.mjs`, freshness integration in `tests/map-sync-integration.mjs` |
 | Native renderers and main controls | `app/overlay.html`, `app/overlay.css`, `app/overlay.js`, `app/overlay-controller.js`; `tests/overlay-ui.mjs` |
+| Native map data and canvas | `app/map-overlay-data.js`, `app/map-overlay.js`; `tests/map-overlay-data.mjs` and actual native smoke |
+| Regex matching and cues | `app/trigger-match-core.js`, `app/trigger-matcher.js`, `app/workers/trigger-match.worker.js`, `app/timer-alerts.js`; timer tests and actual Electron named-capture preview |
+| Inline missing-wiki notices | `app/wiki-discovery.js`, `app/wiki-discovery-ui.js`, `desktop/discovery-host.cjs`; complete-catalog checks, explicit source choice/clipboard capture, visible 15-second queue, hover/focus pause and local Ignore; no automatic upload or popup |
 | Timer rules and log grammar | `app/timer-engine.js`, `app/timer-settings.js`, `app/parser.js`; `tests/timer-engine.mjs`, `tests/timer-settings.mjs`, `tests/damage-taken.mjs`, `docs/TIMERS.md`; pinned PNUT `swing.py`, `timer_panel.py`, `triggers_runtime.py` |
 | Actual Windows runtime | `scripts/test-native-overlays.mjs`; isolated profile and synthetic log, never player files |
 | Installer source parity | `scripts/packaged-runtime-sources.mjs`, `scripts/check-packaged-artifact.mjs` |

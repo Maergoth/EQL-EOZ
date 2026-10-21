@@ -35,3 +35,4 @@ jobs:
       - run: npm run build:workers
       - run: npm run test:desktop-worker
       - run: npm run test:native-overlays
+      - run: npm run test:discovery-notices

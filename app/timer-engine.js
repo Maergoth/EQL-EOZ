@@ -1,5 +1,7 @@
 // Local timer state. The clock is injectable; log-triggered starts use the log's
 // timestamp, never its arrival time. No game input, network or audio lives here.
+import { TriggerMatcher } from './trigger-matcher.js';
+import { fillTriggerTemplate, matchTrigger, MAX_TRIGGER_PATTERN } from './trigger-match-core.js';
 const MAX_DURATION_SECONDS = 7 * 24 * 60 * 60;
 const MAX_DEFINITIONS = 64;
 const MAX_TIMERS = 100;
@@ -27,16 +29,30 @@ function definition(input, id) {
     const label = normalize(input.label).slice(0, 80);
     if (!label) throw new Error('Give the timer a name.');
     const type = ['manual', 'text', 'spawn'].includes(input.type) ? input.type : 'manual';
-    const trigger = normalize(input.trigger).slice(0, 240);
+    const mode = ['contains', 'starts', 'equals', 'regex'].includes(input.match) ? input.match : 'contains';
+    const rawTrigger = mode === 'regex' ? String(input.trigger ?? '').trim() : normalize(input.trigger);
+    if (rawTrigger.length > MAX_TRIGGER_PATTERN) throw new Error('Expressions are limited to 2048 characters.');
+    const trigger = rawTrigger;
     if (type === 'text' && !trigger) throw new Error('Enter the text that starts this timer.');
     const npc = normalize(input.npc).slice(0, 120);
     if (type === 'spawn' && !npc) throw new Error('Choose the NPC whose logged kill starts this timer.');
     return {
         id, label, type, durationSeconds:durationMs(input.durationSeconds) / 1000,
         repeat:Boolean(input.repeat), enabled:input.enabled !== false,
-        trigger, match:['contains', 'starts', 'equals'].includes(input.match) ? input.match : 'contains',
+        trigger, match:mode,
         zone:normalize(input.zone).slice(0, 120), npc,
-        overlap:['replace', 'ignore', 'add'].includes(input.overlap) ? input.overlap : 'replace'
+        overlap:['replace', 'ignore', 'add'].includes(input.overlap) ? input.overlap : 'replace',
+        timerEnabled:input.timerEnabled !== false, displayLabel:normalize(input.displayLabel).slice(0, 240),
+        ignorePunctuation:Boolean(input.ignorePunctuation),
+        cooldownSeconds:Math.max(0, Math.min(600, Number(input.cooldownSeconds) || 0)),
+        notificationSeconds:Math.max(1, Math.min(60, Number(input.notificationSeconds) || 4)),
+        warningSeconds:Math.max(0, Math.min(MAX_DURATION_SECONDS, Number(input.warningSeconds) || 0)),
+        lowSeconds:Math.max(0, Math.min(MAX_DURATION_SECONDS, input.lowSeconds === undefined ? 5 : Number(input.lowSeconds) || 0)),
+        ...Object.fromEntries(['color', 'warningColor', 'lowColor'].map(key => [key, /^#[0-9a-f]{6}$/i.test(input[key] || '') ? input[key] : ''])),
+        ...Object.fromEntries(['action', 'warningAction', 'endAction'].map(key => [key, ['sound', 'speak'].includes(input[key]) ? input[key] : 'none'])),
+        ...Object.fromEntries(['sound', 'warningSound', 'endSound'].map(key => [key, ['Chime', 'Tick', 'Bell', 'Alert', 'Falling'].includes(input[key]) ? input[key] : key === 'warningSound' ? 'Tick' : key === 'endSound' ? 'Bell' : 'Chime'])),
+        speech:String(input.speech || '{label}').slice(0, 240), warningSpeech:String(input.warningSpeech || '{label} soon').slice(0, 240), endSpeech:String(input.endSpeech || '{label}').slice(0, 240),
+        volume:Math.max(0, Math.min(100, input.volume === undefined ? 80 : Number(input.volume) || 0)), error:normalize(input.error).slice(0, 240)
     };
 }
 
@@ -52,7 +68,7 @@ function estimateInterval(times, seed = null) {
 }
 
 export class TimerEngine {
-    constructor({ now = () => Date.now(), definitions = [], state = null } = {}) {
+    constructor({ now = () => Date.now(), definitions = [], state = null, matcher } = {}) {
         this.now = typeof now === 'function' ? now : () => Number(now);
         this.definitions = [];
         this.timers = [];
@@ -61,10 +77,15 @@ export class TimerEngine {
         this.lastKill = null;
         this.watermarks = new Map();
         this.lastTokens = new Set();
+        this.matcher = matcher || new TriggerMatcher(); this.notifications = []; this.cues = []; this.lastFired = new Map();
+        this.regexQueue = []; this.regexScheduled = false; this.regexBusy = false; this.regexSequence = 0; this.matchingStatus = ''; this.closed = false;
         this.swingEnabled = true;
         this.swingDelayTenths = 0;
         this.resetSwing();
         const saved = state && typeof state === 'object' ? state : {};
+        if (Array.isArray(saved.lastFired)) for (const entry of saved.lastFired.slice(0, 64)) {
+            if (Array.isArray(entry) && typeof entry[0] === 'string' && finite(entry[1])) this.lastFired.set(entry[0], entry[1]);
+        }
         const savedDefinitions = Array.isArray(saved.definitions) ? saved.definitions : definitions;
         for (const item of savedDefinitions.slice(0, MAX_DEFINITIONS)) {
             try {
@@ -95,17 +116,18 @@ export class TimerEngine {
                     if (this.timers.some(entry => entry.id === item.id)) continue;
                     this.timers.push({
                         id:normalize(item.id).slice(0, 100), definitionId:normalize(item.definitionId).slice(0, 100),
-                        label:normalize(item.label).slice(0, 80), durationSeconds:total / 1000,
+                        label:normalize(item.label).slice(0, 240), durationSeconds:total / 1000,
                         repeat:Boolean(item.repeat), zone:normalize(item.zone).slice(0, 120),
                         npc:normalize(item.npc).slice(0, 120), source:['manual', 'text', 'spawn'].includes(item.source) ? item.source : 'manual',
                         startedAt:item.startedAt, expiresAt:item.status === 'running' ? item.expiresAt : null,
                         remainingMs:item.status === 'paused' ? item.remainingMs : 0,
-                        status:item.status, cycles:Number.isSafeInteger(item.cycles) && item.cycles > 0 ? item.cycles : 0
+                        status:item.status, cycles:Number.isSafeInteger(item.cycles) && item.cycles > 0 ? item.cycles : 0,
+                        ...this.timerPresentation(item), warned:Boolean(item.warned), endedCue:Boolean(item.endedCue)
                     });
                 } catch { /* Ignore corrupt persisted timer rows individually. */ }
             }
         }
-        this.advance(this.now());
+        this.restoring = true; this.advance(this.now()); this.restoring = false;
     }
 
     id(prefix) {
@@ -115,16 +137,121 @@ export class TimerEngine {
         return id;
     }
 
+    timerPresentation(input) {
+        const parsed = definition({ ...input, label:input.label || 'Timer', type:'manual', durationSeconds:input.durationSeconds || 1 }, 'presentation');
+        return Object.fromEntries(['warningSeconds', 'lowSeconds', 'color', 'warningColor', 'lowColor', 'action', 'sound', 'speech', 'volume', 'warningAction', 'warningSound', 'warningSpeech', 'endAction', 'endSound', 'endSpeech'].map(key => [key, parsed[key]]));
+    }
+
+    cue(input, kind, at, values = {}) {
+        if (this.restoring) return;
+        const prefix = kind === 'warning' ? 'warning' : kind === 'end' ? 'end' : '';
+        const action = input[prefix ? `${prefix}Action` : 'action'];
+        if (!['sound', 'speak'].includes(action)) return;
+        this.cues.push({ id:this.id('cue'), definitionId:input.definitionId || input.id || '', kind, action, sound:input[prefix ? `${prefix}Sound` : 'sound'] || 'Chime',
+            text:fillTriggerTemplate(input[prefix ? `${prefix}Speech` : 'speech'] || '{label}', { ...values, label:input.label }),
+            volume:input.volume ?? 80, at });
+        if (this.cues.length > 100) this.cues.splice(0, this.cues.length - 100);
+    }
+
+    drainCues() { return this.cues.splice(0); }
+
+    async preview(input, line = '') {
+        const item = definition(input, input.id || 'preview');
+        const result = await this.matcher.match({ pattern:item.type === 'spawn' ? item.npc : item.trigger || item.label, mode:item.type === 'spawn' ? 'contains' : item.match, ignorePunctuation:item.ignorePunctuation, line });
+        const values = { line:result.line || String(line), match:result.match || '', name:item.label, ...(result.groups || {}) };
+        return { ...result, label:fillTriggerTemplate(item.displayLabel || item.label, values) };
+    }
+
+    fire(item, at, match = {}, manual = false) {
+        const previous = this.lastFired.get(item.id);
+        if (!manual && finite(previous) && at - previous < item.cooldownSeconds * 1000) return false;
+        if (item.overlap === 'ignore' && this.timers.some(timer => timer.definitionId === item.id && timer.status !== 'ended')) return false;
+        const values = { name:item.label, line:match.line || '', match:match.match || '', ...(match.groups || {}) };
+        const label = fillTriggerTemplate(item.displayLabel || item.label, values);
+        if (item.timerEnabled !== false) {
+            if (at + item.durationSeconds * 1000 <= this.now()) return false;
+            this.start({ ...item, label,
+                speech:fillTriggerTemplate(item.speech, { ...values, label }), warningSpeech:fillTriggerTemplate(item.warningSpeech, { ...values, label }), endSpeech:fillTriggerTemplate(item.endSpeech, { ...values, label }) }, at, item.type);
+        } else {
+            const expiresAt = at + item.notificationSeconds * 1000;
+            if (expiresAt <= this.now()) return false;
+            this.notifications.push({ id:this.id('notification'), definitionId:item.id, label, createdAt:at, expiresAt });
+            this.notifications = this.notifications.slice(-4);
+        }
+        this.lastFired.set(item.id, at);
+        this.cue({ ...item, label }, 'trigger', at, values);
+        return true;
+    }
+
+    queueRegex(record) {
+        if (this.closed) return Promise.resolve(false);
+        if (this.regexQueue.length >= 256) {
+            this.matchingStatus = 'Trigger matcher is busy; excess log lines were skipped.';
+            return Promise.resolve(false);
+        }
+        const promise = new Promise(resolve => this.regexQueue.push({ ...record, id:++this.regexSequence, resolve }));
+        if (!this.regexScheduled) { this.regexScheduled = true; queueMicrotask(() => { this.regexScheduled = false; void this.flushRegex(); }); }
+        return promise;
+    }
+
+    async flushRegex() {
+        if (this.regexBusy || this.closed || !this.regexQueue.length) return;
+        this.regexBusy = true;
+        const records = this.regexQueue.splice(0, 128);
+        const definitions = this.definitions.filter(item => item.enabled && item.type === 'text' && item.match === 'regex').map(item => ({ ...item }));
+        let result;
+        try {
+            result = await this.matcher.batch(definitions, records.map(record => ({ id:record.id, text:record.text })));
+            if (result.error && result.definitionId) {
+                const offender = this.definitions.find(item => item.id === result.definitionId);
+                if (offender) { offender.enabled = false; offender.error = result.error; }
+                this.matchingStatus = result.error;
+                // One bounded recovery attempt lets healthy expressions still
+                // see this batch. Two unsafe patterns cannot create a long queue.
+                result = await this.matcher.batch(definitions.filter(item => item.id !== result.definitionId), records.map(record => ({ id:record.id, text:record.text })));
+            }
+            if (result.error) this.matchingStatus = result.error;
+            if (result.error && result.definitionId) {
+                const offender = this.definitions.find(item => item.id === result.definitionId);
+                if (offender) { offender.enabled = false; offender.error = result.error; }
+            }
+            if (this.closed) { for (const record of records) record.resolve(false); return; }
+            const matches = new Map((result.results || []).map(item => [`${item.lineId}|${item.definitionId}`, item.result]));
+            for (const record of records) {
+                let changed = record.changed;
+                for (const captured of definitions) {
+                    if (!record.rules.includes(`${captured.id}|${tokenHash(captured.trigger)}`)) continue;
+                    const item = this.definitions.find(item => item.id === captured.id && item.enabled && item.trigger === captured.trigger && item.match === 'regex');
+                    if (!item || (item.zone && fold(item.zone) !== fold(record.zone))) continue;
+                    const match = matches.get(`${record.id}|${item.id}`);
+                    if (match?.error) { item.enabled = false; item.error = match.error; this.matchingStatus = match.error; continue; }
+                    if (match?.matched) { try { changed = this.fire(item, record.at, match) || changed; } catch { this.matchingStatus = 'A triggered timer could not start. Dismiss finished countdowns and retry.'; } }
+                }
+                record.resolve(changed);
+            }
+        } catch { this.matchingStatus = 'Trigger matching failed. Review the expression and retry.'; for (const record of records) record.resolve(record.changed); }
+        finally { this.regexBusy = false; if (this.regexQueue.length && !this.closed) void this.flushRegex(); }
+    }
+
     advance(at) {
         if (!finite(at)) throw new Error('Timer clock must be a finite timestamp.');
+        this.notifications = this.notifications.filter(item => item.expiresAt > at);
         for (const timer of this.timers) {
-            if (timer.status !== 'running' || at < timer.expiresAt) continue;
+            if (timer.status !== 'running') continue;
+            if (at < timer.expiresAt) {
+                if (!timer.warned && timer.warningSeconds && timer.expiresAt - at <= timer.warningSeconds * 1000) {
+                    timer.warned = true; this.cue(timer, 'warning', at);
+                }
+                continue;
+            }
+            if (!timer.endedCue) { timer.endedCue = true; this.cue(timer, 'end', at); }
             if (timer.repeat) {
                 const interval = timer.durationSeconds * 1000;
                 const cycles = Math.floor((at - timer.expiresAt) / interval) + 1;
                 timer.cycles += cycles;
                 timer.expiresAt += cycles * interval;
                 timer.startedAt = timer.expiresAt - interval;
+                timer.warned = false; timer.endedCue = false;
             } else {
                 timer.status = 'ended';
                 timer.expiresAt = null;
@@ -135,7 +262,7 @@ export class TimerEngine {
 
     start(input, at, source = 'manual') {
         const total = durationMs(input.durationSeconds);
-        const label = normalize(input.label).slice(0, 80);
+        const label = normalize(input.label).slice(0, 240);
         if (!label) throw new Error('Give the timer a name.');
         const associated = input.id ? this.timers.filter(timer => timer.definitionId === input.id && timer.status !== 'ended') : [];
         if (associated.length && input.overlap === 'ignore') return associated[0];
@@ -149,7 +276,8 @@ export class TimerEngine {
             id:this.id('timer'), definitionId:input.id || '', label, source,
             durationSeconds:total / 1000, repeat:Boolean(input.repeat),
             zone:normalize(input.zone), npc:normalize(input.npc),
-            startedAt:at, expiresAt:at + total, remainingMs:total, status:'running', cycles:0
+            startedAt:at, expiresAt:at + total, remainingMs:total, status:'running', cycles:0,
+            ...this.timerPresentation(input), warned:false, endedCue:false
         };
         this.timers.push(timer);
         this.advance(this.now());
@@ -192,19 +320,23 @@ export class TimerEngine {
             this.lastKill = { name:normalize(event.victim), zone:this.zone, at };
         }
         this.observeSwing(event, at);
-        const text = fold(String(context.text || event?.text || '').replace(/^\[[^\]]+\]\s*/, ''));
+        const text = String(context.text || event?.text || '').replace(/^\[[^\]]+\]\s*/, '');
         let changed = false;
         for (const item of this.definitions) {
             if (!item.enabled || (item.zone && fold(item.zone) !== fold(this.zone))) continue;
-            const trigger = fold(item.trigger);
-            const textMatch = item.type === 'text' && text && (item.match === 'equals' ? text === trigger : item.match === 'starts' ? text.startsWith(trigger) : text.includes(trigger));
+            if (item.match === 'regex' && item.type === 'text') continue;
+            const match = item.type === 'text' && text ? matchTrigger({ pattern:item.trigger, mode:item.match, ignorePunctuation:item.ignorePunctuation, line:text }) : null;
+            const textMatch = match?.matched;
             const spawnMatch = item.type === 'spawn' && event?.type === 'kill' && fold(item.npc) === fold(event.victim);
             if (!textMatch && !spawnMatch) continue;
             // A backlog event whose countdown already elapsed cannot briefly
             // revive a repeating trigger when read after a pause/reconnect.
-            if (at + item.durationSeconds * 1000 <= this.now()) continue;
             if (this.timers.filter(timer => timer.status !== 'ended').length >= MAX_TIMERS && item.overlap === 'add') continue;
-            try { this.start(item, at, item.type); changed = true; } catch { /* Capacity must never stop log consumption. */ }
+            try { changed = this.fire(item, at, match || { line:text, match:event?.victim || '' }) || changed; } catch { /* Capacity must never stop log consumption. */ }
+        }
+        if (text && this.definitions.some(item => item.enabled && item.type === 'text' && item.match === 'regex' && (!item.zone || fold(item.zone) === fold(this.zone)))) {
+            return this.queueRegex({ text, at, zone:this.zone, changed,
+                rules:this.definitions.filter(item => item.enabled && item.type === 'text' && item.match === 'regex').map(item => `${item.id}|${tokenHash(item.trigger)}`) });
         }
         return changed;
     }
@@ -257,15 +389,28 @@ export class TimerEngine {
             const index = this.definitions.findIndex(item => item.id === input.id);
             if (index === -1 && this.definitions.length >= MAX_DEFINITIONS) throw new Error('There are 64 saved timers. Remove one before adding another.');
             const saved = definition(input, index === -1 ? this.id('definition') : input.id);
+            saved.error = '';
             if (index === -1) this.definitions.push(saved); else this.definitions[index] = saved;
         } else if (action === 'remove-definition') {
             this.definitions = this.definitions.filter(item => item.id !== args.id);
             this.timers = this.timers.filter(item => item.definitionId !== args.id);
+            this.notifications = this.notifications.filter(item => item.definitionId !== args.id);
+            this.cues = this.cues.filter(item => item.definitionId !== args.id); this.lastFired.delete(args.id);
+        } else if (action === 'fire-definition') {
+            const item = this.definitions.find(entry => entry.id === args.id);
+            if (!item) throw new Error('Choose a saved trigger first.');
+            if (item.zone && fold(item.zone) !== fold(this.zone)) throw new Error(`This timer is limited to ${item.zone}.`);
+            if (args.line && item.type === 'text') return this.preview(item, args.line).then(match => {
+                if (match.error) throw new Error(match.error);
+                if (!match.matched) throw new Error('The test line does not match this trigger.');
+                this.fire(item, at, match, true); return this.snapshot();
+            });
+            this.fire(item, at, { line:args.line || '', match:'' }, true);
         } else if (action === 'start') {
             const item = this.definitions.find(entry => entry.id === (args.definitionId || args.id));
             if ((args.definitionId || args.id) && !item) throw new Error('That saved timer no longer exists.');
             if (item?.zone && fold(item.zone) !== fold(this.zone)) throw new Error(`This timer is limited to ${item.zone}.`);
-            this.start(item || args, at);
+            if (item) this.fire(item, at, {}, true); else this.start(args, at);
         } else if (action === 'create-spawn') {
             if (!this.lastKill) throw new Error('A logged NPC kill is needed before starting a spawn countdown.');
             const kill = this.lastKill;
@@ -302,6 +447,7 @@ export class TimerEngine {
                 timer.remainingMs = timer.durationSeconds * 1000;
                 timer.status = 'running';
                 timer.cycles = 0;
+                timer.warned = false; timer.endedCue = false;
             }
         } else throw new Error('Unknown timer action.');
         return this.snapshot(at);
@@ -315,6 +461,7 @@ export class TimerEngine {
         const status = stale ? 'idle' : casting ? 'casting' : !intervalMs ? 'learning' : elapsed >= intervalMs ? 'waiting' : 'tracking';
         return {
             definitions:clone(this.definitions), zone:this.zone, lastKill:this.lastKill ? { ...this.lastKill } : null,
+            notifications:clone(this.notifications), matchingStatus:this.matchingStatus,
             timers:this.timers.map(timer => {
                 const remainingMs = timer.status === 'running' ? Math.max(0, timer.expiresAt - at) : timer.remainingMs;
                 return { ...timer, remainingMs, progress:clamp(remainingMs / (timer.durationSeconds * 1000)), visible:!timer.zone || fold(timer.zone) === fold(this.zone) };
@@ -330,6 +477,8 @@ export class TimerEngine {
         this.advance(this.now());
         return clone({ schemaVersion:1, definitions:this.definitions, timers:this.timers, zone:this.zone,
             lastKill:this.lastKill, watermarks:[...this.watermarks], tokens:[...this.lastTokens],
-            swingEnabled:this.swingEnabled, swingDelayTenths:this.swingDelayTenths });
+            swingEnabled:this.swingEnabled, swingDelayTenths:this.swingDelayTenths, lastFired:[...this.lastFired] });
     }
+
+    close() { this.closed = true; this.matcher.close?.(); for (const record of this.regexQueue.splice(0)) record.resolve(false); }
 }

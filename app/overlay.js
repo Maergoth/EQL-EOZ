@@ -1,6 +1,7 @@
 // A lightweight native-window renderer. Session ownership and all log reads stay
 // in the main app; opening or reloading a panel cannot create another parser.
-const PANELS = Object.freeze({ parse:'Parse', intel:'Zone & loot', consider:'Consider', timers:'Timers' });
+import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
+const PANELS = Object.freeze({ parse:'Parse', intel:'Zone & loot', timers:'Timers', map:'Map' });
 // PNUT M&M 28bbf8d _TabStrip/_HeaderBar and compact MeterTable, translated
 // to native Electron panels with EQL colors and this app's supported metrics.
 export const TABS = ['overview', 'damage', 'healing', 'taken', 'session'];
@@ -82,24 +83,40 @@ function knownDropLabel(source, myClassOnly, limit = Infinity) {
     const total = number(source.dropCount ?? source.drops?.length);
     return `${total} known ${myClassOnly ? 'class ' : ''}drops${total > shown ? ` · ${shown} shown` : ''}`;
 }
-export function renderItem(item = {}, index = 0, context = 'consider') {
+export const isRaidSource = source => source?.raidInstance === true || source?.instanceType === 'raid';
+export const intelNpcKey = (npc, context = '') => {
+    const intel = typeof context === 'object' && context ? context : {zone:context};
+    return JSON.stringify([String(intel.zone || ''),Boolean(intel.myClassOnly),String(intel.packVersion || ''),String(intel.profileKey || ''),String(npc?.id || npc?.name || ''),isRaidSource(npc)]);
+};
+export function renderItem(item = {}, index = 0, context = '') {
     const icon = itemIcon(item.icon);
     const stats = Object.entries(item.stats || {}).filter(([,value]) => ['string', 'number'].includes(typeof value)).slice(0, 18);
     return `<div class="item-card"><div class="item-heading">${icon ? `<img class="item-icon" src="${attr(icon)}" alt="">` : '<span class="item-icon item-icon-placeholder" aria-hidden="true">◇</span>'}<div><button type="button" data-item-index="${index}" data-item-context="${attr(context)}">${escapeHtml(item.name || 'Unknown item')}</button><div class="item-meta">${escapeHtml((item.slots || []).join(' · ') || 'Item')}${number(item.tier) ? ` · Tier ${number(item.tier)}` : ' · Base'}</div></div></div>${stats.length ? `<div class="item-stats">${stats.map(([key,value]) => `${escapeHtml(key)} ${escapeHtml(value)}`).join(' · ')}</div>` : ''}</div>`;
 }
-export function renderIntel(intel = {}) {
-    const npcs = Array.isArray(intel.npcs) ? intel.npcs : [];
-    return npcs.length ? npcs.map((npc,index) => `<article class="npc-row con-${conKey(npc.con)}"><div class="npc-heading"><strong>${escapeHtml(npc.name)}</strong><small>${npc.level || npc.levelMax ? `L${escapeHtml(npc.level || (npc.levelMin === npc.levelMax ? npc.levelMax : `${npc.levelMin}–${npc.levelMax}`))}` : ''}${Number.isFinite(npc.distance) ? ` · ${fmt(npc.distance)}u` : ''}</small></div><div class="npc-meta">${npc.named ? 'Named' : npc.rare ? 'Rare' : 'NPC'} · ${knownDropLabel(npc, intel.myClassOnly, 3)}${npc.waypoint ? ' · waypoint available' : ''}</div><div class="row-actions"><button type="button" data-npc-action="route" data-npc-index="${index}" ${!intel.canRoute || !npc.waypoint ? 'disabled title="Enable maps and use a current logged location in the main app"' : ''}>Route</button><button type="button" data-npc-action="copy-waypoint" data-npc-index="${index}" ${!npc.waypoint ? 'disabled' : ''}>Copy /waypoint</button><button type="button" data-npc-action="details" data-npc-index="${index}">Details</button><button type="button" data-npc-action="wiki" data-npc-index="${index}">Wiki</button></div>${(npc.drops || []).slice(0, 3).map((item,itemIndex) => renderItem(item,itemIndex,`intel:${index}`)).join('')}</article>`).join('') : empty('No matching named or rare NPCs in the current zone. Check your log and class filters in the main app.');
-}
-export function renderConsider(consider = {}) {
-    if (!consider.name) return empty('Consider a target in game to see its known loot here.');
-    return `<h2 class="consider-heading con-${conKey(consider.con)}">${escapeHtml(consider.name)}</h2><div class="npc-meta">${consider.level ? `Level ${escapeHtml(consider.level)} · ` : ''}${escapeHtml(consider.con?.label || consider.con || 'Unknown con')} · ${knownDropLabel(consider, consider.myClassOnly)}</div><div class="row-actions"><button type="button" data-consider-action="route" ${consider.canRoute === false || !consider.waypoint ? 'disabled' : ''}>Route</button><button type="button" data-consider-action="details">NPC details</button></div><div class="drops-list">${(consider.drops || []).map((item,index) => renderItem(item,index)).join('') || empty(consider.myClassOnly ? 'No known drops match your class. Turn off My Class to see everything.' : 'No drops are known for this NPC in the current dataset.')}</div>`;
+export function renderIntel(intel = {}, {query = '', expanded = new Set(), loading = new Set(), dropCache = new Map(), errors = new Map()} = {}) {
+    const needle = String(query).trim().toLocaleLowerCase();
+    const npcs = (Array.isArray(intel.npcs) ? intel.npcs : []).map((npc,index) => ({npc,index})).filter(({npc}) => !needle || String(npc.name).toLocaleLowerCase().includes(needle));
+    return [false,true].map(raid => {
+        const sources = npcs.filter(({npc}) => isRaidSource(npc) === raid);
+        return `<section class="intel-group ${raid ? 'is-raid' : ''}" data-intel-section="${raid ? 'raid' : 'normal'}" aria-label="${raid ? 'Raid Zone' : 'Normal Zone'}"><h2>${raid ? 'Raid Zone' : 'Normal Zone'} <span>${sources.length}</span></h2>${sources.length ? sources.map(({npc,index}) => {
+            const key = intelNpcKey(npc,intel);
+            const open = expanded.has(key);
+            const cached = dropCache.get(key);
+            const drops = Array.isArray(cached?.items) ? cached.items : Array.isArray(npc.drops) ? npc.drops : [];
+            const shown = open ? drops : drops.slice(0,3);
+            const total = number(cached?.total ?? npc.dropCount ?? drops.length);
+            const previewCount = Math.min(3,(npc.drops || []).length);
+            const pending = open && loading.has(key) && drops.length < total;
+            const focused = Boolean(intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
+            return `<article class="npc-row con-${conKey(npc.con)} ${focused ? 'is-focused' : ''}" data-intel-key="${attr(key)}" ${focused ? 'aria-current="true"' : ''}><div class="npc-heading"><strong>${escapeHtml(npc.name)}</strong>${raid ? '<span class="raid-source-badge">Raid</span>' : ''}<small>${npc.level || npc.levelMax ? `L${escapeHtml(npc.level || (npc.levelMin === npc.levelMax ? npc.levelMax : `${npc.levelMin}–${npc.levelMax}`))}` : ''}${Number.isFinite(npc.distance) ? ` · ${fmt(npc.distance)}u` : ''}</small></div><div class="npc-meta">${npc.named ? 'Named' : npc.rare ? 'Rare' : 'NPC'} · ${knownDropLabel({...npc,drops,dropCount:total},intel.myClassOnly,shown.length)}${npc.waypoint ? ' · waypoint available' : ''}</div><div class="row-actions"><button type="button" data-npc-action="route" data-npc-index="${index}" ${!intel.canRoute || !npc.waypoint ? 'disabled title="Enable maps and use a current logged location in the main app"' : ''}>Route</button><button type="button" data-npc-action="copy-waypoint" data-npc-index="${index}" ${!npc.waypoint ? 'disabled' : ''}>Copy /waypoint</button><button type="button" data-npc-action="details" data-npc-index="${index}">Details</button><button type="button" data-npc-action="wiki" data-npc-index="${index}">Wiki</button></div><div class="npc-drop-list" ${pending ? 'aria-busy="true"' : ''}>${shown.map((item,itemIndex) => renderItem(item,itemIndex,`intel:${index}`)).join('')}</div>${total > previewCount ? `<button type="button" class="show-more-drops" data-intel-expand="${attr(key)}" data-npc-index="${index}" aria-expanded="${open}">${open ? 'Show Less' : `Show More (${Math.max(0,total - previewCount)})`}</button>` : ''}${pending ? '<div class="npc-meta">Loading remaining drops…</div>' : ''}${open && errors.has(key) ? `<div class="intel-drop-error" role="status">${escapeHtml(errors.get(key))}</div><button type="button" class="show-more-drops" data-intel-retry="${attr(key)}" data-npc-index="${index}">Retry loading drops</button>` : ''}</article>`;
+        }).join('') : `<div class="intel-empty">${needle ? 'No matching mobs.' : raid ? 'No raid-instance mobs in this zone.' : 'No matching named or rare mobs.'}</div>`}</section>`;
+    }).join('');
 }
 function panelMarkup(panel) {
     if (panel === 'parse') return `<nav class="parse-tabs" aria-label="Parse metrics">${TABS.map(tab => `<button type="button" data-tab="${tab}" aria-pressed="${tab === 'damage'}" class="${tab === 'damage' ? 'is-active' : ''}">${TAB_LABELS[tab]}</button>`).join('')}</nav><div id="parse-body"></div>`;
-    if (panel === 'intel') return '<div class="panel-toolbar"><label><input id="class-filter" type="checkbox"> My Class</label><button type="button" data-open-view="map">Map ↗</button></div><div id="intel-body"></div>';
-    if (panel === 'consider') return '<div class="panel-toolbar"><label><input id="class-filter" type="checkbox"> My Class</label><button type="button" data-open-view="items">Items ↗</button></div><div id="consider-body"></div>';
-    return '<div class="timer-display"><div id="timer-list"></div><div id="swing-body"></div></div>';
+    if (panel === 'intel') return '<div class="panel-toolbar"><label><input id="class-filter" type="checkbox"> My Class</label><button type="button" data-open-view="map">Map ↗</button></div><input id="intel-search" class="intel-search" type="search" maxlength="160" placeholder="Find named or rare mob…" aria-label="Search named and rare mobs"><span id="intel-attention" class="sr-only" role="status" aria-live="polite"></span><div id="intel-body"></div>';
+    if (panel === 'map') return '<div id="native-map-root"></div>';
+    return '<div class="timer-display"><div id="timer-list"></div><div id="swing-body"></div></div><div id="wiki-discovery-notices"></div>';
 }
 export function timerView(timer = {}, now = Date.now()) {
     const durationMs = number(timer.durationSeconds) * 1000;
@@ -111,10 +128,14 @@ export function timerView(timer = {}, now = Date.now()) {
 export function renderTimerRows(timers = [], now = Date.now()) {
     return timers.length ? timers.map(source => {
         const timer = timerView(source, now);
-        const color = timer.remainingMs <= 5000 ? '#dc7777' : timer.remainingMs <= 15000 ? '#d8b75c' : '#80b892';
+        const validColor = (value,fallback) => /^#[0-9a-f]{6}$/i.test(value || '') ? value : fallback;
+        const color = timer.remainingMs <= number(timer.lowSeconds ?? 5)*1000 ? validColor(timer.lowColor,'#dc7777') : timer.warningSeconds && timer.remainingMs <= number(timer.warningSeconds)*1000 ? validColor(timer.warningColor,'#d8b75c') : validColor(timer.color,'#80b892');
         const status = timer.status === 'paused' ? ' · paused' : timer.status === 'ended' ? ' · ended' : '';
         return `<div class="timer-row ${timer.status === 'ended' ? 'is-ended' : ''}" style="--remaining:${(timer.fraction * 100).toFixed(1)}%;--timer-color:${color}" title="${attr(timer.label)}${timer.source === 'spawn' ? ' · estimated respawn' : ''}${status}"><span class="timer-ring" aria-hidden="true"></span><span class="timer-label">${escapeHtml(timer.label || 'Timer')}${timer.status === 'paused' ? ' Ⅱ' : ''}</span><span class="timer-value">${durationLabel(timer.remainingMs)}</span><span class="timer-line" aria-hidden="true"><span></span></span></div>`;
     }).join('') : empty('Timers: none running');
+}
+export function renderTimerNotifications(notifications = [], now = Date.now()) {
+    return notifications.filter(item => number(item.expiresAt) > now).slice(-4).map(item => `<div class="timer-notification" style="opacity:${Math.min(1,Math.max(0,(number(item.expiresAt)-now)/1000)).toFixed(2)}">${escapeHtml(item.label)}</div>`).join('');
 }
 export function renderSwing(swing = {}, now = Date.now()) {
     if (swing.enabled === false) return '';
@@ -137,12 +158,42 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         // timer management live in the main app; one hover button opens it.
         $('.hover-menu').innerHTML = '<button class="chrome-button" type="button" data-open-view="timers" aria-label="Edit timers" title="Edit timers">⚙</button>';
     }
-    let state = {}, scope = 'live', tab = 'damage', disposed = false, status = '', request = 0, stateGeneration = 0, noticeGeneration = 0, lastNoticeId = '', unsubscribe;
+    let state = {}, scope = 'live', tab = 'damage', disposed = false, status = '', request = 0, stateGeneration = 0, noticeGeneration = 0, lastNoticeId = '', unsubscribe, mapController, discoveryNotices, noticeResizeObserver, measuredTimerHeight = 0;
+    let intelQuery = '', lastIntelFocus = '', lastIntelFocusEvent = '';
+    const expandedIntel = new Set(), intelLoading = new Map(), intelDropCache = new Map(), intelErrors = new Map();
     const listeners = [];
     const listen = (target,name,callback) => { target?.addEventListener(name,callback); listeners.push(() => target?.removeEventListener(name,callback)); };
     const session = () => state.snapshot?.session || {};
     const replace = (element, html) => { if (element && element.innerHTML !== html) element.innerHTML = html; };
     const report = message => { status = message; $('#overlay-status').textContent = message; };
+    function measureTimers() {
+        if (disposed || panel !== 'timers') return;
+        const height = Math.max(36,Math.ceil(10 + ['#timer-list','#swing-body','#wiki-discovery-notices'].reduce((sum,selector) => sum + ($('#panel-content').querySelector(selector)?.getBoundingClientRect().height || 0),0)));
+        if (height !== measuredTimerHeight) {measuredTimerHeight = height; void Promise.resolve(bridge?.action?.('content-height',height)).catch(() => {});}
+    }
+    if (panel === 'timers') {
+        discoveryNotices = mountWikiDiscoveryNotices({root:$('#wiki-discovery-notices'),action:(name,payload) => bridge.discoveryAction(name,payload),now,setInterval,clearInterval,onSizeChange:measureTimers});
+        if (globalThis.ResizeObserver) {noticeResizeObserver = new globalThis.ResizeObserver(measureTimers); noticeResizeObserver.observe($('#wiki-discovery-notices'));}
+    }
+    const currentIntelNpc = key => (session().intel?.npcs || []).find(npc => intelNpcKey(npc,session().intel) === key);
+    async function loadIntelDrops(npc,key) {
+        if (disposed || state.sessionAvailable !== true || intelLoading.has(key) || !bridge?.action) return;
+        const token = Symbol(key);
+        intelLoading.set(key,token); intelErrors.delete(key); render();
+        try {
+            const result = await bridge.action('session:intel-drops',{npc:npc.name,zone:session().intel?.zone || session().zone,raidInstance:isRaidSource(npc)});
+            if (disposed || intelLoading.get(key) !== token || !currentIntelNpc(key)) return;
+            if (!Array.isArray(result?.items)) throw new Error(result?.error || 'The remaining drops could not be loaded.');
+            intelDropCache.set(key,{items:result.items,total:number(result.total ?? result.items.length)});
+            // Keep memory bounded across long sessions with many visited zones.
+            while (intelDropCache.size > 80) intelDropCache.delete(intelDropCache.keys().next().value);
+        } catch (error) {
+            if (!disposed && currentIntelNpc(key)) intelErrors.set(key,String(error?.message || 'The remaining drops could not be loaded.'));
+        } finally {
+            if (intelLoading.get(key) === token) intelLoading.delete(key);
+            if (!disposed && currentIntelNpc(key)) render();
+        }
+    }
     async function action(command,value) {
         if (disposed || !bridge?.action) return;
         if (command.startsWith('session:') && state.sessionAvailable !== true) { report('Session paused · open main app.'); return; }
@@ -158,8 +209,11 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     function renderTimers() {
         const timers = session().timers || {};
         const visible = (timers.timers || []).filter(timer => timer.visible !== false);
-        replace($('#timer-list'), !visible.length && timers.swing?.enabled !== false ? '' : renderTimerRows(visible, now()));
+        const notifications = renderTimerNotifications(timers.notifications,now());
+        replace($('#timer-list'), (!visible.length && (timers.swing?.enabled !== false || notifications) ? '' : renderTimerRows(visible, now()))+notifications);
         replace($('#swing-body'), renderSwing(timers.swing, now()));
+        discoveryNotices?.render(session().discovery || []);
+        measureTimers();
     }
     function render() {
         if (disposed) return;
@@ -186,8 +240,31 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             $('#encounter-stats').hidden = tab === 'session' || !view.available;
             replace($('#encounter-stats'), `${view.ended ? '<span class="ended">ended</span>' : ''}<span>${durationLabel(view.duration * 1000)}</span><span class="header-total">${fmt(view.metrics.damage)} <small>dmg</small></span><span><strong>${fmt(view.metrics.dps)}</strong> <small>dps</small></span>`);
             replace($('#parse-body'), renderParseContent(view));
-        } else if (panel === 'intel') { $('#overlay-title').textContent = s.zone || 'Zone & loot'; $('#class-filter').checked = Boolean(s.intel?.myClassOnly); replace($('#intel-body'), renderIntel(s.intel)); }
-        else if (panel === 'consider') { $('#overlay-title').textContent = s.consider?.name || 'Consider'; $('#class-filter').checked = Boolean(s.consider?.myClassOnly); replace($('#consider-body'), renderConsider(s.consider)); }
+        } else if (panel === 'intel') {
+            const intel = s.intel || {};
+            $('#overlay-title').textContent = s.zone || 'Zone & loot'; $('#class-filter').checked = Boolean(intel.myClassOnly);
+            const focused = (intel.npcs || []).find(npc => intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
+            const key = focused ? intelNpcKey(focused,intel) : '';
+            const focusEvent = JSON.stringify([intel.zone,intel.focusedNpcId,intel.focusSequence]);
+            const focus = focused ? `${key}|${focusEvent}` : '';
+            const freshFocus = Boolean(state.sessionAvailable === true && focused && focus !== lastIntelFocus);
+            if (freshFocus) {
+                lastIntelFocus = focus; expandedIntel.add(key);
+                if (focusEvent !== lastIntelFocusEvent) {
+                    lastIntelFocusEvent = focusEvent;
+                    if (!String(focused.name).toLocaleLowerCase().includes(intelQuery.trim().toLocaleLowerCase())) { intelQuery = ''; $('#intel-search').value = ''; }
+                    $('#intel-attention').textContent = `${focused.name} · drops selected`;
+                    const shell = $('#overlay'); shell.classList.remove('intel-focus-flash'); void shell.offsetWidth; shell.classList.add('intel-focus-flash');
+                    shell.dataset.focusSequence = String(intel.focusSequence || '');
+                }
+            } else if (!focused) { lastIntelFocus = ''; }
+            replace($('#intel-body'), renderIntel(intel,{query:intelQuery,expanded:expandedIntel,loading:intelLoading,dropCache:intelDropCache,errors:intelErrors}));
+            if (freshFocus) {
+                [...document.querySelectorAll('[data-intel-key]')].find(element => element.dataset.intelKey === key)?.scrollIntoView({block:'start',behavior:'instant'});
+                if (!intelDropCache.has(key) && (focused.drops?.length || 0) < number(focused.dropCount)) void loadIntelDrops(focused,key);
+            }
+        }
+        else if (panel === 'map') { $('#overlay-title').textContent = s.zone || 'Map'; mapController?.render(s); }
         else renderTimers();
         document.querySelectorAll('#panel-content button, #panel-content input, #panel-content select').forEach(element => {
             if (state.sessionAvailable !== true) { if (!element.disabled) element.dataset.sessionDisabled = 'true'; element.disabled = true; }
@@ -204,6 +281,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     listen($('#panel-font'),'change',event => { void action('font-scale',Number(event.target.value)); });
     listen($('#encounter-scope'),'change',event => { scope = event.target.value; render(); });
     listen($('#class-filter'),'change',event => { void action('session:class-filter',{panel,enabled:event.target.checked}); });
+    listen($('#intel-search'),'input',event => { intelQuery = event.target.value; render(); });
     listen(document,'click',event => {
         const button = event.target.closest?.('button'); if (!button || button.disabled) return;
         if (button.dataset.command) void action(button.dataset.command);
@@ -213,12 +291,24 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         if (button.dataset.npcAction) {
             const npc = s.intel?.npcs?.[Number(button.dataset.npcIndex)]; if (!npc) return;
             const command = button.dataset.npcAction;
-            void action(command === 'details' ? 'session:open' : `session:${command}`,{...(command === 'details' ? {view:'npcs'} : {}),npc:npc.name,zone:s.intel?.zone || s.zone});
+            void action(command === 'details' ? 'session:open' : `session:${command}`,{...(command === 'details' ? {view:'npcs'} : {}),npc:npc.name,zone:s.intel?.zone || s.zone,raidInstance:isRaidSource(npc)});
         }
-        if (button.dataset.considerAction && s.consider?.name) void action(button.dataset.considerAction === 'details' ? 'session:open' : 'session:route',{view:'npcs',npc:s.consider.name,zone:s.zone});
+        if (button.dataset.intelExpand || button.dataset.intelRetry) {
+            const key = button.dataset.intelExpand || button.dataset.intelRetry;
+            const npc = currentIntelNpc(key); if (!npc) return;
+            if (expandedIntel.has(key) && !button.dataset.intelRetry) expandedIntel.delete(key);
+            else {
+                expandedIntel.add(key);
+                const total = number(npc.dropCount ?? npc.drops?.length);
+                if (!intelDropCache.has(key) && (npc.drops?.length || 0) < total) void loadIntelDrops(npc,key);
+            }
+            render();
+        }
         if (button.dataset.itemIndex !== undefined) {
             const context = button.dataset.itemContext;
-            const item = context?.startsWith('intel:') ? s.intel?.npcs?.[Number(context.slice(6))]?.drops?.[Number(button.dataset.itemIndex)] : s.consider?.drops?.[Number(button.dataset.itemIndex)];
+            const npc = context?.startsWith('intel:') ? s.intel?.npcs?.[Number(context.slice(6))] : null;
+            const items = npc ? intelDropCache.get(intelNpcKey(npc,s.intel))?.items || npc.drops : null;
+            const item = npc ? items?.[Number(button.dataset.itemIndex)] : null;
             if (item) void action('session:open',{view:'items',item:item.name});
         }
     });
@@ -226,7 +316,14 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     const initial = stateGeneration;
     Promise.resolve(bridge?.getState?.()).then(next => { if (!disposed && initial === stateGeneration && next) { state = next; render(); } }).catch(() => report('Open main app.'));
     const tick = setInterval(() => { if (!document.hidden && panel === 'timers' && state.sessionAvailable === true) renderTimers(); },100);
+    if (panel === 'map') {
+        void import('./map-overlay.js').then(({mountMapOverlay}) => {
+            if (disposed) return;
+            mapController = mountMapOverlay({root:$('#native-map-root'),bridge,getSession:session});
+            mapController.render(session());
+        }).catch(() => report('Map overlay unavailable · open the main map.'));
+    }
     render();
-    return {render(next) {stateGeneration++; state = next || {}; render();},dispose() {disposed = true; listeners.forEach(remove => remove()); unsubscribe?.(); clearInterval(tick);}};
+    return {render(next) {stateGeneration++; state = next || {}; render();},dispose() {disposed = true; listeners.forEach(remove => remove()); unsubscribe?.(); mapController?.dispose(); discoveryNotices?.dispose(); noticeResizeObserver?.disconnect(); clearInterval(tick);}};
 }
 if (globalThis.document?.querySelector('#overlay')) mountOverlay();

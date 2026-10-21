@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.3 - Map overlay, raid intel and PNUT triggers
+
+- Add an independent lightweight client-map overlay with logged position, named destinations, floor filtering and validated route guidance; remove Minimal view and the Consider window.
+- Considering or killing a listed named NPC selects, expands and briefly highlights its intel row with a soft blip, without activating a window.
+- Detect Raid Instance headings dynamically in wiki content, preserve normal/raid variants and provenance, and present Normal Zone/Raid Zone groups with complete expandable drops.
+- Replace the timer editor with PNUT-style trigger lists and When/Then/Timer editing, isolated regex matching, match previews, captures, cooldowns and local sound/speech actions.
+- Check unknown live NPC/item events against a complete bundled wiki presence index. Show Screenshot/Ignore notices inside Timers/Triggers for 15 seconds, paused on hover; explicit screenshots copy locally and never upload.
+- Make cumulative item-era filtering explicit, offer eras present in the dataset, and keep First/Top/Map controls on the map page.
+- Refresh the release bootstrap from the reviewed production exporter and retain existing log, folder and overlay preferences during upgrade.
+
 ## 0.8.2 - Native modular overlays, timers and application updates
 
 - Add a separate Application updates card and header badge, with compatible beta-release discovery, verified downloads, cancellation, Later, and explicit installer approval.

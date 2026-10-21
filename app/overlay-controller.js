@@ -1,6 +1,6 @@
 // The controller is in the complete app, independent of panels that may be
 // locked or ignoring the mouse. It never owns a second log/session parser.
-const PANELS = { parse:'Parse', intel:'Zone & loot', consider:'Consider', timers:'Timers' };
+const PANELS = { parse:'Parse', map:'Map & intel', intel:'Zone & loot', timers:'Timers' };
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
 export function overlayControllerPresentation(state = {}) {
     const supported = state.supported !== false && Boolean(state.panels);

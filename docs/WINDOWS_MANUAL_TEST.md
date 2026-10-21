@@ -1,12 +1,12 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.2-x64.exe`.
+Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.3-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the custom title bar visibly says `v0.8.2`; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the custom title bar visibly says `v0.8.3`; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
 
 ## 0. Application updater acceptance
 
-The 0.8.2 candidate adds Application updates separately from Sync with Wiki.
+The 0.8.3 candidate adds Application updates separately from Sync with Wiki.
 An existing 0.8.1 installation needs the first updater build installed normally.
 Record its folder/log choices, preferences and cached wiki-data state; verify
 those are retained after the normal NSIS upgrade. A future approved newer build
@@ -26,7 +26,7 @@ not establish Authenticode signing; record signature status separately.
 
 ## 0a. Native overlay and timer acceptance
 
-1. Open **Overlays**. Confirm Parse, Zone & loot, Consider and Timers are separate
+1. Open **Overlays**. Confirm Parse, Map, Zone & loot and Timers are separate
    desktop windows that can sit outside the main app. Unlock, move and resize
    each, then lock; tabs, dropdowns, keyboard and hover menus must still work.
 2. Adjust background opacity/font scale. Text must remain readable. Hide/show
@@ -40,11 +40,15 @@ not establish Authenticode signing; record signature status separately.
 5. Repeat at 100/125/150% OS scaling, across monitors and after monitor removal.
    Saved bounds must remain reachable; Reset positions restores input/layout.
    Check real game foreground focus behavior in both locked and unlocked modes.
-6. On the main **Timers** page, add manual/repeating and literal log-trigger timers. Pause/resume/reset,
+6. On the main **Timers** page, add manual/repeating and literal/regex log-trigger timers. Pause/resume/reset,
    restart EoZ and sleep/wake: absolute deadlines remain accurate. Confirm zone
    filters, one-time latest-kill reminders and supplied durations; a reminder is
    not evidence of a spawn. Initial tails, stale/replayed or timestamp-free text
    cannot start timers. Normal parse history must still populate.
+   Test PNUT-style `(?P<name>...)` captures, previewed matches and capture-based
+   display labels; duplicate/edit/disable rules, overlap and cooldown choices.
+   Verify warning/end colors and optional sound/speech, notifications without a
+   countdown, and a pathological regex timing out without freezing the app.
 7. Confirm the native timer panel has only ring/label/countdown rows and a thin
    swing bar; configuration opens the main Timers page. Parse has exactly
    Overview, Damage, Healing, Taken, Session; no duplicate View toolbar or
@@ -101,18 +105,33 @@ Pass: tracking remains responsive during sustained movement, the latest position
 
 Pass: the player can identify and start navigating to an interesting current-zone target without opening the in-game map or typing its name.
 
-## 3. Minimal loot browsing
+## 3. Native Intel and map browsing
 
-1. Enter Minimal mode in the same zone.
-2. Confirm **Named & rare mobs** is the default surface and the map is not consuming space.
-3. In Settings, enable **Show map**, then **Show path controls**. Confirm each changes only its named surface and disabling the map also hides path controls.
-4. Verify targets with class-relevant loot rank first, statless/weight-only items are absent under **My Class**, and current distance appears when coordinates are known.
-5. Expand Loot on two targets and hover or keyboard-focus items; Itembox details and the selected item tier must agree.
-6. Search once by mob name and once by item name. Toggle **My Class** and **Named only**, then clear the query.
-7. Click or keyboard-activate a named NPC's name. Confirm a non-modal notice says the paste-ready `/waypoint Y X [Z]` command was copied; paste it into a safe text field and verify the order matches the in-game location.
-8. Confirm there is no destination-search field in Minimal view; when routing is enabled, use Route on a mob row.
+1. Show Zone & loot and Map as independent native windows. Minimal mode and a separate Consider window must be absent.
+2. Verify **Normal Zone** and slightly red **Raid Zone** sections. Same-name normal/raid sources must retain their own drops, source flags and destinations.
+3. Search by named mob, toggle **My Class**, and verify selected tier, distance and item details. Class-filtered loot excludes statless/weight-only items.
+4. On a mob with more than five matching drops, **Show More** must reveal every matching item; **Show Less** must survive subsequent session snapshots. Repeat after class/era/tier/zone/data refresh to reject stale cached drops.
+5. Consider and kill a listed named mob. Its Intel row must select, scroll and expand with a mild flash/blip; reduced-motion mode suppresses animation. The game must retain OS focus. No Consider popup opens.
+6. Copy `/waypoint Y X [Z]` and verify coordinate order in a safe text field. Route respects the routing opt-in and keeps the native workspace active; opening full details is explicit.
+7. Check the native Map's client line geometry, labels, current location, floors, follow and zoom. A shared validated route/selected source must agree with the full Map Explorer. First/Top/Map controls appear only on the main Map page.
+8. In Items, **Through era** includes the chosen era and earlier eras. Options must correspond to eras present in this pack. Compare known Classic-only and later-era items and verify selection survives view changes.
 
-Pass: the compact default is an intel panel; map and routing are optional without weakening waypoint, consider, or loot behavior.
+Pass: independent map/intel windows retain filters and source identity, show all requested drops and react to named events without stealing game focus.
+
+### Missing-wiki notices in Timers/Triggers
+
+Use a controlled complete-catalog fixture or a verified missing entity; older or
+sample packs cannot establish absence. A fresh missing monster/item event must
+show a notice inside Timers, never a new popup. Visible interactive native Timers
+takes priority; hiding it or enabling mouse passthrough falls back to main Timers.
+There must not be two competing notice clocks. It lasts 15 visible
+seconds, pauses while hovered or keyboard-focused, and queues beyond four cards.
+Screenshot offers a local window/display choice. Verify a disappearing source
+can be reselected, successful capture plays a mild shutter, and the notice says
+**Paste your clipboard into discord!**. Paste into a safe local image target to
+verify the clipboard; no upload occurs. Ignore suppresses that entity across
+restart. Hidden main pages and hidden native windows must preserve unseen time.
+Inspect screenshots yourself before sharing any game/player content.
 
 ## 4. Map Overlay versus S3D textures
 

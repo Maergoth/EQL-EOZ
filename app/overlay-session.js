@@ -3,7 +3,7 @@ import { TimerEngine } from './timer-engine.js';
 const STORAGE_KEY = 'eql-eye-of-zomm-timers-v1';
 const text = (value, limit = 240) => String(value ?? '').slice(0, limit);
 const amount = value => Number.isFinite(Number(value)) ? Number(value) : 0;
-const TIMER_ACTIONS = new Set(['save-definition', 'remove-definition', 'start', 'pause', 'resume', 'reset', 'cancel', 'delete', 'create-spawn', 'reset-swing', 'set-swing-enabled', 'set-swing-delay', 'set-zone', 'cancel-all']);
+const TIMER_ACTIONS = new Set(['save-definition', 'remove-definition', 'fire-definition', 'start', 'pause', 'resume', 'reset', 'cancel', 'delete', 'create-spawn', 'reset-swing', 'set-swing-enabled', 'set-swing-delay', 'set-zone', 'cancel-all']);
 
 function eventSummary(event) {
     const result = {};
@@ -93,8 +93,8 @@ export function fitOverlaySnapshot(snapshot) {
     shrinkBreakdowns(parse.breakdowns, 60);
     if (snapshotBytes(snapshot) <= limit) return snapshot;
     if (parse.encounters) parse.encounters = parse.encounters.slice(0, 3);
-    if (session.intel?.npcs) session.intel.npcs = session.intel.npcs.slice(0, 25).map(npc => ({ ...npc, drops:npc.drops.slice(0, 1) }));
-    if (session.consider?.drops) session.consider.drops = session.consider.drops.slice(0, 8);
+    // Drop details remain available through the lazy broker for every NPC.
+    if (session.intel?.npcs) session.intel.npcs = session.intel.npcs.map(npc => ({ ...npc, drops:[] }));
     if (snapshotBytes(snapshot) <= limit) return snapshot;
     // Defensive fallback for malformed dataset text. Keep timer deadlines and
     // player totals; defer details to the complete app.
@@ -107,10 +107,10 @@ export function fitOverlaySnapshot(snapshot) {
                 total:(parse.breakdowns?.[key] || []).reduce((sum, row) => sum + amount(row.total), 0),
                 count:(parse.breakdowns?.[key] || []).reduce((sum, row) => sum + amount(row.count), 0),
                 ...(key.startsWith('taken') ? { rate:(parse.breakdowns?.[key] || []).reduce((sum, row) => sum + amount(row.rate), 0) } : {}) }]])) },
-        intel:{ npcs:[], zone:text(session.zone) }, consider:{} } };
+        intel:{ npcs:[], zone:text(session.zone), message:'This dataset exceeds the overlay limit. Open NPCs in the main app.' } } };
 }
 
-export function createOverlaySession({ api, storage = globalThis.localStorage, getSession, onCommand = () => {}, notify = () => {}, now = Date.now,
+export function createOverlaySession({ api, storage = globalThis.localStorage, getSession, onCommand = () => {}, onCues = () => {}, notify = () => {}, now = Date.now,
     setInterval = globalThis.setInterval, clearInterval = globalThis.clearInterval } = {}) {
     let saved = null;
     try {
@@ -119,7 +119,13 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
     } catch { /* Invalid local preferences should not stop log parsing. */ }
     const engine = new TimerEngine({ now, state:saved });
     const sessionId = `session-${now()}-${Math.random().toString(36).slice(2)}`;
-    let sequence = 0, disposed = false, busy = false, lastSaved = '', storageWarning = false, notice = null;
+    let sequence = 0, disposed = false, busy = false, lastSaved = '', storageWarning = false, notice = null, flushQueued = false;
+    function cues() { const pending = engine.drainCues(); if (pending.length) { try { onCues(pending); } catch { /* A device failure cannot interrupt parsing. */ } } }
+    function scheduleFlush() {
+        if (disposed || flushQueued) return;
+        flushQueued = true;
+        queueMicrotask(() => { flushQueued=false; if (!disposed) { cues(); void publish(); } });
+    }
     const timerListeners = new Set();
     function emitTimers(snapshot) {
         for (const listener of timerListeners) {
@@ -144,6 +150,7 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
         busy = true;
         try {
             const timers = engine.snapshot(now());
+            cues();
             persist();
             emitTimers(timers);
             if (api?.publish) await api.publish(fitOverlaySnapshot({ schemaVersion:1, sessionId, sequence:++sequence, at:now(), session:{ ...getSession(), timers, notice } }));
@@ -153,15 +160,18 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
     const unsubscribe = api?.onAction?.(async command => {
         if (disposed || !command || typeof command.action !== 'string') return;
         try {
+            let result = {};
             if (command.action.startsWith('timer:')) {
                 const action = command.action.slice(6);
                 if (!TIMER_ACTIONS.has(action)) throw new Error('Unknown timer action.');
-                engine.command(action, command.payload || {});
+                await engine.command(action, command.payload || {});
                 persist();
-            } else await onCommand(command);
+            } else result = await onCommand(command);
+            if (command.requestId) await api?.reply?.(command.requestId, result || {});
             await publish();
         } catch (error) {
             const message = text(error?.message || 'The overlay action could not complete.');
+            if (command.requestId) await api?.reply?.(command.requestId, null, message);
             notice = { id:`notice-${now()}-${sequence}`, at:now(), panel:text(command.panel, 16), message, status:'error' };
             notify(message); await publish();
         }
@@ -179,12 +189,17 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
         async commandTimer(action, payload = {}) {
             if (disposed) throw new Error('The timer session has closed.');
             if (!TIMER_ACTIONS.has(action)) throw new Error('Unknown timer action.');
-            const snapshot = engine.command(action, payload);
+            const snapshot = await engine.command(action, payload);
+            cues();
             persist(); emitTimers(snapshot); await publish();
             return snapshot;
         },
-        consume(event, context) { engine.consume(event, context); },
+        testTimer:(definition,line) => engine.preview(definition,line),
+        consume(event, context) {
+            const result = engine.consume(event, context);
+            if (result?.then) void result.then(scheduleFlush).catch(scheduleFlush);
+        },
         flush:persist,
-        dispose() { if (disposed) return; persist(); disposed = true; timerListeners.clear(); clearInterval(interval); unsubscribe?.(); }
+        dispose() { if (disposed) return; persist(); disposed = true; engine.close(); timerListeners.clear(); clearInterval(interval); unsubscribe?.(); }
     };
 }

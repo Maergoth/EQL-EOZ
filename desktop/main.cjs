@@ -11,6 +11,7 @@ const zlib = require('node:zlib');
 const { URL } = require('node:url');
 const { AppUpdater, isReleaseNotesUrl } = require('./app-updater.cjs');
 const { OverlayHost } = require('./overlay-host.cjs');
+const { DiscoveryHost } = require('./discovery-host.cjs');
 const {
     inferEqRootPath,
     isEqLogName,
@@ -35,9 +36,9 @@ const SUPPORTED_EQ_EXTENSIONS = new Set(['.s3d', '.eqg', '.txt', '.eff', '.xmi',
 let server = null;
 let windowRef = null;
 let port = DEFAULT_PORT;
-let normalWindowBounds = null;
 let appUpdater = null;
 let overlayHost = null;
+let discoveryHost = null;
 let quitting = false;
 let sessionNeedsReload = false;
 
@@ -141,7 +142,6 @@ async function readConfig() {
         logPath: '',
         logSelection: 'automatic',
         alwaysOnTop: false,
-        minimalMode: false,
         ...(await readJson(configPath(), {}))
     };
 }
@@ -158,24 +158,6 @@ async function setAlwaysOnTop(enabled) {
     windowRef?.setAlwaysOnTop(enabled, enabled ? 'screen-saver' : 'normal');
     windowRef?.setSkipTaskbar(false);
     await updateConfig({ alwaysOnTop: enabled });
-    return enabled;
-}
-
-async function setMinimalMode(enabled) {
-    enabled = Boolean(enabled);
-    if (windowRef && !windowRef.isDestroyed()) {
-        if (enabled) {
-            normalWindowBounds ||= windowRef.getBounds();
-            windowRef.setMinimumSize(720, 420);
-            const bounds = windowRef.getBounds();
-            windowRef.setBounds({ ...bounds, width: Math.min(bounds.width, 1040), height: Math.min(bounds.height, 680) }, true);
-        } else {
-            windowRef.setMinimumSize(1024, 700);
-            if (normalWindowBounds) windowRef.setBounds(normalWindowBounds, true);
-            normalWindowBounds = null;
-        }
-    }
-    await updateConfig({ minimalMode: enabled });
     return enabled;
 }
 
@@ -568,7 +550,6 @@ async function apiInfo() {
         productionPack: fs.existsSync(productionPackPath()),
         windowState: {
             alwaysOnTop: Boolean(windowRef?.isAlwaysOnTop() ?? config.alwaysOnTop),
-            minimalMode: Boolean(config.minimalMode)
         },
         desktop: true
     };
@@ -597,7 +578,7 @@ async function requestHandler(req, res) {
         const pathname = url.pathname;
         const isMutation = [
             '/api/select-eq-root', '/api/select-log', '/api/log/automatic',
-            '/api/window/always-on-top', '/api/window/minimal', '/api/update-pack'
+            '/api/window/always-on-top', '/api/update-pack'
         ].includes(pathname);
         if (isMutation && !trustedMutation(req, pathname)) {
             return sendJson(res, req.method === 'POST' ? 403 : 405, { error: 'Trusted POST required' });
@@ -629,11 +610,6 @@ async function requestHandler(req, res) {
         if (pathname === '/api/window/always-on-top') {
             const enabled = url.searchParams.get('enabled') === '1';
             await setAlwaysOnTop(enabled);
-            return sendJson(res, 200, { ok: true, enabled });
-        }
-        if (pathname === '/api/window/minimal') {
-            const enabled = url.searchParams.get('enabled') === '1';
-            await setMinimalMode(enabled);
             return sendJson(res, 200, { ok: true, enabled });
         }
         if (pathname === '/api/update-pack') {
@@ -679,12 +655,11 @@ async function startServer() {
 }
 
 function createWindow(config = {}) {
-    const minimalMode = Boolean(config.minimalMode);
     windowRef = new BrowserWindow({
-        width: minimalMode ? 1040 : 1440,
-        height: minimalMode ? 680 : 900,
-        minWidth: minimalMode ? 720 : 1024,
-        minHeight: minimalMode ? 420 : 700,
+        width: 1440,
+        height: 900,
+        minWidth: 1024,
+        minHeight: 700,
         backgroundColor: '#08101b',
         frame: false,
         autoHideMenuBar: true,
@@ -696,6 +671,7 @@ function createWindow(config = {}) {
             nodeIntegration: false,
             sandbox: true,
             webSecurity: true,
+            autoplayPolicy: 'no-user-gesture-required',
             // This renderer is the sole log/session owner even when only
             // independent native overlays are visible.
             backgroundThrottling: false
@@ -735,6 +711,10 @@ function createWindow(config = {}) {
     });
     const unavailable = () => { sessionNeedsReload = true; overlayHost?.markSessionUnavailable(); };
     windowRef.webContents.on('render-process-gone', unavailable);
+    windowRef.webContents.on('render-process-gone', () => discoveryHost?.clear());
+    windowRef.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+        if (isMainFrame && !isInPlace) discoveryHost?.clear();
+    });
     windowRef.webContents.on('unresponsive', unavailable);
     windowRef.webContents.on('responsive', () => { sessionNeedsReload = false; });
     windowRef.webContents.on('did-start-loading', () => overlayHost?.markSessionUnavailable());
@@ -768,6 +748,8 @@ async function bootstrap() {
         writePreferences:preferences => atomicWriteJson(overlayPreferencesPath(), preferences)
     });
     await overlayHost.initialize();
+    discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
+        isTimerPanel:event=>overlayHost.overlaySender(event)==='timers'});
     createWindow(config);
     // Metadata checks are quiet. Application downloads require an explicit
     // request or the saved opt-in; a staged installer never runs on startup.
@@ -831,6 +813,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
     quitting = true;
     overlayHost?.dispose();
+    discoveryHost?.dispose();
     appUpdater?.shutdown();
     try { server?.close(); } catch {}
 });

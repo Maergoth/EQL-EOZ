@@ -103,7 +103,8 @@ test('fresh layouts keep compact timers below the parse without overlapping othe
         }
         assert(panels.parse.bounds.x < panels.intel.bounds.x);
         assert(panels.parse.bounds.y < panels.timers.bounds.y);
-        assert(panels.intel.bounds.y < panels.consider.bounds.y);
+        assert(panels.map.bounds.y < panels.intel.bounds.y);
+        assert.equal(panels.consider, undefined, 'retired consider panel is never restored');
         const saved = { x:120, y:100, width:460, height:390 };
         assert.deepEqual(normalizePreferences({ panels:{ parse:{ bounds:saved } } }, [display(0, 0, width, height)]).panels.parse.bounds, saved);
     }
@@ -114,7 +115,7 @@ test('fresh layouts keep compact timers below the parse without overlapping othe
     }
 });
 
-test('timer windows fit only visible countdown rows and the swing bar without a large minimum height', () => fixture(async ({ host, mainEvent }) => {
+test('timer windows fit only visible countdown rows and the swing bar without a large minimum height', () => fixture(async ({ host, mainEvent, overlayEvent }) => {
     await host.control('show', 'timers');
     const sendTimers = timers => host.handleMainRequest(mainEvent, 'publish', {
         schemaVersion:1, session:{ timers }
@@ -129,6 +130,13 @@ test('timer windows fit only visible countdown rows and the swing bar without a 
     await host.control('font-scale', 'timers', 1.3);
     await sendTimers({ timers:[{ visible:true }], swing:{ enabled:true } });
     assert.equal(host.windows.get('timers').getBounds().height, 81);
+    await host.handleOverlayRequest(overlayEvent('timers'),'content-height',245.3);
+    assert.equal(host.windows.get('timers').getBounds().height,246,'Measured inline notice content expands the real timer surface');
+    await host.handleOverlayRequest(overlayEvent('timers'),'content-height',36);
+    assert.equal(host.windows.get('timers').getBounds().height,36,'Removing notices can shrink the surface again');
+    for (const invalid of ['300',NaN,Infinity,35,2401]) await assert.rejects(host.handleOverlayRequest(overlayEvent('timers'),'content-height',invalid),/Invalid timer content height/);
+    await host.control('show','parse');
+    await assert.rejects(host.handleOverlayRequest(overlayEvent('parse'),'content-height',300),/Invalid timer content height/,'Only Timers can request content fitting');
 }));
 
 test('startup restores only the selected native panels with their independent lock and mouse state', () => fixture(async ({ host, nativeWindows }) => {
@@ -144,6 +152,57 @@ test('startup restores only the selected native panels with their independent lo
     assert.equal(host.getState().panels.parse.fontScale, 1.25);
 }, { saved:{ panels:{ parse:{ visible:true, locked:true, passThrough:true,
     backgroundOpacity:0.6, fontScale:1.25, bounds:{ x:2200, y:100, width:400, height:300 } } } } }));
+
+test('explicit show recovers only the crashed panel at its trusted URL without restarting the session', () => fixture(async ({ host, mainEvent, nativeWindows }) => {
+    await host.control('show','parse');
+    await host.control('show','intel');
+    await host.control('lock','parse',true);
+    await host.control('pass-through','parse',true);
+    await host.control('opacity','parse',0.6);
+    await publish(host,mainEvent);
+    const win=host.windows.get('parse'), other=host.windows.get('intel');
+    const preferences=structuredClone(host.getState().panels.parse), snapshot=host.snapshot;
+    win.webContents.emit('render-process-gone',{}, {reason:'crashed'});
+    assert.equal(host.ready.has('parse'),false);
+    assert.equal(host.crashed.has('parse'),true);
+    assert.equal(host.sessionAvailable,true,'One panel crash cannot suspend the sole parser owner');
+    host.restoreBounds();
+    await publish(host,mainEvent);
+    await host.control('font-scale','intel',1.15);
+    assert.equal(win.loadedUrls.length,1,'Ordinary updates do not automatically retry a failed renderer');
+    await host.control('show','parse');
+    assert.equal(host.windows.get('parse'),win);
+    assert.equal(nativeWindows.length,2,'Recover the existing isolated panel without duplicating it');
+    assert.deepEqual(win.loadedUrls,[host.panelUrl('parse'),host.panelUrl('parse')]);
+    assert.equal(other.loadedUrls.length,1);
+    assert.equal(host.crashed.has('parse'),false);
+    assert.equal(host.ready.has('parse'),true);
+    assert.equal(win.visible,true);
+    assert.equal(win.ignoreMouse,true);
+    assert.equal(win.resizable,false);
+    assert.deepEqual(host.getState().panels.parse,preferences,'Layout and input preferences survive recovery');
+    assert.deepEqual(host.snapshot,snapshot);
+    assert.equal(host.sessionRestartCount,0);
+    win.webContents.emit('render-process-gone',{}, {reason:'crashed'});
+    await host.control('show-all');
+    assert.equal(win.loadedUrls.length,3,'Show all also explicitly recovers crashed panels');
+    win.webContents.emit('render-process-gone',{}, {reason:'crashed'});
+    await host.control('toggle','parse');
+    assert.equal(win.loadedUrls.length,3,'Hiding a crashed panel does not reload it');
+    await host.control('toggle','parse');
+    assert.equal(win.loadedUrls.length,4,'Showing the hidden panel through its tray toggle recovers it');
+    win.webContents.emit('render-process-gone',{}, {reason:'crashed'});
+    const load=win.loadURL.bind(win);
+    win.loadURL=async url=>{win.loadedUrls.push(url);throw new Error('Synthetic load failure');};
+    await host.control('show','parse');
+    assert.equal(host.crashed.has('parse'),true,'A failed explicit reload remains recoverable');
+    host.restoreBounds();
+    assert.equal(win.loadedUrls.length,5,'A failed reload never starts an automatic retry loop');
+    win.loadURL=load;
+    await host.control('show','parse');
+    assert.equal(win.loadedUrls.length,6);
+    assert.equal(host.ready.has('parse'),true);
+}));
 
 test('reset positions applies the same four-corner defaults and restores editing and mouse input', () => fixture(async ({ host, screen }) => {
     await host.control('show-all');
@@ -239,6 +298,40 @@ test('only bounded allowlisted session commands reach the existing main renderer
     await assert.rejects(host.handleOverlayRequest(event, 'session:open', { view:'external' }), /Unknown/);
     await assert.rejects(host.handleOverlayRequest(event, 'timer:start', { huge:'x'.repeat(16384) }), /too large/);
     assert.equal(nativeWindows.length, 1, 'session actions must not create another main parser window');
+}));
+
+test('map and complete-drop requests resolve only through an authenticated main reply', () => fixture(async ({host,mainEvent,overlayEvent,commands}) => {
+    await host.control('show','map'); await host.control('show','intel'); await publish(host,mainEvent);
+    const map = host.handleOverlayRequest(overlayEvent('map'),'session:map-data',{zone:'Unrest'});
+    const sent = commands.at(-1)[1];
+    assert.equal(sent.action,'session:map-data'); assert.equal(sent.panel,'map'); assert(sent.requestId);
+    await assert.rejects(host.handleMainRequest(overlayEvent('intel'),'reply',{requestId:sent.requestId,result:{private:'not accepted'}}),/unavailable/);
+    assert.equal(host.pendingReplies.size,1);
+    const result = {status:'ready',zone:'Unrest',lines:[[0,0,0,10,10,0,255,255,255,0]],labels:[]};
+    assert.deepEqual(await host.handleMainRequest(mainEvent,'reply',{requestId:sent.requestId,result}),{ok:true});
+    assert.deepEqual(await map,result);
+    assert.deepEqual(await host.handleMainRequest(mainEvent,'reply',{requestId:sent.requestId,result}),{ok:false},'a response cannot be replayed');
+    const drops = host.handleOverlayRequest(overlayEvent('intel'),'session:intel-drops',{npc:'Synthetic Keeper',zone:'Unrest',raidInstance:true});
+    const requested = commands.at(-1)[1];
+    assert.equal(requested.payload.raidInstance,true);
+    const items = Array.from({length:12},(_,index) => ({name:`Synthetic item ${index}`}));
+    await host.handleMainRequest(mainEvent,'reply',{requestId:requested.requestId,result:{items,total:12}});
+    assert.deepEqual(await drops,{items,total:12},'lazy metadata has no former 3/5 item limit');
+    assert.equal(host.pendingReplies.size,0);
+}));
+
+test('lazy data errors, oversized replies and session loss reject the waiting panel', () => fixture(async ({host,mainEvent,overlayEvent,commands}) => {
+    await host.control('show','map'); await publish(host,mainEvent);
+    const rejected = host.handleOverlayRequest(overlayEvent('map'),'session:map-data',{zone:'Unrest'});
+    const failure = assert.rejects(rejected,/No matching client map/);
+    await host.handleMainRequest(mainEvent,'reply',{requestId:commands.at(-1)[1].requestId,error:'No matching client map'}); await failure;
+    const oversized = host.handleOverlayRequest(overlayEvent('map'),'session:map-data',{zone:'Unrest'});
+    const bounded = assert.rejects(oversized,/too large/);
+    await host.handleMainRequest(mainEvent,'reply',{requestId:commands.at(-1)[1].requestId,result:{huge:'x'.repeat(8*1024*1024)}}); await bounded;
+    const interrupted = host.handleOverlayRequest(overlayEvent('map'),'session:map-data',{zone:'Unrest'});
+    const unavailable = assert.rejects(interrupted,/unavailable/);
+    host.markSessionUnavailable(); await unavailable;
+    assert.equal(host.pendingReplies.size,0);
 }));
 
 test('close hides only its own panel and preference saves never include the session', () => fixture(async ({ host, mainEvent, writes }) => {
@@ -365,9 +458,9 @@ test('overlay preload exposes no filesystem, updater, raw IPC, or Electron event
     } });
     assert.deepEqual(Object.keys(exposed), ['eyeOfZommOverlay']);
     const bridge = exposed.eyeOfZommOverlay;
-    assert.deepEqual(Object.keys(bridge), ['getState', 'onState', 'action']);
-    bridge.getState(); bridge.action('hide');
-    assert.deepEqual(invoked, [['eye-of-zomm:overlay', 'get-state'], ['eye-of-zomm:overlay', 'hide', undefined]]);
+    assert.deepEqual(Object.keys(bridge), ['discoveryAction', 'getState', 'onState', 'action']);
+    bridge.getState(); bridge.action('hide'); bridge.discoveryAction('capture',{id:'synthetic-pending'});
+    assert.deepEqual(invoked, [['eye-of-zomm:overlay', 'get-state'], ['eye-of-zomm:overlay', 'hide', undefined], ['eye-of-zomm:discovery','capture',{id:'synthetic-pending'}]]);
     let received;
     const unsubscribe = bridge.onState(value => { received = value; });
     listeners.get('eye-of-zomm:overlay-state')({ secret:'Electron event' }, { panel:'parse' });
@@ -380,45 +473,47 @@ test('malformed command objects do not escape the command allowlist', () => {
     assert.throws(() => sessionCommand('timer:start', []), /object/);
     assert.throws(() => sessionCommand('session:wiki', { npc:'x'.repeat(241) }), /Invalid/);
     assert.throws(() => sessionCommand('eye-of-zomm:window', {}), /Unknown/);
+    assert.throws(() => sessionCommand('session:class-filter', { panel:'consider', enabled:true }), /Invalid/);
+    assert.throws(() => sessionCommand('session:intel-drops', {npc:'Synthetic Keeper',raidInstance:'true'}),/Invalid/);
+    assert.throws(() => sessionCommand('session:map-data', {zone:{name:'Unrest'}}),/Invalid/);
 });
 
-test('authoritative route actions recheck zone and path opt-in after every UI await', async () => {
+test('opening a selected NPC rechecks its zone and native routing keeps the main window hidden', async () => {
     const source = await readFile(new URL('../app/app.js', import.meta.url), 'utf8');
     const start = source.indexOf('async function handleOverlayCommand(');
     const end = source.indexOf('\nfunction currentEraIndex(', start);
     assert(start >= 0 && end > start, 'Missing authoritative application handler.');
-    async function routeFixture({ changeAt, changeZone = false, disablePaths = false, minimal = false } = {}) {
+    async function routeFixture({ changeAt, changeZone = false, disablePaths = false } = {}) {
         let zone = 'Unrest';
         const routes = [];
-        const settings = { minimalRoutingVisible:true };
+        const selections = [], fields = {};
+        const settings = { routingEnabled:true };
         const mutate = stage => {
             if (stage !== changeAt) return;
             if (changeZone) zone = 'Befallen';
-            if (disablePaths) settings.minimalRoutingVisible = false;
+            if (disablePaths) settings.routingEnabled = false;
         };
         const context = vm.createContext({
             state:() => ({ zone }), zoneKey:value => String(value).toLowerCase(), settings,
             npcRecordForName:(name, requestedZone) => name === 'a synthetic guard' ? { name, zone:requestedZone } : null,
+            raidVariant:npc => npc?.raidInstance === true,
             window:{ eyeOfZommOverlays:{ control:async action => { assert.equal(action, 'show-main'); mutate('show'); } } },
-            document:{ body:{ classList:{ contains:() => minimal } } },
-            toggleMinimalMode:async () => { minimal = false; mutate('toggle'); },
-            pathToNpc:async name => { routes.push({ name, zone }); }
+            $:selector => fields[selector] ||= {value:''}, setView:view => selections.push(view), renderAll() {},
+            pathToNpc:async (name,options) => { routes.push({ name, zone, options:JSON.parse(JSON.stringify(options)) }); }
         });
         vm.runInContext(source.slice(start, end), context);
-        return { routes, run:() => context.handleOverlayCommand({ action:'session:route',
-            payload:{ npc:'a synthetic guard', zone:'Unrest', loc:[9999, 9999, 9999] } }) };
+        return { routes, selections, run:(action = 'session:open') => context.handleOverlayCommand({ action,
+            payload:{ view:'npcs', npc:'a synthetic guard', zone:'Unrest', loc:[9999, 9999, 9999] } }) };
     }
-    for (const changeAt of ['show', 'toggle']) {
-        const zoned = await routeFixture({ changeAt, changeZone:true, minimal:true });
+    for (const changeAt of ['show']) {
+        const zoned = await routeFixture({ changeAt, changeZone:true });
         await assert.rejects(zoned.run(), /previous zone/);
         assert.equal(zoned.routes.length, 0, `a zone change during ${changeAt} must not reuse the stale target`);
-        const disabled = await routeFixture({ changeAt, disablePaths:true, minimal:true });
-        await assert.rejects(disabled.run(), /disabled/);
-        assert.equal(disabled.routes.length, 0, `disabling routes during ${changeAt} must not bypass the opt-in`);
     }
-    const valid = await routeFixture({ minimal:true });
-    await valid.run();
-    assert.deepEqual(valid.routes, [{ name:'a synthetic guard', zone:'Unrest' }]);
+    const valid = await routeFixture();
+    await valid.run('session:route');
+    assert.deepEqual(valid.routes, [{ name:'a synthetic guard', zone:'Unrest', options:{openMain:false,raidInstance:false} }]);
+    await valid.run(); assert.deepEqual(valid.selections,['npcs']);
 });
 
 let failures = 0;

@@ -57,12 +57,13 @@ function harness() {
         viewerFolderStatus:'ready', viewerZoneState:{ zone:'', status:'idle', message:'' },
         partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,
         overlaySession:{ inputs:[], consume(event, context) { this.inputs.push({ event, context }); }, flush() {} },
+        wikiDiscovery:{consume() {}},
         $:node, state:() => parser.snapshot(), viewerApi:() => viewer,
         waitForViewerApi:async () => viewer, ensureViewerFolderConnected:async () => true,
         queueViewerSync:operation => { const pending = operation(); operations.push(pending); return pending; },
         queueLatestLocationSync:location => { operations.push(context.syncLocationToViewer(false, location)); },
         scheduleRouteRefresh() {}, syncRareMobsToViewer() {}, showNotice() {},
-        clearActiveRoute() {}, showConsiderTray() {}, setActiveMapMode() {}, applyRouteGuidance() {}
+        clearActiveRoute() {}, focusIntelForConsider() {}, setActiveMapMode() {}, applyRouteGuidance() {}
     });
     const code = [
         between(source, 'function zoneRecord(', 'function npcNameKey('),

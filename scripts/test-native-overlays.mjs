@@ -18,15 +18,19 @@ try {
     const profile = join(temporary, 'profile');
     const game = join(temporary, 'synthetic-game');
     const log = join(game, 'Logs', 'eqlog_Fixture_Test.txt');
-    await mkdir(profile); await mkdir(join(game, 'Logs'), { recursive:true }); await mkdir(screenshots, { recursive:true });
+    await mkdir(profile); await mkdir(join(game, 'Logs'), { recursive:true }); await mkdir(join(game, 'Maps')); await mkdir(screenshots, { recursive:true });
+    await writeFile(join(game,'Maps','mistmoore.txt'),'L -100,-100,0,100,-100,0,150,160,180\nL 100,-100,0,100,100,0,150,160,180\nL 100,100,0,-100,100,0,150,160,180\nL -100,100,0,-100,-100,0,150,160,180\nP -20,-10,0,216,183,92,2,Synthetic_Keeper\n');
+    await writeFile(join(game,'Maps','mistmoore_1.txt'),'L -50,-50,50,50,50,50,200,100,110\n');
     await mkdir(join(profile, 'data'));
     // Keep the smoke independent of the ignored production bootstrap and
     // network access. This tiny presentation pack exists only in this profile.
     await writeFile(join(profile, 'data', 'eye-of-zomm-pack.json'), JSON.stringify({
         meta:{ schemaVersion:3, version:'native-overlay-synthetic', currentEra:'Classic', sample:true },
         zones:[{ name:'Mistmoore Castle', viewerName:'Mistmoore Castle', aliases:['mistmoore', 'The Castle of Mistmoore'] }],
-        npcs:[{ name:'Synthetic Keeper', zone:'Mistmoore Castle', avgLevel:26, levelMin:26, levelMax:26, era:'Classic', loc:[10,20,0] }],
-        items:[{ name:'Synthetic Charm', era:'Classic', classes:['MNK','SHM','BER'], slots:['NECK'], stats:{HP:10}, iconId:'fixture', dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle'}] }],
+        npcs:[false,true].map(raidInstance => ({name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance,avgLevel:26,levelMin:26,levelMax:26,era:'Classic',loc:raidInstance ? [30,20,50] : [10,20,0]})),
+        items:[...Array.from({length:12},(_,index) => ({name:`Synthetic Charm ${index + 1}`,era:'Classic',classes:['MNK','SHM','BER'],slots:['NECK'],stats:{HP:index + 1},iconId:'fixture',dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false}]})),
+            ...Array.from({length:2},(_,index) => ({name:`Raid Charm ${index + 1}`,era:'Classic',classes:['MNK','SHM','BER'],slots:['NECK'],stats:{HP:50 + index},iconId:'fixture',dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true}]})),
+            ...['Classic','Kunark','Velious'].map(era => ({name:`Era fixture ${era}`,era,classes:['MNK','SHM','BER'],slots:['FINGER'],stats:{HP:1},dropSources:[]}))],
         icons:{ fixture:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAATklEQVR4nGNgGAWjgObg6saw//gwTQwl2zJcGjkEpLFikiwixlBi5LBaQo5riVFHtAWkBN3gtIDiIKJ5JNMlmRJj0YDkarIMHQWjgCQAAOw009RU8GzvAAAAAElFTkSuQmCC' }
     }));
     // A nonempty initial tail establishes the cursor before live fixture lines
@@ -49,7 +53,14 @@ try {
         function RecordedWindow(options) {
             const window = new BrowserWindow(options);
             nativeOptions.set(window.id, options); nativeCalls.set(window.id, []);
-            for (const name of ['setIgnoreMouseEvents', 'setResizable', 'setMovable', 'setFocusable']) {
+            window.webContents.on('console-message', (_event,...details) => {
+                const message = typeof details[0] === 'object' ? details[0]?.message : details[1];
+                if (/\/api\/info.*(?:connect-src|Refused to connect)/.test(message || '')) return;
+                if (typeof details[0] === 'object' && ['error','warning'].includes(details[0]?.level)) console.error('[renderer]',message);
+                else if (typeof details[0] === 'number' && details[0] >= 2) console.error('[renderer]',message);
+            });
+            window.webContents.on('preload-error',(_event,_path,error) => console.error('[preload]',error.message));
+            for (const name of ['setIgnoreMouseEvents', 'setResizable', 'setMovable', 'setFocusable', 'focus']) {
                 const original = window[name].bind(window);
                 window[name] = (...args) => { nativeCalls.get(window.id).push([name, ...args]); return original(...args); };
             }
@@ -97,9 +108,11 @@ try {
             owner = await until(() => BrowserWindow.getAllWindows().find(window => /^http:\/\/127\.0\.0\.1:\d+\/$/.test(window.webContents.getURL())), 'main app');
             await until(async () => execute(owner, () => Boolean(window.eyeOfZommOverlays && document.querySelector('#bridge-status')?.textContent === 'Live log')), 'initial log poll');
             await until(async () => (await state()).sessionAvailable, 'first shared snapshot');
+            await execute(owner, () => window.addEventListener('error',event => console.error(event.error?.stack || event.message)));
             await execute(owner, () => localStorage.setItem('eoz-smoke-owner-only', 'synthetic-owner-preference'));
             await control('show-all');
             await until(() => Object.keys(panels()).length === 4, 'four native overlays');
+            assert.deepEqual(Object.keys(panels()).sort(),['intel','map','parse','timers']);
             for (const window of Object.values(panels())) await until(async () => execute(window, () => Boolean(document.querySelector('#panel-content')?.children.length)), 'overlay renderer');
             const ids = Object.values(panels()).map(window => window.id);
             assert.equal(new Set(ids).size, 4);
@@ -139,24 +152,67 @@ try {
             assert.equal((await state()).panels.parse.passThrough, false);
             assert.equal(panels().parse.isResizable(), true); assert.equal(panels().parse.isMovable(), true); assert.equal(panels().parse.isFocusable(), true);
             assert.equal(nativeCalls.get(panels().parse.id).filter(call => call[0] === 'setIgnoreMouseEvents').at(-1)[1], false);
-            await append(['[26 MNK/SHM/BER] Fixture (Iksar) ZONE: The Castle of Mistmoore (mistmoore)', 'You slash a synthetic skeleton for 100 points of damage.', 'You healed Fixture for 50 hit points by Mend.', 'Synthetic Keeper scowls at you (Lvl: 26)', 'a synthetic skeleton hits YOU for 27 points of damage.', 'a synthetic skeleton hit YOU for 10 points of fire damage by Test Flame.', 'You have taken 5 damage from Test Venom by a synthetic skeleton.']);
+            const focusCalls = () => [...nativeCalls.values()].flat().filter(call => call[0] === 'focus').length;
+            const beforeConsiderFocus = focusCalls();
+            await append(['[26 MNK/SHM/BER] Fixture (Iksar) ZONE: The Castle of Mistmoore (mistmoore)', 'Your Location is 10, 20, 0', 'You slash a synthetic skeleton for 100 points of damage.', 'You healed Fixture for 50 hit points by Mend.', 'Synthetic Keeper scowls at you (Lvl: 26)', 'a synthetic skeleton hits YOU for 27 points of damage.', 'a synthetic skeleton hit YOU for 10 points of fire damage by Test Flame.', 'You have taken 5 damage from Test Venom by a synthetic skeleton.']);
             await until(async () => (await state()).snapshot.session.parse.totalDamage === 100, 'first synthetic parse');
-            await until(async () => (await state()).snapshot.session.consider?.name === 'Synthetic Keeper', 'consider shared state');
+            await until(async () => (await state()).snapshot.session.intel?.focusedNpcId, 'consider selects existing Intel source');
             assert.equal((await state()).snapshot.session.intel.npcs[0]?.name, 'Synthetic Keeper', 'smoke uses its disposable synthetic pack, not an ignored production bootstrap');
+            await until(async () => execute(panels().intel, () => document.querySelector('.npc-row.is-focused')?.textContent.includes('Synthetic Charm 12')), 'consider expands all twelve normal drops through the authenticated broker');
+            assert.equal(focusCalls(),beforeConsiderFocus,'a consider scrolls the Intel list without activating any OS window');
+            assert.equal(await execute(panels().intel, () => Boolean(document.querySelector('#overlay').dataset.focusSequence)),true);
+            const variants = await execute(panels().intel, () => ({normal:document.querySelector('[data-intel-section="normal"]').textContent,raid:document.querySelector('[data-intel-section="raid"]').textContent}));
+            assert.match(variants.normal,/Synthetic Charm 12/); assert.doesNotMatch(variants.normal,/Raid Charm/);
+            assert.match(variants.raid,/Raid Charm/); assert.doesNotMatch(variants.raid,/Synthetic Charm/);
+            const completeDrops = await action('intel','session:intel-drops',{npc:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false});
+            assert.equal(completeDrops.total,12); assert.equal(completeDrops.items.length,12);
+            const raidDrops = await action('intel','session:intel-drops',{npc:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true});
+            assert.equal(raidDrops.total,2); assert(raidDrops.items.every(item => item.name.startsWith('Raid Charm')));
+            await screenshot(panels().intel,'intel-expanded');
+            await execute(panels().intel, () => document.querySelector('.npc-row.is-focused [data-intel-expand]').click());
+            await wait(1250);
+            assert.equal(await execute(panels().intel, () => document.querySelector('.npc-row.is-focused [data-intel-expand]').getAttribute('aria-expanded')),'false','manual Show Less survives repeated owner snapshots');
+            await execute(panels().intel, () => document.querySelector('.npc-row.is-focused [data-intel-expand]').click());
+            await until(async () => execute(panels().intel, () => document.querySelector('.npc-row.is-focused')?.textContent.includes('Synthetic Charm 12')), 'Show More reveals the complete cached list');
+            await execute(panels().intel, () => {const input=document.querySelector('#intel-search');input.value='unmatched';input.dispatchEvent(new Event('input'));});
+            assert.equal(await execute(panels().intel, () => document.querySelectorAll('.npc-row').length),0);
+            await append(['Synthetic Keeper scowls at you (Lvl: 26)']);
+            await until(async () => execute(panels().intel, () => document.querySelector('#intel-search').value === '' && Boolean(document.querySelector('.npc-row.is-focused'))),'new named consider reveals a target hidden by a local search');
+            const mapData = await action('map','session:map-data',{zone:'Mistmoore Castle'});
+            assert.equal(mapData.status,'ready'); assert.equal(mapData.lines.length,5); assert.equal(mapData.labels.length,1);
+            await until(async () => execute(panels().map, () => document.querySelector('.native-map-note')?.textContent.includes('Default maps')),'native canvas draws local map layers');
+            assert(await execute(panels().map, () => document.querySelector('canvas').width > 100 && document.querySelector('canvas').height > 100));
+            await execute(panels().map, () => document.querySelector('[data-map-action="zoom-in"]').click());
+            await action('map','session:select-npc',{npc:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true});
+            await until(async () => execute(panels().intel, () => Boolean(document.querySelector('[data-intel-section="raid"] .npc-row.is-focused'))),'map selection focuses the raid variant in Intel');
+            await screenshot(panels().intel,'intel-raid');
+            const beforeKillSequence=(await state()).snapshot.session.intel.focusSequence;
+            const beforeKillFocus=focusCalls();
+            await append(['You have slain Synthetic Keeper!']);
+            await until(async () => (await state()).snapshot.session.intel.focusSequence > beforeKillSequence,'a named kill refreshes Intel attention and selection');
+            await until(async () => execute(panels().intel,sequence => Number(document.querySelector('#overlay').dataset.focusSequence) > sequence,beforeKillSequence),'a named kill triggers the reduced-motion-aware visual cue');
+            assert.equal(focusCalls(),beforeKillFocus,'named kill attention does not steal OS focus');
             await until(async () => execute(panels().intel, () => [...document.querySelectorAll('img.item-icon')].some(image => image.complete && image.naturalWidth > 0)), 'dataset icons remain available with restrictive overlay CSP');
             const sessionId = (await state()).snapshot.sessionId;
             await execute(owner, () => document.querySelector('[data-view="timers"]').click());
             await execute(owner, () => {
                 const form = document.querySelector('#timer-settings [data-timer-editor]');
-                for (const [name,value] of Object.entries({label:'Synthetic pulse',type:'text',trigger:'SYNTHETIC PULSE',match:'contains',durationSeconds:'90'})) form.elements.namedItem(name).value = value;
+                for (const [name,value] of Object.entries({label:'Synthetic pulse',type:'text',trigger:'^SYNTHETIC PULSE (?P<who>[A-Za-z]+) (?P<seconds>[0-9]+)$',match:'regex',displayLabel:'Pulse {who}',durationSeconds:'90'})) {
+                    form.elements.namedItem(name).value = value; form.elements.namedItem(name).dispatchEvent(new Event('input',{bubbles:true}));
+                }
+                document.querySelector('#timer-settings [data-test-line]').value = 'SYNTHETIC PULSE Keeper 90';
+                document.querySelector('#timer-settings [data-timer-action="test"]').click();
             });
+            await until(async () => execute(owner, () => document.querySelector('#timer-settings [data-test-result]').textContent.includes('who=Keeper')), 'isolated regex test preview supports PNUT named captures');
             const draft = await execute(owner, () => document.querySelector('#timer-settings [data-timer-editor]').elements.namedItem('label').value);
             await new Promise(resolve => setTimeout(resolve, 1250));
             assert.equal(await execute(owner, () => document.querySelector('#timer-settings [data-timer-editor]').elements.namedItem('label').value), draft, 'main editor draft survives session heartbeat');
             await execute(owner, () => document.querySelector('#timer-settings [data-timer-editor]').requestSubmit());
             await until(async () => (await state()).snapshot.session.timers.definitions.length === 1, 'saved trigger in main app');
-            await append(['SYNTHETIC PULSE', 'You crush a synthetic skeleton for 25 points of damage.']);
+            await append(['SYNTHETIC PULSE Keeper 90', 'You crush a synthetic skeleton for 25 points of damage.']);
             await until(async () => (await state()).snapshot.session.parse.totalDamage === 125 && (await state()).snapshot.session.timers.timers.length === 1, 'timer and parse consume one shared log');
+            assert.equal((await state()).snapshot.session.timers.timers[0].label,'Pulse Keeper','live regex capture is substituted into the timer label');
+            await execute(owner, () => document.querySelector('#timer-settings [data-timer-tab="running"]').click());
             await execute(owner, () => {
                 const form = document.querySelector('#timer-settings [data-quick-timer]');
                 form.elements.namedItem('label').value = 'Manual fixture'; form.elements.namedItem('durationSeconds').value = '120'; form.requestSubmit();
@@ -167,12 +223,28 @@ try {
             await until(async () => (await state()).snapshot.session.timers.timers.find(timer => timer.id === timerId)?.status === 'paused', 'paused timer in main app');
             await execute(owner, id => document.querySelector(`#timer-settings [data-timer-action="resume"][data-timer-id="${id}"]`).click(), timerId);
             await until(async () => (await state()).snapshot.session.timers.timers.find(timer => timer.id === timerId)?.status === 'running', 'resumed timer in main app');
-            await execute(owner, () => { const input = document.querySelector('#timer-settings [data-swing-delay]'); input.value = '25'; input.dispatchEvent(new Event('change', {bubbles:true})); });
+            await execute(owner, () => { document.querySelector('#timer-settings [data-timer-tab="swing"]').click(); const input = document.querySelector('#timer-settings [data-swing-delay]'); input.value = '25'; input.dispatchEvent(new Event('change', {bubbles:true})); });
             await until(async () => (await state()).snapshot.session.timers.swing.delayTenths === 25, 'swing delay edited in main app');
             await execute(owner, () => document.querySelector('#timer-settings [data-timer-action="reset-swing"]').click());
             await append(['You slash a synthetic skeleton for 5 points of damage.']);
             await until(async () => (await state()).snapshot.session.timers.swing.intervalMs === 2500, 'weapon delay swing seed');
             assert.equal((await state()).snapshot.session.parse.totalTaken, 42, 'incoming melee, spell and dot damage share Taken');
+            await execute(owner, () => {
+                document.querySelector('[data-view="items"]').click();
+                const search=document.querySelector('#item-search');search.value='Era fixture';search.dispatchEvent(new Event('input'));
+                const zone=document.querySelector('#item-current-zone');zone.checked=false;zone.dispatchEvent(new Event('change'));
+                const era=document.querySelector('#era-select');era.value='Classic';era.dispatchEvent(new Event('change'));
+            });
+            const classicItems=await execute(owner, () => [...document.querySelectorAll('#item-list .data-card h3')].map(item=>item.textContent));
+            assert.deepEqual(classicItems,['Era fixture Classic']);
+            await execute(owner, () => {const era=document.querySelector('#era-select');era.value='Velious';era.dispatchEvent(new Event('change'));});
+            const veliousItems=await execute(owner, () => [...document.querySelectorAll('#item-list .data-card h3')].map(item=>item.textContent));
+            assert.deepEqual(veliousItems.slice().sort(),['Era fixture Classic','Era fixture Kunark','Era fixture Velious']);
+            await execute(owner, () => {document.querySelector('[data-view="overview"]').click();document.querySelector('[data-view="items"]').click();});
+            assert.equal(await execute(owner, () => document.querySelector('#era-select').value),'Velious','Era selection persists across full view rendering');
+            assert.equal(await execute(owner, () => document.querySelectorAll('#item-list .data-card').length),3);
+            assert.equal(await execute(owner, () => [...document.querySelectorAll('[data-map-mode]')].every(element=>Boolean(element.closest('[data-view-panel="map"]')))),true,'First/Top/Map controls belong only to the main Map page');
+            await execute(owner, () => {const search=document.querySelector('#item-search');search.value='';search.dispatchEvent(new Event('input'));const era=document.querySelector('#era-select');era.value='Classic';era.dispatchEvent(new Event('change'));});
             for (const window of Object.values(panels())) assert.equal(await execute(window, () => Boolean(document.querySelector('form, #swing-delay, #timer-form'))), false, 'floating panels contain no timer forms or settings');
             const tabs = await execute(panels().parse, () => [...document.querySelectorAll('[data-tab]')].map(button => button.textContent.trim()));
             assert.deepEqual(tabs, ['Overview', 'Damage', 'Healing', 'Taken', 'Session']);
@@ -214,11 +286,11 @@ try {
             assert.equal(owner.isDestroyed(), false, 'closing main app with visible overlays keeps the one session owner');
             assert.equal(owner.isVisible(), false);
             const before = (await state()).snapshot.session.timers.timers[0].remainingMs;
-            await append(['You slash a synthetic skeleton for 10 points of damage.', 'SYNTHETIC PULSE']);
+            await append(['You slash a synthetic skeleton for 10 points of damage.', 'SYNTHETIC PULSE Keeper 90']);
             await until(async () => (await state()).snapshot.session.parse.totalDamage === 140, 'hidden owner continues log parsing');
             const after = await state();
             assert.equal(after.snapshot.sessionId, sessionId);
-            assert.equal(after.snapshot.session.timers.timers.filter(timer => timer.label === 'Synthetic pulse').length, 1, 'repeated trigger replaces instead of duplicating');
+            assert.equal(after.snapshot.session.timers.timers.filter(timer => timer.label === 'Pulse Keeper').length, 1, 'repeated regex trigger replaces instead of duplicating');
             assert(after.snapshot.session.timers.timers.find(timer => timer.label === 'Manual fixture').remainingMs < 120000, 'hidden owner timers continue');
             assert(before > 0);
             return { ok:true, windows:ids.length, damage:after.snapshot.session.parse.totalDamage, timers:after.snapshot.session.timers.timers.length, sharedSession:true, screenshots };
@@ -230,7 +302,7 @@ try {
     };
     await writeFile(join(temporary, 'main.cjs'), `const { app } = require('electron');\napp.setPath('userData', ${JSON.stringify(profile)});\n(${run.toString()})(${JSON.stringify({root, log, screenshots})}).catch(error => { console.error(error.stack); app.exit(1); });\n`);
     const result = await new Promise((resolve, reject) => {
-        const child = spawn(electron, [temporary, '--disable-gpu'], { windowsHide:true, stdio:['ignore', 'pipe', 'pipe'] });
+        const child = spawn(electron, [temporary, '--disable-gpu', '--mute-audio'], { windowsHide:true, stdio:['ignore', 'pipe', 'pipe'] });
         let output = '';
         child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
         child.once('error', reject); child.once('exit', code => resolve({code, output}));

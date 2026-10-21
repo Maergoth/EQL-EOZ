@@ -25,10 +25,16 @@ const subscribe = (channel, callback) => {
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
 };
+contextBridge.exposeInMainWorld('eyeOfZommDiscovery',{
+    show:value=>ipcRenderer.invoke('eye-of-zomm:discovery','show',value),
+    action:(action,value)=>ipcRenderer.invoke('eye-of-zomm:discovery',action,value),
+    onAction:callback=>subscribe('eye-of-zomm:discovery-action',callback)
+});
 contextBridge.exposeInMainWorld('eyeOfZommOverlays', {
     getState:() => ipcRenderer.invoke('eye-of-zomm:overlays', 'get-state'),
     control:(action, panel, value) => ipcRenderer.invoke('eye-of-zomm:overlays', 'control', { action, panel, value }),
     publish:snapshot => ipcRenderer.invoke('eye-of-zomm:overlays', 'publish', snapshot),
+    reply:(requestId, result, error) => ipcRenderer.invoke('eye-of-zomm:overlays', 'reply', { requestId, result, error }),
     onAction:callback => subscribe('eye-of-zomm:overlay-command', callback),
     onState:callback => subscribe('eye-of-zomm:overlays-state', callback)
 });

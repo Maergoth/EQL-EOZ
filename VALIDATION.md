@@ -1,4 +1,35 @@
-# Validation report — v0.8.2
+# Validation report — v0.8.3
+
+## 0.8.3 map, intel, triggers and inline wiki notices
+
+The full source suite passes, including dynamic Raid Instance section fixtures,
+normal/raid identities, complete lazy drop replies, catalog completeness,
+regex worker timeouts/recovery, capture/Ignore authorization, fifteen-second
+notice deadlines and hover/focus holds. Source review also recovered stale
+map-root races and rejects an incomplete file inventory instead of claiming a
+map is missing. No runtime dependency was added.
+
+The actual Electron native-window smoke passes with a synthetic layered map,
+twelve normal drops versus two raid drops, consider selection/expansion without
+window activation, regex match preview and live named captures, Taken totals,
+hidden-owner continuity and cumulative Classic/Velious item filtering. All
+First/Top/Map controls are contained by the main map page. The worker/CSP smoke
+passes with JavaScript evaluation blocked and the WASM route worker available.
+
+Read-only parsing of the selected local client Maps directory matched 122 of
+124 catalog identities before the Kerra Island `kerraridge` alias correction,
+covering 857,460 lines and 4,354 labels. New Sebilis Expedition has no matching
+client map in this installation. Missing maps show an explicit fallback;
+markers never fabricate a validated route. Game files and raw logs are excluded.
+
+The discovery smoke uses a synthetic capture source and an in-memory clipboard
+spy. It verifies explicit capture, copied pixels and instructions without
+touching the user's clipboard or reading the desktop. This is separate from a
+physical game screenshot, foreground/DPI, click-through or audio-device check.
+Known named targets continue to use log text; screenshots do not drive parsing.
+
+Release dataset, installer and installed-upgrade observations are recorded below
+after those gates finish. Earlier 0.8.2 observations remain historical evidence.
 
 ## 0.8.2 application updates, native overlays and timers
 

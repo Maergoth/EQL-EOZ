@@ -21,19 +21,24 @@ function form(names) {
 }
 function fixture({ session, engine = new TimerEngine({ now:() => 100000 }) } = {}) {
     const root = new Element();
-    const editor = form(['label', 'type', 'durationSeconds', 'zone', 'trigger', 'match', 'overlap', 'repeat', 'enabled']);
+    const editor = form(['label', 'type', 'durationSeconds', 'zone', 'trigger', 'match', 'overlap', 'repeat', 'enabled', 'timerEnabled', 'ignorePunctuation',
+        'displayLabel', 'cooldownSeconds', 'notificationSeconds', 'warningSeconds', 'lowSeconds', 'color', 'warningColor', 'lowColor',
+        'action', 'sound', 'speech', 'volume', 'warningAction', 'warningSound', 'warningSpeech', 'endAction', 'endSound', 'endSpeech']);
+    editor.contains = element => Object.values(editor.fields).includes(element);
     const quick = form(['label', 'durationSeconds', 'repeat']);
     const kill = form(['durationSeconds']);
     const selectors = ['data-timer-status', 'data-editor-title', 'data-save-definition', 'data-trigger-field', 'data-match-field', 'data-trigger-title', 'data-editor-help',
-        'data-active-timers', 'data-saved-timers', 'data-last-kill', 'data-swing-enabled', 'data-swing-delay', 'data-swing-summary', 'data-start-spawn'];
+        'data-active-timers', 'data-saved-timers', 'data-last-kill', 'data-swing-enabled', 'data-swing-delay', 'data-swing-summary', 'data-start-spawn',
+        'data-timer-options', 'data-trigger-search', 'data-test-line', 'data-test-result'];
     const elements = Object.fromEntries(selectors.map(name => [`[${name}]`, new Element()]));
     elements['[data-timer-editor]'] = editor; elements['[data-quick-timer]'] = quick; elements['[data-kill-timer]'] = kill;
     root.querySelector = selector => elements[selector];
-    root.querySelectorAll = () => [...Object.values(elements), ...Object.values(editor.fields), ...Object.values(quick.fields), ...Object.values(kill.fields)];
+    root.querySelectorAll = selector => selector.includes('[data-timer-action=') || selector === '[data-timer-pane]' || selector === '[data-timer-tab]' ? [] : [...Object.values(elements), ...Object.values(editor.fields), ...Object.values(quick.fields), ...Object.values(kill.fields)];
     const listeners = new Set(), calls = [];
     const api = session ?? {
         getTimers:() => engine.snapshot(),
-        commandTimer(action, payload) { calls.push({ action, payload }); const snapshot = engine.command(action, payload); for (const callback of listeners) callback(snapshot); return snapshot; },
+        testTimer:(definition, line) => engine.preview(definition, line),
+        async commandTimer(action, payload) { calls.push({ action, payload }); const snapshot = await engine.command(action, payload); for (const callback of listeners) callback(snapshot); return snapshot; },
         onTimers(callback) { listeners.add(callback); return () => listeners.delete(callback); }
     };
     const controller = mountTimerSettings({ root, session:api });
@@ -59,7 +64,8 @@ assert.match(renderActiveTimerSettings([{ id:'1', label:'Other', remainingMs:300
 const app = fixture();
 await flush();
 assert.equal(app.elements['[data-start-spawn]'].disabled, true);
-assert.equal(app.editor.fields.type.value, 'manual');
+assert.equal(app.editor.fields.type.value, 'text');
+app.editor.fields.type.value = 'manual';
 app.editor.fields.label.value = 'Manual reminder';
 app.editor.fields.durationSeconds.value = '30';
 app.editor.fields.repeat.checked = true;
@@ -67,7 +73,7 @@ await app.editor.fire('submit');
 assert.equal(app.engine.snapshot().definitions.length, 1);
 const manualId = app.engine.snapshot().definitions[0].id;
 assert.equal(app.engine.snapshot().definitions[0].repeat, true);
-assert.equal(app.editor.fields.label.value, '', 'successful save clears the new-definition draft');
+assert.equal(app.editor.fields.label.value, 'Manual reminder', 'successful save keeps the new trigger selected in the editor');
 assert.match(app.elements['[data-timer-status]'].textContent, /saved/);
 await app.click('edit', manualId, true);
 assert.equal(app.editor.fields.label.value, 'Manual reminder');
@@ -95,6 +101,7 @@ assert.equal(app.engine.snapshot().timers[0].remainingMs, 45000);
 await app.click('delete', timerId);
 assert.equal(app.engine.snapshot().timers.length, 0);
 
+await app.click('new');
 app.editor.fields.type.value = 'text';
 await app.root.fire('change', app.editor.fields.type);
 assert.equal(app.elements['[data-trigger-field]'].hidden, false);
@@ -162,4 +169,57 @@ const source = readFileSync(new URL('../app/timer-settings.js', import.meta.url)
 assert.ok(!/new TimerEngine|new EQLogParser|setInterval\(/.test(source), 'main timer editor shares the owner session and creates no parser/engine/clock');
 assert.match(source, /Retain existing/);
 assert.match(source, /Add another/);
+assert.match(source, /trigger-workspace/);
+assert.match(source, /When the chat says/);
+assert.match(source, /Test match/);
+assert.match(source, /Regular expression/);
+
+const previewCalls = [];
+const regexUiEngine = new TimerEngine({ now:() => 100000, matcher:{
+    async match(input) { previewCalls.push(input); return { matched:true, line:input.line, match:'Hit 154', groups:{ damage:'154' } }; }, close() {}
+} });
+const regexUi = fixture({ engine:regexUiEngine });
+await flush();
+regexUi.editor.fields.label.value = 'Damage warning';
+regexUi.editor.fields.trigger.value = 'Hit (?P<damage>\\d+)';
+regexUi.editor.fields.match.value = 'regex';
+regexUi.editor.fields.displayLabel.value = '{damage} damage';
+regexUi.editor.fields.timerEnabled.checked = false;
+regexUi.editor.fields.notificationSeconds.value = '8';
+regexUi.editor.fields.cooldownSeconds.value = '3';
+regexUi.editor.fields.action.value = 'speak';
+regexUi.editor.fields.speech.value = 'Hit for {damage}';
+regexUi.elements['[data-test-line]'].value = 'Hit 154';
+await regexUi.click('test');
+assert.match(regexUi.elements['[data-test-result]'].textContent, /154 damage/);
+assert.match(regexUi.elements['[data-test-result]'].textContent, /damage=154/);
+assert.equal(regexUiEngine.snapshot().timers.length, 0, 'Test match never fires a real countdown');
+assert.equal(regexUiEngine.drainCues().length, 0, 'Test match never plays its action');
+assert.equal(previewCalls[0].mode, 'regex');
+assert.equal(previewCalls[0].pattern, 'Hit (?P<damage>\\d+)');
+await regexUi.editor.fire('submit');
+let regexDefinition = regexUiEngine.snapshot().definitions[0];
+assert.equal(regexDefinition.match, 'regex');
+assert.equal(regexDefinition.timerEnabled, false);
+assert.equal(regexDefinition.cooldownSeconds, 3);
+assert.equal(regexDefinition.displayLabel, '{damage} damage');
+assert.equal(regexDefinition.action, 'speak');
+assert.equal(regexUi.editor.fields.label.value, 'Damage warning', 'saving keeps the trigger selected like the PNUT editor');
+await regexUi.click('fire-selected');
+assert.equal(regexUiEngine.snapshot().notifications[0].label, '154 damage');
+assert.equal(regexUiEngine.drainCues()[0].text, 'Hit for 154');
+assert.equal(regexUiEngine.snapshot().timers.length, 0);
+await regexUi.click('duplicate');
+assert.equal(regexUi.editor.fields.label.value, 'Damage warning copy');
+await regexUi.editor.fire('submit');
+assert.equal(regexUiEngine.snapshot().definitions.length, 2);
+assert.notEqual(regexUiEngine.snapshot().definitions[1].id, regexDefinition.id);
+const toggle = new Element(); toggle.dataset.toggleDefinition = regexDefinition.id; toggle.checked = false;
+await regexUi.root.fire('change', toggle); await flush();
+assert.equal(regexUiEngine.snapshot().definitions[0].enabled, false, 'list checkbox enables/disables the saved trigger');
+regexUi.editor.fields.label.value = 'Unsaved';
+await regexUi.root.fire('input', regexUi.editor.fields.label);
+await regexUi.click('fire-selected');
+assert.match(regexUi.elements['[data-timer-status]'].textContent, /Save your changes/);
+regexUi.controller.dispose(); regexUiEngine.close();
 console.log('Timer settings: complete main-app editing, draft retention, countdown controls, literal/zone/overlap options, kill reminders, swing controls and visible errors passed.');

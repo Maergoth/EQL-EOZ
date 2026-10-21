@@ -38,22 +38,63 @@ their original phase after sleep/restart; the engine computes elapsed cycles
 directly instead of running missed callbacks. Ended one-time timers stay at zero
 until reset or dismissed. Definitions and timer rows are separate: resetting or
 closing a row does not create or edit a reusable definition.
-The main editor provides a quick countdown, a saved-definition list with
-Start/Edit/Delete actions, active countdown controls and a reminder from the
-last logged kill. Editing a saved definition preserves its ID and does not
+The main page follows PNUT's list/editor layout: search and enable checkboxes
+on the left; New, Duplicate and Delete below the list; one selected editor on
+the right with Save and Fire now. The editor groups **When the chat says**,
+**Then**, and **Start a timer**. Running timers and Swing have their own tabs,
+with one-time countdown and last-kill reminders under Running timers.
+Editing a saved definition preserves its ID and does not
 overwrite an already running countdown. New live snapshots leave unsaved
 editor fields intact. Definitions can be disabled without deleting them;
-Start now remains available for manual testing. Errors appear in the editor.
+Fire now remains available for manual testing. Unsaved changes must be saved
+before firing. Errors and worker timeouts appear in the editor.
 
-Text-trigger definitions match literal text using Contains, Starts with or
-Whole line. Matching ignores case and repeated whitespace, and strips a log
-timestamp. Punctuation remains significant. No regular expression, script,
-audio file, speech, OCR typo matching or timer-sharing code executes. A text
+Text-trigger definitions support Contains, Starts with, Whole line and Regular
+expression. Literal matching ignores case and repeated whitespace and strips
+the log timestamp. Punctuation is significant unless **Ignore punctuation** is
+enabled. Existing literal definitions keep their original behavior. A text
 trigger can replace its prior timer, retain the existing one or add another.
 All three choices are available under **If already running** in the main
 editor. Its optional zone filter controls where new triggers may start. Existing
 zone-bound timers keep counting while another zone is active and expose
 `visible:false` to the panel; zoning never pauses their deadlines.
+
+**Test match** previews a pasted line, matched text, captures and the expanded
+display label without starting a countdown, showing a notification or playing
+audio. Labels and speech can use `{name}`, `{line}`, `{match}`, numeric captures
+such as `{1}`, and named captures such as `{damage}`. JavaScript `(?<damage>\d+)`
+and PNUT's common Python spelling `(?P<damage>\d+)` are both supported. Other
+expression syntax follows JavaScript; this is not a complete Python-regex
+compatibility layer. Unknown placeholders remain visible rather than disappearing.
+
+**Then** can show a label, play a built-in sound or speak local text. Turning
+off **Start a timer** produces a brief notification instead of a countdown.
+Quiet for suppresses repeated matches using event time. Countdown options
+include warning/low thresholds, normal/warning/low colors, and separate warning
+and end cues. Warnings and end cues fire once per observed timer cycle, and
+missed cycles during sleep do not produce an audio backlog. Speech and sound
+playback belong to the sole renderer session; the engine emits bounded cue
+records and never invokes an executable, opens arbitrary sound files, sends
+game input or performs network actions. PNUT's custom audio files, OCR typo
+matching, and timer sharing/import/export are outside this implementation.
+
+## Isolated expression matching
+
+User expressions compile and execute only in `app/workers/trigger-match.worker.js`.
+`TriggerMatcher` applies a 150 ms wall-clock deadline, terminates a stuck worker
+and starts a clean worker for subsequent work. Live definitions that exceed the
+deadline are disabled with a saved review message. The editor's test preview
+reports invalid syntax or a timeout without freezing the main app or overlays.
+Patterns are limited to 2,048 characters and lines to 8,192 characters.
+
+Literal, kill and swing processing stays synchronous. Regex lines are batched
+in event order (128 lines per batch, at most 256 queued), with their event-time
+zone retained. One bounded retry after quarantining an offending expression
+lets healthy definitions see that batch. Backpressure skips excess work with
+a visible matching-status message. Editing/deleting a definition while work is
+pending prevents an obsolete pattern from firing; closing the session resolves
+pending work and terminates its worker. Saved manual/literal definitions and
+absolute countdown deadlines migrate without restarting.
 
 One-time spawn reminders use a logged kill's target and zone plus the duration
 the user supplies. The deadline is **kill timestamp + chosen duration**, even if
@@ -116,7 +157,7 @@ rounds and unrecognized wording may be missed. No input is sent to EverQuest.
 
 ## Integration contract
 
-`TimerEngine({now, definitions, state})` accepts an injectable millisecond clock
+`TimerEngine({now, definitions, state, matcher})` accepts an injectable millisecond clock
 and validated local state. `consume(event, context)` accepts parsed events and
 raw log text. Use `context.at` for an unparsed line, `context.text` for literal
 triggers, a stable `context.logId`, and `context.zone`/`character` for session
@@ -135,13 +176,19 @@ to a different log uses that log's separate watermark. Initial/backfill gating
 remains required; these bounded replay guards are additional protection.
 
 `command(action, args)` accepts `save-definition`, `remove-definition`, `start`,
+`fire-definition`,
 `pause`, `resume`, `reset`, `cancel`/`delete`, `cancel-all`, `create-spawn`,
 `reset-swing`, `set-swing-enabled`, `set-swing-delay` and `set-zone`.
 `snapshot(now)` advances absolute deadlines and returns cloned definitions,
 timer rows, last logged kill and the observed swing estimate. Countdown progress
 is 1→0; swing progress is 0→1. `exportState()` is JSON-serializable. Persist it
-after every live batch and command, including watermark/kill-only changes;
-`consume`'s boolean reports only trigger countdown starts.
+after every live batch and command, including watermark/kill-only changes.
+`consume` returns a boolean for synchronous work or a Promise when regex work
+is queued; completion reports whether a countdown/notification fired. The
+session coalesces asynchronous completion publication without blocking parsing.
+`preview(definition, line)` is asynchronous and side-effect free.
+`drainCues()` returns and clears bounded sound/speech records. `close()` stops
+the matcher. Snapshots include transient notifications and matching status.
 
 `app/parser.js` retains outgoing damage totals and encounter construction.
 Melee events gain `skill`/`swingEligible`. `melee-miss`, `cast-begin` and
@@ -159,7 +206,12 @@ literal text matching, zone filters, overlap retention, history and persisted
 replay guards, kill-time spawn deadlines, corrupt local state, existing parser
 damage/encounter behavior, hit/miss learning, same-second clusters, waiting and
 idle states, observed haste changes, cast hold/interruption, seed replacement
-and settings persistence. Existing `node tests/test.mjs` also passes after
+and settings persistence. Real worker tests additionally cover named/numeric
+capture handling, invalid syntax, a pathological expression that is terminated
+while the owner event loop stays responsive, clean-worker recovery, live
+quarantine with healthy-rule retry, event order/zone retention, label and speech
+substitution, side-effect-free preview, notification expiry and once-only cues.
+Existing `node tests/test.mjs` also passes after
 parser enrichment. `node tests/overlay-session.mjs` verifies retained parse
 aggregates before feed limits, batch persistence, action dispatch, restart and
 replay handling, periodic expiry, storage/transport recovery and disposal.
@@ -170,5 +222,8 @@ action counts, timer deadlines and panel-targeted error notices.
 engine, including editing without duplicate definitions, draft retention during
 live updates, all countdown controls, literal/zone/overlap choices, kill-time
 reminders, swing controls, unavailable-session handling and visible errors.
+It also covers the selected-trigger list/editor, duplicate/enable controls,
+regex preview and saving, captured labels, notification-only actions and
+explicit Fire now behavior.
 These tests do not establish live-game attack precision or
 an NPC's actual respawn time.
