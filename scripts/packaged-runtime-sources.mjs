@@ -4,7 +4,10 @@
 // bootstrap must also match the verified pack fetched for this build.
 export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/data/eye-of-zomm-pack.bootstrap.json',
+    'app/index.html',
+    'app/styles.css',
     'app/app.js',
+    'app/app-update-ui.js',
     'app/item-browse.js',
     'app/item-scaling.js',
     'app/zone-identity.js',
@@ -24,7 +27,9 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/zoneviewer/zone-parser.worker.js',
     'app/zoneviewer/navigation.worker.js',
     'app/workers/recast-route.worker.js',
-    'desktop/main.cjs'
+    'desktop/main.cjs',
+    'desktop/preload.cjs',
+    'desktop/app-updater.cjs'
 ]);
 
 export function verifyPackagedRuntimeSources(packagedText, sourceText) {

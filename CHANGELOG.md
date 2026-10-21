@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.2 - Application updates and overlay UX direction
+
+- Add a separate Application updates card and header badge, with compatible beta-release discovery, verified downloads, cancellation, Later, and explicit installer approval.
+- Keep verified downloads across relaunches, make startup downloading opt-in, and preserve the normal NSIS app identity and user-data profile.
+- Reject mismatched installer names, sizes, hashes, redirects and downgrades; permit a replacement download when staged files change and retain the app if Windows handoff fails.
+- Record PNUT's interaction patterns and an EQL-themed overlay design, including independent panels, layout lock, separate click-through, hover/focus menus, player parse tabs and retained wiki/map/loot tools. Native overlays remain planned.
+
 ## 0.8.1 - Wiki and map integration corrections
 
 - Recover complete ramp candidates with validated exact-endpoint connectors, preserve legal supported stairs, and permit one independently certified local-drop retry when ordinary routing fails. Real Mistmoore/Kurn descents recover while blocked and reverse probes remain rejected.

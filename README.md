@@ -52,6 +52,7 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Provides a pin-to-top option that hides the draggable title bar while keeping the app in the Windows taskbar.
 - Keeps waypoint copy, consider pop-under loot, and class-filtered named-mob/drop intel available even when Minimal view's map and route actions are hidden; class-filtered loot excludes statless and weight-only records.
 - Opens Items to recommended current-zone/class loot, with explicit search, slot, sort, class, era, tier, and scope overrides.
+- Checks for new application releases, offers verified downloads and a user-approved Windows installer, and keeps app updates separate from wiki-data synchronization.
 - Shows keyboard-accessible EQLWiki Itembox-inspired local-data tooltips, including embedded wiki icons and tier/base comparisons.
 - Searches EQLWiki from the global search field and opens exact wiki links from local records.
 
@@ -115,6 +116,22 @@ The **Sync with Wiki** button performs the same check on demand.
 If the manifest version matches the cached version, nothing else is downloaded. If it changes, Eye of Zomm downloads the compressed data file from GitHub, verifies its SHA-256, validates the schema, and atomically replaces the local cached copy.
 
 **Players do not hit EQLWiki to check for dataset updates.**
+
+### Application updates
+
+In the installed Windows x64 app, **Settings → Application updates** checks
+GitHub for newer compatible releases, including the 0.x beta prereleases.
+Choose **Download**, then **Install update…** when ready to close EoZ and open
+the normal Windows installer. **Later** keeps the verified download for another
+time. Automatic startup downloads are optional and default off; installation
+always needs your approval. Settings, log/folder choices and cached wiki data
+stay in the existing application profile.
+
+This feature starts with 0.8.2. Older installations need that first updater
+build installed normally; **Sync with Wiki** updates data rather than app code.
+Unsigned beta installers remain unsigned. See the
+[PNUT UX plan](docs/PNUT_UX_PLAN.md) for implementation boundaries and the
+proposed overlay workspace; native overlays are not yet implemented.
 
 ## Wiki search / Open in browser
 

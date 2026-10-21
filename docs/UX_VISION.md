@@ -1,8 +1,8 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.8.1
-Last updated: 2026-09-05
+Baseline: 0.8.2
+Last updated: 2026-10-21
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
 
@@ -134,6 +134,20 @@ A renamed folder, rotated log, missing map file, stale cache, or interrupted dat
 ### 4.11 Every change carries its proof
 
 Every behavioral change adds the nearest deterministic regression test in the same commit. A reported bug starts with a fixture that fails for the reported case; coordinate, parser, routing, clipboard, and state rules belong in unit or contract tests. Visual behavior that requires proprietary archives or Windows still gets an automated structural guard plus a specific manual acceptance step and redacted diagnostics—not an undocumented “looks right” assumption.
+
+### 4.12 PNUT-style overlay direction (proposed)
+
+Use EQL's navy/gold visual identity with PNUT's compact encounter tabs,
+hover/focus menus and independent overlay panels. Layout lock preserves tab/menu
+interaction; Ignore mouse is a separate state with tray/main-window recovery.
+Keep the named/rare loot, consider tray, item scaling, wiki links and validated
+map/route tools. Exclude Elitist/Carebear and Revenge. Current parses remain
+player-only; rune grants are capacity rather than proven absorption.
+
+The [PNUT UX plan](PNUT_UX_PLAN.md) records the reference commit, exact source
+locations, state model and staged implementation. Shared session ownership must
+precede native overlay windows. This direction is a concept, not an implemented
+multi-window overlay. The 0.8.2 application updater is implemented separately.
 
 ## 5. Information architecture
 

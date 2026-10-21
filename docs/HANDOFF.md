@@ -9,7 +9,7 @@ This repository is the source of truth. A new contributor should be able to resu
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.8.1**. Minimal view is intel-first: named/rare mobs are the default surface, with no duplicate destination field, while map and row-level routing are independent opt-in Settings choices that default off. Waypoint copying, considers, pop-under loot, and mob-list filtering remain active without either. Class-filtered loot excludes statless and weight-only items.
+Current code baseline: **0.8.2**. Minimal view is intel-first: named/rare mobs are the default surface, with no duplicate destination field, while map and row-level routing are independent opt-in Settings choices that default off. Waypoint copying, considers, pop-under loot, and mob-list filtering remain active without either. Class-filtered loot excludes statless and weight-only items.
 
 The [wiki/map integration audit](INTEGRATION_AUDIT.md) records the 0.8.1 repairs,
 the fresh export, source locations, and remaining data/visual gates. The
@@ -51,6 +51,23 @@ npm run test:catalog
 
 Do not commit proprietary S3D/EQG archives, player logs, exported diagnostics, or the generated bootstrap pack.
 
+## Application updates and overlay direction
+
+The 0.8.2 candidate adds application releases independently of wiki-data Sync.
+`desktop/app-updater.cjs` owns release selection, bounded download/verification,
+saved staging and explicit NSIS handoff. `desktop/preload.cjs` exposes a fixed
+API only to the main local application frame; `app/app-update-ui.js` presents
+status, Download, Later and Install update… in Settings and a compact badge.
+Downloads on startup are opt-in; installation is never automatic. App ID,
+profile paths and the game-read boundary stay intact.
+
+[PNUT_UX_PLAN.md](PNUT_UX_PLAN.md) retains the inspected PNUT commit/source map,
+the EQL-themed overlay concept and exact next implementation seams. Native
+overlays are proposed. First extract one shared session owner before adding
+independent renderers, then deliver parse/intel panels and recovery, then map
+integration. Preserve player-only parse semantics and distinguish rune capacity
+from absorbed damage. Do not copy PNUT's Revenge or Elitist/Carebear controls.
+
 ## Runtime architecture
 
 The desktop process in [`desktop/main.cjs`](../desktop/main.cjs) owns the selected EverQuest root, safe loopback file bridge, log selection, cached dataset, and Electron window. [`app/app.js`](../app/app.js) consumes that bridge, parses appended log text with [`app/parser.js`](../app/parser.js), derives the session UI, and coordinates the embedded viewer.
@@ -90,6 +107,11 @@ The app is read-only with respect to EverQuest. It may consume `/loc` lines prod
 - EQEmu's deprecated but directly relevant [azone2 WLD exporter](https://github.com/EQEmu/EQEmu/blob/master/utils/deprecated/azone2/wld.cpp) assigns each material group's `polycount` to the next sequential polygons. That is corroborating evidence for the skipped-material cursor repair, not a replacement for proprietary client rendering tests.
 
 ## Exact next work
+
+For the requested overlay evolution, follow the shared-session and native-window
+phases in [PNUT_UX_PLAN.md](PNUT_UX_PLAN.md). Complete the controlled Windows
+updater/installer acceptance before claiming a successful installed upgrade.
+The updater's mocked and actual-Electron checks do not launch an installer.
 
 Use [MAP_VALIDATION.md](MAP_VALIDATION.md) for completed 0.8.1 rendered checks,
 aggregate results, and private local rerun context. Continue section 16.3 of

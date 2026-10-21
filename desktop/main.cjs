@@ -8,6 +8,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const { URL } = require('node:url');
+const { AppUpdater, isReleaseNotesUrl } = require('./app-updater.cjs');
 const {
     inferEqRootPath,
     isEqLogName,
@@ -33,6 +34,31 @@ let server = null;
 let windowRef = null;
 let port = DEFAULT_PORT;
 let normalWindowBounds = null;
+let appUpdater = null;
+
+function getAppUpdater() {
+    if (!appUpdater) appUpdater = new AppUpdater({
+        version:APP_VERSION,
+        cacheDirectory:path.join(userDataDir(), 'app-updates'),
+        isPackaged:app.isPackaged,
+        confirmInstall:async version => {
+            const result = await dialog.showMessageBox(windowRef || undefined, {
+                type:'question',
+                title:'Install Eye of Zomm update',
+                message:`Install Eye of Zomm ${version}?`,
+                detail:'Eye of Zomm will close and the Windows installer will open. Your saved settings, wiki data, and logs are kept. Finish the installer to reopen the app.',
+                buttons:['Later', 'Install update'],
+                defaultId:0,
+                cancelId:0,
+                noLink:true
+            });
+            return result.response === 1;
+        },
+        launchInstaller:target => shell.openPath(target),
+        onInstallerLaunched:() => app.quit()
+    });
+    return appUpdater;
+}
 
 function rootDir() {
     return path.join(__dirname, '..');
@@ -647,17 +673,17 @@ function createWindow(config = {}) {
     windowRef.setAlwaysOnTop(Boolean(config.alwaysOnTop), config.alwaysOnTop ? 'screen-saver' : 'normal');
     windowRef.setSkipTaskbar(false);
 
-    const openApprovedWikiUrl = url => {
+    const openApprovedExternalUrl = url => {
         try {
             const target = new URL(url);
-            if (target.protocol === 'https:' && ['eqlwiki.com', 'www.eqlwiki.com'].includes(target.hostname.toLowerCase())) {
+            if ((target.protocol === 'https:' && ['eqlwiki.com', 'www.eqlwiki.com'].includes(target.hostname.toLowerCase())) || isReleaseNotesUrl(url)) {
                 void shell.openExternal(target.toString());
             }
         } catch {}
     };
 
     windowRef.webContents.setWindowOpenHandler(({ url }) => {
-        openApprovedWikiUrl(url);
+        openApprovedExternalUrl(url);
         return { action: 'deny' };
     });
 
@@ -665,7 +691,7 @@ function createWindow(config = {}) {
         const localPrefix = `http://${HOST}:${port}/`;
         if (!url.startsWith(localPrefix)) {
             event.preventDefault();
-            openApprovedWikiUrl(url);
+            openApprovedExternalUrl(url);
         }
     });
 
@@ -690,7 +716,28 @@ async function bootstrap() {
     // a tiny GitHub dataset-manifest check runs in parallel on every startup.
     void updateStaticDataPack(false).catch(error => console.warn('[Eye of Zomm] data sync:', error));
     createWindow(config);
+    // Metadata checks are quiet. Application downloads require an explicit
+    // request or the saved opt-in; a staged installer never runs on startup.
+    void getAppUpdater().startup().catch(() => console.warn('[Eye of Zomm] application update check unavailable.'));
 }
+
+ipcMain.handle('eye-of-zomm:app-update', async (event, action, value) => {
+    // Only the main local application frame can control an installer. The
+    // embedded zone viewer and unrelated loopback clients have no update API.
+    if (!windowRef || windowRef.isDestroyed() || event.sender !== windowRef.webContents ||
+        event.senderFrame !== windowRef.webContents.mainFrame ||
+        event.senderFrame?.url !== `http://${HOST}:${port}/`) {
+        throw new Error('Application update request is unavailable.');
+    }
+    const updater = getAppUpdater();
+    if (action === 'get-status') return updater.getStatus();
+    if (action === 'check') return updater.check();
+    if (action === 'download') return updater.download();
+    if (action === 'cancel') return updater.cancel();
+    if (action === 'startup-download' && typeof value === 'boolean') return updater.setStartupDownload(value);
+    if (action === 'install') return updater.install();
+    throw new Error('Unknown application update request.');
+});
 
 ipcMain.handle('eye-of-zomm:window', (_event, action) => {
     if (!windowRef || windowRef.isDestroyed()) return false;
@@ -732,5 +779,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+    appUpdater?.shutdown();
     try { server?.close(); } catch {}
 });

@@ -9,6 +9,7 @@ EQLWiki - Eye of Zomm is intentionally designed around a narrow, auditable bound
 - local EverQuest zone/archive/map files under that selected folder;
 - Eye of Zomm's own preferences/cache files;
 - the public GitHub `dataset` branch manifest and compressed EQLWiki dataset.
+- release metadata and the exact Windows installer from the public Eye of Zomm GitHub repository, when checking/downloading an app update.
 
 ## It does not
 
@@ -28,3 +29,9 @@ The desktop service binds only to `127.0.0.1`. Renderer polling therefore stays 
 The embedded Zone Viewer receives bounded, read-only access to supported zone/map files under the selected folder. Its parsed/cached data is maintained by the viewer runtime and is never written back into the EverQuest installation.
 
 Remote structured knowledge arrives from GitHub as a static gzip data pack originally generated on EQLWiki. The app verifies the published SHA-256 before replacing the previous local pack.
+
+Application updates use a separate bounded release check and SHA-256-verified
+installer staged only in Eye of Zomm's own user-data directory. Automatic
+downloads are opt-in. Launching that installer requires an explicit native
+confirmation; checking, downloading, closing and starting EoZ never silently
+install an update. The normal installer upgrades Eye of Zomm, not game files.

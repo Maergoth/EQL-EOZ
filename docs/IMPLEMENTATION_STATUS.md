@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-21
 
-Code baseline: 0.8.1
+Code baseline: 0.8.2
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
@@ -16,6 +16,8 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 | 0.8 Recast/Detour worker | Guarded real-zone candidate integrated; promotion gated | Pinned 0.43.1 + deterministic module bundle; cooperative decoded-viewer collision export; bounded route crop; transferable buffers; established-first atomic replacement; latest-request-wins cancellation; independent validation; package and notice checks | Pass the full proprietary-zone and responsiveness matrix before making Recast first choice |
 | 0.9 decision intelligence beta | Planned | User stories and data rules in vision 16.4 | Begin only after the 0.8 95% corpus/collision/non-blocking exit gate |
 | 1.0 trusted release | Planned | Quality gate in vision 16.5 | Signing, upgrade path, support/compatibility docs, clean Windows matrix, no S1/S2 defects |
+| 0.8.2 application updater | Implemented; installed upgrade acceptance pending | GitHub beta discovery; verified bounded NSIS staging; explicit native install approval; mocked lifecycle and renderer tests; actual Electron IPC/UI smoke | Controlled Windows upgrade preserves profile and verifies installer/relaunch behavior |
+| PNUT-style overlay workspace | Concept and source-backed plan | EQL palette; independent/docked panel concepts; lock versus click-through; player parse tabs and retained EoZ tools in [PNUT_UX_PLAN.md](PNUT_UX_PLAN.md) | Shared session owner, then native panel/recovery/OS-scaling acceptance |
 
 ## Current highest-priority task
 

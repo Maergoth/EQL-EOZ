@@ -1,4 +1,32 @@
-# Validation report — v0.8.1
+# Validation report — v0.8.2
+
+## 0.8.2 application updates and overlay design
+
+The dependency-free updater has 22 mocked lifecycle/network/IPC checks plus
+renderer checks for progress, cancellation, Later, explicit install action,
+retryable error visibility and stale responses. Independent review identified
+and verified fixes for hidden retry errors and redownloading changed/missing
+staged installers. Actual Electron smoke exercises the preload API and Settings
+controls in unsupported development mode while retaining the worker/CSP check.
+
+The full test suite, both 8/8 route corpora, production catalog relevance (64
+Befallen/MNK items), and the high-severity dependency gate pass. The existing
+eight moderate builder-chain advisories remain; no new dependency is added.
+A read-only unauthenticated GitHub check selects the actual v0.8.1 installer
+and valid asset digest for a simulated 0.8.0 client, and correctly finds no newer
+release for the 0.8.2 candidate. It downloads or executes no installer.
+
+Local Windows NSIS compilation and the expanded exact-source ASAR gate pass
+for 0.8.2 with production snapshot `20261021T062421Z-830bd5a89bfa` (124 zones,
+8,645 NPC records, 11,262 items). The ASAR includes the new updater, preload,
+renderer module and Settings markup/styles. The installer reports `NotSigned`
+and was not installed or used to perform an upgrade.
+
+The overlay deliverable is an interactive concept and the source-backed
+[PNUT UX plan](docs/PNUT_UX_PLAN.md). It does not establish native overlay,
+shared-session, focus, mouse-passthrough, docking or OS-wide scaling behavior.
+Installation/upgrade execution remains untested; use the updated
+[Windows checklist](docs/WINDOWS_MANUAL_TEST.md) for a controlled upgrade.
 
 ## 0.8.1 integration audit
 

@@ -7,6 +7,7 @@ import { buildDiagnosticSnapshot } from './diagnostics.js';
 import { routeDistanceLabel } from './route-guidance.js';
 import { formatWorldLocationForPlayer, waypointCommandForWorldLocation, wikiLocationToWorld } from './coordinate-system.js';
 import { resolveZoneRecord } from './zone-identity.js';
+import { mountAppUpdates } from './app-update-ui.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -2180,6 +2181,14 @@ function wireUi() {
 
 buildClassChips();
 wireUi();
+const appUpdatesUi = mountAppUpdates({
+    openSettings:async () => {
+        if (document.body.classList.contains('minimal-mode')) await toggleMinimalMode();
+        setView('settings');
+        document.getElementById('check-app-update').focus();
+    }
+});
+window.addEventListener('pagehide', () => appUpdatesUi.dispose(), { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

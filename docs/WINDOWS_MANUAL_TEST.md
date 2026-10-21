@@ -1,8 +1,31 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.1-x64.exe`.
+Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.2-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the custom title bar visibly says `v0.8.1`; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the custom title bar visibly says `v0.8.2`; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+
+## 0. Application updater acceptance
+
+The 0.8.2 candidate adds Application updates separately from Sync with Wiki.
+An existing 0.8.1 installation needs the first updater build installed normally.
+Record its folder/log choices, preferences and cached wiki-data state; verify
+those are retained after the normal NSIS upgrade. A future approved newer build
+is needed to prove the complete in-app updater path without changing production
+release metadata for a test.
+
+In a controlled Windows test, check that the correct new version is offered,
+Release notes opens only this repository, download progress/cancellation work,
+Later preserves the staged package after relaunch, and no installer runs on
+startup or exit. Automatic download defaults off. Cancel the native install
+confirmation first; EoZ must remain open. Approve only when ready to test the
+actual upgrade: verify NSIS opens, EoZ closes after handoff, installation finishes,
+the correct version relaunches and the same profile/cache/log choices remain.
+Use disposable EoZ test profiles to test changed/missing staged installer recovery
+and Windows launch failure. Game files must never change. Hash verification does
+not establish Authenticode signing; record signature status separately.
+
+Native overlay lock, mouse passthrough and multi-monitor behavior are proposed
+in [PNUT_UX_PLAN.md](PNUT_UX_PLAN.md), not shipped in this candidate.
 
 For the 0.8.1 integration fixes, select a wiki-only named NPC and verify its
 marker and route destination coincide. Move and issue a later `/loc`; the same

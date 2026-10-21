@@ -23,6 +23,14 @@ try {
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
     await writeFile(join(temporary, 'package.json'), JSON.stringify({ name:'eoz-worker-smoke', version:pkg.version, main:'main.cjs' }));
     const browserTest = async () => {
+        const appUpdate = await window.eyeOfZommUpdates.getStatus();
+        if (appUpdate.supported !== false || appUpdate.isPackaged !== false || appUpdate.status !== 'unsupported') {
+            throw new Error('Development desktop updater must be exposed through trusted IPC without offering installation.');
+        }
+        document.querySelector('[data-view="settings"]').click();
+        if (!document.getElementById('check-app-update').disabled || !document.getElementById('install-app-update').hidden) {
+            throw new Error('Application update controls must reflect development-mode support.');
+        }
         let evalBlocked = false;
         try { new Function('return 1')(); } catch { evalBlocked = true; }
         const worker = new Worker('/workers/recast-route.worker.js', { type:'module' });
@@ -37,7 +45,7 @@ try {
                 worker.onerror = event => { clearTimeout(timer); reject(new Error(event.message)); };
                 worker.postMessage({ id:'synthetic-smoke', action:'route', request });
             });
-            return { evalBlocked, ok:result.ok, status:result.status, violations:result.violationCount, reason:result.reason };
+            return { evalBlocked, appUpdateStatus:appUpdate.status, ok:result.ok, status:result.status, violations:result.violationCount, reason:result.reason };
         } finally { worker.terminate(); }
     };
     const main = `const { app, BrowserWindow } = require('electron');
@@ -67,7 +75,8 @@ require(${JSON.stringify(join(root, 'desktop/main.cjs'))});
     });
     assert.equal(result.code, 0, result.output);
     assert.match(result.output, /EOZ_WORKER_SMOKE=.*"ok":true/);
-    console.log('Actual Electron CSP/browser worker smoke passed: WASM route ready, zero violations, JavaScript eval blocked.');
+    assert.match(result.output, /"appUpdateStatus":"unsupported"/);
+    console.log('Actual Electron updater IPC/UI and CSP/browser worker smoke passed: unsupported dev installer, WASM route ready, zero violations, JavaScript eval blocked.');
 } finally {
     if (dirname(temporary) !== resolve(tmpdir()) || !basename(temporary).startsWith('eoz-worker-smoke-')) throw new Error('Unexpected smoke-test cleanup path');
     await rm(temporary, { recursive:true, force:true });

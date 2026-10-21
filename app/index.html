@@ -41,6 +41,7 @@
             <button id="minimal-intel-toggle" class="topbar-control minimal-only-control" type="button" aria-pressed="true">Hide intel</button>
             <button id="pin-window" class="topbar-control" type="button" aria-pressed="false">◇ Pin to top</button>
             <button id="minimal-mode" class="topbar-control" type="button" aria-pressed="false">Minimal</button>
+            <button id="app-update-badge" class="topbar-control app-update-badge" type="button" hidden>App update</button>
         </div>
         <div class="live-strip">
             <span id="bridge-status" class="status-pill status-warn">Connecting</span>
@@ -301,8 +302,25 @@
                     </label>
                 </article>
                 <article class="panel">
+                    <h2>Application updates</h2>
+                    <div class="setting-line"><span>Installed version</span><code id="app-version">—</code></div>
+                    <p id="app-update-status" class="app-update-status" role="status" aria-live="polite">Checking application update support…</p>
+                    <p id="app-update-detail" class="settings-helper" role="alert" hidden></p>
+                    <progress id="app-update-progress" class="app-update-progress" max="100" aria-label="Application update download" hidden></progress>
+                    <span id="app-update-progress-label" class="settings-helper" hidden></span>
+                    <div class="settings-actions">
+                        <button id="check-app-update" class="secondary-button" type="button">Check for updates</button>
+                        <button id="download-app-update" class="primary-button" type="button" hidden>Download update</button>
+                        <button id="install-app-update" class="primary-button" type="button" hidden>Install update…</button>
+                        <button id="cancel-app-update" class="secondary-button" type="button" hidden>Cancel download</button>
+                        <button id="later-app-update" class="text-button" type="button" hidden>Later</button>
+                        <a id="app-update-notes" class="text-button" target="_blank" rel="noopener noreferrer" hidden>Release notes</a>
+                    </div>
+                    <label class="check-control app-update-preference"><input id="app-update-startup-download" type="checkbox"> Download app updates automatically on startup</label>
+                    <p class="settings-helper">Installation always waits for your approval. Your settings and wiki data stay on this PC.</p>
+                </article>
+                <article class="panel">
                     <h2>Wiki data</h2>
-                    <div class="setting-line"><span>App version</span><code id="app-version">—</code></div>
                     <div class="setting-line"><span>Pack version</span><code id="pack-version">—</code></div>
                     <div class="setting-line"><span>Pack mode</span><code id="pack-mode">Sample</code></div>
                     <div class="setting-line"><span>Update status</span><code id="pack-update-status">—</code></div>
