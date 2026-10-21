@@ -58,21 +58,33 @@ promotion PR #36 applied only the reviewed six-file change on top of current
 passed. Installed producer/catalog hashes match the reviewed Git contents.
 The previous verified filtered manifest/gzip pair was retained privately.
 
-The existing low-priority export job then rebuilt the live wiki data and
-published dataset commit `81a5c819b2832a580918d3aea4ad35ccb896d2b3`:
+The first rebuilt snapshot (`20261021T060010Z-b9ad50c7439d`) exposed stale
+categories overriding explicit NPC zones or discarding a second spawn zone.
+Follow-up PR #37 passed staging; scoped production promotion #38 and deployment
+[`3f65f4c`](https://github.com/Maergoth/EQLWiki/actions/runs/39554124791)
+passed. The installed producer hash matches that reviewed correction.
+The existing low-priority job rebuilt the live wiki again and published the
+final dataset commit `a97e2c8e1fea4f2a33cc65a83b94fabeceec7857`:
 
-- Manifest: `20261021T060010Z-b9ad50c7439d`, published October 21 at 06:00:10 UTC.
-- Gzip: 2,774,048 bytes; SHA-256
-  `f536abd2a755fd1520184b6206eda5cb91afd5556b681c877d0fffd80d6fb363`.
-- Schema v3, **124 zones, 8,426 NPC records, 11,262 items, 776 icons**;
+- Manifest: `20261021T062421Z-830bd5a89bfa`, published October 21 at 06:24:21 UTC.
+- Gzip: 2,788,522 bytes; SHA-256
+  `6ea087bd6162b62a52545e81f1b16ab9f3b58436cce633ddffb8b3da9576dc61`.
+- Schema v3, **124 zones, 8,645 NPC records, 11,262 items, 776 icons**;
   metadata counts agree and canonical zone names are unchanged.
 - **750 previously unzoned NPC pages recovered**, leaving 19 unresolved;
   no previously unzoned page disappeared. All 712 `ALL except` records now
   carry the explicit class complement, including 703 with listed exclusions.
   No invalid class codes or unrecognized nonblank NPC zones remain.
+- All 7,959 represented NPC pages and NPC/item revision IDs are unchanged.
+  The final precedence correction changes zone records on 307 pages, adding
+  288 article/zone pairs and removing 69 for a net 219 over the interim snapshot,
+  with no duplicate pairs. NPC
+  fields outside zones are unchanged; item records and icons match the interim
+  snapshot. The three reported zone regressions and the preserved explicit
+  field of the internally inconsistent fourth article pass direct checks.
 - Public download checksum/schema checks, the 64-result Befallen/MNK catalog
   check, and a rebuilt Windows ASAR pass. The packaged bootstrap exactly
-  matches the fetched snapshot and reports pack `wiki-20261021T060009Z`.
+  matches the fetched snapshot and reports pack `wiki-20261021T062421Z`.
 
 Only the filtered dataset was published. Database snapshots, account data,
 settings, and client assets remain outside the application release.
@@ -134,6 +146,11 @@ copied and no renderer/parser replacement is justified by this evidence.
 
 ### Follow-up work kept out of this patch
 
+- **Conflicting article metadata:** the producer preserves recognized explicit
+  template zones. Ungia's template says Grobb while its category/description
+  point to Neriak Foreign Quarter. This remains a wiki-content question; do not
+  introduce NPC-specific exporter exceptions or silently edit the article as
+  part of a code release.
 - **NPC game names versus article titles:** 227 initial NPC records have
   parenthesized disambiguators. Export the actual template name plus separate
   wikiTitle/aliases, and match names with zone context; stripping every suffix

@@ -127,8 +127,9 @@ zone. Categories and article-title suffixes are fallbacks; newly recognized
 categories must not override a field or remove a second spawn zone.
 
 The October 21, 2026 owner-approved rollout completed staging and production
-deployment via EQLWiki PRs #35/#36, then rebuilt and published manifest
-`20261021T060010Z-b9ad50c7439d`: 124 zones, 8,426 NPC records, 11,262 items.
+deployment via EQLWiki PRs #35/#36 and the explicit-zone precedence follow-up
+#37/#38, then rebuilt and published final manifest
+`20261021T062421Z-830bd5a89bfa`: 124 zones, 8,645 NPC records, 11,262 items.
 The [integration audit](../docs/INTEGRATION_AUDIT.md#approved-production-rollout)
 records the verified checksum, recovered coverage, and initial-download checks.
 

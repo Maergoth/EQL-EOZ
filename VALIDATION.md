@@ -10,12 +10,14 @@ corpora remain 8/8; no routing engine promotion is included.
 
 The corrected producer/catalog passed staging and production deployment.
 The subsequent live-wiki export published
-`20261021T060010Z-b9ad50c7439d`. Bootstrap SHA-256/schema checks pass for 124
-zones, 8,426 NPC records, and 11,262 items. It recovers 750 previously unzoned
+`20261021T062421Z-830bd5a89bfa`. Bootstrap SHA-256/schema checks pass for 124
+zones, 8,645 NPC records, and 11,262 items. It recovers 750 previously unzoned
 NPC pages (19 remain unresolved) and normalizes all 712 `ALL except` records.
 `npm run test:catalog` passes with 64 Befallen/MNK items. A rebuilt Windows
 ASAR contains exactly the fetched bootstrap bytes and tested runtime sources.
-See the [integration audit](docs/INTEGRATION_AUDIT.md) for exact provenance.
+Direct final-data checks confirm the repaired explicit/multiple-zone records;
+all represented NPC pages and revision IDs are preserved. See the
+[integration audit](docs/INTEGRATION_AUDIT.md) for exact provenance.
 
 The follow-up [map validation](docs/MAP_VALIDATION.md) uses the actual Electron
 renderer and bundled workers against five local zones. The

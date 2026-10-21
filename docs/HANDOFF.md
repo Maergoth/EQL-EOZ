@@ -20,7 +20,7 @@ repairs: 36 rendered requests, 20 valid paths, 16 markers, and exact endpoints.
 This patch retains guarded established-first
 routing; both engines are checked before drawing. The reviewed exporter/catalog
 is deployed in production and the rebuilt initial-download snapshot is
-`20261021T060010Z-b9ad50c7439d` (124 zones, 8,426 NPCs, 11,262 items).
+`20261021T062421Z-830bd5a89bfa` (124 zones, 8,645 NPCs, 11,262 items).
 The integration audit records deployment and checksum evidence.
 
 Desktop zone indexing remains metadata-only and hydrates the selected archive on demand. The WLD exporter advances across skipped material groups so later textures stay assigned to their actual polygon ranges; bitmap aliases and repeating UV sampling remain in place. EQEmu's sequential WLD polygon/material assignment independently supports this repair. The local rendered pass now confirms Mistmoore and Commonlands textures; live game comparison remains separate.

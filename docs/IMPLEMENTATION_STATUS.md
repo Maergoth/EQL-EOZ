@@ -29,7 +29,7 @@ the guarded engine policy and conservative clearance checks.
 
 Next verify known-walkable ramp/drop/door coverage and live movement/heading,
 OS-wide DPI changes, and installer behavior. The reviewed producer/catalog is
-deployed; rebuilt dataset `20261021T060010Z-b9ad50c7439d` is published and the
+deployed; rebuilt dataset `20261021T062421Z-830bd5a89bfa` is published and the
 initial-download bootstrap passes exact-byte ASAR checks. Capture only
 aggregate schema-v2 diagnostics. Both established and candidate paths must
 validate before display; do not introduce a renderer-thread collision graph
