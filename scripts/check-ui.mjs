@@ -43,7 +43,7 @@ for (const required of ['frame: false', 'skipTaskbar: false', "setSkipTaskbar(fa
 if (/setSkipTaskbar\((?:true|enabled)/.test(desktop)) throw new Error('Pinned mode must remain in the taskbar.');
 
 const viewer = readFileSync(join(root, 'app/zoneviewer/viewer.html'), 'utf8');
-for (const required of ['setView(mode)', 'const changedZone = zoneIdentity !== loadedZoneIdentity', 'selectedFloorIndices?.clear?.()', 'app.eqWorldToThree', 'lastSyncedLocation', 'lastSyncedGround', 'findGroundPointAt(point.x, point.z, point.y)', 'focusTopViewAt(lastSyncedGround)', 'headingTracker.push', 'setRareMobs(records = [])', 'eoz-rare-mob-selected', 'eyeOfZommHasZoneArchives', "reason:'no-zone-archives'", 'routeGuidance', 'renderRouteGuidance', 'navigationResult', 'clearPath()']) {
+for (const required of ['setView(mode)', 'installZoneLoadGuard(app, {', 'zoneLoadGuard.isReady(selected)', 'app.currentZoneRecord.id !== selected.id', 'app.currentZoneRecord.format !== selected.format', 'selectViewerZoneOption(select.options, zoneName)', 'selectedFloorIndices?.clear?.()', 'app.eqWorldToThree', 'lastSyncedLocation', 'lastSyncedGround', 'findGroundPointAt(point.x, point.z, point.y)', 'focusTopViewAt(lastSyncedGround)', 'headingTracker.push', 'setRareMobs(records = [])', 'eoz-rare-mob-selected', 'eyeOfZommHasZoneArchives', "reason:'no-zone-archives'", 'routeGuidance', 'renderRouteGuidance', 'navigationResult', 'clearPath()']) {
     if (!viewer.includes(required)) throw new Error(`Map integration check is missing: ${required}`);
 }
 if (!viewer.includes("type:'eoz-route-cancelled'")) throw new Error('Viewer cancel does not notify the route owner.');

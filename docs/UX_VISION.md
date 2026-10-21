@@ -609,7 +609,7 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 
 ### Coordinate and camera truth
 
-- Logged `Your Location is -30, -961, -66` displays unchanged as `/loc -30, -961, -66`, while its internal client-map anchor is X `961`, Y `30`, Z `-66`.
+- Logged `Your Location is -961, -30, -66` displays unchanged as `/loc -961, -30, -66`, while its internal client-map anchor is X `30`, Y `961`, Z `-66`.
 - In a stacked zone, that Z remains on the nearest valid floor around `-66`; it must not snap to the floor around `-37` merely because collision was queried from above.
 - Two different `/loc` values orient first person along the observed trajectory.
 - First, Top, and Map remain centered on the same location.
@@ -707,7 +707,7 @@ Known 0.6 limits, stated rather than hidden:
 0.6 exit checklist:
 
 1. Fresh-folder and returning-startup flows complete with the expected automatic log.
-2. Befallen `/loc -30, -961, -66` normalizes to world X `-961`, Y `-30`, Z `-66`, projects to client-map X `961`, Y `30`, Z `-66`, and both paths meet on the same stacked-floor viewer anchor.
+2. Befallen `/loc -961, -30, -66` normalizes to world X `-30`, Y `-961`, Z `-66`, projects to client-map X `30`, Y `961`, Z `-66`, and both paths meet on the same stacked-floor viewer anchor. This fixture was corrected against local archive/map bounds in 0.8.1.
 3. Mistmoore `/loc -330, 120, -178.13` projects to the real map's Succor anchor near X `-120`, Y `330`, Z `-180` through the shared `(-world X,-world Y,Z)` transform. The viewer HUD/footer use the in-game Map window's explicit `X -330.00, Y 120.00, Z -178.13` labels; canonical world and client-map-file axes never appear as competing player locations.
 4. Two `/loc` samples update facing; a live destination re-routes without another selection.
 5. First/Top/Map remain available through full/minimal transitions.
@@ -750,11 +750,15 @@ Committed user stories:
 The 0.8.1 [integration audit](INTEGRATION_AUDIT.md) adds behavioral coverage
 for wiki-to-map destination conversion, movement-driven rerouting, cancellation,
 dataset recovery, and item/export parity. It retains established-first routing
-and the proprietary visual/route acceptance matrix below.
+and the proprietary visual/route acceptance matrix below. The follow-up
+[map validation](MAP_VALIDATION.md) records 28 rendered local-zone probes and
+27 view/scale captures, safe destination-only rejections, and remaining live
+movement/door/DPI/installer limits. Both route engines now validate before
+display; this evidence does not authorize engine promotion.
 
 Release thesis: paths must be predictable enough that a player will use them in a multi-floor dungeon without cross-checking every turn.
 
-Implementation note (updated for 0.8.0): deterministic route cues, diagnostics schema v2, and the eight-expectation geometry corpus are implemented. The established line-map graph still runs in a Web Worker first and is collision-projected in yielding renderer chunks. After that usable line or honest marker exists, the wrapper cooperatively exports the already-decoded viewer collision mesh, crops a capped route corridor, and transfers it to the pinned `recast-navigation` 0.43.1 worker. Only a full candidate that independently passes surface, +6 upward-climb, and directed-drop validation may atomically replace the ribbon; every failure and stale response preserves established guidance. Minimal defaults to rare-mob intel with map and routing independently opt-in. WLD skipped-material groups preserve sequential polygon alignment, corroborated by EQEmu's WLD exporter, but texture fidelity and route quality still require the proprietary Windows matrix. See [the navmesh evaluation](NAVMESH_EVALUATION.md), [implementation status](IMPLEMENTATION_STATUS.md), and [contributor handoff](HANDOFF.md#exact-next-work).
+Implementation note (updated for 0.8.1): deterministic route cues, diagnostics schema v2, and both eight-expectation geometry corpora are implemented. The established line-map graph runs in a Web Worker first and is collision-projected in yielding renderer chunks. A zone/request-scoped guard checks walkable support, full body clearance, +6 climb, and directed drops before drawing. The wrapper crops decoded collision data around that safe line or the requested endpoints and transfers it to the pinned `recast-navigation` 0.43.1 worker. Only a full validated candidate replaces the ribbon; failure retains a safe route or honest marker. The actor is 6 units tall with radius 2.25; voxel settings use those world dimensions. Minimal defaults to rare-mob intel with map and routing independently opt-in. Local First/Top rendering confirms the WLD material repair in Mistmoore/Commonlands, corroborated by EQEmu's WLD exporter. Complete known-walkable route coverage and live Windows acceptance remain open. See [the navmesh evaluation](NAVMESH_EVALUATION.md), [implementation status](IMPLEMENTATION_STATUS.md), and [contributor handoff](HANDOFF.md#exact-next-work).
 
 Navigation architecture:
 

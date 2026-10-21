@@ -1,4 +1,6 @@
 export const MAX_NAVIGATION_CLIMB_Z = 6;
+export const NAVIGATION_AGENT_HEIGHT = 6;
+export const NAVIGATION_AGENT_RADIUS = 2.25;
 export const NAVIGATION_ELEVATION_EPSILON = 0.001;
 
 /**
@@ -34,6 +36,8 @@ export function canUseDropSurface(fromElevation, candidateElevation, surfaces = 
 
 export function configureViewerMovement(controller) {
     if (!controller) return;
+    controller.eyeHeight = NAVIGATION_AGENT_HEIGHT;
+    controller.playerRadius = NAVIGATION_AGENT_RADIUS;
     controller.maxStepUp = Math.min(Number(controller.maxStepUp) || MAX_NAVIGATION_CLIMB_Z, MAX_NAVIGATION_CLIMB_Z);
     controller.jumpHeight = MAX_NAVIGATION_CLIMB_Z;
     controller.jumpVelocity = Math.sqrt(2 * controller.gravity * controller.jumpHeight);

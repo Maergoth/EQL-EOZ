@@ -19,6 +19,8 @@ function between(source, start, end) {
 class Point {
     constructor(x = 0, y = 0, z = 0) { Object.assign(this, { x, y, z }); }
     clone() { return new Point(this.x, this.y, this.z); }
+    set(x, y, z) { Object.assign(this, { x, y, z }); return this; }
+    copy(point) { return this.set(point.x, point.y, point.z); }
     add(point) { this.x += point.x; this.y += point.y; this.z += point.z; return this; }
     distanceToSquared(point) { return (this.x - point.x) ** 2 + (this.y - point.y) ** 2 + (this.z - point.z) ** 2; }
     distanceTo(point) { return Math.sqrt(this.distanceToSquared(point)); }
@@ -28,7 +30,7 @@ function node() {
     return { dataset:{}, style:{}, classList:{ toggle() {} }, append() {}, replaceChildren() {}, addEventListener() {} };
 }
 
-function harness() {
+function harness({ realModeTransitions = false } = {}) {
     const calls = [];
     const candidates = [];
     const candidateCancellations = [];
@@ -56,8 +58,27 @@ function harness() {
         },
         addNavigationPath(path) { this.navigationPath = path; }
     };
+    if (realModeTransitions) {
+        app.zoneGroup = { children:[{}] };
+        app.findGroundPointAt = (x, z) => new Point(x, -20, z);
+        app.setGameMapVisible = value => { app.mapFileVisible = value; if (value) app.mode = 'top'; };
+        app.els.top = { disabled:false };
+        app.fp = { eyeHeight:6, maxStepUp:6, activate() {} };
+        app.perspective = app.camera = { position:app.currentStart.clone().add({ x:0, y:6, z:0 }), up:new Point(), lookAt() {} };
+        app.orbit = {};
+        app.configureModeControls = mode => { app.mode = mode; };
+        app.captureCameraState = () => ({ position:app.camera.position.clone() });
+        app.restoreCameraState = state => { if (!state) return false; app.camera.position.copy(state.position); return true; };
+        app.resetTopView = () => {};
+        app.getTopFitBounds = () => ({ getCenter:() => new Point() });
+        app.findFirstPersonSpawn = () => (app.lastPick || app.currentStart).clone().add({ x:0, y:6, z:0 });
+        app.captureFirstPersonPose = () => {
+            app.lastFirstPersonPose = { position:app.camera.position.clone().add({ x:0, y:-6, z:0 }), forward:new Point(0, 0, -1) };
+        };
+        app.resize = app.updateCoordinateHud = app.drawMiniMap = () => {};
+    }
     const context = vm.createContext({
-        app, worldToClientMap, document:{ createElement:node, createTextNode:value => value },
+        app, A:Point, worldToClientMap, document:{ createElement:node, createTextNode:value => value },
         rareLayer:node(), renderRareMobs() {}, renderRouteGuidance() {},
         navigationResult(label, source) { return { ok:true, label, source }; },
         cancelCandidateRoute(reason) { candidateCancellations.push(reason); },
@@ -67,15 +88,25 @@ function harness() {
     });
     const helpers = between(wrapper, 'function currentPresentation()', 'function currentRouteGuidance()') +
         between(wrapper, 'function clearRareMobs()', 'function renderRareMobs()') +
-        between(wrapper, 'function normalizedNpcName(', 'let collisionExportSerial');
+        between(wrapper, 'function normalizedNpcName(', 'let collisionExportSerial') +
+        between(wrapper, 'function syncedNavigationGround()', '// The camera is grounded');
     const methods = between(wrapper, '    setRareMobs(records = []) {', '    setActiveRareMob(') +
         between(wrapper, '    async pathTo(label, wikiLocation = null) {', '    clearPath()');
     const goto = between(viewer, 'async gotoNpcLabel(', 'updateNamedMobLabels(){');
-    vm.runInContext(`let rareGotoEntries = [], rareMobMarkers = [], activeRareMob = ''; ${helpers}
+    const modes = realModeTransitions ? between(viewer, 'setMode(e){', 'resetTopView(){') : '';
+    const navigationStart = realModeTransitions ? between(viewer, 'navigationStartPoint(){', 'addNavigationBeam(') : '';
+    vm.runInContext(`let rareGotoEntries = [], rareMobMarkers = [], activeRareMob = '';
+        let lastSyncedLocation = null, lastSyncedGround = null, loadedZoneIdentity = 'synthetic:S3D';
+        ${realModeTransitions ? `Object.assign(app, { ${modes}, ${navigationStart} });` : ''}
+        ${helpers}
         app.gotoNpcLabel = ({ ${goto} }).gotoNpcLabel;
         globalThis.api = { ${methods} };
-        globalThis.markers = () => rareMobMarkers;`, context);
-    return { app, calls, candidates, candidateCancellations, api:context.api, markers:context.markers };
+        globalThis.markers = () => rareMobMarkers;
+        globalThis.syncGround = point => {
+            lastSyncedLocation = point ? {} : null;
+            lastSyncedGround = point?.clone() || null;
+        };`, context);
+    return { app, calls, candidates, candidateCancellations, api:context.api, markers:context.markers, syncGround:context.syncGround };
 }
 
 function coordinates(point) { return { x:point.x, y:point.y, z:point.z }; }
@@ -152,3 +183,69 @@ for (const action of ['cancel', 'replace']) {
 }
 
 console.log('Wiki/map destination alignment, same-target rerouting, presentation, and stale/cancel contracts passed.');
+
+// The actual vendor mode switch spawns First at lastPick. A route stores its
+// destination there, so routing again from Top/Map previously used that old
+// destination as the new player's start and could produce a zero-length line.
+for (const mode of ['top', 'map']) {
+    const h = harness({ realModeTransitions:true });
+    const loggedStart = h.app.currentStart.clone();
+    h.app.mode = 'top';
+    h.app.mapFileVisible = mode === 'map';
+    h.app.lastFirstPersonPose = { position:loggedStart.clone(), forward:new Point(0, 0, -1) };
+    h.syncGround(loggedStart);
+    h.api.setRareMobs([
+        { name:'Synthetic first target', loc:[41, -73, -20] },
+        { name:'Synthetic second target', loc:[41, -73, -20] }
+    ]);
+    await h.api.pathTo('Synthetic first target');
+    h.app.clearNavigationGuide();
+    // Model the shipped viewer's poisoned pose independently of the pose
+    // preservation fix; routing must still trust the current logged sample.
+    h.app.lastFirstPersonPose.position = new Point(73, -20, 41);
+    await h.api.pathTo('Synthetic second target');
+    assert.equal(h.calls.length, 2);
+    assert.deepEqual(coordinates(h.calls[1].start), coordinates(loggedStart), `${mode}: replacement retains the logged start`);
+    assert(h.calls[1].start.distanceTo(h.calls[1].goal) > 1, `${mode}: replacement cannot become a zero-length route at the goal`);
+    assert.deepEqual(coordinates(h.app.lastFirstPersonPose.position), coordinates(loggedStart), `${mode}: arrow remains at the logged position`);
+    assert.deepEqual(coordinates(h.app.lastPick), coordinates(loggedStart), `${mode}: later First spawns at the logged position`);
+    assert.equal(h.app.mapFileVisible ? 'map' : h.app.mode, mode);
+    h.app.setMode('first');
+    assert.deepEqual(coordinates(h.app.lastFirstPersonPose.position), coordinates(loggedStart), 'Entering First later uses the logged position');
+    h.app.setMode('top');
+
+    const movedStart = new Point(30, -20, 19);
+    h.syncGround(movedStart);
+    await h.api.pathTo('Synthetic second target');
+    assert.deepEqual(coordinates(h.calls.at(-1).start), coordinates(movedStart), 'Newer logged movement wins');
+    const clone = h.app.navigationStartPoint();
+    clone.x += 100;
+    assert.deepEqual(coordinates(h.app.navigationStartPoint()), coordinates(movedStart), 'Callers cannot mutate the stored log position');
+
+    h.app.currentZoneRecord = { id:'another', format:'S3D' };
+    h.app.lastFirstPersonPose = { position:new Point(7, -20, 9), forward:new Point(0, 0, -1) };
+    assert.deepEqual(coordinates(h.app.navigationStartPoint()), { x:7, y:-20, z:9 }, 'A different zone cannot reuse the previous log position');
+    h.app.currentZoneRecord = { id:'synthetic', format:'S3D' };
+    h.syncGround(null);
+    assert.deepEqual(coordinates(h.app.navigationStartPoint()), { x:7, y:-20, z:9 }, 'Unsynced manual navigation retains the vendor start behavior');
+}
+
+{
+    const h = harness({ realModeTransitions:true });
+    const loggedStart = h.app.currentStart.clone();
+    h.app.mode = 'top'; h.app.mapFileVisible = false;
+    h.app.lastFirstPersonPose = { position:loggedStart.clone(), forward:new Point(0, 0, -1) };
+    h.syncGround(loggedStart);
+    h.api.setRareMobs([{ name:'Synthetic awaited target', loc:[41, -73, -20] }]);
+    let finish;
+    h.app.pendingRoute = new Promise(resolve => { finish = resolve; });
+    const pending = h.api.pathTo('Synthetic awaited target');
+    await new Promise(resolve => setImmediate(resolve));
+    const newest = new Point(30, -20, 19);
+    h.syncGround(newest);
+    h.app.lastFirstPersonPose.position = newest.clone();
+    finish([loggedStart, new Point(73, -20, 41)]);
+    await pending;
+    assert.deepEqual(coordinates(h.app.lastFirstPersonPose.position), coordinates(newest), 'A completing old request cannot restore an earlier logged pose');
+}
+console.log('Actual vendor camera transitions retain current-zone logged route starts, player poses, and manual fallback.');

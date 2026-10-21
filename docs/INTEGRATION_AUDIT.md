@@ -7,6 +7,12 @@ application and a fresh production-derived dataset, investigate obvious map
 explorer defects using the local EverQuest installation and EQEmu references,
 and prepare a reviewable Eye of Zomm PR. Do not merge or deploy the application.
 
+The subsequent [map explorer validation](MAP_VALIDATION.md) records actual
+Electron rendering against local client archives, additional loader/route/
+clearance/CSP fixes, and the remaining live-client acceptance limits. Use that
+page for final map results; the initial parse-only observations below are
+retained as audit history.
+
 Baseline: EoZ `76f02e3` (0.8.0). EQLWiki is a separate MediaWiki application;
 its Git repository does **not** contain the live database. Wiki content,
 account data, uploads, client archives, and generated packs must stay outside
@@ -112,9 +118,10 @@ copied and no renderer/parser replacement is justified by this evidence.
 - **Effects:** 1,528 initial items retain Effect text; there is no structured
   spell/proc corpus, and separate focus-effect template fields need review.
   Full wiki links remain the detailed reference.
-- **Spatial release gate:** complete the existing First/Top texture checks and
-  outdoor/indoor/stacked-floor/ramp/door/drop matrix at 100/125/150% scaling.
-  Keep established-first routing until that evidence supports promotion.
+- **Spatial release gate:** rendered local-archive and emulated-scale results
+  are now recorded in [MAP_VALIDATION.md](MAP_VALIDATION.md). Complete live
+  movement, known-walkable drop/door coverage, and OS-wide DPI acceptance.
+  Keep guarded established-first routing until that evidence supports promotion.
 
 ### Verification and release procedure
 

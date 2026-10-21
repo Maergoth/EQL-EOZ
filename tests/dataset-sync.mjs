@@ -32,7 +32,7 @@ async function runtime(fetchImpl, options = {}) {
         fetch:async (url, request) => { calls.push(url); return fetchImpl(url, request); }
     });
     vm.runInContext(source, context, { filename:mainPath });
-    const api = vm.runInContext('({ updateStaticDataPack, readResponseBytes, productionPackPath, packStatePath })', context);
+    const api = vm.runInContext('({ updateStaticDataPack, readResponseBytes, productionPackPath, packStatePath, sendBuffer })', context);
     await mkdir(path.dirname(api.productionPackPath()), { recursive:true });
     return {
         ...api, calls,
@@ -82,6 +82,19 @@ async function runBootstrap(manifest, compressed) {
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
+
+test('desktop response policy permits the local WASM worker without JavaScript eval', async () => {
+    await withRuntime(() => { throw new Error('No network request expected'); }, async api => {
+        let headers;
+        api.sendBuffer({ method:'GET' }, { writeHead(_status, value) { headers = value; }, end() {} }, 200, 'text/javascript', Buffer.from('synthetic worker'));
+        const policy = headers['Content-Security-Policy'];
+        const script = policy.split(';').find(value => value.trim().startsWith('script-src '));
+        assert.ok(script.includes("'wasm-unsafe-eval'"), 'Recast WebAssembly compilation must be allowed by the served policy');
+        assert.equal(script.includes("'unsafe-eval'"), false, 'JavaScript eval remains disallowed');
+        assert.match(policy, /worker-src 'self' blob:/);
+        assert.match(policy, /connect-src 'self'/);
+    });
+});
 
 test('a corrupt same-version cache downloads a verified replacement', async () => {
     const compressed = compressedPack('new');

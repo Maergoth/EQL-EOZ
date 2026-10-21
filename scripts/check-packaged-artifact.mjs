@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import asar from '@electron/asar';
+import { verifyPackagedRuntimeSources } from './packaged-runtime-sources.mjs';
 
 const packageRoot = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const archivePath = [
@@ -44,11 +45,7 @@ const bootstrap = JSON.parse(packagedText('app/data/eye-of-zomm-pack.bootstrap.j
 
 // The integration regressions run against source. Require those exact runtime
 // bytes in the ASAR so a stale package cannot pass on older marker strings.
-for (const relative of ['app/app.js', 'app/item-browse.js', 'app/item-scaling.js', 'app/zoneviewer/viewer.html', 'desktop/main.cjs']) {
-    if (packagedText(relative) !== readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8')) {
-        throw new Error(`Packaged ${relative} differs from the tested source.`);
-    }
-}
+verifyPackagedRuntimeSources(packagedText, relative => readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8'));
 
 for (const [name, content, required] of [
     ['title bar', index, 'id="titlebar-version"'],

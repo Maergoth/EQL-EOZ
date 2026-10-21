@@ -482,7 +482,7 @@ function sendBuffer(req, res, status, contentType, body, cacheControl = 'no-stor
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'SAMEORIGIN',
         'Referrer-Policy': 'no-referrer',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     });
     if (req.method === 'HEAD') res.end();
     else res.end(body);

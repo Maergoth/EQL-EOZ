@@ -13,6 +13,30 @@ function replaceMethod(source, startTokens, endToken, replacement) {
     return source.slice(0, start) + replacement + source.slice(end);
 }
 
+function prepareObject(object, isProp) {
+    const materials = new Map();
+    const clone = material => {
+        if (!materials.has(material)) materials.set(material, this.cloneMaterial(material));
+        return materials.get(material);
+    };
+    const collisionEnabled = mesh => {
+        for (let current = mesh; current; current = current.parent) {
+            if (current.userData?.passThrough === true || current.userData?.eqlCollision === false) return false;
+            if (current === object) break;
+        }
+        return true;
+    };
+    object.traverse(mesh => {
+        if (!mesh.isMesh) return;
+        const collision = !isProp && collisionEnabled(mesh);
+        mesh.userData.eqlProp = isProp;
+        mesh.userData.eqlCollision = collision;
+        mesh.frustumCulled = true;
+        const source = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mesh.material = Array.isArray(mesh.material) ? source.map(clone) : clone(source[0]);
+    });
+}
+
 function drawMiniMap() {
     const panel = this.els?.miniMap;
     const canvas = this.els?.miniMapCanvas;
@@ -591,6 +615,34 @@ const elevationSource = navigationCanTraverseElevation.toString().replace(/^func
 const surfaceSource = navigationCanUseSurface.toString().replace(/^function /, '');
 const projectedSource = navigationProjectedSurface.toString().replace(/^function /, '');
 const attemptSource = findNavigationPathAttempt.toString().replace(/^async function /, 'async ');
+const prepareObjectSource = prepareObject.toString().replace(/^function /, '');
+viewer = replaceMethod(viewer, ['prepareObject(e,t){', 'prepareObject(object, isProp) {'], 'materialRegistryKey(', prepareObjectSource);
+// GLB pass-through extras belong to geometry, not materials. Preserve the
+// prepared collision flag through both batching paths and separate otherwise
+// identical solid/pass-through records before merging their triangles.
+viewer = viewer.replace(
+    'l.userData={...i.userData,eqlProp:!1,eqlCollision:!0}',
+    'l.userData={...i.userData,eqlProp:!1,eqlCollision:i.userData.eqlCollision!==!1}'
+);
+viewer = viewer.replace(
+    'matrix:new ke,center:o,prop:!1,sourceMeshes:1}',
+    'matrix:new ke,center:o,prop:!1,collision:i.userData.eqlCollision!==!1,sourceMeshes:1}'
+);
+viewer = viewer.replace(
+    'h=`${this.materialBatchId(o.material)}|${this.geometryBatchSignature(o.geometry)}|${l}:${c}`',
+    'h=`${this.materialBatchId(o.material)}|${this.geometryBatchSignature(o.geometry)}|${o.collision===!1?0:1}|${l}:${c}`'
+);
+viewer = viewer.replace('o.userData.eqlCollision=!t,o.userData.eqlSourceMeshes', 'o.userData.eqlCollision=!t&&e[0].collision!==!1,o.userData.eqlSourceMeshes');
+viewer = viewer.replace('n.userData.eqlCollision=!t,n.userData.eqlSourceMeshes', 'n.userData.eqlCollision=!t&&e.collision!==!1,n.userData.eqlSourceMeshes');
+for (const required of [
+    'current.userData?.passThrough === true',
+    'collision:i.userData.eqlCollision!==!1',
+    '${o.collision===!1?0:1}',
+    'o.userData.eqlCollision=!t&&e[0].collision!==!1',
+    'n.userData.eqlCollision=!t&&e.collision!==!1'
+]) {
+    if (!viewer.includes(required)) throw new Error(`Unable to preserve zone collision flags: ${required}`);
+}
 // Repair the single bad boundary emitted by the first v15 patch draft before
 // applying the corrected method replacement. This is intentionally idempotent.
 viewer = viewer.replace(
@@ -743,7 +795,9 @@ if (!viewer.includes('l.eyeOfZommReadFile?await l.eyeOfZommReadFile():l') ||
 
 viewer = viewer.replace(/fh="v(?:13|14|15|16|17)"/, 'fh="v18"');
 if (!viewer.includes('fh="v18"')) throw new Error('Unable to bump the parsed-zone cache version.');
-writeFileSync(viewerPath, viewer);
+// Function.toString inherits the source checkout's line endings on Windows.
+// Keep generated vendored bytes deterministic across contributor platforms.
+writeFileSync(viewerPath, viewer.replace(/\r\n/g, '\n'));
 
 const workerPath = `${root}/app/zoneviewer/zone-parser.worker.js`;
 let worker = readFileSync(workerPath, 'utf8');

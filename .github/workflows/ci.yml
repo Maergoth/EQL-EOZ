@@ -23,3 +23,14 @@ jobs:
         run: node scripts/fetch-bootstrap-pack.mjs --required
       - name: Test production catalog relevance
         run: npm run test:catalog
+
+  desktop-worker:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:workers
+      - run: npm run test:desktop-worker

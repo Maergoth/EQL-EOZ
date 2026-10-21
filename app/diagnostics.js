@@ -10,6 +10,7 @@ function cleanToken(value) {
 
 function cleanSpatialStatus(spatial) {
     const collision = spatial?.collision || {};
+    const established = spatial?.established || {};
     const candidate = spatial?.candidate || {};
     return {
         collision:{
@@ -22,6 +23,11 @@ function cleanSpatialStatus(spatial) {
             vertices:finiteNumber(collision.vertices),
             triangles:finiteNumber(collision.triangles),
             skippedTriangles:finiteNumber(collision.skippedTriangles)
+        },
+        established:{
+            status:cleanToken(established.status),
+            reason:cleanToken(established.reason),
+            violationCount:finiteNumber(established.violationCount)
         },
         candidate:{
             status:cleanToken(candidate.status),

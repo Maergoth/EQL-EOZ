@@ -7,6 +7,8 @@ import {
 import { buildFixtureGeometry } from '../app/route-corpus.js';
 import { runRecastRoute } from '../app/recast-route-engine.js';
 import { validateRouteGeometry } from '../app/route-validation.js';
+import { readFileSync } from 'node:fs';
+import { installEstablishedRouteGuard } from '../app/established-route-guard.js';
 
 function attribute(values, itemSize = 3) {
     return {
@@ -111,6 +113,25 @@ if (!result.ok || !validateRouteGeometry({ geometry:cropped.geometry }, result.p
     throw new Error(`Exported/cropped viewer geometry failed Recast integration: ${result.reason || 'invalid route'}.`);
 }
 
+const broadTriangle = {
+    positions:new Float32Array([-1000, 0, -1000, 1000, 0, -1000, 0, 0, 1000]),
+    indices:new Uint32Array([0, 2, 1]),
+    offMeshConnections:[]
+};
+const shortRoute = [{ x:-10, y:0, z:0 }, { x:10, y:0, z:0 }];
+const boundedCrop = await cropCollisionGeometryForRoute(broadTriangle, shortRoute, { margin:20 });
+if (!boundedCrop.ok || boundedCrop.geometry.generationBounds[0][0] !== -30 ||
+    boundedCrop.geometry.generationBounds[1][0] !== 30 ||
+    boundedCrop.geometry.generationBounds[0][2] !== -20 ||
+    boundedCrop.geometry.generationBounds[1][2] !== 20 ||
+    Math.min(...boundedCrop.geometry.positions) !== -1000) {
+    throw new Error('Route crop either lost broad collision geometry or expanded its generation bounds to far vertices.');
+}
+const broadResult = await runRecastRoute({ geometry:boundedCrop.geometry, start:shortRoute[0], goal:shortRoute[1] });
+if (!broadResult.ok || !validateRouteGeometry({ geometry:boundedCrop.geometry }, broadResult.path).valid) {
+    throw new Error('Recast could not route across a broad triangle using bounded corridor generation.');
+}
+
 const mirrored = group([mesh(
     [0, 0, 0, 1, 0, 0, 0, 0, 1],
     [0, 2, 1],
@@ -164,5 +185,101 @@ const markerOnly = await cropCollisionGeometryForRoute(exported, [{ x:0, y:20, z
 if (!markerOnly.ok || markerOnly.geometry.offMeshConnections.length) {
     throw new Error('An unvalidated direct destination marker invented a drop connection.');
 }
+
+// Exercise the shipped viewer methods: pass-through metadata must survive
+// material batching before collision export or the established raycasts run.
+const viewer = readFileSync(new URL('../app/zoneviewer/ZoneViewerApp.js', import.meta.url), 'utf8');
+const shippedMethod = (start, end) => {
+    const from = viewer.indexOf(start);
+    const to = viewer.indexOf(end, from);
+    if (from < 0 || to < 0) throw new Error(`Cannot locate shipped viewer method ${start}`);
+    return viewer.slice(from, to);
+};
+class MockMatrix {
+    elements = identity;
+    copy() { return this; }
+}
+class MockMesh {
+    constructor(geometry, material) {
+        this.isMesh = true;
+        this.geometry = geometry;
+        this.material = material;
+        this.userData = {};
+        this.matrix = new MockMatrix();
+        this.matrixWorld = new MockMatrix();
+    }
+}
+const geometryStub = () => ({
+    attributes:{ position:attribute([0, 0, 0, 0, 0, 10, 10, 0, 0]) },
+    index:indexAttribute([0, 1, 2]),
+    boundingBox:{ getCenter:() => ({ x:1, y:0, z:1 }) },
+    clone:() => geometryStub(),
+    applyMatrix4() {}, clearGroups() {}, dispose() {},
+    computeBoundingBox() {}, computeBoundingSphere() {}
+});
+const shipped = new Function('ht', 'A', 'ke', '$d', `return ({
+    ${shippedMethod('prepareObject(object, isProp) {', 'materialRegistryKey(')},
+    ${shippedMethod('collectZoneBatchRecords(e){', 'collectPropBatchRecords(')},
+    ${shippedMethod('buildStaticBatches(e,t,n){', 'splitInstanceRecords(e){')},
+    ${shippedMethod('createMergedBatch(e,t,n){', 'createFallbackMesh(')},
+    ${shippedMethod('createFallbackMesh(e,t){', 'estimateParsedBytes(')}
+});`)(MockMesh, class {}, MockMatrix, () => geometryStub());
+const sharedMaterial = {};
+const solidMesh = new MockMesh(geometryStub(), sharedMaterial);
+const passMesh = new MockMesh(geometryStub(), sharedMaterial);
+const passParent = group([passMesh], { passThrough:true });
+const rawScene = group([solidMesh, passParent]);
+const batchContext = {
+    ...shipped,
+    cloneMaterial:value => value,
+    cloneAndBakeMeshGeometry:() => geometryStub(),
+    materialBatchId:() => 1,
+    geometryBatchSignature:() => 'fixture',
+    splitMergeRecords:records => [records]
+};
+batchContext.prepareObject(rawScene, false);
+if (!solidMesh.userData.eqlCollision || passMesh.userData.eqlCollision) {
+    throw new Error('Viewer preparation did not retain inherited pass-through metadata.');
+}
+const records = batchContext.collectZoneBatchRecords(rawScene);
+const batches = [];
+batchContext.buildStaticBatches(records.batchable, { add:mesh => batches.push(mesh) }, false);
+if (batches.length !== 2 || batches.filter(mesh => mesh.userData.eqlCollision).length !== 1) {
+    throw new Error('Viewer batching merged pass-through faces into solid collision geometry.');
+}
+const passRecord = records.batchable.find(record => record.collision === false);
+if (!passRecord || batchContext.createFallbackMesh(passRecord, false).userData.eqlCollision) {
+    throw new Error('Viewer merge fallback reintroduced pass-through collision geometry.');
+}
+const exportedBatches = await exportViewerCollisionGeometry(group(batches));
+if (exportedBatches?.stats.triangles !== 1) {
+    throw new Error('The exported viewer batches included pass-through triangles.');
+}
+
+const establishedApp = { navigationBuildToken:1, findNavigationPath:async () => route };
+const establishedStates = [];
+installEstablishedRouteGuard(establishedApp, {
+    getGeometry:() => exported,
+    getZoneIdentity:() => 'fixture',
+    onState:state => establishedStates.push(state)
+});
+if (await establishedApp.findNavigationPath(route[0], route.at(-1), 1) !== route || establishedStates.at(-1)?.status !== 'ready') {
+    throw new Error('Established route guard did not retain a supported route.');
+}
+const climbPath = [{ x:0, y:0, z:0 }, { x:0, y:20, z:0 }];
+const climbApp = { navigationBuildToken:1, findNavigationPath:async () => climbPath };
+installEstablishedRouteGuard(climbApp, { getGeometry:() => exported, getZoneIdentity:() => 'fixture' });
+if (await climbApp.findNavigationPath(climbPath[0], climbPath[1], 1) !== null) {
+    throw new Error('Established route guard allowed a same-planar-position ascent to be displayed.');
+}
+let releaseGeometry;
+const waitingGeometry = new Promise(resolve => { releaseGeometry = resolve; });
+const staleApp = { navigationBuildToken:1, findNavigationPath:async () => route };
+installEstablishedRouteGuard(staleApp, { getGeometry:() => waitingGeometry, getZoneIdentity:() => 'fixture' });
+const pendingEstablished = staleApp.findNavigationPath(route[0], route.at(-1), 1);
+await Promise.resolve();
+staleApp.navigationBuildToken += 1;
+releaseGeometry(exported);
+if (await pendingEstablished !== null) throw new Error('Established route validation revived cancelled work.');
 
 console.log('Viewer collision export, crop, winding, cancellation, drop, and Recast integration contracts passed.');

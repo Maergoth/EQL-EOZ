@@ -280,6 +280,8 @@ export async function cropCollisionGeometryForRoute(geometry, points, options = 
     const positions = new Float32Array(selected.length * 9);
     const indices = new Uint32Array(selected.length * 3);
     let targetVertex = 0;
+    let minimumY = Infinity;
+    let maximumY = -Infinity;
     for (let selectedIndex = 0; selectedIndex < selected.length; selectedIndex += 1) {
         const sourceOffset = selected[selectedIndex];
         for (let corner = 0; corner < 3; corner += 1) {
@@ -289,6 +291,8 @@ export async function cropCollisionGeometryForRoute(geometry, points, options = 
             positions[target + 1] = geometry.positions[source + 1];
             positions[target + 2] = geometry.positions[source + 2];
             indices[targetVertex] = targetVertex;
+            minimumY = Math.min(minimumY, geometry.positions[source + 1]);
+            maximumY = Math.max(maximumY, geometry.positions[source + 1]);
             targetVertex += 1;
         }
         if (performance.now() - lastYield >= yieldEveryMs) {
@@ -307,6 +311,13 @@ export async function cropCollisionGeometryForRoute(geometry, points, options = 
             units:'eq-units',
             positions,
             indices,
+            // A triangle intersecting the corridor can extend across the whole
+            // zone. Keep its real geometry for validation, but bound Recast's
+            // raster grid to the intended corridor rather than its far vertices.
+            generationBounds:[
+                [bounds.minX, minimumY, bounds.minZ],
+                [bounds.maxX, maximumY, bounds.maxZ]
+            ],
             offMeshConnections:[
                 ...(geometry.offMeshConnections || []),
                 ...directedDropsFromPath(dropPoints)

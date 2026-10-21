@@ -6,6 +6,7 @@ import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
 import { routeDistanceLabel } from './route-guidance.js';
 import { formatWorldLocationForPlayer, waypointCommandForWorldLocation, wikiLocationToWorld } from './coordinate-system.js';
+import { resolveZoneRecord } from './zone-identity.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -30,6 +31,7 @@ let pendingViewerLocation = null;
 let viewerFolderPromise = null;
 let viewerFolderPath = '';
 let viewerFolderStatus = 'idle';
+let viewerZoneState = { zone:'', status:'idle', message:'' };
 let consideredTarget = null;
 let considerTrayTimer = null;
 let activeTooltipItem = null;
@@ -187,11 +189,7 @@ function showSettingsNotice(message, tone = 'warning') {
 }
 
 function zoneRecord(name) {
-    const n = String(name || '').toLowerCase().replace(/\s+\d+\s+\([^)]*\)\s*$/,'').trim();
-    if (!n) return null;
-    return pack.zones.find(z => [z.name,z.viewerName,z.wikiTitle,...(z.aliases||[])]
-        .some(v => String(v||'').toLowerCase() === n)) ||
-        pack.zones.find(z => String(z.name||'').toLowerCase().includes(n) || n.includes(String(z.name||'').toLowerCase()));
+    return resolveZoneRecord(pack.zones, name);
 }
 
 function zoneKey(name) {
@@ -455,12 +453,14 @@ function consumeText(text, allowTransientUi = true) {
     let latestLocation = null;
     let requiresFullRender = false;
     for (const line of lines) {
+        const previousZone = parser.zone;
         const event = parser.parse(line);
         if (event && event.type !== 'location') requiresFullRender = true;
         if (event?.type === 'zone') {
             const canonicalZone = zoneRecord(event.zoneShortName || event.zone)?.name || event.zoneShortName || event.zone;
             event.zone = canonicalZone;
             parser.zone = canonicalZone;
+            if (zoneKey(previousZone) !== zoneKey(canonicalZone)) parser.location = null;
             if (activeRoute && zoneKey(activeRoute.zone) !== zoneKey(event.zone)) clearActiveRoute({ clearViewer:false });
             zoneChanged = true;
             latestLocation = null;
@@ -1250,14 +1250,14 @@ function renderMapReadiness(s = state()) {
     const states = {
         folder:Boolean(bridgeInfo?.eqRootExists),
         log:Boolean(bridgeInfo?.logExists),
-        zone:Boolean(s.zone),
+        zone:Boolean(s.zone && viewerZoneState.status === 'ready' && viewerZoneState.zone === zoneKey(s.zone)),
         location:Boolean(s.location)
     };
     let waitingFound = false;
     for (const name of ['folder', 'log', 'zone', 'location']) {
         const node = $(`[data-readiness="${name}"]`);
         if (!node) continue;
-        node.className = states[name] ? 'is-ready' : waitingFound ? 'is-blocked' : 'is-waiting';
+        node.className = waitingFound ? 'is-blocked' : states[name] ? 'is-ready' : 'is-waiting';
         if (name === 'folder') node.title = bridgeInfo?.eqRootPath || 'No EverQuest folder selected';
         if (name === 'log') node.title = bridgeInfo?.logPath || 'No active eqlog_*.txt';
         waitingFound ||= !states[name];
@@ -1269,13 +1269,13 @@ function renderMapReadiness(s = state()) {
             : !states.log
                 ? 'Find active log'
                 : !states.zone
-                    ? 'Waiting for zone'
+                    ? s.zone ? 'Load current zone' : 'Waiting for zone'
                     : !states.location
                         ? 'How to place me'
                         : 'Center on last /loc';
     }
     const reload = $('#sync-zone');
-    if (reload) reload.disabled = !states.zone;
+    if (reload) reload.disabled = !s.zone;
 }
 
 function renderViewPanel(view, s, profile) {
@@ -1468,6 +1468,11 @@ function mapReadinessMessage(s = state()) {
     if (viewerFolderStatus === 'error') return 'The selected folder is saved, but its map files could not be opened.';
     if (!bridgeInfo.logExists) return 'Game folder ready · waiting for an eqlog_*.txt file in Logs.';
     if (!s.zone) return 'Game folder and log ready · waiting for the next zone line.';
+    if (viewerZoneState.zone !== zoneKey(s.zone) || viewerZoneState.status !== 'ready') {
+        return viewerZoneState.zone === zoneKey(s.zone) && viewerZoneState.message
+            ? viewerZoneState.message
+            : `${s.zone} detected · waiting for its local map to load.`;
+    }
     if (!s.location) return `${s.zone} ready · type /loc in game once to place yourself on the map.`;
     return formatWorldLocationForPlayer(s.location, 1);
 }
@@ -1563,18 +1568,36 @@ async function syncZoneToViewer(showFeedback = true) {
         if (showFeedback) showNotice('The folder and log are ready. Eye of Zomm is waiting for the next zone line.', { tone:'warning' });
         return false;
     }
-    const apiObj = await waitForViewerApi();
-    if (!apiObj) {
-        if (showFeedback) showNotice('The Zone Viewer did not finish loading. Reopen Live Map and try again.', { tone:'error' });
+    const request = { zone:zoneKey(s.zone), status:'loading', message:`Loading ${s.zone} from your local EverQuest files…` };
+    viewerZoneState = request;
+    const isCurrent = () => viewerZoneState === request && zoneKey(state().zone) === request.zone;
+    const fail = message => {
+        if (!isCurrent()) return false;
+        Object.assign(request, { status:'error', message });
+        $('#map-subtitle').textContent = message;
+        renderMapReadiness();
+        if (showFeedback) showNotice(message, { tone:'error' });
         return false;
-    }
-    if (!await ensureViewerFolderConnected(showFeedback)) return false;
-    $('#map-subtitle').textContent = `Loading ${s.zone} from your local EverQuest files…`;
+    };
+    renderMapReadiness(s);
     try {
+        const apiObj = await waitForViewerApi();
+        if (!isCurrent()) return false;
+        if (!apiObj) return fail('The Zone Viewer did not finish loading. Reopen Live Map and try again.');
+        const folderReady = await ensureViewerFolderConnected(showFeedback);
+        if (!isCurrent()) return false;
+        if (!folderReady) return fail('The current zone could not load because its local map files are unavailable.');
+        $('#map-subtitle').textContent = request.message;
         const record = zoneRecord(s.zone);
         let result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
-        if (result?.reason === 'select-eq-folder-first' && await ensureViewerFolderConnected(false, true)) {
-            result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
+        if (!isCurrent()) return false;
+        if (result?.reason === 'select-eq-folder-first') {
+            const reconnected = await ensureViewerFolderConnected(false, true);
+            if (!isCurrent()) return false;
+            if (reconnected) {
+                result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
+                if (!isCurrent()) return false;
+            }
         }
         if (!result?.ok) {
             const messages = {
@@ -1584,19 +1607,16 @@ async function syncZoneToViewer(showFeedback = true) {
                 'zone-not-found': `The Zone Viewer could not match ${s.zone} to a local zone archive.`,
                 'load-failed': result.message || `The local files for ${s.zone} could not be loaded.`
             };
-            const message = messages[result?.reason] || 'The current zone could not be synchronized.';
-            $('#map-subtitle').textContent = message;
-            if (showFeedback) showNotice(message, { tone:'error' });
-            return false;
+            return fail(messages[result?.reason] || 'The current zone could not be synchronized.');
         }
         renderedRareViewerKey = '';
+        Object.assign(request, { status:'ready', message:'' });
+        renderMapReadiness();
         syncRareMobsToViewer(true);
         $('#map-subtitle').textContent = `${s.zone} loaded · ${result.status || 'ready for location sync'}`;
         return true;
     } catch (error) {
-        $('#map-subtitle').textContent = `Zone sync failed: ${error.message}`;
-        if (showFeedback) showNotice(`Zone sync failed: ${error.message}`, { tone:'error' });
-        return false;
+        return fail(`Zone sync failed: ${error.message}`);
     }
 }
 
@@ -1624,10 +1644,11 @@ async function syncLocationToViewer(showFeedback = true, requestedLocation = nul
         if (showFeedback) showNotice('The Zone Viewer did not finish loading.', { tone:'error' });
         return false;
     }
-    if (!apiObj.status()?.zone) {
+    if (!apiObj.status()?.zone || viewerZoneState.status !== 'ready' || viewerZoneState.zone !== zoneKey(s.zone)) {
         const loaded = await syncZoneToViewer(showFeedback);
         if (!loaded) return false;
     }
+    if (zoneKey(state().zone) !== zoneKey(s.zone)) return false;
     const result = apiObj.syncLocation(location, { mode:settings.mapMode || 'first', timestamp:Date.now() });
     if (!result?.ok) {
         const message = result?.message || 'The zone is not ready for location sync yet.';
@@ -1638,7 +1659,7 @@ async function syncLocationToViewer(showFeedback = true, requestedLocation = nul
     settings.mapMode = result.mode || settings.mapMode || 'first';
     setActiveMapMode(settings.mapMode || 'first');
     applyRouteGuidance(result.guidance);
-    $('#map-subtitle').textContent = `Synced to ${location.x.toFixed(1)}, ${location.y.toFixed(1)}, ${location.z.toFixed(1)} in ${s.zone}.`;
+    $('#map-subtitle').textContent = `Synced to ${formatWorldLocationForPlayer(location, 1)} in ${s.zone}.`;
     return true;
 }
 
@@ -1649,7 +1670,7 @@ function setActiveMapMode(mode) {
 async function setMapMode(mode, showFeedback = true) {
     const apiObj = await waitForViewerApi();
     if (!apiObj) return false;
-    if (!apiObj.status?.().zone) {
+    if (!apiObj.status?.().zone || viewerZoneState.status !== 'ready' || viewerZoneState.zone !== zoneKey(state().zone)) {
         const loaded = await syncZoneToViewer(showFeedback);
         if (!loaded) return false;
     }
@@ -1697,9 +1718,12 @@ function scheduleRouteRefresh(location) {
 
 async function calculateActiveRoute(options = {}) {
     if (!activeRoute) return false;
+    const route = activeRoute;
     const automatic = Boolean(options.automatic);
     const routeIdentity = `${zoneKey(activeRoute.zone)}|${npcNameKey(activeRoute.name)}`;
     const requestSerial = ++routeRequestSerial;
+    const isCurrent = () => requestSerial === routeRequestSerial && activeRoute === route &&
+        `${zoneKey(route.zone)}|${npcNameKey(route.name)}` === routeIdentity && zoneKey(state().zone) === zoneKey(route.zone);
     clearTimeout(routeRefreshTimer);
     routeRefreshTimer = null;
     const s = state();
@@ -1719,17 +1743,31 @@ async function calculateActiveRoute(options = {}) {
     activeRoute.message = automatic ? `Updating path to ${activeRoute.name} from your latest /loc…` : `Calculating path to ${activeRoute.name}…`;
     renderMapRoutePlanner(s);
     const apiObj = await waitForViewerApi();
-    if (!apiObj || !await ensureViewerFolderConnected(!automatic)) {
-        if (requestSerial === routeRequestSerial && activeRoute) {
+    if (!isCurrent()) return false;
+    const folderReady = apiObj && await ensureViewerFolderConnected(!automatic);
+    if (!isCurrent()) return false;
+    if (!apiObj || !folderReady) {
+        if (isCurrent()) {
             activeRoute.status = 'error';
             activeRoute.message = 'Map files are not ready. Your destination is still saved.';
             renderMapRoutePlanner(state());
         }
         return false;
     }
-    if ((!automatic || !apiObj.status?.().zone) && !await syncZoneToViewer(!automatic)) return false;
-    if (!await syncLocationToViewer(false, s.location)) {
-        if (requestSerial === routeRequestSerial && activeRoute) {
+    if (!automatic || !apiObj.status?.().zone) {
+        const zoneReady = await syncZoneToViewer(!automatic);
+        if (!isCurrent()) return false;
+        if (!zoneReady) {
+            activeRoute.status = 'error';
+            activeRoute.message = 'The zone map is not ready. Your destination is still saved; another /loc will retry.';
+            renderMapRoutePlanner(state());
+            return false;
+        }
+    }
+    const locationReady = await syncLocationToViewer(false, s.location);
+    if (!isCurrent()) return false;
+    if (!locationReady) {
+        if (isCurrent()) {
             activeRoute.status = 'error';
             activeRoute.message = 'Your destination is saved, but the latest /loc could not be placed on this zone.';
             renderMapRoutePlanner(state());
@@ -1742,7 +1780,7 @@ async function calculateActiveRoute(options = {}) {
     const wikiLocation = worldLocation?.slice(0, Number(pack.meta?.schemaVersion) >= 3 ? 3 : 2) || null;
     apiObj.clearPath?.();
     const result = await apiObj.pathTo(activeRoute.name, wikiLocation);
-    if (requestSerial !== routeRequestSerial || !activeRoute || `${zoneKey(activeRoute.zone)}|${npcNameKey(activeRoute.name)}` !== routeIdentity) return false;
+    if (!isCurrent()) return false;
 
     activeRoute.lastRoutedLocation = { ...s.location };
     if (!result?.ok) {
@@ -1767,6 +1805,7 @@ async function calculateActiveRoute(options = {}) {
 
     const desiredMode = settings.mapMode || 'first';
     if (desiredMode !== 'first') await apiObj.setView(desiredMode);
+    if (!isCurrent()) return false;
     setActiveMapMode(desiredMode);
     renderMapRoutePlanner(state());
     scheduleRouteRefresh(state().location);
@@ -1875,6 +1914,9 @@ async function handleMapPrimaryAction() {
     if (!s.zone) {
         showNotice('The folder and log are ready. Enter or zone in EverQuest; the map will load automatically.', { tone:'warning' });
         return false;
+    }
+    if (viewerZoneState.status !== 'ready' || viewerZoneState.zone !== zoneKey(s.zone)) {
+        return syncZoneToViewer(true);
     }
     if (!s.location) {
         showNotice('Type /loc in EverQuest once. Eye of Zomm will center automatically and follow later /loc updates.', { tone:'warning', duration:8000 });

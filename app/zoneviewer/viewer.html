@@ -39,6 +39,10 @@ import { routeDistanceLabel, routeGuidance } from '../route-guidance.js';
 import { formatWorldLocationForGameMap, worldToClientMap } from '../coordinate-system.js';
 import { RecastRouteClient } from '../recast-route-client.js';
 import { cropCollisionGeometryForRoute, exportViewerCollisionGeometry } from '../collision-geometry.js';
+import { installEstablishedRouteGuard } from '../established-route-guard.js';
+import { deferHiddenViewportFit } from '../viewport-framing.js';
+import { installZoneLoadGuard } from '../zone-load-guard.js';
+import { selectViewerZoneOption } from '../viewer-zone-selection.js';
 
 globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
@@ -52,6 +56,9 @@ const app = mountZoneViewer(root, {
 configureViewerMovement(app.fp);
 app.fp?.setFly?.(true);
 window.eqlZoneViewer = app;
+const viewportFraming = deferHiddenViewportFit(app, () => {
+    if (lastSyncedGround) focusTopViewAt(lastSyncedGround);
+});
 
 function simplifyViewerUi() {
     root.querySelectorAll('.eqlzv-toolbar .eqlzv-button').forEach(button => {
@@ -66,36 +73,9 @@ simplifyViewerUi();
 
 app.els?.pathCancel?.addEventListener('click', () => {
     cancelCandidateRoute('cancelled');
+    establishedRouteState = { status:'cancelled' };
     window.parent?.postMessage({ type:'eoz-route-cancelled' }, window.location.origin);
 });
-
-const zoneAliases = new Map(Object.entries({
-    'the northern desert of ro': 'North Ro',
-    'northern desert of ro': 'North Ro',
-    'north ro': 'North Ro',
-    'the southern desert of ro': 'South Ro',
-    'southern desert of ro': 'South Ro',
-    'south ro': 'South Ro',
-    'the oasis of marr': 'Oasis of Marr',
-    'oasis of marr': 'Oasis of Marr',
-    'the plane of sky': 'Plane of Sky',
-    'plane of sky': 'Plane of Sky',
-    'new sebilis expedition': 'New Sebilis Expedition',
-    "nagafen's lair": "Nagafen's Lair (Sol B)"
-}));
-
-function norm(text) {
-    return String(text || '')
-        .replace(/\s+\d+\s+\([^)]*\)\s*$/,'')
-        .replace(/\s+/g,' ')
-        .trim()
-        .toLowerCase();
-}
-
-function viewerName(zoneName) {
-    const cleaned = String(zoneName || '').replace(/\s+\d+\s+\([^)]*\)\s*$/,'').trim();
-    return zoneAliases.get(norm(cleaned)) || cleaned;
-}
 
 function playerMapSetLabel(sourceLabel) {
     const source = String(sourceLabel || 'maps').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
@@ -240,10 +220,23 @@ function restorePresentation(mode) {
 
 function startRouteWithoutChangingPresentation(start) {
     const presentation = currentPresentation();
+    const syncedLocation = lastSyncedLocation;
+    const ground = syncedNavigationGround();
+    const loggedPose = ground ? {
+        position:ground,
+        forward:app.lastFirstPersonPose?.forward?.clone?.() || ground.clone().set(0, 0, -1)
+    } : null;
     const pending = start();
     const status = app.els?.statusText?.textContent || '';
     const progress = app.els?.progress?.hasAttribute?.('value') ? app.els.progress.value : null;
     restorePresentation(presentation);
+    // The upstream label action temporarily enters First and uses lastPick
+    // as its spawn. Keep that internal camera transition from moving the
+    // player's arrow or the next route start to the previous destination.
+    if (loggedPose && lastSyncedLocation === syncedLocation && syncedNavigationGround()) {
+        app.lastFirstPersonPose = loggedPose;
+        app.lastPick = loggedPose.position.clone();
+    }
     if (status) app.setStatus(status, progress);
     return pending;
 }
@@ -351,6 +344,26 @@ async function waitForZoneSelect(timeout = 15000) {
 let lastSyncedLocation = null;
 let lastSyncedGround = null;
 let loadedZoneIdentity = '';
+function syncedNavigationGround() {
+    const identity = `${app.currentZoneRecord?.id || ''}:${app.currentZoneRecord?.format || ''}`;
+    return lastSyncedLocation && loadedZoneIdentity && loadedZoneIdentity === identity && lastSyncedGround?.clone
+        ? lastSyncedGround.clone()
+        : null;
+}
+
+const originalNavigationStartPoint = app.navigationStartPoint.bind(app);
+app.navigationStartPoint = (...args) => syncedNavigationGround() || originalNavigationStartPoint(...args);
+
+// The camera is grounded for collision/navigation, but the player's readout
+// must retain the exact logged elevation in every view and after camera pans.
+const originalUpdateCoordinateHud = app.updateCoordinateHud?.bind(app);
+app.updateCoordinateHud = (...args) => {
+    originalUpdateCoordinateHud?.(...args);
+    const identity = `${app.currentZoneRecord?.id || ''}:${app.currentZoneRecord?.format || ''}`;
+    if (lastSyncedLocation && loadedZoneIdentity === identity && app.els?.coord) {
+        app.els.coord.textContent = `Map ${formatWorldLocationForGameMap(lastSyncedLocation)}`;
+    }
+};
 const headingTracker = new LocationHeadingTracker();
 const rareLayer = document.createElement('div');
 rareLayer.className = 'eoz-rare-layer';
@@ -378,6 +391,13 @@ let collisionGeometryPromise = null;
 let candidateRouteSerial = 0;
 let collisionGeometryState = { status:'idle' };
 let candidateRouteState = { status:'idle' };
+let establishedRouteState = { status:'idle' };
+
+installEstablishedRouteGuard(app, {
+    getGeometry:() => collisionGeometry || collisionGeometryPromise,
+    getZoneIdentity:() => loadedZoneIdentity,
+    onState:state => { establishedRouteState = state; }
+});
 
 function finiteMetric(value) {
     if (value === null || value === undefined || value === '') return null;
@@ -416,6 +436,7 @@ function resetSpatialRouteState() {
     collisionGeometryPromise = null;
     collisionGeometryState = { status:'idle' };
     candidateRouteState = { status:'idle' };
+    establishedRouteState = { status:'idle' };
 }
 
 function cancelCandidateRoute(reason = 'cancelled') {
@@ -465,6 +486,25 @@ function startCollisionGeometryExport(zoneIdentity) {
         return null;
     });
 }
+
+const zoneLoadGuard = installZoneLoadGuard(app, {
+    onRequest() {
+        resetSpatialRouteState();
+        loadedZoneIdentity = '';
+        lastSyncedLocation = null;
+        lastSyncedGround = null;
+        headingTracker.reset();
+        clearRareMobs();
+        routeGuidanceLayer.hidden = true;
+    },
+    onReady() {
+        loadedZoneIdentity = `${app.currentZoneRecord.id || ''}:${app.currentZoneRecord.format || ''}`;
+        app.selectedFloorIndices?.clear?.();
+        root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
+        app.applyFloorSelection?.();
+        startCollisionGeometryExport(loadedZoneIdentity);
+    }
+});
 
 function removeRenderedPath() {
     const group = app?.navigationGuideGroup;
@@ -717,13 +757,7 @@ window.eqlEyeOfZommViewer = {
         if (!select) return { ok:false, reason:'select-eq-folder-first' };
         if (select.disabled || select.options.length <= 1) return { ok:false, reason:'select-eq-folder-first' };
 
-        const wanted = norm(viewerName(zoneName));
-        let option = Array.from(select.options).find(o => norm(o.textContent) === wanted);
-        if (!option) {
-            option = Array.from(select.options).find(o =>
-                norm(o.textContent).includes(wanted) || wanted.includes(norm(o.textContent))
-            );
-        }
+        const option = selectViewerZoneOption(select.options, zoneName);
         if (!option) return { ok:false, reason:'zone-not-found', zone:zoneName };
 
         if (select.value !== option.value) {
@@ -733,38 +767,22 @@ window.eqlEyeOfZommViewer = {
         }
 
         const selected = app.selectedZoneRecord?.();
-        const alreadyLoaded = app.currentZoneRecord && selected &&
+        const alreadyLoaded = zoneLoadGuard.isReady(selected) && app.currentZoneRecord && selected &&
             app.currentZoneRecord.id === selected.id && app.currentZoneRecord.format === selected.format;
         if (!alreadyLoaded) {
-            // Stop exporting/querying the previous zone before the viewer
-            // begins replacing its scene graph, not only after the new load.
-            resetSpatialRouteState();
-            loadedZoneIdentity = '';
-            await app.loadSelectedZone();
+            const result = await app.loadSelectedZone();
+            if (result?.reason === 'superseded') return { ok:false, reason:'superseded' };
         }
-        if (!app.currentZoneRecord) {
+        if (!selected || !zoneLoadGuard.isReady(selected) || !app.currentZoneRecord ||
+            app.currentZoneRecord.id !== selected.id || app.currentZoneRecord.format !== selected.format) {
             return {
                 ok:false,
                 reason:'load-failed',
                 message:app.els?.statusText?.textContent || `Unable to load ${zoneName}.`
             };
         }
-        const zoneIdentity = `${app.currentZoneRecord.id || ''}:${app.currentZoneRecord.format || ''}`;
-        const changedZone = zoneIdentity !== loadedZoneIdentity;
-        if (changedZone) {
-            resetSpatialRouteState();
-            lastSyncedLocation = null;
-            lastSyncedGround = null;
-            headingTracker.reset();
-            clearRareMobs();
-            routeGuidanceLayer.hidden = true;
-            loadedZoneIdentity = zoneIdentity;
-            app.selectedFloorIndices?.clear?.();
-            root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
-            app.applyFloorSelection?.();
-            startCollisionGeometryExport(zoneIdentity);
-        } else if (!collisionGeometryPromise) {
-            startCollisionGeometryExport(zoneIdentity);
+        if (!collisionGeometryPromise) {
+            startCollisionGeometryExport(loadedZoneIdentity);
         }
         return {
             ok:true,
@@ -925,7 +943,7 @@ window.eqlEyeOfZommViewer = {
     },
 
     async pathTo(label, wikiLocation = null) {
-        if (!app || !label) return { ok:false };
+        if (!app?.currentZoneRecord || !label) return { ok:false };
         // Invalidate a previous-start candidate before awaiting the line
         // worker, including when the destination key will stay the same.
         cancelCandidateRoute('rerouting');
@@ -968,6 +986,7 @@ window.eqlEyeOfZommViewer = {
     clearPath() {
         if (!app) return { ok:false };
         cancelCandidateRoute('cleared');
+        establishedRouteState = { status:'idle' };
         app.clearNavigationGuide?.();
         app.updateNavigationOverlay?.();
         app.drawMiniMap?.();
@@ -992,6 +1011,7 @@ window.eqlEyeOfZommViewer = {
             },
             navigation:navigationResult('', app?.navigationTarget ? 'active' : ''),
             spatial:{
+                established:{ ...establishedRouteState },
                 collision:{ ...collisionGeometryState },
                 candidate:{ ...candidateRouteState }
             },
@@ -1000,7 +1020,7 @@ window.eqlEyeOfZommViewer = {
     },
 
     resize() {
-        app?.resize?.();
+        viewportFraming.resize();
         return { ok:Boolean(app) };
     }
 };

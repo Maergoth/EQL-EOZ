@@ -2,6 +2,10 @@
 
 ## 0.8.1 - Wiki and map integration corrections
 
+- Fix exact zone selection, queued archive loads, stale readiness and route ownership, exact logged-elevation HUD, and framing after a hidden map loads.
+- Preserve pass-through collision faces and validate both route engines against ground support, full body clearance, legal climbs, and exposed drops before displaying a path. Match Recast agent dimensions and bound rasterization work.
+- Permit the routing worker's WebAssembly under the desktop content policy; verify it in actual Electron CI, retain redacted rejection reasons, and check packaged runtime source parity.
+- Record 28 rendered local-zone route probes and 27 view/scale captures, while retaining conservative destination markers and the guarded engine policy.
 - Convert wiki NPC destinations to the client-map coordinate basis used by named routing, recompute routes after the player moves, and keep cancelled work from restarting a destination through fallback.
 - Apply the wiki's +10 Range per tier to every item with a listed Range, including bows and throwing weapons.
 - Honor `Class: ALL except ...` in existing packs and export the actual allowed classes in future packs, keeping unusable loot out of class-filtered recommendations.

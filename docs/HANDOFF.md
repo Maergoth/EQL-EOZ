@@ -12,13 +12,15 @@ This repository is the source of truth. A new contributor should be able to resu
 Current code baseline: **0.8.1**. Minimal view is intel-first: named/rare mobs are the default surface, with no duplicate destination field, while map and row-level routing are independent opt-in Settings choices that default off. Waypoint copying, considers, pop-under loot, and mob-list filtering remain active without either. Class-filtered loot excludes statless and weight-only items.
 
 The [wiki/map integration audit](INTEGRATION_AUDIT.md) records the 0.8.1 repairs,
-the fresh export, source locations, and remaining data/visual gates. This patch
-retains the 0.8.0 established-first route policy. Its exporter catalog changes
+the fresh export, source locations, and remaining data/visual gates. The
+[map validation](MAP_VALIDATION.md) records rendered local-archive evidence
+and the additional repairs. This patch retains guarded established-first
+routing; both engines are checked before drawing. Its exporter catalog changes
 require a separate reviewed server installation and dataset rebuild.
 
-Desktop zone indexing remains metadata-only and hydrates the selected archive on demand. The WLD exporter advances across skipped material groups so later textures stay assigned to their actual polygon ranges; bitmap aliases and repeating UV sampling remain in place. EQEmu's sequential WLD polygon/material assignment independently supports this repair, but Mistmoore plus one outdoor proprietary-zone visual check is still required.
+Desktop zone indexing remains metadata-only and hydrates the selected archive on demand. The WLD exporter advances across skipped material groups so later textures stay assigned to their actual polygon ranges; bitmap aliases and repeating UV sampling remain in place. EQEmu's sequential WLD polygon/material assignment independently supports this repair. The local rendered pass now confirms Mistmoore and Commonlands textures; live game comparison remains separate.
 
-The pinned Recast/Detour worker is now a guarded integration candidate, not a dormant prototype. The established line-map worker builds and collision-projects the first usable route. In parallel, the wrapper exports decoded viewer collision triangles, crops them around that route, and transfers the route-local buffers to Recast. Only a complete candidate that passes independent surface and directed-elevation validation replaces the rendered ribbon. Candidate preparation never clears the established line or destination, and real Windows/game-client evidence is still required before Recast becomes first-choice routing.
+The pinned Recast/Detour worker is a guarded integration candidate. The established line-map worker builds and collision-projects a route, then the independent established-route guard checks support, body clearance, and directed elevation before drawing. The wrapper crops decoded collision geometry around that safe route, or around the requested endpoints if it was rejected, and transfers buffers to Recast. Only a complete validated candidate replaces the ribbon. Failure retains a safe line or destination marker. Real game-client evidence is still required before Recast becomes first-choice routing.
 
 The parser also treats the current character's Legends `/who` row as an authoritative zone signal. It strips the volatile instance number, retains the parenthesized short name for catalog/archive matching, ignores other players, and suppresses repeat-zone reloads. Keep the exact capture in `tests/test.mjs` when extending this grammar.
 
@@ -53,6 +55,8 @@ The desktop process in [`desktop/main.cjs`](../desktop/main.cjs) owns the select
 Spatial candidate ownership is intentionally split at testable boundaries:
 
 - [`app/collision-geometry.js`](../app/collision-geometry.js) flattens `zoneGroup` collision meshes after `matrixWorld`, preserves winding under mirrored transforms, skips props/pass-through/degenerate triangles, yields during large exports, and crops a bounded corridor around the established route.
+- [`app/zone-load-guard.js`](../app/zone-load-guard.js) serializes archive loads across toolbar and shell; [`app/viewer-zone-selection.js`](../app/viewer-zone-selection.js) resolves exact IDs and aliases. [`app/zone-identity.js`](../app/zone-identity.js) shares identity checks with the app shell.
+- [`app/established-route-guard.js`](../app/established-route-guard.js) validates the established path before its first draw and abandons stale zone/request work. [`app/viewport-framing.js`](../app/viewport-framing.js) defers fitting hidden viewports.
 - [`app/recast-route-client.js`](../app/recast-route-client.js) transfers ephemeral crop buffers, enforces latest-request-wins, terminates stale/failed/timed-out workers, and resolves every failure as fallback rather than throwing away the current route.
 - [`app/recast-route-engine.js`](../app/recast-route-engine.js) generates and queries the navmesh in the dedicated bundled worker, rejects partial goals, and uses the shared +6 climb policy.
 - [`app/route-validation.js`](../app/route-validation.js) builds a worker-local X/Z triangle index, projects the sparse result back onto supplied triangles, and independently fails closed on unsupported segments, undeclared drops, and excessive upward climbs. Large triangles that span many cells stay in a broad-triangle bucket; retain that fallback when tuning the index.
@@ -81,16 +85,19 @@ The app is read-only with respect to EverQuest. It may consume `/loc` lines prod
 
 ## Exact next work
 
-Continue section 16.3 of the vision in this order. Steps 1–4 require the 0.8.0 Windows installer because proprietary archives are deliberately absent from GitHub.
+Use [MAP_VALIDATION.md](MAP_VALIDATION.md) for completed 0.8.1 rendered checks,
+aggregate results, and private local rerun context. Continue section 16.3 of
+the vision with the remaining live-client gates; use a build from this PR,
+not the older 0.8.0 installer.
 
-1. **Confirm texture repair first.** In Mistmoore and one outdoor S3D zone, inspect First and Top for correct later-material assignment and tiling. Map Overlay is intentionally `.txt` line art. Export diagnostics and record only zone short name plus `viewer.textures.available/materials/resolved`. If a face still fails, preserve a redacted screenshot and the aggregate counts; never commit archives, logs, installation paths, or character-linked coordinates.
-2. **Run the complete spatial matrix.** Exercise outdoor open ground, narrow indoor corridor, stacked-floor stairs, legal ramp, closed door/solid wall, exposed downward drop, and reverse-drop ascent. Begin each with the established line visible. A candidate may replace it only when `viewer.spatial.candidate.status` is `ready`; every displayed segment must remain on the correct walkable surface.
-3. **Prove continuity and stale-work safety.** During export/query, move, zoom, switch First/Top/Map, change the Z slice, open loot, choose a second target, cancel, and change zones. The UI must remain responsive; camera/presentation/target choices must persist; no old target or prior-zone result may reappear; a failure must retain the established route or honest destination marker.
+1. **Compare with the live client.** Local rendered texture checks pass for Mistmoore/Commonlands/Befallen. Compare First/Top textures, HUD, marker, heading, and stacked-floor placement during real game movement. Use the corrected Befallen anchor in the current checklist. Never commit archives, logs, installation paths, or character-linked coordinates.
+2. **Extend known-walkable coverage.** Revisit the destination-only ramp/drop probes, then exercise narrow corridors, stairs, doors, and directed drops with independently known legal routes. Both established and candidate paths must validate; a candidate may replace guidance only with `viewer.spatial.candidate.status` equal to `ready`.
+3. **Repeat continuity with live updates.** Synthetic-log and rendered cancellation/replacement/zoning checks complement the async regressions. During real updates, move, zoom, switch First/Top/Map, change the Z slice, open loot, choose a second target, cancel, and change zones. Preserve camera/presentation/target choices and keep failed routes as safe guidance or honest markers.
 4. **Capture redacted evidence.** At 100%, 125%, and 150% Windows scaling, record `viewer.spatial.collision` triangle counts/export time and candidate crop/generation/query/total time, status, violation count, and fallback reason. Manually inspect the JSON before attaching it. It must not contain an NPC target, route points, raw worker error detail, logs, or filesystem paths.
 5. **Classify every failure before tuning.** Use one of: texture mapping, no collision export, oversized/empty crop, generation failure, unreachable goal, validation rejection, stale cancellation, responsiveness, or visual route defect. Add the nearest redistributable fixture/contract when possible; do not weaken validation, raise triangle caps, or broaden diagnostic data without evidence.
 6. **Make the promotion decision.** If every real-zone case and responsiveness check passes, change orchestration so cached Recast geometry is queried first with the established worker-line route as automatic fallback. If any case fails, keep the current established-first/candidate-second behavior and record the exact category, zone type, aggregate diagnostics, and next code seam here.
 
-Do not start durable history or upgrade scoring from 0.9 until this matrix passes. The integration code, 8/8 synthetic corpus, typed export-to-Recast test, cancellation, redaction, and fallback contracts are complete; proprietary texture fidelity, real-zone route quality, and interaction responsiveness are the remaining 0.8 evidence gate.
+Do not start durable history or upgrade scoring from 0.9 until this matrix passes. Both 8/8 synthetic corpora, typed export-to-Recast integration, cancellation, redaction, and package contracts pass. The rendered local matrix found 14 valid paths and 14 honest rejections, so safe known-walkable route coverage, live movement, dynamic doors, OS-wide scaling, and installer acceptance remain. Preserve the conservative guard while extending coverage.
 
 ## Release path
 
