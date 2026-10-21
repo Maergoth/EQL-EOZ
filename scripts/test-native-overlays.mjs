@@ -229,7 +229,9 @@ try {
                     const measure=()=>({height:list.scrollHeight,summary:summary.getBoundingClientRect().toJSON(),heading:summary.querySelector('.npc-heading').getBoundingClientRect().toJSON(),drops:summary.nextElementSibling.getBoundingClientRect().toJSON()});
                     const before=measure();name.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse'}));const after=measure(),bar=actions.getBoundingClientRect().toJSON();
                     const map=actions.querySelector('[data-npc-action="map"]');map.focus();const button=map.getBoundingClientRect().toJSON(),strip=actions.getBoundingClientRect().toJSON();
-                    return{before,after,bar,button,strip,display:getComputedStyle(actions).display,position:getComputedStyle(actions).position,focused:document.activeElement===map};
+                    const focused=document.activeElement===map,scroll={left:actions.scrollLeft,width:actions.scrollWidth,clientWidth:actions.clientWidth,clientLeft:actions.clientLeft};
+                    const details=actions.querySelector('[data-npc-action="details"]');details.focus();const first=details.getBoundingClientRect().toJSON();map.focus();
+                    return{before,after,bar,button,strip,first,scroll,display:getComputedStyle(actions).display,position:getComputedStyle(actions).position,focused};
                 });
                 const detail=JSON.stringify({width,fontScale,...geometry});
                 assert.equal(geometry.position,'absolute',`Actions overlay the mob-name row: ${detail}`);
@@ -237,6 +239,7 @@ try {
                 assert(geometry.bar.top>=geometry.after.heading.top-1&&geometry.bar.bottom<=geometry.after.heading.bottom+1,`Action strip stays inside the original name row: ${detail}`);
                 assert(geometry.focused&&geometry.button.left>=geometry.strip.left-1&&geometry.button.right<=geometry.strip.right+1,`The last action scrolls horizontally into keyboard view at narrow widths: ${detail}`);
                 assert(geometry.button.top>=geometry.strip.top&&geometry.button.bottom<=geometry.strip.bottom,`The final action has full vertical clearance without a scrollbar consuming its row: ${detail}`);
+                assert(geometry.first.left>=geometry.strip.left&&geometry.first.right<=geometry.strip.right,`Returning keyboard focus to Details fully reveals the beginning of the same strip: ${detail}`);
             }
             intelWindow.setBounds(intelOriginalBounds);await action('intel','font-scale',1);
             const tooltipHover=await execute(intelWindow,async()=>{
