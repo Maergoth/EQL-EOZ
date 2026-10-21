@@ -16,9 +16,9 @@ hidden-owner continuity and cumulative Classic/Velious item filtering. All
 First/Top/Map controls are contained by the main map page. The worker/CSP smoke
 passes with JavaScript evaluation blocked and the WASM route worker available.
 
-Read-only parsing of the selected local client Maps directory matched 122 of
-124 catalog identities before the Kerra Island `kerraridge` alias correction,
-covering 857,460 lines and 4,354 labels. New Sebilis Expedition has no matching
+Read-only parsing of the selected local client Maps directory matched 123 of
+124 catalog identities after the Kerra Island `kerraridge` alias correction,
+covering 862,469 lines and 4,358 labels. New Sebilis Expedition has no matching
 client map in this installation. Missing maps show an explicit fallback;
 markers never fabricate a validated route. Game files and raw logs are excluded.
 
@@ -28,8 +28,21 @@ touching the user's clipboard or reading the desktop. This is separate from a
 physical game screenshot, foreground/DPI, click-through or audio-device check.
 Known named targets continue to use log text; screenshots do not drive parsing.
 
-Release dataset, installer and installed-upgrade observations are recorded below
-after those gates finish. Earlier 0.8.2 observations remain historical evidence.
+The reviewed wiki producer reached staging in EQLWiki #39 and production through
+the separate scoped promotion #40 (`cc70c432`). Deployment succeeded; the installed
+producer matched the reviewed Git source hash. The prior filtered manifest/gzip
+pair was preserved before the existing low-priority refresh job published
+`20261021T095417Z-c7004672e0f3` to the dataset branch. This export contains 124
+zones, 8,679 NPC records (117 raid variants), 11,270 items and a complete public
+presence index (8,159 NPC names, 11,259 item names and 26,342 titles). King Tranix
+remains raid-only; Fire Giant Warrior retains both variants; Robe of the Kedge
+retains raid and normal-zone sources. No database pages or host scripts changed.
+
+The local 0.8.3 NSIS build passes exact-source ASAR validation against that freshly
+fetched bootstrap, including the map renderer, regex worker, discovery UI/host,
+timer editor, and native preloads. The installer remains unsigned. Physical
+game/DPI/audio/desktop-capture checks and installed upgrades are distinct from
+these build and synthetic checks. Earlier 0.8.2 observations remain historical.
 
 ## 0.8.2 application updates, native overlays and timers
 

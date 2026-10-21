@@ -58,7 +58,7 @@ Wiki README/CONTRIBUTING/development/component guides were read. Production
 data/export refresh is separate from Git deployment; use PROJECT.md and the
 existing private host jobs after reviewed exporter changes are concrete.
 
-Current installed app is 0.8.2, using the existing shortcut and profile. User
+At the start of this slice the installed app was 0.8.2, using the existing shortcut and profile. User
 requested local installation earlier; back up preferences before any further
 upgrade. New functionality must be present in a rebuilt, exact-source-verified
 installer; do not equate a source push with a local or production installation.
@@ -71,3 +71,14 @@ Verify: full suite; actual Electron map window, lazy reply, Show More, regex
 matching/timeouts and timer editor; local C:\EverQuest Legends map parsing;
 Normal/Raid exporter fixtures and production pack provenance; NSIS and ASAR
 parity; current PR CI. Keep actual game/DPI interaction distinct from fixtures.
+
+## Verified release handoff
+
+Wiki #39 and its separate main promotion #40 are merged. Production deployment
+`cc70c432` succeeded, and the installed exporter matches reviewed Git bytes.
+The existing host refresh job saved its prior filtered output and published
+`20261021T095417Z-c7004672e0f3`: 124 zones, 8,679 NPCs, 11,270 items, 117 raid
+variants, complete public wiki presence. This verified pack is the local 0.8.3
+bootstrap. Full source tests, actual Electron worker/native/discovery smokes,
+catalog relevance, NSIS build and exact-source ASAR gate pass. Complete EoZ
+PR #2 publication and local installed-upgrade/shortcut verification next.
