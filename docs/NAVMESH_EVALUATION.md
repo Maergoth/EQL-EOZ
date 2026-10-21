@@ -8,9 +8,9 @@ Candidate: [`recast-navigation` 0.43.1](https://github.com/isaac-mason/recast-na
 
 ## Decision
 
-The pinned `recast-navigation` 0.43.1 worker passed the shared geometry corpus and now runs as a guarded candidate against decoded viewer collision geometry. The established collision-validated pathfinder still produces the first visible route when its result passes the independent pre-draw guard. Recast may atomically replace only its rendered ribbon after full-goal, collision-surface, body-clearance, and directed-elevation validation. Do not make it first choice or add a player-facing engine toggle until the proprietary-zone and responsiveness gates pass.
+The pinned `recast-navigation` 0.43.1 worker passed the shared geometry corpus and now runs as a guarded candidate against decoded viewer collision geometry. The established collision-validated pathfinder still produces the first visible route when its result passes the independent pre-draw guard. Recast may install or atomically replace the rendered ribbon after full-goal, collision-surface, body-clearance, and directed-elevation validation. Do not make it first choice or add a player-facing engine toggle until the proprietary-zone and responsiveness gates pass.
 
-The final rendered local-asset matrix covered 28 requests: 14 displayed candidate-ready routes passed independent validation, and 14 requests retained an honest marker/no-path or validation rejection, including real drop probes. These are decoded-asset and renderer observations, not in-game route-following evidence or proof that every legal drop is routable. This result does not promote Recast to first choice.
+The initial rendered local-asset matrix covered 28 requests with 14 valid paths/14 markers. The [destination-only audit](ROUTE_REJECTION_AUDIT.md) repeats those outcomes and adds eight independently verified ramp/drop probes: 20 valid paths/16 markers across 36 requests, zero displayed violations, and exact endpoints. Two clear descents recover through certified retries; their reverse ascents remain markers. These observations do not prove every legal route is found or promote Recast to first choice.
 
 Why it is the preferred prototype:
 
@@ -40,7 +40,7 @@ The integrated candidate lives behind `app/recast-route-client.js`. `app/collisi
 
 `app/established-route-guard.js` wraps `app.findNavigationPath` before its callers can draw a line. It awaits the same zone-scoped collision export, crops cooperatively, and independently validates the established planner's result. Missing geometry, failed validation, cancellation, or a changed zone returns no line; the destination can remain an honest marker. This closes shortcuts in the established planner as well as guarding Recast candidates.
 
-The client applies a 12-second timeout, uses latest-request-wins worker termination, and restarts after worker-level failure. Zone, destination, clear, and reroute changes invalidate orchestration serials before any response can display. `app/recast-route-engine.js` rejects Detour partial results and shares the +6 climb limit; `app/route-validation.js` grounds sparse funnel points, retains triangle-edge height breakpoints, and independently rejects paths that leave the supplied surface, exceed upward policy, or reverse an exposed drop.
+The client applies a 12-second per-query timeout, uses latest-request-wins worker termination, and restarts after worker-level failure. Zone, destination, clear, and reroute changes invalidate orchestration serials before any response can display. `app/recast-route-engine.js` rejects partial/truncated polygon corridors, requires the final goal polygon, funnels using closest polygon points, and validates connectors to the exact trusted endpoints. `app/route-validation.js` retains the incoming/outgoing heights of triangle edges and independently rejects paths that leave the supplied surface, exceed the +6 policy, or reverse an exposed drop.
 
 The controller, candidate generator, and validator share the actor dimensions in `app/navigation-policy.js`. Recast's generation settings use voxel counts, so EQ units must be converted explicitly:
 
@@ -51,6 +51,21 @@ The controller, candidate generator, and validator share the actor dimensions in
 | Maximum upward climb | 6 | `walkableClimb: 24` |
 
 Independent validation requires upward walkable support and uses continuous, conservative swept-body triangle clipping. Solid walls and nonwalkable ceilings receive lateral/end clearance; upward walkable faces receive a continuous center-body obstruction check while side contact remains eligible for climbing. Thin overhead faces cannot hide between support samples. Declared drops require supported endpoints, an exposed takeoff and landing, no overlapping reachable upper floor, and no intersection with intervening solid geometry. Projection may advance a declared drop to its supported edge without expanding the connection radius. Rejection preserves the valid established route or an honest destination marker.
+
+Supported stairs need adjacent landings and actual capped risers, with each
+transition no greater than +6. Contiguous monotone flights permit body overlap
+only within the shared radius and bounded aggregate height. Permission belongs
+to that route occurrence; unrelated loops, uncapped side walls, floating caps,
+and overhangs—including internal triangle seams—cannot borrow it.
+
+Without a valid established line, `app/drop-certification.js` can prove a
+local exposed descent before creating its exact takeoff-to-landing link.
+The ordinary worker query runs first. After unreachable/validation-failed
+results, at most one certified retry is allowed; successful detours stay
+unchanged. Proof is bounded to 64 horizontal units/60 descent units and shares
+request/zone cancellation. Radius attachment includes a 0.75-unit voxel-edge
+margin beyond the 2.25-unit actor radius; final exact-endpoint/body validation
+still applies. Engine faults and allocation limits do not trigger retries.
 
 The crop retains complete triangles for collision validation but supplies the intended corridor X/Z rectangle and selected geometry's Y range as Recast generation bounds. A large floor triangle therefore cannot expand rasterization to its distant vertices. The 250,000-triangle payload cap remains, and a separate 4,000,000-cell raster budget rejects oversized allocation before generation; neither limit is raised to force a route.
 

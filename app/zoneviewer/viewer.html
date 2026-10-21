@@ -39,6 +39,7 @@ import { routeDistanceLabel, routeGuidance } from '../route-guidance.js';
 import { formatWorldLocationForGameMap, worldToClientMap } from '../coordinate-system.js';
 import { RecastRouteClient } from '../recast-route-client.js';
 import { cropCollisionGeometryForRoute, exportViewerCollisionGeometry } from '../collision-geometry.js';
+import { certifyDirectDrop } from '../drop-certification.js';
 import { installEstablishedRouteGuard } from '../established-route-guard.js';
 import { deferHiddenViewportFit } from '../viewport-framing.js';
 import { installZoneLoadGuard } from '../zone-load-guard.js';
@@ -574,9 +575,9 @@ function scheduleCandidateRoute(label) {
         }
         const cropStartedAt = performance.now();
         const cropped = await cropCollisionGeometryForRoute(fullGeometry, guidePoints, {
-            // A direct start/goal marker is useful for the crop but is not
-            // evidence that a drop is exposed. Only the established,
-            // collision-approved line may authorize one-way drop links.
+            // A marker cannot authorize a drop. Established lines have already
+            // passed collision checks; otherwise a separate certificate below
+            // must prove an exposed descent before any link reaches Recast.
             dropPath:fallbackPath,
             shouldCancel:() => serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey
         });
@@ -591,6 +592,12 @@ function scheduleCandidateRoute(label) {
             });
             return;
         }
+        const certifiedDrop = fallbackPath.length < 2
+            ? await certifyDirectDrop(cropped.geometry, start, goal, {
+                shouldCancel:() => serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey
+            })
+            : { ok:false };
+        if (serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey) return;
         candidateRouteState = {
             ...candidateRouteState,
             status:'calculating',
@@ -599,15 +606,31 @@ function scheduleCandidateRoute(label) {
             selectedTriangles:finiteMetric(cropped.stats?.selectedTriangles),
             corridorMargin:finiteMetric(cropped.stats?.margin)
         };
-        const result = await recastRouteClient.route({
+        let result = await recastRouteClient.route({
             geometry:cropped.geometry,
             start,
             goal
         }, {
             rerouting:fallbackPath.length >= 2,
-            transferGeometry:true
+            // Retain the original buffers only for a certified, bounded retry.
+            transferGeometry:!certifiedDrop.ok
         });
         if (serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey) return;
+        // Preserve a successful ordinary detour. A certified link gets one
+        // retry only when an ordinary path is unreachable or independently
+        // rejected; worker failures and generation limits keep their fallback.
+        if (certifiedDrop.ok && !result.ok && ['goal-unreachable', 'validation-failed'].includes(result.reason)) {
+            const first = result;
+            result = await recastRouteClient.route({
+                geometry:{ ...cropped.geometry, offMeshConnections:[...(cropped.geometry.offMeshConnections || []), certifiedDrop.connection] },
+                start,
+                goal
+            }, { transferGeometry:true });
+            if (serial !== candidateRouteSerial || zoneIdentity !== loadedZoneIdentity || app.navigationTarget?.key !== targetKey) return;
+            for (const metric of ['generationMs', 'queryMs', 'totalMs']) {
+                result[metric] = (Number(first[metric]) || 0) + (Number(result[metric]) || 0);
+            }
+        }
         candidateRouteState = candidateStateFrom(result, candidateRouteState);
         if (result.ok && !replacePathWithCandidate(result, label)) {
             candidateRouteState = candidateStateFrom({ status:'fallback', reason:'candidate-render-failed' }, candidateRouteState);

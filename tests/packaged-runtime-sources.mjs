@@ -7,7 +7,7 @@ import { PACKAGED_RUNTIME_SOURCES, verifyPackagedRuntimeSources } from '../scrip
 
 const requiredModules = [
     'app/zone-identity.js', 'app/viewer-zone-selection.js', 'app/zone-load-guard.js',
-    'app/viewport-framing.js', 'app/established-route-guard.js', 'app/navigation-policy.js', 'app/route-validation.js', 'app/zoneviewer/ZoneViewerApp.js'
+    'app/viewport-framing.js', 'app/established-route-guard.js', 'app/drop-certification.js', 'app/navigation-policy.js', 'app/route-validation.js', 'app/zoneviewer/ZoneViewerApp.js'
 ];
 for (const relative of requiredModules) assert(PACKAGED_RUNTIME_SOURCES.includes(relative), `Package gate omits ${relative}`);
 const checker = await readFile(new URL('../scripts/check-packaged-artifact.mjs', import.meta.url), 'utf8');

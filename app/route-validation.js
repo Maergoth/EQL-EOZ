@@ -22,7 +22,7 @@ function matchingDrop(from, to, connections) {
         && distance(to, connection.to) <= (Number(connection.radius) || 1) + SURFACE_TOLERANCE);
 }
 
-function triangleSurfaceY(positions, indices, triangleOffset, point, requireInside = true) {
+function triangleSurfaceY(positions, indices, triangleOffset, point, requireInside = true, insideTolerance = .001) {
     const ia = indices[triangleOffset] * 3;
     const ib = indices[triangleOffset + 1] * 3;
     const ic = indices[triangleOffset + 2] * 3;
@@ -37,7 +37,7 @@ function triangleSurfaceY(positions, indices, triangleOffset, point, requireInsi
     const u = ((bz - cz) * (point.x - cx) + (cx - bx) * (point.z - cz)) / denominator;
     const v = ((cz - az) * (point.x - cx) + (ax - cx) * (point.z - cz)) / denominator;
     const w = 1 - u - v;
-    if (requireInside && (u < -.001 || v < -.001 || w < -.001)) return null;
+    if (requireInside && (u < -insideTolerance || v < -insideTolerance || w < -insideTolerance)) return null;
     return u * positions[ia + 1] + v * positions[ib + 1] + w * positions[ic + 1];
 }
 
@@ -92,18 +92,18 @@ function spatialIndex(geometry) {
     return index;
 }
 
-function surfaceYs(point, geometry, walkableOnly = true) {
+function surfaceYs(point, geometry, walkableOnly = true, insideTolerance = .001) {
     const values = [];
     const index = spatialIndex(geometry);
     const local = index.cells.get(`${index.cellCoordinate(point.x)}:${index.cellCoordinate(point.z)}`) || [];
     for (const offset of local) {
         if (walkableOnly && !index.walkableTriangles.has(offset)) continue;
-        const y = triangleSurfaceY(geometry.positions, geometry.indices, offset, point);
+        const y = triangleSurfaceY(geometry.positions, geometry.indices, offset, point, true, insideTolerance);
         if (y !== null) values.push(y);
     }
     for (const offset of index.broadTriangles) {
         if (walkableOnly && !index.walkableTriangles.has(offset)) continue;
-        const y = triangleSurfaceY(geometry.positions, geometry.indices, offset, point);
+        const y = triangleSurfaceY(geometry.positions, geometry.indices, offset, point, true, insideTolerance);
         if (y !== null) values.push(y);
     }
     return values;
@@ -112,6 +112,186 @@ function surfaceYs(point, geometry, walkableOnly = true) {
 function hasClearance(point, geometry) {
     return !surfaceYs(point, geometry, false).some(y =>
         y > point.y + .001 && y < point.y + NAVIGATION_AGENT_HEIGHT);
+}
+
+function localTriangleOffsets(point, geometry) {
+    const index = spatialIndex(geometry);
+    return new Set([...(index.cells.get(`${index.cellCoordinate(point.x)}:${index.cellCoordinate(point.z)}`) || []), ...index.broadTriangles]);
+}
+
+function strictlyInsideTriangle(point, geometry, offset, requireInterior = false) {
+    const { positions, indices } = geometry;
+    const vertices = [0, 1, 2].map(corner => indices[offset + corner] * 3);
+    let positive = false, negative = false, boundary = false;
+    for (let corner = 0; corner < 3; corner += 1) {
+        const a = vertices[corner], b = vertices[(corner + 1) % 3];
+        const side = (positions[b] - positions[a]) * (point.z - positions[a + 2]) -
+            (positions[b + 2] - positions[a + 2]) * (point.x - positions[a]);
+        positive ||= side > 1e-7;
+        negative ||= side < -1e-7;
+        boundary ||= Math.abs(side) <= 1e-7;
+    }
+    return !(positive && negative) && !(requireInterior && boundary);
+}
+
+function stepSupports(point, geometry) {
+    const index = spatialIndex(geometry);
+    return [...localTriangleOffsets(point, geometry)].filter(offset => index.walkableTriangles.has(offset) &&
+        strictlyInsideTriangle(point, geometry, offset) &&
+        Math.abs(triangleSurfaceY(geometry.positions, geometry.indices, offset, point, false) - point.y) <= .001);
+}
+
+function insideCapUnion(point, geometry, capOffsets) {
+    const offsets = [...capOffsets].filter(offset => strictlyInsideTriangle(point, geometry, offset));
+    if (!offsets.length) return false;
+    if (offsets.some(offset => strictlyInsideTriangle(point, geometry, offset, true))) return true;
+    // A mesh seam is interior when the cap continues on every side. Treating
+    // each triangle's shared edge as an external boundary permits overhangs.
+    const epsilon = .00001;
+    return [[epsilon, 0], [-epsilon, 0], [0, epsilon], [0, -epsilon]].every(([dx, dz]) =>
+        offsets.some(offset => strictlyInsideTriangle({ x:point.x + dx, z:point.z + dz }, geometry, offset)));
+}
+
+// A step needs adjacent supported landings and an actual capped riser. Height
+// alone cannot distinguish a legal stair from a wall or overlapping floors.
+function legalStepTransitions(geometry, path) {
+    if (!geometry?.positions || !geometry?.indices || !Array.isArray(path)) return [];
+    const steps = [];
+    for (let index = 1; index < path.length; index += 1) {
+        const from = path[index - 1], to = path[index];
+        if (!finitePoint(from) || !finitePoint(to)) continue;
+        const rise = Math.abs(to.y - from.y);
+        const planar = Math.hypot(to.x - from.x, to.z - from.z);
+        if (rise <= .001 || rise > MAX_NAVIGATION_CLIMB_Z + 1e-7 || planar > .02) continue;
+        let dx = to.x - from.x, dz = to.z - from.z;
+        if (planar < 1e-5) {
+            const before = path[index - 2], after = path[index + 1];
+            if (!before || !after) continue;
+            dx = after.x - before.x;
+            dz = after.z - before.z;
+        }
+        const length = Math.hypot(dx, dz);
+        if (length < 1e-5) continue;
+        dx /= length; dz /= length;
+        const center = { x:(from.x + to.x) / 2, z:(from.z + to.z) / 2 };
+        const entry = { x:center.x - dx * .05, y:from.y, z:center.z - dz * .05 };
+        const exit = { x:center.x + dx * .05, y:to.y, z:center.z + dz * .05 };
+        if (!stepSupports(entry, geometry).length || !stepSupports(exit, geometry).length) continue;
+        const lowerY = Math.min(from.y, to.y), upperY = Math.max(from.y, to.y);
+        const lowerProbe = from.y < to.y ? entry : exit;
+        // A cap spanning the lower landing is an overhead floor, not a step.
+        if (stepSupports({ ...lowerProbe, y:upperY }, geometry).length) continue;
+        const upperProbe = from.y > to.y ? entry : exit;
+        const capOffsets = new Set(stepSupports(upperProbe, geometry));
+        const lowerEndpoint = from.y < to.y ? from : to;
+        const lowerCaps = new Set(stepSupports({ ...lowerEndpoint, y:upperY }, geometry));
+        if (insideCapUnion(lowerEndpoint, geometry, lowerCaps)) continue;
+        const riserOffsets = new Set();
+        const candidates = segmentTriangleCandidates(entry, exit, geometry, NAVIGATION_AGENT_RADIUS);
+        for (const offset of candidates.offsets) {
+            if (!candidates.index.wallTriangles.has(offset)) continue;
+            const ys = [0, 1, 2].map(corner => geometry.positions[geometry.indices[offset + corner] * 3 + 1]);
+            if (Math.abs(Math.min(...ys) - lowerY) > .001 || Math.abs(Math.max(...ys) - upperY) > .001) continue;
+            const middle = (lowerY + upperY) / 2;
+            if (intersectsWallTriangle({ ...entry, y:middle }, { ...exit, y:middle }, geometry, offset, 0)) riserOffsets.add(offset);
+        }
+        // A quad's two triangles need not both contain the center-line probe.
+        // Include a sibling only when it shares a full edge with a proven
+        // riser and lies in that same bounded face plane.
+        for (const seed of [...riserOffsets]) {
+            const vertices = offset => [0, 1, 2].map(corner => {
+                const vertex = geometry.indices[offset + corner] * 3;
+                return { x:geometry.positions[vertex], y:geometry.positions[vertex + 1], z:geometry.positions[vertex + 2] };
+            });
+            const seedVertices = vertices(seed), [a, b, c] = seedVertices;
+            const ab = { x:b.x - a.x, y:b.y - a.y, z:b.z - a.z }, ac = { x:c.x - a.x, y:c.y - a.y, z:c.z - a.z };
+            const normal = { x:ab.y * ac.z - ab.z * ac.y, y:ab.z * ac.x - ab.x * ac.z, z:ab.x * ac.y - ab.y * ac.x };
+            const magnitude = Math.hypot(normal.x, normal.y, normal.z);
+            for (const offset of candidates.offsets) {
+                if (riserOffsets.has(offset) || !candidates.index.wallTriangles.has(offset)) continue;
+                const points = vertices(offset);
+                if (Math.abs(Math.min(...points.map(p => p.y)) - lowerY) > .001 || Math.abs(Math.max(...points.map(p => p.y)) - upperY) > .001) continue;
+                if (points.some(p => Math.abs(normal.x * (p.x - a.x) + normal.y * (p.y - a.y) + normal.z * (p.z - a.z)) > magnitude * .001)) continue;
+                if (points.filter(p => seedVertices.some(q => distance(p, q) < .001)).length >= 2) riserOffsets.add(offset);
+            }
+        }
+        if (riserOffsets.size) {
+            const side = point => (point.x - center.x) * dx + (point.z - center.z) * dz;
+            let firstSegment = index, lastSegment = index;
+            // Only this occurrence's contiguous approach/exit can use its step
+            // proof. Earlier loops under the cap cannot borrow later stairs.
+            for (let before = index - 1; before >= 1; before -= 1) {
+                const a = path[before - 1], b = path[before];
+                if (Math.abs(a.y - from.y) > .001 || Math.abs(b.y - from.y) > .001 || side(a) > .001 || side(b) > .001 || side(b) < side(a) - .001) break;
+                firstSegment = before;
+                if (Math.hypot(a.x - center.x, a.z - center.z) > NAVIGATION_AGENT_RADIUS + .02) break;
+            }
+            for (let after = index + 1; after < path.length; after += 1) {
+                const a = path[after - 1], b = path[after];
+                if (Math.abs(a.y - to.y) > .001 || Math.abs(b.y - to.y) > .001 || side(a) < -.001 || side(b) < -.001 || side(b) < side(a) - .001) break;
+                lastSegment = after;
+                if (Math.hypot(b.x - center.x, b.z - center.z) > NAVIGATION_AGENT_RADIUS + .02) break;
+            }
+            steps.push({ from, to, center, lowerY, upperY, riserOffsets, capOffsets, firstSegment, lastSegment, segmentIndex:index, direction:{ x:dx, z:dz } });
+        }
+    }
+    for (let index = 0; index + 1 < steps.length; index += 1) {
+        const step = steps[index], next = steps[index + 1];
+        if (Math.abs(step.to.y - next.from.y) > .001 ||
+            Math.sign(step.to.y - step.from.y) !== Math.sign(next.to.y - next.from.y) ||
+            step.direction.x * next.direction.x + step.direction.z * next.direction.z < .95) continue;
+        let contiguous = true;
+        for (let pointIndex = step.segmentIndex; pointIndex < next.segmentIndex; pointIndex += 1) {
+            const point = path[pointIndex], following = path[pointIndex + 1];
+            if (Math.abs(point.y - step.to.y) > .001 || pointIndex + 1 < next.segmentIndex && Math.abs(following.y - step.to.y) > .001 ||
+                (following.x - point.x) * step.direction.x + (following.z - point.z) * step.direction.z < -.001) {
+                contiguous = false; break;
+            }
+        }
+        if (contiguous) {
+            step.nextIndex = index + 1;
+            next.previousIndex = index;
+        }
+    }
+    return steps;
+}
+
+function stepClearanceForSegment(from, to, steps, segmentIndex) {
+    const riserOffsets = new Set(), capOffsets = new Set();
+    let transition = false;
+    const dx = to.x - from.x, dz = to.z - from.z, denominator = dx * dx + dz * dz;
+    for (const step of steps) {
+        if (segmentIndex < step.firstSegment || segmentIndex > step.lastSegment) continue;
+        const parameter = denominator ? Math.max(0, Math.min(1, ((step.center.x - from.x) * dx + (step.center.z - from.z) * dz) / denominator)) : 0;
+        const separation = Math.hypot(from.x + dx * parameter - step.center.x, from.z + dz * parameter - step.center.z);
+        if (separation > NAVIGATION_AGENT_RADIUS + .02 || Math.min(from.y, to.y) < step.lowerY - .001 || Math.max(from.y, to.y) > step.upperY + .001) continue;
+        for (const offset of step.riserOffsets) riserOffsets.add(offset);
+        for (const offset of step.capOffsets) capOffsets.add(offset);
+        transition ||= segmentIndex === step.segmentIndex;
+        for (const link of ['nextIndex', 'previousIndex']) {
+            let next = step;
+            while (next[link] !== undefined) {
+                next = steps[next[link]];
+                const t = denominator ? Math.max(0, Math.min(1, ((next.center.x - from.x) * dx + (next.center.z - from.z) * dz) / denominator)) : 0;
+                const distanceToNext = Math.hypot(from.x + dx * t - next.center.x, from.z + dz * t - next.center.z);
+                const totalRise = Math.max(next.upperY, from.y, to.y) - Math.min(next.lowerY, from.y, to.y);
+                if (distanceToNext > NAVIGATION_AGENT_RADIUS + .02 || totalRise > MAX_NAVIGATION_CLIMB_Z + 1e-7) break;
+                for (const offset of next.riserOffsets) riserOffsets.add(offset);
+                for (const offset of next.capOffsets) capOffsets.add(offset);
+            }
+        }
+    }
+    return { riserOffsets, capOffsets, transition };
+}
+
+function hasStepClearance(point, geometry, capOffsets, transition = false) {
+    if (!capOffsets.size) return hasClearance(point, geometry);
+    for (const offset of localTriangleOffsets(point, geometry)) {
+        if (capOffsets.has(offset) && (transition || !insideCapUnion(point, geometry, capOffsets))) continue;
+        const y = triangleSurfaceY(geometry.positions, geometry.indices, offset, point);
+        if (y !== null && y > point.y + .001 && y < point.y + NAVIGATION_AGENT_HEIGHT) return false;
+    }
+    return true;
 }
 
 function exposedTakeoff(from, to, geometry) {
@@ -185,10 +365,10 @@ function segmentTriangleCandidates(from, to, geometry, margin = 0) {
 }
 
 /** Match the established route's eye-height wall check, in either direction. */
-function segmentCrossesWall(from, to, geometry) {
+function segmentCrossesWall(from, to, geometry, permittedRisers = new Set()) {
     const { index, offsets } = segmentTriangleCandidates(from, to, geometry);
     for (const offset of offsets) {
-        if (index.wallTriangles.has(offset) && intersectsWallTriangle(from, to, geometry, offset)) return true;
+        if (!permittedRisers.has(offset) && index.wallTriangles.has(offset) && intersectsWallTriangle(from, to, geometry, offset)) return true;
     }
     return false;
 }
@@ -222,7 +402,7 @@ function clippedTriangleIntersectsBox(vertices, minimum, maximum) {
 }
 
 /** Continuous upright body sweep; thin barriers cannot hide between samples. */
-function segmentBodyBlocked(from, to, geometry) {
+function segmentBodyBlocked(from, to, geometry, clearance = null) {
     const radius = NAVIGATION_AGENT_RADIUS;
     const { index, offsets } = segmentTriangleCandidates(from, to, geometry, radius * Math.SQRT2);
     const length = Math.hypot(to.x - from.x, to.z - from.z);
@@ -234,6 +414,7 @@ function segmentBodyBlocked(from, to, geometry) {
         { minimumU:length, maximumU:length + radius, start:to, end:to, slope:0, floorY:to.y }
     ] : [{ minimumU:-radius, maximumU:radius, start:from, end:from, slope:0, floorY:from.y }];
     for (const offset of offsets) {
+        if (clearance?.riserOffsets.has(offset) || clearance?.transition && clearance.capOffsets.has(offset)) continue;
         const points = [0, 1, 2].map(corner => {
             const vertex = geometry.indices[offset + corner] * 3;
             return { x:geometry.positions[vertex], y:geometry.positions[vertex + 1], z:geometry.positions[vertex + 2] };
@@ -259,9 +440,10 @@ function segmentBodyBlocked(from, to, geometry) {
                 const v = -dx * directionZ + dz * directionX;
                 return [u, v, point.y - section.floorY - section.slope * u];
             });
+            const capApproach = clearance?.capOffsets.has(offset);
             if (clippedTriangleIntersectsBox(transformed,
-                [section.minimumU, walkable ? 0 : -radius, .001],
-                [section.maximumU, walkable ? 0 : radius, NAVIGATION_AGENT_HEIGHT - .001])) return true;
+                [section.minimumU + (capApproach ? .00001 : 0), walkable ? 0 : -radius, .001],
+                [section.maximumU - (capApproach ? .00001 : 0), walkable ? 0 : radius, NAVIGATION_AGENT_HEIGHT - .001])) return true;
         }
     }
     return false;
@@ -318,16 +500,37 @@ export function projectRouteToGeometry(request, path) {
         const planarLength = Math.hypot(to.x - from.x, to.z - from.z);
         const samples = Math.max(1, Math.ceil(planarLength / SAMPLE_SPACING));
         const parameters = [...surfaceEdgeParameters(from, to, geometry)];
+        const boundaryPoints = new Map();
+        const pointAt = t => ({ x:from.x + (to.x - from.x) * t, y:from.y + (to.y - from.y) * t, z:from.z + (to.z - from.z) * t });
+        for (const t of [...parameters]) {
+            const probe = Math.min(.0001, .001 / Math.max(.001, planarLength), t / 2, (1 - t) / 2);
+            const before = pointAt(t - probe);
+            const after = pointAt(t + probe);
+            const nearest = point => surfaceYs(point, geometry, true, 1e-7)
+                .sort((a, b) => Math.abs(a - point.y) - Math.abs(b - point.y))[0];
+            const beforeY = nearest(before);
+            const afterY = nearest(after);
+            const continuousRise = Math.hypot(after.x - before.x, after.z - before.z) * Math.sqrt(3);
+            if (Number.isFinite(beforeY) && Number.isFinite(afterY) && Math.abs(afterY - beforeY) > continuousRise + .001) {
+                // Preserve both sides of a real discontinuity. A single edge
+                // height can turn a supported riser into a diagonal through
+                // its upper floor; the validator must see the actual step.
+                boundaryPoints.set(t - probe, { ...before, y:beforeY });
+                boundaryPoints.set(t + probe, { ...after, y:afterY });
+                parameters.push(t - probe, t + probe);
+            }
+        }
         for (let sampleIndex = 1; sampleIndex <= samples; sampleIndex += 1) parameters.push(sampleIndex / samples);
         parameters.sort((a, b) => a - b);
         for (let parameterIndex = 0; parameterIndex < parameters.length; parameterIndex += 1) {
             const t = parameters[parameterIndex];
             if (parameterIndex && t - parameters[parameterIndex - 1] < 1e-7) continue;
-            const point = {
-                x:from.x + (to.x - from.x) * t,
-                y:from.y + (to.y - from.y) * t,
-                z:from.z + (to.z - from.z) * t
-            };
+            const boundaryPoint = boundaryPoints.get(t);
+            const point = boundaryPoint ? { ...boundaryPoint } : pointAt(t);
+            if (boundaryPoint) {
+                projected.push(point);
+                continue;
+            }
             const surfaces = surfaceYs(point, geometry);
             surfaces.sort((a, b) => Math.abs(a - point.y) - Math.abs(b - point.y));
             if (Number.isFinite(surfaces[0])) point.y = surfaces[0];
@@ -339,6 +542,10 @@ export function projectRouteToGeometry(request, path) {
 
 /** First-party post-query guard; no candidate path is eligible without it. */
 export function validateRouteGeometry(request, path) {
+    return validateRouteWithSteps(request, path, legalStepTransitions(request?.geometry, path));
+}
+
+function validateRouteWithSteps(request, path, steps, segmentIndexOffset = 0) {
     const violations = [];
     const geometry = request?.geometry;
     if (!geometry?.positions || !geometry?.indices || !Array.isArray(path) || path.length < 2) {
@@ -352,20 +559,21 @@ export function validateRouteGeometry(request, path) {
             continue;
         }
         const deltaY = to.y - from.y;
-        if (deltaY > MAX_NAVIGATION_CLIMB_Z) {
+        if (deltaY > MAX_NAVIGATION_CLIMB_Z + 1e-7) {
             violations.push(`segment ${segmentIndex}: exceeds upward climb limit`);
             continue;
         }
-        const isDrop = deltaY < -MAX_NAVIGATION_CLIMB_Z && matchingDrop(from, to, geometry.offMeshConnections || []);
-        if (deltaY < -MAX_NAVIGATION_CLIMB_Z && !isDrop) {
+        const isDrop = deltaY < -MAX_NAVIGATION_CLIMB_Z - 1e-7 && matchingDrop(from, to, geometry.offMeshConnections || []);
+        if (deltaY < -MAX_NAVIGATION_CLIMB_Z - 1e-7 && !isDrop) {
             violations.push(`segment ${segmentIndex}: undeclared drop`);
             continue;
         }
-        if (segmentCrossesWall(from, to, geometry)) {
+        const clearance = stepClearanceForSegment(from, to, steps, segmentIndex + segmentIndexOffset);
+        if (segmentCrossesWall(from, to, geometry, clearance.riserOffsets)) {
             violations.push(`segment ${segmentIndex}: crosses solid wall`);
             continue;
         }
-        if (segmentBodyBlocked(from, to, geometry)) {
+        if (segmentBodyBlocked(from, to, geometry, clearance)) {
             violations.push(`segment ${segmentIndex}: insufficient body clearance`);
             continue;
         }
@@ -401,6 +609,13 @@ export function validateRouteGeometry(request, path) {
             }
             continue;
         }
+        if (clearance.transition) {
+            if (!supported(from, geometry) || !supported(to, geometry) ||
+                !hasStepClearance(from, geometry, clearance.capOffsets, true) || !hasStepClearance(to, geometry, clearance.capOffsets, true)) {
+                violations.push(`segment ${segmentIndex}: unsupported step or insufficient headroom`);
+            }
+            continue;
+        }
         const length = distance(from, to);
         const samples = Math.max(1, Math.ceil(length / SAMPLE_SPACING));
         for (let sampleIndex = 0; sampleIndex <= samples; sampleIndex += 1) {
@@ -414,7 +629,7 @@ export function validateRouteGeometry(request, path) {
                 violations.push(`segment ${segmentIndex}: leaves walkable surface`);
                 break;
             }
-            if (!hasClearance(point, geometry)) {
+            if (!hasStepClearance(point, geometry, clearance.capOffsets)) {
                 violations.push(`segment ${segmentIndex}: insufficient headroom`);
                 break;
             }
@@ -428,11 +643,13 @@ export async function validateRouteGeometryAsync(request, path, options = {}) {
     if (!Array.isArray(path) || path.length < 2) return validateRouteGeometry(request, path);
     const violations = [];
     const shouldCancel = options.shouldCancel || (() => false);
+    if (shouldCancel()) return { valid:false, violations:['validation cancelled'] };
+    const steps = legalStepTransitions(request?.geometry, path);
     const yieldControl = options.yieldControl || (() => new Promise(resolve => setTimeout(resolve, 0)));
     let lastYield = performance.now();
     for (let index = 1; index < path.length; index += 1) {
         if (shouldCancel()) return { valid:false, violations:['validation cancelled'] };
-        const result = validateRouteGeometry(request, [path[index - 1], path[index]]);
+        const result = validateRouteWithSteps(request, [path[index - 1], path[index]], steps, index - 1);
         violations.push(...result.violations);
         if (performance.now() - lastYield >= 6) {
             await yieldControl();

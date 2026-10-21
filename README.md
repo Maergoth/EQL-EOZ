@@ -24,6 +24,7 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - [Navmesh evaluation](docs/NAVMESH_EVALUATION.md): dependency decision, worker boundary, risks, and player-facing route-state contract.
 - [Wiki/map integration audit](docs/INTEGRATION_AUDIT.md): source map, fresh dataset provenance, reproduced defects, fixes, and remaining release checks.
 - [Map validation](docs/MAP_VALIDATION.md): rendered local-archive route/texture/scale results, repaired map defects, and evidence limits.
+- [Destination-only audit](docs/ROUTE_REJECTION_AUDIT.md): classification of the 14 initial rejections, valid ramp/drop repairs, and expanded rendered results.
 - [Validation report](VALIDATION.md) and [Windows/game-client checklist](docs/WINDOWS_MANUAL_TEST.md): automated and proprietary-asset release gates.
 - [Changelog](CHANGELOG.md): versioned user-facing changes.
 

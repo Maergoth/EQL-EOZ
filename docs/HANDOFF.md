@@ -14,7 +14,10 @@ Current code baseline: **0.8.1**. Minimal view is intel-first: named/rare mobs a
 The [wiki/map integration audit](INTEGRATION_AUDIT.md) records the 0.8.1 repairs,
 the fresh export, source locations, and remaining data/visual gates. The
 [map validation](MAP_VALIDATION.md) records rendered local-archive evidence
-and the additional repairs. This patch retains guarded established-first
+and the additional repairs. The [destination-only audit](ROUTE_REJECTION_AUDIT.md)
+classifies every initial rejection and records verified ramp/stair/drop
+repairs: 36 rendered requests, 20 valid paths, 16 markers, and exact endpoints.
+This patch retains guarded established-first
 routing; both engines are checked before drawing. Its exporter catalog changes
 require a separate reviewed server installation and dataset rebuild.
 
@@ -57,6 +60,7 @@ Spatial candidate ownership is intentionally split at testable boundaries:
 - [`app/collision-geometry.js`](../app/collision-geometry.js) flattens `zoneGroup` collision meshes after `matrixWorld`, preserves winding under mirrored transforms, skips props/pass-through/degenerate triangles, yields during large exports, and crops a bounded corridor around the established route.
 - [`app/zone-load-guard.js`](../app/zone-load-guard.js) serializes archive loads across toolbar and shell; [`app/viewer-zone-selection.js`](../app/viewer-zone-selection.js) resolves exact IDs and aliases. [`app/zone-identity.js`](../app/zone-identity.js) shares identity checks with the app shell.
 - [`app/established-route-guard.js`](../app/established-route-guard.js) validates the established path before its first draw and abandons stale zone/request work. [`app/viewport-framing.js`](../app/viewport-framing.js) defers fitting hidden viewports.
+- [`app/drop-certification.js`](../app/drop-certification.js) proves a bounded exposed descent before a single directed-link retry. It cannot replace a successful ordinary detour or authorize a reverse ascent.
 - [`app/recast-route-client.js`](../app/recast-route-client.js) transfers ephemeral crop buffers, enforces latest-request-wins, terminates stale/failed/timed-out workers, and resolves every failure as fallback rather than throwing away the current route.
 - [`app/recast-route-engine.js`](../app/recast-route-engine.js) generates and queries the navmesh in the dedicated bundled worker, rejects partial goals, and uses the shared +6 climb policy.
 - [`app/route-validation.js`](../app/route-validation.js) builds a worker-local X/Z triangle index, projects the sparse result back onto supplied triangles, and independently fails closed on unsupported segments, undeclared drops, and excessive upward climbs. Large triangles that span many cells stay in a broad-triangle bucket; retain that fallback when tuning the index.
@@ -97,7 +101,7 @@ not the older 0.8.0 installer.
 5. **Classify every failure before tuning.** Use one of: texture mapping, no collision export, oversized/empty crop, generation failure, unreachable goal, validation rejection, stale cancellation, responsiveness, or visual route defect. Add the nearest redistributable fixture/contract when possible; do not weaken validation, raise triangle caps, or broaden diagnostic data without evidence.
 6. **Make the promotion decision.** If every real-zone case and responsiveness check passes, change orchestration so cached Recast geometry is queried first with the established worker-line route as automatic fallback. If any case fails, keep the current established-first/candidate-second behavior and record the exact category, zone type, aggregate diagnostics, and next code seam here.
 
-Do not start durable history or upgrade scoring from 0.9 until this matrix passes. Both 8/8 synthetic corpora, typed export-to-Recast integration, cancellation, redaction, and package contracts pass. The rendered local matrix found 14 valid paths and 14 honest rejections, so safe known-walkable route coverage, live movement, dynamic doors, OS-wide scaling, and installer acceptance remain. Preserve the conservative guard while extending coverage.
+Do not start durable history or upgrade scoring from 0.9 until this matrix passes. Both 8/8 synthetic corpora, typed export-to-Recast integration, cancellation, redaction, and package contracts pass. The expanded rendered matrix found 20 valid paths/16 markers across 36 requests. Original outcomes remain 14/14; supplemental probes prove real ramp-candidate and marker-to-drop repairs. Complex stair side panels and alternate itineraries remain uncertified. Live movement, dynamic doors, OS-wide scaling, and installer acceptance remain. Preserve the guard while extending coverage.
 
 ## Release path
 

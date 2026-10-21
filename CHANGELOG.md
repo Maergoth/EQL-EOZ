@@ -2,6 +2,7 @@
 
 ## 0.8.1 - Wiki and map integration corrections
 
+- Recover complete ramp candidates with validated exact-endpoint connectors, preserve legal supported stairs, and permit one independently certified local-drop retry when ordinary routing fails. Real Mistmoore/Kurn descents recover while blocked and reverse probes remain rejected.
 - Fix exact zone selection, queued archive loads, stale readiness and route ownership, exact logged-elevation HUD, and framing after a hidden map loads.
 - Preserve pass-through collision faces and validate both route engines against ground support, full body clearance, legal climbs, and exposed drops before displaying a path. Match Recast agent dimensions and bound rasterization work.
 - Permit the routing worker's WebAssembly under the desktop content policy; verify it in actual Electron CI, retain redacted rejection reasons, and check packaged runtime source parity.

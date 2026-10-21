@@ -751,8 +751,9 @@ The 0.8.1 [integration audit](INTEGRATION_AUDIT.md) adds behavioral coverage
 for wiki-to-map destination conversion, movement-driven rerouting, cancellation,
 dataset recovery, and item/export parity. It retains established-first routing
 and the proprietary visual/route acceptance matrix below. The follow-up
-[map validation](MAP_VALIDATION.md) records 28 rendered local-zone probes and
-27 view/scale captures, safe destination-only rejections, and remaining live
+[map validation](MAP_VALIDATION.md) and [rejection audit](ROUTE_REJECTION_AUDIT.md)
+record 36 rendered local-zone probes and 27 view/scale captures, verified
+ramp/stair/drop repairs, safe destination-only rejections, and remaining live
 movement/door/DPI/installer limits. Both route engines now validate before
 display; this evidence does not authorize engine promotion.
 

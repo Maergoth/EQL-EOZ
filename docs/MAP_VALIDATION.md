@@ -6,6 +6,10 @@ the remaining release limits. The app's read-only game boundary was retained.
 Client files, decoded geometry, screenshots, synthetic log files, and raw
 diagnostic exports remain private and are absent from Git.
 
+The [destination-only audit](ROUTE_REJECTION_AUDIT.md) follows up every initial
+rejection and records the ramp, supported-stair, and certified-drop repairs.
+The expanded rendered matrix has 36 requests, 20 valid paths, and 16 markers.
+
 ## Method and context
 
 Tests launched the actual Electron desktop entry point with an isolated user
@@ -25,7 +29,9 @@ Private rerun context is kept under the wiki checkout's ignored
 `contract-review.md`, `cases.json`, `render-matrix.cjs`,
 `render-scales.cjs`, and `render-interactions.cjs`. These are local evidence,
 not downloadable repository fixtures. Final summaries are `render-matrix.json`,
-`render-scales.json`, and `render-interactions.json`; earlier headless results
+`render-scales.json`, and `render-interactions.json`. The subsequent
+`render-route-followup.cjs`/`render-route-followup.json` retain the original
+28 requests and add eight separately certified ramp/drop probes; earlier headless results
 must not be substituted for the final rendered run.
 
 ## Defects corrected
@@ -68,7 +74,7 @@ coordinate transform did not change.
 
 ## Rendered routes and appearance
 
-The final route matrix covers five decoded S3D zones and rotates First, Top,
+The initial route matrix covers five decoded S3D zones and rotates First, Top,
 and Map across 28 requests: open surfaces, ramps in both directions, wall
 probes, stacked-floor ascents, and downward/reverse-drop probes. Every
 displayed path was independently checked against exported collision geometry.
@@ -87,10 +93,21 @@ observations, not a 100% route-completion claim. Some ramp/drop probes cannot
 currently produce a safe route. The guarded established-first policy remains;
 Recast is not promoted to first-choice routing.
 
-Longest observed generation was 2.37 seconds in the worker. Maximum observed
-frame interval was 317 ms across route preparation and 84 ms during the
-candidate phase. Rendering continued during calculation; those pauses remain
-performance observations, not a claim of uniformly smooth frame pacing.
+The follow-up repeats those 28 outcomes unchanged and adds eight probes:
+Befallen's confirmed ramp in both directions, a Mistmoore detour pair, and
+new Mistmoore/Kurn drop-recovery pairs. **Six supplemental paths validate and
+two reverse requests remain markers: 20 paths/16 markers across 36 requests,
+zero displayed validation violations, and exact start/goal matches on every
+displayed path.** Both recovered forward drops have no established fallback;
+each succeeds after one independently certified link retry and traverses a
+real downward segment. Their direct reverse ascents gain no link permission.
+The original 14 remain uncertified; their fixture labels did not prove legal
+ramps/drops. See the case-by-case audit before interpreting that count.
+
+Longest observed generation in the expanded run was 2.63 seconds (combined
+where a certified retry ran). Maximum observed frame interval was 287 ms,
+including the candidate phase. Rendering continued during calculation; those
+pauses remain performance observations, not a claim of uniformly smooth pacing.
 
 The appearance matrix exercised Mistmoore, Commonlands, and Befallen in all
 three views at 100%, 125%, and 150% **emulated renderer scale**: 27 captures.
@@ -103,12 +120,12 @@ other cases do not establish OS-wide DPI behavior.
 
 ## Release decision and remaining checks
 
-Eleven actual-renderer interaction checks pass: cancel, pending-target
+Eleven actual-renderer interaction checks pass, repeated after the follow-up: cancel, pending-target
 replacement, view/camera/Z-slice continuity during worker calculation, zoning
 during a route, exact ordinary-log zoning, latest synthetic log bursts in all
 three modes, repeated same-zone `/who`, Mistmoore alias/elevation, and an actual
 diagnostic export. In the worker interaction probe, the presentation change
-completed in 9 ms and retained the selected camera and slice. The exported
+completed in 12 ms and retained the selected camera and slice. The exported
 schema-v2 JSON was inspected for the synthetic identity/target, log names,
 local paths, and raw geometry; none appeared. Established rejection diagnostics
 contain only status, reason, and violation count.

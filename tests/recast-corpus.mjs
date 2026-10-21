@@ -171,6 +171,47 @@ if (!validateRouteGeometry({ geometry:wideCorridor }, throughWall).valid) {
     throw new Error('Conservative lateral clearance rejected an unobstructed actor-sized corridor.');
 }
 
+const edgeLanding = {
+    positions:new Float32Array([-20, 0, -10, -20, 0, 10, 20, 0, -10, 20, 0, 10]),
+    indices:new Uint32Array([0, 1, 2, 2, 1, 3]),
+    offMeshConnections:[]
+};
+const edgeStart = { x:-19.5, y:0, z:0 };
+const edgeGoal = { x:19.5, y:0, z:0 };
+const edgeResult = await runRecastRoute({ geometry:edgeLanding, start:edgeStart, goal:edgeGoal });
+if (!edgeResult.ok || JSON.stringify(edgeResult.path[0]) !== JSON.stringify(edgeStart) ||
+    JSON.stringify(edgeResult.path.at(-1)) !== JSON.stringify(edgeGoal) ||
+    !validateRouteGeometry({ geometry:edgeLanding }, edgeResult.path).valid) {
+    throw new Error('A complete navmesh corridor lost valid geometry-grounded connectors to the exact trusted endpoints.');
+}
+for (const request of [
+    { start:{ x:0, y:3, z:0 }, goal:edgeGoal },
+    { start:{ x:0, y:0, z:0 }, goal:{ x:20.5, y:0, z:0 } }
+]) {
+    const result = await runRecastRoute({ geometry:edgeLanding, ...request });
+    if (result.ok || result.path.length) throw new Error('Navmesh snapping concealed an unsupported trusted endpoint.');
+}
+const realStep = {
+    positions:new Float32Array([
+        -20, 0, -10, -20, 0, 10, 0, 0, -10, 0, 0, 10,
+        0, 1, -10, 0, 1, 10, 20, 1, -10, 20, 1, 10
+    ]),
+    indices:new Uint32Array([0, 1, 2, 2, 1, 3, 4, 5, 6, 6, 5, 7, 2, 4, 3, 3, 4, 5]),
+    offMeshConnections:[]
+};
+for (const [start, goal] of [
+    [{ x:-10, y:0, z:0 }, { x:10, y:1, z:0 }],
+    [{ x:10, y:1, z:0 }, { x:-10, y:0, z:0 }]
+]) {
+    const result = await runRecastRoute({ geometry:realStep, start, goal });
+    const hasRiser = result.path.some((point, index) => index > 0 &&
+        Math.abs(Math.abs(point.y - result.path[index - 1].y) - 1) < .001 &&
+        Math.hypot(point.x - result.path[index - 1].x, point.z - result.path[index - 1].z) <= .02);
+    if (!result.ok || !hasRiser || !validateRouteGeometry({ geometry:realStep }, result.path).valid) {
+        throw new Error('Recast projection lost the supported incoming/outgoing heights of a legal one-unit riser.');
+    }
+}
+
 const timings = results.map(result => result.result.totalMs).filter(Number.isFinite).sort((a, b) => a - b);
 const p95 = timings[Math.max(0, Math.ceil(timings.length * .95) - 1)];
 console.log(`Recast ${RECAST_ENGINE_VERSION} corpus passed: ${results.length}/${results.length}; isolated queries p95 ${p95.toFixed(1)} ms.`);

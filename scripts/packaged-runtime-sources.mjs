@@ -10,6 +10,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/zone-load-guard.js',
     'app/viewport-framing.js',
     'app/established-route-guard.js',
+    'app/drop-certification.js',
     'app/collision-geometry.js',
     'app/navigation-policy.js',
     'app/route-validation.js',

@@ -2,11 +2,11 @@
 
 ## 0.8.1 integration audit
 
-Checked October 21, 2026 on Windows. `npm test` passes with five new focused
-suites: Range parity, class exclusion parsing/legacy filtering, exact exporter
-zone aliases, real-wrapper map routing, and 14 dataset/runtime/build/renderer
-checks (now 15 dataset/runtime checks). The regressions reproduced failures before their fixes. Both synthetic
-route corpora remain 8/8; no routing engine promotion is included.
+Checked October 21, 2026 on Windows. `npm test` passes, including Range/class
+parity, exporter zone aliases, actual-wrapper routing, 15 dataset/runtime
+checks, supported stair flights, certified drops, and exact endpoint guards.
+The regressions reproduced failures before their fixes. Both synthetic route
+corpora remain 8/8; no routing engine promotion is included.
 
 The installed production export completed and published
 `20261021T042355Z-2acd4aba91ab`. Bootstrap SHA-256/schema checks pass for 124
@@ -16,9 +16,12 @@ zones, 8,389 NPC records, and 11,262 items. `npm run test:catalog` passes with
 separate producer deployment/rebuild dependency.
 
 The follow-up [map validation](docs/MAP_VALIDATION.md) uses the actual Electron
-renderer and bundled workers against five local zones: 28 route requests,
-14 validated displayed paths, zero displayed validation violations, and 14
-honest destination-only results. Twenty-seven view/scale captures cover
+renderer and bundled workers against five local zones. The
+[destination-only audit](docs/ROUTE_REJECTION_AUDIT.md) repeats the original
+14 paths/14 markers and adds eight verified probes: **36 requests, 20 valid
+paths, 16 markers, zero displayed violations, and exact endpoint matches**.
+It recovers real Mistmoore/Kurn drops, corrects ramp candidate completion, and
+tests supported stair flights. Twenty-seven view/scale captures cover
 Mistmoore, Commonlands, and Befallen at emulated 100/125/150% renderer scale.
 Loader, readiness, body-clearance, stale route, hidden framing, and browser
 WASM-policy regressions are repaired. No client files, raw logs, generated
@@ -37,7 +40,7 @@ Electron 43.8.3 and compatible transitive updates clear all high findings;
 advisories. `npm ls --all` passes. The packaged-artifact check now additionally
 requires the tested app/map/class/scaling/desktop source bytes in the ASAR.
 The unpacked Windows build, NSIS compilation, and `npm run test:artifact` pass with the fresh
-production bootstrap, all new runtime modules, and the 753 KiB worker checked
+production bootstrap, all new runtime modules, and the 759 KiB worker checked
 against current source. The generated installer reports `NotSigned` under
 `Get-AuthenticodeSignature`; installation and the interactive game-client
 matrix were not exercised.

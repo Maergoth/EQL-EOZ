@@ -12,7 +12,7 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 | 0.7 replacement map | Implemented; local rendering checked | Explicit coordinate adapters, exact/serialized loads, accurate logged HUD, hidden framing, intel-first defaults, optional map/routing, persistent cancel, WLD texture alignment; 27 view/scale captures | Complete live-client sections 1–5 and OS-wide DPI checks on a current build |
 | 0.8 live route guidance | Implemented in 0.7.1; real-client gate required | Pure projection/remaining-distance/turn/facing/off-route tests; cue HUD in First/Top/Map; route summary updates from `/loc` | Verify cue direction and readability while moving in all three modes |
 | 0.8 redacted diagnostics | Schema v2 implemented; actual export inspected | Allow-list retains aggregate collision/established/candidate status, counts, timings, and reasons; regressions and actual renderer export exclude private fields | Retain redaction when adding diagnostic fields |
-| 0.8 route corpus contract | Implemented; decoded local geometry checked | Reference and candidate both pass 8/8 shared triangle expectations; 28 rendered local-zone probes produced 14 valid paths and 14 honest rejections | Extend known-walkable ramp/drop/door coverage without weakening validation |
+| 0.8 route corpus contract | Implemented; decoded local geometry checked | Both corpora pass 8/8; expanded 36-case rendered matrix has 20 valid paths/16 markers and exact endpoints; supported stair and certified drop regressions | Extend complex stair/door/alternate-itinerary coverage without weakening validation |
 | 0.8 Recast/Detour worker | Guarded real-zone candidate integrated; promotion gated | Pinned 0.43.1 + deterministic module bundle; cooperative decoded-viewer collision export; bounded route crop; transferable buffers; established-first atomic replacement; latest-request-wins cancellation; independent validation; package and notice checks | Pass the full proprietary-zone and responsiveness matrix before making Recast first choice |
 | 0.9 decision intelligence beta | Planned | User stories and data rules in vision 16.4 | Begin only after the 0.8 95% corpus/collision/non-blocking exit gate |
 | 1.0 trusted release | Planned | Quality gate in vision 16.5 | Signing, upgrade path, support/compatibility docs, clean Windows matrix, no S1/S2 defects |
@@ -21,8 +21,10 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 
 Review the [0.8.1 integration audit](INTEGRATION_AUDIT.md) and
 [rendered map validation](MAP_VALIDATION.md). The local-archive pass now covers
-five zones, 28 route probes, 27 view/scale captures, and actual Electron worker
-execution. Fourteen routes validate and fourteen remain destination-only; keep
+five zones, 36 route probes, 27 view/scale captures, and actual Electron worker
+execution. Twenty routes validate and sixteen remain destination-only. The
+[rejection audit](ROUTE_REJECTION_AUDIT.md) distinguishes original uncertified
+probes from recovered valid ramps/drops; keep
 the guarded engine policy and conservative clearance checks.
 
 Next verify known-walkable ramp/drop/door coverage and live movement/heading,
