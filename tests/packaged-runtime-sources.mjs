@@ -5,7 +5,9 @@ import { basename, dirname, join, resolve } from 'node:path';
 import asar from '@electron/asar';
 import { PACKAGED_RUNTIME_SOURCES, verifyPackagedRuntimeSources } from '../scripts/packaged-runtime-sources.mjs';
 
+const bootstrapPath = 'app/data/eye-of-zomm-pack.bootstrap.json';
 const requiredModules = [
+    bootstrapPath,
     'app/zone-identity.js', 'app/viewer-zone-selection.js', 'app/zone-load-guard.js',
     'app/viewport-framing.js', 'app/established-route-guard.js', 'app/drop-certification.js', 'app/navigation-policy.js', 'app/route-validation.js', 'app/zoneviewer/ZoneViewerApp.js'
 ];
@@ -18,6 +20,15 @@ try {
     const fixture = join(directory, 'source');
     const archive = join(directory, 'app.asar');
     const sources = new Map(PACKAGED_RUNTIME_SOURCES.map(relative => [relative, `// Synthetic packaged source: ${relative}\n`]));
+    // Production-scale synthetic data would pass the older shape/count gate.
+    // It must still fail if packaging retains a different dataset generation.
+    const bootstrapFixture = {
+        meta:{ schemaVersion:3, sample:false, manifestVersion:'fresh-synthetic-manifest', version:'fresh-synthetic-pack' },
+        zones:Array.from({ length:124 }, (_, id) => ({ id:`synthetic-zone-${id}` })),
+        npcs:Array.from({ length:1000 }, (_, id) => ({ name:`Synthetic NPC ${id}` })),
+        items:Array.from({ length:1000 }, (_, id) => ({ name:`Synthetic Item ${id}` }))
+    };
+    sources.set(bootstrapPath, `${JSON.stringify(bootstrapFixture)}\n`);
     for (const [relative, contents] of sources) {
         const path = join(fixture, relative);
         await mkdir(dirname(path), { recursive:true });
@@ -48,10 +59,24 @@ try {
     asar.uncache(archive);
     assert.throws(() => verifyPackagedRuntimeSources(packagedText, sourceText),
         /Packaged app\/route-validation\.js differs from the tested source/);
+    await writeFile(join(fixture, 'app/route-validation.js'), sources.get('app/route-validation.js'));
+
+    for (const change of [
+        pack => { pack.meta.manifestVersion = 'old-synthetic-manifest'; pack.meta.version = 'old-synthetic-pack'; },
+        pack => { pack.npcs[0].name = 'Different data with the same manifest version'; }
+    ]) {
+        const stale = structuredClone(bootstrapFixture);
+        change(stale);
+        await writeFile(join(fixture, bootstrapPath), `${JSON.stringify(stale)}\n`);
+        await asar.createPackage(fixture, archive);
+        asar.uncache(archive);
+        assert.throws(() => verifyPackagedRuntimeSources(packagedText, sourceText),
+            /Packaged app\/data\/eye-of-zomm-pack\.bootstrap\.json differs from the tested source/);
+    }
 } finally {
     asar.uncacheAll();
     assert.equal(dirname(resolve(directory)), resolve(tmpdir()), 'Cleanup must remain in the intended temporary directory');
     assert(basename(directory).startsWith('eoz-packaged-contract-'), 'Cleanup must target this test fixture');
     await rm(directory, { recursive:true, force:true });
 }
-console.log('Actual ASAR missing-module and stale runtime-source package contracts passed.');
+console.log('Actual ASAR missing/stale runtime-source and exact bootstrap freshness contracts passed.');

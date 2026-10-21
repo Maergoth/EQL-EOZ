@@ -78,3 +78,4 @@ if (Number(bootstrap?.meta?.schemaVersion) < 3 || bootstrap?.meta?.sample === tr
 }
 
 console.log(`Packaged app verified as v${packagedPackage.version} with production data and current coordinate, texture, and spatial-candidate code.`);
+console.log(`Bundled dataset verified against freshly fetched source: manifest ${bootstrap.meta.manifestVersion}, pack ${bootstrap.meta.version}; ${bootstrap.zones.length} zones, ${bootstrap.npcs.length} NPCs, ${bootstrap.items.length} items.`);

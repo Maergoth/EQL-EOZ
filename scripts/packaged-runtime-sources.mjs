@@ -1,7 +1,9 @@
 // These sources are exercised directly by the integration tests or generated
 // from those sources. A current HTML wrapper is insufficient if one of its
-// imported modules is missing or stale in the installer.
+// imported modules is missing or stale in the installer. The generated
+// bootstrap must also match the verified pack fetched for this build.
 export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
+    'app/data/eye-of-zomm-pack.bootstrap.json',
     'app/app.js',
     'app/item-browse.js',
     'app/item-scaling.js',
