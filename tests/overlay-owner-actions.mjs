@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {wikiLocationToWorld} from '../app/coordinate-system.js';
+import {EQLogParser} from '../app/parser.js';
+import {scaledItemStats} from '../app/item-scaling.js';
 
 // Execute the actual main owner's action handler. These fixtures prove camera
 // preview cannot become a logged player position or choose a different source.
@@ -40,4 +42,61 @@ assert.equal(context.settings.itemTier,10);assert(calls.some(call=>call[0]==='sa
 assert(calls.some(call=>call[0]==='render'));assert(calls.some(call=>call[0]==='tooltip'));
 for(const tier of [-1,11,1.5,'5',NaN])await assert.rejects(context.handle({action:'session:item-tier',payload:{tier}}),/Base to 10/);
 assert.equal(context.settings.itemTier,10,'Invalid overlay values cannot corrupt the shared item level');
+
+// Execute the same owner reset and line-consumption functions used by the main
+// button and native Session tab. Splitting never rewinds/reopens the log, drops
+// an incomplete line, rebuilds trigger/discovery state, or reapplies a reset tail.
+const parser = new EQLogParser();
+parser.setCharacterFromFilename('C:\\Synthetic\\eqlog_Fixture_eql.txt');
+parser.parse('[Wed Oct 21 12:00:00 2026] You have entered Synthetic Zone.');
+parser.parse('[Wed Oct 21 12:00:01 2026] You slash Synthetic Keeper for 50 points of damage.');
+const resetFrom=source.indexOf('function startNewSession('),resetTo=source.indexOf('const raidVariant',resetFrom);
+const consumeFrom=source.indexOf('function consumeText('),consumeTo=source.indexOf('function state()',consumeFrom);
+assert(resetFrom>=0&&resetTo>resetFrom&&consumeFrom>=0&&consumeTo>consumeFrom);
+const triggerCalls=[], discoveryCalls=[], notices=[], publications=[];
+const overlayOwner={consume:(...args)=>triggerCalls.push(args),flush(){},publish:async()=>publications.push(parser.snapshot())};
+const discoveryOwner={consume:(...args)=>discoveryCalls.push(args)};
+const splitContext=vm.createContext({parser,partialLine:'[Wed Oct 21 12:00:02 2026] You slash Synthetic Keeper for ',logOffset:12345,
+    selectedEncounterId:'old-fight',fightExpiryTimer:77,clearTimeout:id=>calls.push(['clear-timer',id]),
+    renderAll:()=>calls.push(['render-split']),showNotice:message=>notices.push(message),overlaySession:overlayOwner,wikiDiscovery:discoveryOwner,
+    bridgeInfo:{logPath:'synthetic-log'},state:()=>parser.snapshot()});
+vm.runInContext(`${source.slice(resetFrom,resetTo)};${source.slice(consumeFrom,consumeTo)};${source.slice(from,to)};this.handle=handleOverlayCommand;this.consume=consumeText;`,splitContext);
+await splitContext.handle({action:'session:new-session',payload:{}});
+assert.equal(parser.snapshot().totalDamage,0);
+assert.equal(splitContext.selectedEncounterId,'');
+assert.equal(splitContext.logOffset,12345,'manual split keeps the exact existing byte cursor');
+assert.equal(splitContext.partialLine,'[Wed Oct 21 12:00:02 2026] You slash Synthetic Keeper for ','manual split retains a split UTF-8/log line for the next read');
+assert.equal(splitContext.overlaySession,overlayOwner);
+assert.equal(splitContext.wikiDiscovery,discoveryOwner);
+assert.equal(publications.at(-1).sessionNumber,2);
+assert.match(notices.at(-1),/New session started/);
+splitContext.consume('7 points of damage.\n',true);
+assert.equal(parser.snapshot().totalDamage,7,'the next unread fragment completes exactly once in the new session');
+splitContext.consume('[Wed Oct 21 12:00:01 2026] You slash Synthetic Keeper for 50 points of damage.\n',false);
+assert.equal(parser.snapshot().totalDamage,7,'an initial/replacement tail cannot restore cleared combat');
+assert.equal(triggerCalls.at(-1)[0],null);
+assert.equal(triggerCalls.at(-1)[1].live,false,'reset-tail freshness protection remains active for triggers');
+assert.equal(discoveryCalls.at(-1)[1].live,false,'reset-tail freshness protection remains active for wiki discoveries');
+
+// Native item hover gets the stat block from bounded local data, including base
+// comparisons at the shared tier, without granting another file/network API.
+const itemFrom=source.indexOf('function overlayItemSummary('),itemTo=source.indexOf('const mapDataLoader',itemFrom);
+assert(itemFrom>=0&&itemTo>itemFrom);
+const itemContext=vm.createContext({settings:{itemTier:7},scaledItemStats,itemIconSource:()=>'',});
+vm.runInContext(`${source.slice(itemFrom,itemTo)};this.summarize=overlayItemSummary;`,itemContext);
+const summary=itemContext.summarize({name:'Synthetic Sword',slots:['PRIMARY'],classes:['WAR'],displayLines:['MAGIC ITEM','Class: WAR'],
+    stats:{HP:20,DMG:10,WT:1,INVALID:Infinity},notes:'Synthetic note',privatePath:'C:\\Private\\fixture'}, {remaining:1000});
+assert.equal(summary.tier,7);
+assert.equal(summary.baseStats.HP,20);
+assert.equal(summary.stats.HP,34);
+assert.equal(summary.baseStats.INVALID,undefined,'non-finite numeric stats do not enter the native snapshot');
+assert.deepEqual(Array.from(summary.classes),['WAR']);
+assert.deepEqual(Array.from(summary.displayLines),['MAGIC ITEM','Class: WAR']);
+assert.equal(summary.notes,'Synthetic note');
+assert.doesNotMatch(JSON.stringify(summary),/privatePath|Private/);
+const bounded=itemContext.summarize({name:'X'.repeat(500),classes:Array(100).fill('Y'.repeat(100)),displayLines:Array(100).fill('Z'.repeat(1000)),notes:'N'.repeat(5000)}, {remaining:1000});
+assert.equal(bounded.name.length,240);
+assert.equal(bounded.classes.length,20);assert.equal(bounded.classes[0].length,40);
+assert.equal(bounded.displayLines.length,12);assert.equal(bounded.displayLines[0].length,240);
+assert.equal(bounded.notes.length,1200);
 console.log('Owner actions: exact raid identity, camera-only native map preview, unknown Z, stale-source rejection and shared item-level persistence passed.');

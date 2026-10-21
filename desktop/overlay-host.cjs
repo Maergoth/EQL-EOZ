@@ -4,7 +4,7 @@ const path = require('node:path');
 const {allowMapRequest}=require('./overlay-map-policy.cjs');
 
 const PANEL_IDS = Object.freeze(['parse', 'map', 'intel', 'timers']);
-const PANEL_NAMES = Object.freeze({ parse:'Combat parse', map:'Map & intel', intel:'Zone intel', timers:'Timers' });
+const PANEL_NAMES = Object.freeze({ parse:'Combat parse', map:'Map & intel', intel:'Zone intel', timers:'Triggers' });
 const IPC_MAIN = 'eye-of-zomm:overlays';
 const IPC_OVERLAY = 'eye-of-zomm:overlay';
 const RECOVERY_SHORTCUT = 'CommandOrControl+Shift+O';
@@ -12,7 +12,7 @@ const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 const MAX_COMMAND_BYTES = 16 * 1024;
 const MAX_REPLY_BYTES = 8 * 1024 * 1024;
 const SESSION_ACTIONS = new Set([
-    'session:open', 'session:route', 'session:copy-waypoint', 'session:class-filter', 'session:item-tier', 'session:wiki',
+    'session:open', 'session:new-session', 'session:route', 'session:copy-waypoint', 'session:class-filter', 'session:item-tier', 'session:wiki',
     'session:map-data', 'session:map-focus', 'session:intel-drops', 'session:select-npc', 'session:cancel-route',
     'timer:fire-definition', 'timer:save-definition', 'timer:remove-definition', 'timer:start', 'timer:pause', 'timer:resume',
     'timer:reset', 'timer:cancel', 'timer:delete', 'timer:create-spawn', 'timer:reset-swing',
@@ -90,6 +90,7 @@ function jsonObject(value, maxBytes) {
 function sessionCommand(action, payload) {
     if (!SESSION_ACTIONS.has(action)) throw new Error('Unknown overlay session action.');
     const value = jsonObject(payload || {}, MAX_COMMAND_BYTES);
+    if (action === 'session:new-session' && Object.keys(value).length) throw new Error('New session does not accept options.');
     if (action === 'session:open' && !['map', 'items', 'npcs', 'combat', 'timers', 'settings'].includes(value.view)) throw new Error('Unknown application view.');
     if (action === 'session:open' && ['npc', 'item'].some(key => value[key] !== undefined &&
         (typeof value[key] !== 'string' || value[key].length > 240))) throw new Error('Invalid application selection.');

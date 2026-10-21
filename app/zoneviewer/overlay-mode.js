@@ -7,10 +7,14 @@ export function installOverlayMode({app,root,api,onSlice=()=>{}}){
     const style=root.ownerDocument.createElement('style');
     style.textContent='.eoz-native-3d .eqlzv-toolbar,.eoz-native-3d .eqlzv-status{display:none!important}.eoz-native-3d .eqlzv-app{border:0;border-radius:0}.eoz-native-3d .eqlzv-first-person-prompt{font-size:11px}';root.append(style);
     const baseFov=app.perspective?.fov||60;
-    function focusAtLocation(location,{mode='first'}={}){
+    function focusAtLocation(location,{mode='first',fallbackZ}={}){
         if(!Array.isArray(location)||location.length<2||!location.slice(0,2).every(value=>Number.isFinite(Number(value)))||!app.currentZoneRecord)return {ok:false,reason:'no-location'};
-        const hasZ=knownZ(location[2]),point=app.eqWorldToThree(Number(location[0]),Number(location[1]),hasZ?Number(location[2]):0);
-        const ground=app.findGroundPointAt(point.x,point.z,hasZ?point.y:app.currentBounds.max.y+100)||point;
+        const hasZ=knownZ(location[2]),estimatedZ=knownZ(fallbackZ)?Number(fallbackZ):null;
+        const point=app.eqWorldToThree(Number(location[0]),Number(location[1]),hasZ?Number(location[2]):estimatedZ??0);
+        // Unknown-height inspection starts near the selected floor, so an
+        // overhead ceiling cannot steal the initial ground ray. This remains
+        // an estimated camera position and never assigns an NPC a wiki Z.
+        const ground=app.findGroundPointAt(point.x,point.z,hasZ||estimatedZ!==null?point.y:app.currentBounds.max.y+100)||point;
         const forward=app.lastFirstPersonPose?.forward?.clone?.()||ground.clone().set(0,0,-1);
         if(app.mapFileVisible)app.setGameMapVisible(false);
         app.setMode(mode==='top'?'top':'first');

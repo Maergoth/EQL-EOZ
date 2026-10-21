@@ -10,9 +10,9 @@ export const WHATS_NEW_STEPS = Object.freeze([
     Object.freeze({title:'Follow named mobs and their loot',image:'intel',view:'npcs',action:'Open NPCs',
         copy:'Item Level Slider and My Class stay above the scrolling list. Raid Zone comes first, with separate drops. Hover or focus a mob name for actions; its Map button previews that source in first person. Show More expands every matching drop.',
         alt:'Eye of Zomm zone intel showing named mobs, distinct raid sources and matching loot.',caption:'Synthetic NPC and loot records demonstrate the current intel view.'}),
-    Object.freeze({title:'Bring only the overlays you need',image:'timers',view:'timers',action:'Open Timers',
-        copy:'Parse, Map, Zone & loot and Timers are separate desktop windows. Unlock panels to move them and resize supported panels; Timers fits its rows automatically. Set countdowns and log triggers on the main Timers page; the swing bar learns your own attacks.',
-        alt:'Eye of Zomm main Timers page with a log-trigger editor, match preview and named captures.',caption:'The current timer editor with a synthetic log line and named-capture preview.'})
+    Object.freeze({title:'Bring only the overlays you need',image:'timers',view:'timers',action:'Open Triggers',
+        copy:'Parse, Map, Zone & loot and Triggers are separate desktop windows. Unlock panels to move them and resize supported panels; Triggers fits its rows automatically. Set countdowns and log triggers on the main Triggers page; the swing bar learns your own attacks.',
+        alt:'Eye of Zomm main Triggers page with a log-trigger editor, match preview and named captures.',caption:'The current trigger editor with a synthetic log line and named-capture preview.'})
 ]);
 
 export function whatsNewStep(index) {

@@ -471,7 +471,7 @@ function consumeText(text, allowTransientUi = true) {
     let requiresFullRender = false;
     for (const line of lines) {
         const previousZone = parser.zone;
-        const event = parser.parse(line);
+        const event = parser.parse(line, { recordSession:allowTransientUi || parser.sessionNumber === 1 });
         if (event && event.type !== 'location') requiresFullRender = true;
         if (event?.type === 'zone') {
             const canonicalZone = zoneRecord(event.zoneShortName || event.zone)?.name || event.zoneShortName || event.zone;
@@ -513,6 +513,17 @@ function state() {
     return parser.snapshot();
 }
 
+function startNewSession() {
+    // Split at the current consumed cursor. Keep logOffset and partialLine so
+    // the next poll completes unread lines without replaying the previous tail.
+    parser.startNewSession();
+    selectedEncounterId = '';
+    clearTimeout(fightExpiryTimer);
+    renderAll();
+    void overlaySession.publish();
+    showNotice('New session started. Combat and loot totals have been cleared.', { tone:'success' });
+}
+
 const raidVariant = npc => npc?.raidInstance === true || npc?.instanceType === 'raid';
 const intelIdentity = npc => `${zoneKey(npc?.zone)}|${npcNameKey(npc?.name)}|${raidVariant(npc) ? 'raid' : 'normal'}`;
 function focusIntelForConsider(target) {
@@ -532,11 +543,15 @@ function overlayItemSummary(item, budget) {
     let icon = itemIconSource(item);
     if (icon.length > 12000 || icon.length > budget.remaining) icon = '';
     budget.remaining -= icon.length;
+    const boundedStats = stats => Object.fromEntries(Object.entries(stats || {}).slice(0,24)
+        .filter(([,value]) => typeof value === 'number' && Number.isFinite(value) || typeof value === 'string')
+        .map(([key,value]) => [key.slice(0,40), typeof value === 'string' ? value.slice(0,80) : value]));
     return { name:String(item.name || '').slice(0,240), icon,
         slots:(item.slots || []).slice(0,8).map(slot => String(slot).slice(0,60)),
-        stats:Object.fromEntries(Object.entries(scaledItemStats(item,settings.itemTier) || {}).slice(0,24)
-            .filter(([,value]) => typeof value === 'number' || typeof value === 'string')
-            .map(([key,value]) => [key.slice(0,40), typeof value === 'string' ? value.slice(0,80) : value])), tier:Number(settings.itemTier) || 0 };
+        classes:(Array.isArray(item.classes) ? item.classes : []).slice(0,20).map(value => String(value).slice(0,40)),
+        displayLines:(Array.isArray(item.displayLines) ? item.displayLines : []).slice(0,12).map(value => String(value).slice(0,240)),
+        notes:String(item.notes || '').slice(0,1200), baseStats:boundedStats(item.stats),
+        stats:boundedStats(scaledItemStats(item,settings.itemTier)), tier:Number(settings.itemTier) || 0 };
 }
 const mapDataLoader = createMapDataLoader({ getManifest:() => api('/api/eq-files'),
     readText:async path => { const response = await fetch(`/api/eq-file?path=${encodeURIComponent(path)}`); if (!response.ok) throw new Error('The local map could not be read.'); return response.text(); },
@@ -570,6 +585,7 @@ function overlaySessionSnapshot() {
 }
 
 async function handleOverlayCommand({ action, payload = {} }) {
+    if (action === 'session:new-session') { startNewSession(); return; }
     const requestedZone = state().zone;
     const resolveNpc = () => {
         const currentZone = state().zone;
@@ -890,7 +906,7 @@ function eventText(e) {
     if (e.type === 'damage') return `${e.source}: ${e.amount} → ${e.victim}`;
     if (e.type === 'heal') return `${e.source}: healed ${e.target}`;
     if (e.type === 'kill') return `Slain ${e.victim}`;
-    if (e.type === 'rune') return `Rune absorbed ${e.amount}`;
+    if (e.type === 'rune') return `Rune capacity granted: ${e.amount}`;
     if (e.type === 'loot') return `${Number(e.quantity) > 1 ? `${e.quantity}× ` : ''}${e.item} · from ${e.source || 'Unknown'}`;
     return e.type;
 }
@@ -907,6 +923,7 @@ function renderCombat(s) {
     $('#combat-damage').textContent = formatNum(s.totalDamage);
     $('#combat-dps').textContent = formatNum(s.sessionDps);
     $('#combat-healing').textContent = formatNum(s.totalHealing);
+    $('#combat-rune-capacity').textContent = `${formatNum(s.totalRuneCapacity)} rune capacity granted`;
     $('#combat-observed').textContent = s.observed.length.toLocaleString();
 }
 
@@ -1976,6 +1993,7 @@ function wireUi() {
         prefs.save(settings);
         renderAll();
     });
+    $('#new-session').addEventListener('click', startNewSession);
     $('#encounter-gap').addEventListener('change', e => {
         settings.encounterGapSeconds = Math.max(3, Math.min(300, Number(e.target.value) || 15));
         parser.setEncounterGapSeconds(settings.encounterGapSeconds);

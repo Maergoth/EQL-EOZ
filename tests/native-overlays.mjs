@@ -513,6 +513,8 @@ test('overlay preload exposes no filesystem, updater, raw IPC, or Electron event
 });
 
 test('malformed command objects do not escape the command allowlist', () => {
+    assert.deepEqual(sessionCommand('session:new-session', {}), {});
+    assert.throws(() => sessionCommand('session:new-session', {logOffset:0}), /does not accept options/);
     assert.throws(() => sessionCommand('session:class-filter', { panel:'timers', enabled:true }), /Invalid/);
     assert.throws(() => sessionCommand('timer:start', []), /object/);
     assert.throws(() => sessionCommand('session:wiki', { npc:'x'.repeat(241) }), /Invalid/);

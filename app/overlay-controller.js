@@ -1,13 +1,13 @@
 // The controller is in the complete app, independent of panels that may be
 // locked or ignoring the mouse. It never owns a second log/session parser.
-const PANELS = { parse:'Parse', map:'Map & intel', intel:'Zone & loot', timers:'Timers' };
+const PANELS = { parse:'Parse', map:'Map & intel', intel:'Zone & loot', timers:'Triggers' };
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
 export function overlayControllerPresentation(state = {}) {
     const supported = state.supported !== false && Boolean(state.panels);
     return { supported,
         panels:Object.entries(PANELS).map(([id,label]) => ({ id, label, visible:Boolean(state.panels?.[id]?.visible), locked:Boolean(state.panels?.[id]?.locked), passThrough:Boolean(state.panels?.[id]?.passThrough) })),
         recovery:state.recoveryShortcutRegistered ? `Restore mouse input: ${String(state.recoveryShortcut || 'Ctrl+Shift+O').replace('CommandOrControl', 'Ctrl')}. The tray also restores input.` : 'Restore mouse input from these controls or the tray. The global shortcut is unavailable.',
-        session:state.sessionAvailable === false ? 'The shared session is paused. Keep the main app open to update overlay data.' : 'Panels share this app’s current log, encounters, loot and timers.',
+        session:state.sessionAvailable === false ? 'The shared session is paused. Keep the main app open to update overlay data.' : 'Panels share this app’s current log, encounters, loot and triggers.',
         restart:Number(state.sessionRestartCount) > 0 ? 'Session restarted; parse history rebuilt from the log tail. Saved timer deadlines restored.' : '' };
 }
 export function mountOverlayController({ document = globalThis.document, root = document?.getElementById('overlay-controller'), api = globalThis.eyeOfZommOverlays, setInterval = globalThis.setInterval, clearInterval = globalThis.clearInterval } = {}) {

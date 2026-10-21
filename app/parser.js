@@ -55,6 +55,7 @@ export class EQLogParser {
         this.observed = new Map();
         this.totalDamage = 0;
         this.totalHealing = 0;
+        this.totalRuneCapacity = 0;
         this.totalTaken = 0;
         this.totalTakenHits = 0;
         this.takenStartedAt = null;
@@ -62,6 +63,7 @@ export class EQLogParser {
         this.totalLoot = 0;
         this.totalOwnKills = 0;
         this.sessionStartedAt = null;
+        this.sessionNumber = 1;
         this.lastCombatAt = null;
         this.currentFight = null;
         this.encounterGapSeconds = 15;
@@ -74,6 +76,37 @@ export class EQLogParser {
         this.lastKill = null;
         this.recentEvents = [];
         this.currentLineAt = null;
+    }
+
+    startNewSession(at = Date.now()) {
+        this.sessionNumber++;
+        this.totalDamage = 0;
+        this.totalHealing = 0;
+        this.totalRuneCapacity = 0;
+        this.totalTaken = 0;
+        this.totalTakenHits = 0;
+        this.takenStartedAt = null;
+        this.lastTakenAt = null;
+        this.totalLoot = 0;
+        this.totalOwnKills = 0;
+        this.sessionStartedAt = Number.isFinite(at) ? at : Date.now();
+        this.lastCombatAt = null;
+        this.currentFight = null;
+        this.combatEvents = [];
+        this.encounters = [];
+        this.killCounts.clear();
+        this.lootCounts.clear();
+        this.lootLog = [];
+        this.lastKill = null;
+        this.recentEvents = [];
+        this.currentLineAt = null;
+        // Retain discovered identities/levels for Intel, but their activity is
+        // part of the parse session that just ended.
+        for (const npc of this.observed.values()) {
+            npc.damageDone = 0;
+            delete npc.killed;
+        }
+        return this.sessionNumber;
     }
 
     setEncounterGapSeconds(value) {
@@ -105,7 +138,7 @@ export class EQLogParser {
         let encounter = this.encounters[this.encounters.length - 1];
         if (!encounter || event.at - encounter.lastAt > gapMs) {
             encounter = {
-                id: `encounter-${this.nextEncounterId++}`,
+                id: `session-${this.sessionNumber}-encounter-${this.nextEncounterId++}`,
                 startAt: event.at,
                 lastAt: event.at,
                 firstTarget: '',
@@ -262,7 +295,7 @@ export class EQLogParser {
             encounterTarget:attacker, amount:n, source:normalizeName(source) || 'Unknown ability', kind });
     }
 
-    parse(rawLine) {
+    parse(rawLine, { recordSession = true } = {}) {
         const raw = String(rawLine || '').replace(/\r$/, '');
         const m = raw.match(LINE_RE);
         const parsedAt = m ? Date.parse(m[1]) : NaN;
@@ -345,6 +378,11 @@ export class EQLogParser {
             return this.rememberEvent({ type: 'consider', target: { name, level, at: this.currentLineAt || Date.now() } });
         }
 
+        // A manually split session follows the existing live cursor. An initial
+        // tail or a replaced/truncated log may restore profile/map context, but
+        // must never repopulate the new parse with historical combat or loot.
+        if (!recordSession) return null;
+
         // Incoming Legends direct spells, DoTs and melee. Only YOU or the
         // currently selected character is an authoritative player target;
         // nearby players, pets, grants of rune capacity and misses are excluded.
@@ -404,7 +442,8 @@ export class EQLogParser {
         x = text.match(/^You gain a rune for ([\d,]+) points? of absorption\.$/i);
         if (x) {
             const n = parseNumber(x[1]);
-            return this.rememberCombatEvent({ type: 'rune', amount: n });
+            this.totalRuneCapacity += n;
+            return this.rememberCombatEvent({ type: 'rune', amount: n, source:'Rune capacity granted' });
         }
 
         x = text.match(/^You have slain (.+?)!/i);
@@ -477,6 +516,7 @@ export class EQLogParser {
             location: this.location ? { ...this.location } : null,
             totalDamage: this.totalDamage,
             totalHealing: this.totalHealing,
+            totalRuneCapacity: this.totalRuneCapacity,
             totalTaken: this.totalTaken,
             totalTakenHits: this.totalTakenHits,
             takenSeconds,
@@ -486,6 +526,8 @@ export class EQLogParser {
             totalLoot: this.totalLoot,
             encounterCount: this.encounters.length,
             sessionSeconds,
+            sessionNumber: this.sessionNumber,
+            sessionStartedAt: this.sessionStartedAt,
             sessionDps: sessionSeconds ? this.totalDamage / sessionSeconds : 0,
             fight,
             encounters,

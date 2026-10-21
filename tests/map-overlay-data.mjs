@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import {selectMapFamily,parseClientMap,createMapDataLoader} from '../app/map-overlay-data.js';
-import {mapBounds,layoutMapLabels,knownMapZ,mapElevationBounds,mapSliceContainsZ,clipMapSegmentToSlice,mapNpcHitTargets,hitMapNpc,nextNativeMapMode} from '../app/map-overlay.js';
+import {mapBounds,layoutMapLabels,knownMapZ,mapElevationBounds,mapSliceContainsZ,clipMapSegmentToSlice,mapNpcHitTargets,hitMapNpc,nextNativeMapMode,defaultMapSliceCenter} from '../app/map-overlay.js';
 const zone={name:'Mistmoore Castle',aliases:['mistmoore']};
+for(const name of ['Plane of Hate','plane_of_hate','hateplane'])assert.equal(defaultMapSliceCenter(name),120,'Exact Hate identities start on the requested playable slice');
+assert.equal(defaultMapSliceCenter('Alternate display label','hateplane'),120);
+for(const name of ['Mistmoore Castle','Plane of Fear','hateplaneb','Plane of Hate 2.0',''])assert.equal(defaultMapSliceCenter(name),null,'The ceiling workaround cannot affect a different zone');
 const files=[{path:'Maps/Brewall/mistmoore.txt',size:12},{path:'Maps/mistmoore_1.txt',size:12},{path:'Maps/mistmoore.txt',size:12},{path:'Maps/mistmoore_2.txt',size:12},{path:'Maps/mistmooreb.txt',size:12}];
 assert.deepEqual(selectMapFamily(files,zone).layers.map(file=>file.path),['Maps/mistmoore.txt','Maps/mistmoore_1.txt','Maps/mistmoore_2.txt']);
 assert.equal(selectMapFamily(files,{name:'Unknown'}),null);

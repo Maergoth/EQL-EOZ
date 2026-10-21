@@ -1,4 +1,42 @@
-# Validation report — v0.8.6
+# Validation report — v0.8.7
+
+## 0.8.7 Triggers, sessions and complete Intel
+
+The Timers workspace/native panel is now labeled Triggers while keeping its
+existing view IDs, storage keys, definitions and deadlines. Rune grants appear
+under Healing as capacity granted, separately from actual healing/HPS and
+measured incoming damage. A manual New session clears parse/encounter/loot
+totals at the consumed log cursor while preserving partial lines, profile,
+location, Intel identity, trigger/discovery owners and their replay guards.
+
+The reported missing Hate drops originate in wiki NPC `known_loot` entries
+without matching item `dropsfrom` entries. The matching producer now reconciles
+both directions against canonical exported item pages, with exact instance
+scope and public NPC revision/field provenance. It does not generate item stats
+or rewrite articles. Counter fixtures ensure existing joins are not counted as
+new and repeated merges add nothing; internal-case title collisions remain
+distinct. The catalog gate requires the refreshed capability plus Vicar's 11
+documented items and Lord of Loathing's Diamond Rod/Wand of Conflagration.
+My Class still enforces class eligibility but retains equippable click/worn/
+focus-effect gear that lacks numeric stats.
+
+Intel mob actions overlay the existing name row, with keyboard access and no
+hover reflow. Name/icon tooltips use bounded local item metadata and the shared
+tier/base values; the viewport-constrained popup supports scrolling. Raid and
+normal sections have explicit disclosure state that survives heartbeats, tier
+and search changes; a fresh named focus can reopen its matching section.
+Plane of Hate's native map starts/resets at Z 120, preserving manual overrides
+and unknown-Z markers. An unknown-height inspection uses the selected slice
+for its estimated camera ground ray; known wiki Z remains authoritative.
+
+Authored checks cover the actual owner split/cursor/backfill functions, parser
+totals, trigger-state preservation, trusted native command, enriched snapshot
+bounds, rendered row geometry at tier 7 and multiple font scales/widths,
+name/icon/stat-popup interaction, disclosure/focus transitions, healing rune
+placement and logged Hate/default/manual-slice behavior. Execution and captures
+run in GitHub CI. No local app tests/build/install are used. Live game focus,
+actual Hate ceiling geometry and a complete installed update remain separate
+manual acceptance; the Z 120 presentation default does not change collision data.
 
 ## 0.8.6 map interaction and Intel source repair
 

@@ -1,5 +1,29 @@
 # Overlay map and Intel workspace
 
+## 0.8.7 follow-up and continuation
+
+Branch `codex/intel-triggers-session` starts from released 0.8.6 (`1790c93`).
+The approved work is: rename the Timers workspace/overlay to Triggers while
+retaining stored IDs; show rune capacity within Healing with its measured
+meaning intact; add a manual New session boundary without rereading the log;
+repair missing Hate loot from NPC-page `known_loot`; replace mob-hover action
+reflow with a same-row overlay; show item stats from both name and icon; make
+Raid Zone collapsible; and default Plane of Hate's native map slice to Z 120.
+
+| Work | Critical context and source |
+| --- | --- |
+| Combat/session | `app/parser.js`, `app/app.js`, `app/overlay-session.js`, main Combat controls and trusted native session commands. Keep log cursor, replay guards, identity/location, trigger state and discovery intact when splitting. |
+| Intel interaction | `app/overlay.js`, `app/overlay.css`, native synthetic fixture. No row-height changes on hover at any tier; preserve keyboard action access and heartbeat state. Tooltips consume bounded item metadata at the shared tier. |
+| Missing loot | `server/BuildEyeOfZommPack.php` mirrors Wiki `maintenance/BuildEyeOfZommPack.php`. Vicar's 11 NPC-page loot entries have no reverse item sources; Lord of Loathing lacks Diamond Rod/Wand of Conflagration. Reconcile supported NPC loot with canonical exported items and normal/raid scope, with no per-mob lists. |
+| Map default | `app/map-overlay.js` owns initial/reset slice; `app/map-overlay-3d.js` forwards it to `zoneviewer/overlay-mode.js` global clipping. Apply Z 120 only to exact Hate identities, keep manual overrides and unknown-Z markers. |
+| Operational source | Existing clean Wiki worktree `eoz-export-contract`, feature branch `codex/eoz-npc-loot-joins` from `staging`; review PHP fixtures, promote only that feature to production, verify installed producer hash, then rebuild/audit/publish through the existing host wrapper. |
+
+Execute application checks/build/captures in GitHub CI; do not run or install
+the app locally. Record dataset/release evidence privately under the task's
+existing `.local/validation` directory. The prior dataset is
+`20261021T225644Z-29f86651a9b9`, with 124 zones, 8,679 NPCs and 11,270 items.
+Owner authorization to publish completed fixes continues to apply.
+
 ## Approved follow-up
 
 The 0.8.6 repair responds to live 0.8.5 feedback: put the zone title and controls

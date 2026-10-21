@@ -44,7 +44,7 @@
         <button class="nav-button" data-view="items"><span>◇</span>Items</button>
         <button class="nav-button" data-view="drops"><span>▣</span>Drops</button>
         <button class="nav-button" data-view="combat"><span>⚔</span>Combat</button>
-        <button class="nav-button" data-view="timers"><span>◷</span>Timers</button>
+        <button class="nav-button" data-view="timers"><span>◷</span>Triggers</button>
         <button class="nav-button" data-view="settings"><span>⚙</span>Settings</button>
     </aside>
 
@@ -210,11 +210,12 @@
                     <span class="eyebrow">LOCAL LOG PARSER</span>
                     <h1>Combat</h1>
                 </div>
+                <button id="new-session" class="secondary-button" type="button" title="Clear combat and loot totals and continue from the current log position">New session</button>
             </div>
             <div class="metric-grid combat-metrics">
                 <article class="metric-card"><span class="metric-label">Session damage</span><strong id="combat-damage">0</strong></article>
                 <article class="metric-card"><span class="metric-label">Session DPS</span><strong id="combat-dps">0</strong></article>
-                <article class="metric-card"><span class="metric-label">Healing</span><strong id="combat-healing">0</strong></article>
+                <article class="metric-card"><span class="metric-label">Healing</span><strong id="combat-healing">0</strong><small id="combat-rune-capacity" title="Logged rune capacity granted; damage absorbed is not measured.">0 rune capacity granted</small></article>
                 <article class="metric-card"><span class="metric-label">Observed NPCs</span><strong id="combat-observed">0</strong></article>
             </div>
             <div class="encounter-layout">
@@ -230,7 +231,7 @@
         </section>
 
         <section class="view" data-view-panel="timers">
-            <div class="section-heading"><div><span class="eyebrow">COUNTDOWNS &amp; LOG TRIGGERS</span><h1>Timers</h1></div></div>
+            <div class="section-heading"><div><span class="eyebrow">COUNTDOWNS &amp; LOG TRIGGERS</span><h1>Triggers</h1></div></div>
             <div id="timer-settings" class="panel"></div>
             <div id="wiki-discovery-notices" aria-label="Wiki discoveries"></div>
         </section>

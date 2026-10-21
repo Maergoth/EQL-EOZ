@@ -55,7 +55,7 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
             if(slice&&JSON.stringify(slice)!==lastSlice){api.setOverlaySlice?.(slice);lastSlice=JSON.stringify(slice);}
             const focus=map.focus,focusKey=focus?JSON.stringify([focus.sequence,focus.id,focus.zone]):'';
             if(focusKey&&focusKey!==lastFocus&&focus.zone===(map.zone||session.zone)){
-                const result=api.focusAtLocation?.(focus.loc,{mode:'first'});
+                const result=api.focusAtLocation?.(focus.loc,{mode:'first',fallbackZ:slice?.center});
                 if(result?.ok){lastFocus=focusKey;follow=false;focusNotice=`${focus.name||'NPC'} · inspection camera${result.heightEstimated?' · height estimated':''}`;onFollowChange(false);onFocusApplied(focus,result);report(focusNotice);}
             }else{
                 const nextLocation=locationKey(map.location);

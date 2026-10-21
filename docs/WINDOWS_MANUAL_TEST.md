@@ -1,8 +1,18 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.6-x64.exe`.
+Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.7-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.6` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.7` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+
+## 0.8.7 Intel, session and trigger acceptance
+
+1. Check main navigation, page heading, overlay controls and tray all say Triggers. Existing definitions, running countdowns and layout must remain.
+2. Read logged healing and rune grants. Healing shows rune capacity separately, without inflating actual healing/HPS or reporting damage absorbed.
+3. Start New session from Combat and from Parse → Session. Totals/encounters/loot clear; unread log lines continue once, with the same character, map, timers/triggers and discovery state.
+4. In Intel, set tier 7 and hover a mob name. Actions cover that same row without changing the row/list height. Move to each action; keyboard focus also reaches them. Hover/focus both item icon and name to inspect scaled/base stats.
+5. Collapse Raid Zone: a clear collapsed label/chevron remains. It stays collapsed through heartbeat/tier/search changes; a fresh named consider/kill in that section reopens its matching mob/drop list.
+6. Sync the rebuilt wiki pack. With My Class off, compare Vicar M`Kari's 11 known drops and Lord of Loathing's Diamond Rod/Wand of Conflagration against their wiki sources. Class filtering may intentionally exclude ineligible classes.
+7. Enter Plane of Hate. Native Z starts at 120 ±25, remains adjustable through later /loc messages, and Reset restores 120. Other zones retain their normal starting elevation; unknown-Z markers remain visible. Check actual ceiling clipping and first-person unknown-height preview with local zone archives.
 
 ## 0c. Overlay map and anchored Intel
 

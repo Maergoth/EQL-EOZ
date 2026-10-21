@@ -138,6 +138,21 @@ piped links and multiline rows; their Area/Loc columns and surrounding
 `ItemWhereTable` wrapper never become NPC identities or change another list's zone.
 Explicit normal/raid zone anchors override the enclosing section for that row.
 
+The producer also reconciles the NPC template's `known_loot` with item
+`dropsfrom`. A leading item transclusion or direct item link in a loot entry
+adds that NPC's zone/instance source to the existing canonical item record.
+It does not create missing item stats or alter item eras/classes. Exact item
+page titles win over display names and retain internal case after MediaWiki's
+normal first-letter/space normalization; a bounded local redirect lookup supports
+item aliases. Public NPC revision/field evidence is retained in `lootSources`.
+Normal/raid NPC template and loot-section scope still apply, with shared NPC
+variants derived through the existing instance index. Notes, unknown templates,
+comments, namespace links and prose do not establish additional drops.
+`meta.npcLootSourcesIncluded` marks completed reconciliation;
+`npcLootSourceCounts` reports candidate titles, distinct resolved items,
+unresolved candidate titles, enriched items and added unique source variants.
+These additions require producer deployment and a new published dataset.
+
 The October 21, 2026 owner-approved rollout completed staging and production
 deployment via EQLWiki PRs #35/#36 and the explicit-zone precedence follow-up
 #37/#38, then rebuilt and published final manifest
