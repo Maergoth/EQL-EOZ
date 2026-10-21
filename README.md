@@ -37,7 +37,7 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Groups combat into timestamped encounters using a configurable quiet-period threshold.
 - Records looted items and their sources, with observed drop rates derived from nearby logged kills.
 - Shows current-zone NPCs with EQ-style con labels and color-tinted cards relative to the player's level.
-- Filters items locally by class and era.
+- Filters items locally by class and **Through era** (cumulative through the selected era, using eras present in the dataset).
 - Applies EQLWiki Item Level Slider scaling locally.
 - Shows item sources and known NPC drops without requesting item/NPC pages from the wiki.
 - Embeds a deliberately simplified EQL Zone Viewer.
@@ -47,13 +47,13 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Runs the production line-map route search first, validates it before drawing, then sends a route-local crop of the viewer's decoded collision triangles to a Recast/Detour worker. Only a full, independently collision-validated candidate may replace a safe line; failure leaves a validated route or an honest destination marker.
 - Shows Folder, Log, Zone, and `/loc` readiness separately instead of collapsing setup and live-state problems into one Sync error.
 - Keeps one named destination active, reports path/marker/error state and routed distance, and re-routes from later `/loc` samples.
-- Makes Minimal view an intel-first named/rare-mob list with no duplicate destination field. The 3D map and row-level Route actions are independent Settings opt-ins and both default off.
+- Provides native Map and Intel windows alongside the main Map Explorer; row-level Route actions respect the routing opt-in.
 - Copies a paste-ready `/waypoint Y X [Z]` command when a located NPC name is activated, while retaining a separate explicit Route action.
 - Provides a pin-to-top option that hides the draggable title bar while keeping the app in the Windows taskbar.
-- Keeps waypoint copy, consider pop-under loot, and class-filtered named-mob/drop intel available even when Minimal view's map and route actions are hidden; class-filtered loot excludes statless and weight-only records.
+- Groups named-mob/drop intel into Normal Zone and Raid Zone sources. Show More retrieves every matching drop; class-filtered loot excludes statless and weight-only records.
 - Opens Items to recommended current-zone/class loot, with explicit search, slot, sort, class, era, tier, and scope overrides.
 - Checks for new application releases, offers verified downloads and a user-approved Windows installer, and keeps app updates separate from wiki-data synchronization.
-- Offers independent native Parse, Zone & loot, Consider and Timers overlays with saved layouts, lock controls, mouse passthrough and tray recovery.
+- Offers independent native Parse, Map, Zone & loot and Timers overlays with saved layouts, lock controls, mouse passthrough and tray recovery.
 - Runs countdowns, log-triggered and kill-based reminders, plus a swing bar learned from your outgoing melee hits and misses.
 - Shows keyboard-accessible EQLWiki Itembox-inspired local-data tooltips, including embedded wiki icons and tier/base comparisons.
 - Searches EQLWiki from the global search field and opens exact wiki links from local records.
@@ -129,7 +129,7 @@ time. Automatic startup downloads are optional and default off; installation
 always needs your approval. Settings, log/folder choices and cached wiki data
 stay in the existing application profile.
 
-This feature starts with 0.8.2. Older installations need that first updater
+This feature starts with 0.8.3. Older installations need that first updater
 build installed normally; **Sync with Wiki** updates data rather than app code.
 Unsigned beta installers remain unsigned. See the
 [PNUT UX plan](docs/PNUT_UX_PLAN.md) for implementation boundaries.
@@ -137,25 +137,40 @@ Unsigned beta installers remain unsigned. See the
 ### Native overlays and timers
 
 Choose **Overlays** in the header or configure individual panels in
-**Settings → Native overlays**. Parse, Zone & loot, Consider and Timers are real
+**Settings → Native overlays**. Parse, Map, Zone & loot and Timers are real
 separate desktop windows. Unlock a panel to move/resize it; locking keeps tabs
 and menus interactive. **Ignore mouse** passes clicks through the panel.
 Restore input from Settings, the tray or **Ctrl+Shift+O** when registered.
 Each panel remembers its layout, opacity and font scale. Closing the main app
 while panels are visible keeps the shared session running; use the tray's
-**Quit Eye of Zomm** to exit. The complete Map Explorer opens from panel actions.
+**Quit Eye of Zomm** to exit. The native Map uses client line maps and shared
+location/route state; the complete 3D Map Explorer opens explicitly. First/Top/Map
+controls appear only on the main Map page.
+
+Intel keeps Normal Zone and Raid Zone drops distinct. Search named mobs and use
+**Show More** to expand all matching drops. Considering or killing a listed named
+mob selects, scrolls and expands its Intel row with a mild flash/blip, without
+activating the window.
 
 The overlay follows PNUT’s compact header and **Overview / Damage / Healing /
 Taken / Session** tabs. The Timers overlay displays only radial countdown rows
 and a thin swing bar. Configure everything on the main **Timers** page.
 
-The main Timers page supports manual/repeating countdowns, saved literal log
-triggers and target-kill reminders, plus a one-time reminder from the latest
+The main Timers page supports manual/repeating countdowns, saved literal or regex
+log triggers with named captures, match preview, cooldowns, colors and optional
+sound/speech cues, plus target-kill reminders and a one-time reminder from the latest
 logged kill. You supply the duration; EoZ does not know a mob's respawn period.
 Pause, resume, reset or dismiss rows. The overlay’s observed swing bar learns your own
 melee rounds, accepts an optional weapon-delay seed and waits for real attacks.
 EQL's one-second log timestamps make this an estimate. See [timer behavior](docs/TIMERS.md)
 for limits, replay protection and cast handling.
+
+When a complete wiki catalog verifies that an encountered NPC or looted item is
+missing, a notice appears inside Timers/Triggers: the visible interactive native
+Timers window takes priority, with the main Timers page as fallback. **Screenshot** offers a local
+window/display choice and copies the image to the clipboard; paste it yourself
+where needed. Nothing uploads automatically. **Ignore** persists locally.
+Notices fade after 15 visible seconds, pausing on hover or keyboard focus.
 
 ## Wiki search / Open in browser
 
