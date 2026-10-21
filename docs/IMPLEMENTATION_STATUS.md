@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-21
 
-Code baseline: 0.8.4
+Code baseline: 0.8.5
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
@@ -22,6 +22,7 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 | PNUT-style timers and swing | Implemented with synthetic log evidence | Main list/editor with literal/regex PNUT captures, preview, cooldown/overlap, warning/end colors and sound/speech, notifications; persisted deadlines/replay guards and observed swing; [rules](TIMERS.md) | Live EQL grammar and timing comparison; timestamps limit precision to one second |
 | Missing wiki suggestions | Implemented; explicit clipboard capture acceptance pending | Complete-catalog membership guard, shared inline main/native Timers notices, 15 visible seconds with hover/focus pause, Screenshot source choices/clipboard and persistent Ignore; no popup/upload | Fresh complete catalog, physical capture/source selection and local clipboard check |
 | Main window and map controls | Implemented in 0.8.4; physical monitor acceptance pending | Native main frame; saved placement/maximized state; tray/start preferences; responsive map footer; embedded minimap zoom; native Z slider with unknown-Z markers; Raid Zone first; [continuation index](WINDOW_MAP_POLISH.md) | Physical monitor removal/DPI and live game interaction |
+| Native map modes and Intel workspace | Implemented in 0.8.5; CI and physical acceptance tracked separately | Collapsing Reset/Follow/zoom/view header; exact label hit targets; lazy overlay Top/First viewer; camera-only mob preview; pinned shared tier/class controls; [source map](OVERLAY_MAP_WORKSPACE.md) | GitHub Windows gates, physical pointer-lock/focus and live archive acceptance |
 
 ## Current highest-priority task
 

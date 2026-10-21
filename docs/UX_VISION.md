@@ -1,7 +1,7 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.8.4
+Baseline: 0.8.5
 Last updated: 2026-10-21
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
@@ -147,9 +147,10 @@ player-only; rune grants are capacity rather than proven absorption.
 The 0.8.3 PR implements four independent transparent native windows: Parse,
 Map, Zone & loot and Timers. One main-renderer session owns parsing, timers,
 pack and routes while hidden. Panels save independent bounds and use restricted
-snapshot/command IPC, tray/main recovery and a checked global shortcut. The heavy
-Map Explorer remains in the main app and opens explicitly from panel actions;
-the native Map is a lightweight client line-map canvas sharing location/routes.
+snapshot/command IPC, tray/main recovery and a checked global shortcut. Since
+0.8.5, native Map can cycle its lightweight line map into an on-demand Top/First
+viewer in the same window. Its extra selected-zone scene is released when idle;
+the main Map Explorer retains the authoritative route owner.
 Intel separates Normal Zone/Raid Zone sources, lazily expands every matching
 drop with Show More, and selects/expands on a named consider or kill with a mild
 flash/blip. It never activates the window. Minimal and Consider windows are retired.
@@ -194,7 +195,7 @@ The persistent header contains only cross-cutting state and actions:
 
 Parse, Map, Intel and Timers are independent native windows with separately saved
 visibility/layout/input preferences. The main app retains detailed browsing and
-editing. First/Top/Map controls appear only on the main Map page; item filtering
+editing. Main Map and native Map each offer a view selector within their own map surface; item filtering
 uses cumulative **Through era** options drawn from eras present in the dataset.
 
 ## 6. Click budgets
@@ -686,7 +687,7 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 - Pin keeps the app above the game.
 - Pin hides custom titlebar only.
 - App remains on the taskbar.
-- Native Parse/Map/Intel/Timers visibility and layouts are independent; recovery remains reachable. First/Top/Map controls appear only on the main Map page.
+- Native Parse/Map/Intel/Timers visibility and layouts are independent; recovery remains reachable. Map/Top/First controls belong to their map surface. Native Map loads 3D on demand; Intel's shared item-level/class controls stay anchored while mobs scroll.
 
 ## 16. Road to v1
 

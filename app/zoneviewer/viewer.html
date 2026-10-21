@@ -33,6 +33,7 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 .eoz-rare-marker{position:absolute;max-width:220px;border:1px solid rgba(240,199,73,.72);border-radius:999px;background:rgba(8,14,22,.9);box-shadow:0 3px 13px rgba(0,0,0,.62);color:#f4d66e;padding:4px 8px;font:700 11px/1.2 Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:auto;cursor:pointer}
 .eoz-rare-marker:hover,.eoz-rare-marker:focus-visible,.eoz-rare-marker.is-active{border-color:#fff0a6;background:rgba(76,58,15,.95);color:#fff6c9;outline:none}
 .eoz-rare-marker small{margin-left:5px;color:#a9b4bf;font:600 8px/1.2 system-ui,sans-serif}
+.eoz-rare-marker.is-raid{border-color:#cd8189;color:#efbdc3;background:rgba(35,13,23,.92)}
 .eoz-route-guidance{position:absolute;z-index:22;top:12px;left:50%;transform:translateX(-50%);min-width:220px;max-width:min(520px,calc(100% - 28px));border:1px solid rgba(240,199,73,.66);border-radius:10px;background:rgba(8,14,22,.92);box-shadow:0 5px 20px rgba(0,0,0,.55);padding:7px 12px;color:#fff6c9;text-align:center;pointer-events:none;font-family:system-ui,sans-serif}
 .eoz-route-guidance[hidden]{display:none}
 .eoz-route-guidance strong{display:block;color:#f4d66e;font:700 14px/1.25 Georgia,serif}
@@ -55,6 +56,11 @@ import { deferHiddenViewportFit } from '../viewport-framing.js';
 import { installZoneLoadGuard } from '../zone-load-guard.js';
 import { selectViewerZoneOption } from '../viewer-zone-selection.js';
 import { installMiniMapControls } from '../minimap-controls.js';
+import { installOverlayMode } from './overlay-mode.js';
+
+const overlayMode=new URLSearchParams(window.location.search).get('overlay')==='1';
+let overlaySlice=null;
+if(overlayMode)globalThis.showDirectoryPicker=async()=>{throw new Error('Choose the EverQuest folder in the main Settings.');};
 
 globalThis.EyeOfZommNavigationPolicy = navigationPolicy;
 
@@ -98,6 +104,7 @@ function playerMapSetLabel(sourceLabel) {
 }
 
 async function localApi(url, options = {}) {
+    if(overlayMode&&(!/^\/api\/(?:eq-files|eq-file)(?:\?|$)/.test(url)||!['GET','HEAD'].includes(options.method||'GET')))throw new Error('This viewer can only read selected game files.');
     const next = { cache:'no-store', ...options };
     next.headers = { 'X-Eye-Of-Zomm-Request':'1', ...(next.headers || {}) };
     const response = await fetch(url, next);
@@ -113,7 +120,7 @@ class LocalFileHandle {
     }
 
     async readFile() {
-        const response = await localApi(`/api/eq-file?path=${encodeURIComponent(this.entry.path)}`);
+        const response = await localApi(`/api/eq-file?path=${encodeURIComponent(this.entry.path)}${overlayMode?'&surface=overlay-map':''}`);
         const bytes = await response.arrayBuffer();
         return new File([bytes], this.name, { lastModified:Number(this.entry.lastModified) || Date.now() });
     }
@@ -149,6 +156,7 @@ class LocalDirectoryHandle {
 async function configuredDirectoryHandle() {
     const response = await localApi('/api/eq-files');
     const manifest = await response.json();
+    if(overlayMode&&manifest.truncated)throw new Error('The local file inventory is incomplete. Choose the installation folder in the main Settings.');
     if (!manifest.rootName || !Array.isArray(manifest.files)) return null;
     const rootHandle = new LocalDirectoryHandle(manifest.rootName);
     rootHandle.eyeOfZommHasZoneArchives = manifest.files.some(entry => /\.(?:s3d|eqg)$/i.test(String(entry.path || '')));
@@ -515,7 +523,7 @@ const zoneLoadGuard = installZoneLoadGuard(app, {
         app.selectedFloorIndices?.clear?.();
         root.querySelectorAll('[data-eql-floor-index]').forEach(input => { input.checked = false; });
         app.applyFloorSelection?.();
-        startCollisionGeometryExport(loadedZoneIdentity);
+        if(!overlayMode)startCollisionGeometryExport(loadedZoneIdentity);
     }
 });
 
@@ -675,7 +683,7 @@ function renderRareMobs() {
         const distance = cameraPosition?.distanceTo?.(marker.position) ?? 0;
         const projected = marker.position.clone().project(app.camera);
         const onScreen = projected.z >= -1 && projected.z <= 1 && projected.x >= -1.08 && projected.x <= 1.08 && projected.y >= -1.08 && projected.y <= 1.08;
-        const correctFloor = !app.floorSelectionContainsY || app.floorSelectionContainsY(marker.eqZ);
+        const correctFloor = overlayMode ? !marker.hasZ||!overlaySlice||Math.abs(marker.eqZ-overlaySlice.center)<=overlaySlice.tolerance : !app.floorSelectionContainsY || app.floorSelectionContainsY(marker.eqZ);
         if (!visible || !onScreen || !correctFloor || (firstPerson && distance > 1800)) {
             marker.element.hidden = true;
             continue;
@@ -740,6 +748,7 @@ function focusTopViewAt(point) {
 window.eqlEyeOfZommViewer = {
     async selectFolder() {
         if (!app) return { ok:false };
+        if(overlayMode)return {ok:false,reason:'choose-folder-in-main-settings'};
         try {
             await localApi('/api/select-eq-root', { method:'POST' });
             const configured = await configuredDirectoryHandle();
@@ -778,6 +787,7 @@ window.eqlEyeOfZommViewer = {
             }
             return { ok:false, reason:'folder-open-failed', name:configured.name || '', source:'settings' };
         }
+        if(overlayMode)return {ok:false,reason:'choose-folder-in-main-settings'};
         const handle = await loadSavedHandle().catch(() => null);
         if (!handle) return { ok:false, reason:'no-saved-folder' };
         const permission = await handle.queryPermission?.({ mode:'read' });
@@ -816,7 +826,7 @@ window.eqlEyeOfZommViewer = {
                 message:app.els?.statusText?.textContent || `Unable to load ${zoneName}.`
             };
         }
-        if (!collisionGeometryPromise) {
+        if (!overlayMode && !collisionGeometryPromise) {
             startCollisionGeometryExport(loadedZoneIdentity);
         }
         return {
@@ -901,10 +911,10 @@ window.eqlEyeOfZommViewer = {
             const name = String(record?.name || '').trim();
             const location = Array.isArray(record?.loc) ? record.loc.map(Number) : [];
             if (!name || location.length < 2 || !location.slice(0, 2).every(Number.isFinite)) continue;
-            const key = normalizedNpcName(name);
+            const key = overlayMode ? String(record.id||`${name}|${record.raidInstance?'raid':'normal'}`) : normalizedNpcName(name);
             if (seen.has(key)) continue;
             seen.add(key);
-            const hasZ = Number.isFinite(location[2]);
+            const hasZ = (typeof record.loc?.[2]==='number'||typeof record.loc?.[2]==='string'&&record.loc[2].trim()!=='')&&Number.isFinite(location[2]);
             const eqZ = hasZ ? location[2] : 0;
             const point = app.eqWorldToThree(location[0], location[1], eqZ);
             const ground = app.findGroundPointAt(point.x, point.z, hasZ ? point.y : app.currentBounds.max.y + 100) || point;
@@ -912,7 +922,8 @@ window.eqlEyeOfZommViewer = {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'eoz-rare-marker';
-            button.title = `Navigate to ${name}${record.dropCount ? ` · ${record.dropCount} known drops` : ''}`;
+            if(overlayMode&&record.raidInstance)button.classList.add('is-raid');
+            button.title = `${overlayMode?'Select':'Navigate to'} ${name}${overlayMode?` · ${record.raidInstance?'Raid':'Normal'} Zone${hasZ?'':' · height unknown'}`:''}${record.dropCount ? ` · ${record.dropCount} known drops` : ''}`;
             button.dataset.npc = name;
             button.append(document.createTextNode(name));
             if (record.classDropCount || record.dropCount) {
@@ -922,13 +933,14 @@ window.eqlEyeOfZommViewer = {
             }
             button.addEventListener('click', event => {
                 event.stopPropagation();
-                window.parent?.postMessage({ type:'eoz-rare-mob-selected', name }, window.location.origin);
+                window.parent?.postMessage({ type:'eoz-rare-mob-selected', name,...(overlayMode?{id:record.id,raidInstance:!!record.raidInstance}:{}) }, window.location.origin);
             });
             rareLayer.append(button);
             const marker = {
                 element:button,
+                id:record.id,raidInstance:!!record.raidInstance,hasZ,
                 name,
-                eqZ:resolvedEqZ,
+                eqZ:overlayMode&&!hasZ?null:resolvedEqZ,
                 position:ground.clone().add({ x:0, y:8, z:0 }),
                 priority:(Number(record.classDropCount) || 0) * 20 + (Number(record.dropCount) || 0),
                 active:normalizedNpcName(name) === normalizedNpcName(activeRareMob)
@@ -978,6 +990,7 @@ window.eqlEyeOfZommViewer = {
     },
 
     async pathTo(label, wikiLocation = null) {
+        if(overlayMode)return {ok:false,reason:'routing-owned-by-main'};
         if (!app?.currentZoneRecord || !label) return { ok:false };
         // Invalidate a previous-start candidate before awaiting the line
         // worker, including when the destination key will stay the same.
@@ -1030,6 +1043,12 @@ window.eqlEyeOfZommViewer = {
         return { ok:true };
     },
 
+    setOverlaySelection(id) {
+        if(!overlayMode)return {ok:false};
+        for(const marker of rareMobMarkers){marker.active=marker.id===id;marker.element.classList.toggle('is-active',marker.active);}
+        renderRareMobs();return {ok:true};
+    },
+
     overlayNavigation() {
         // Export only a collision-validated route. Destinations alone are markers.
         const path = app?.navigationPath;
@@ -1073,6 +1092,13 @@ window.eqlEyeOfZommViewer = {
         return { ok:Boolean(app) };
     }
 };
+
+if(overlayMode){
+    installOverlayMode({app,root,api:window.eqlEyeOfZommViewer,onSlice:value=>{overlaySlice=value;renderRareMobs();}});
+    // Mode is owned by the native Map header. Movement keys and pointer-lock
+    // navigation remain local to this iframe; no gameplay input is produced.
+    window.addEventListener('keydown',event=>{if(['Digit1','Digit2','Digit3','KeyM'].includes(event.code)){event.preventDefault();event.stopImmediatePropagation();}},true);
+}
 
 window.addEventListener('beforeunload', resetSpatialRouteState, { once:true });
 window.parent?.postMessage({ type:'eoz-viewer-ready' }, window.location.origin);

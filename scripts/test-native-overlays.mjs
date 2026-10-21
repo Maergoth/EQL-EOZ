@@ -86,7 +86,7 @@ try {
         };
         const execute = (window, fn, ...args) => window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
         let owner;
-        const panels = () => Object.fromEntries(BrowserWindow.getAllWindows().filter(window => window.webContents.getURL().includes('/overlay.html?panel=')).map(window => [new URL(window.webContents.getURL()).searchParams.get('panel'), window]));
+        const panels = () => Object.fromEntries(BrowserWindow.getAllWindows().filter(window => /\/overlay(?:-map)?\.html\?panel=/.test(window.webContents.getURL())).map(window => [new URL(window.webContents.getURL()).searchParams.get('panel'), window]));
         const state = () => execute(owner, () => window.eyeOfZommOverlays.getState());
         const control = (action, panel, value) => execute(owner, (action, panel, value) => window.eyeOfZommOverlays.control(action, panel, value), action, panel, value);
         const action = (panel, command, payload) => execute(panels()[panel], (command, payload) => window.eyeOfZommOverlay.action(command, payload), command, payload);
@@ -166,6 +166,48 @@ try {
             assert.equal(await execute(panels().intel, () => document.querySelector('[data-intel-section]')?.dataset.intelSection),'raid','Raid Zone is the first Intel section');
             assert.match(variants.normal,/Synthetic Charm 12/); assert.doesNotMatch(variants.normal,/Raid Charm/);
             assert.match(variants.raid,/Raid Charm/); assert.doesNotMatch(variants.raid,/Synthetic Charm/);
+            const intelPointerPath = await execute(panels().intel, () => {
+                const summary=document.querySelector('[data-intel-section="raid"] .npc-summary'),name=summary.querySelector('.npc-name'),metadata=summary.querySelector('.npc-meta'),map=summary.querySelector('[data-npc-action="map"]'),outside=document.querySelector('.intel-controls');
+                const point=(node,type,relatedTarget)=>node.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerType:'mouse',relatedTarget}));
+                const open=()=>getComputedStyle(summary.querySelector('.row-actions')).display!=='none';
+                document.activeElement?.blur();point(summary,'pointerout',outside);
+                // Hidden native windows exercise the actual delegated pointer
+                // handlers without assuming foreground OS mouse delivery.
+                point(metadata,'pointerover',outside);const metadataOnly=open();
+                point(name,'pointerover',metadata);const nameEntered=open();
+                point(name,'pointerout',metadata);point(metadata,'pointerover',name);const nameToMetadata=open();
+                point(metadata,'pointerout',map);point(map,'pointerover',metadata);const metadataToAction=open();
+                point(map,'pointerout',outside);const leftSummary=open();
+                name.focus();const keyboardFocus=open();name.blur();const focusLeft=open();
+                return{metadataOnly,nameEntered,nameToMetadata,metadataToAction,leftSummary,keyboardFocus,focusLeft};
+            });
+            assert.deepEqual(intelPointerPath,{metadataOnly:false,nameEntered:true,nameToMetadata:true,metadataToAction:true,leftSummary:false,keyboardFocus:true,focusLeft:false},'Only the actual NPC name arms pointer actions; its metadata/buttons retain them until the pointer leaves, and keyboard focus remains supported');
+            const stickyIntel = await execute(panels().intel, () => {
+                const list=document.querySelector('#intel-body'),controls=document.querySelector('.intel-controls'),tier=document.querySelector('#intel-item-tier'),filter=document.querySelector('#class-filter');
+                const before=[controls,tier,filter].map(node=>node.getBoundingClientRect().top);
+                list.scrollTop=list.scrollHeight;
+                const after=[controls,tier,filter].map(node=>node.getBoundingClientRect().top);
+                return{before,after,scroll:list.scrollTop,searchOutsideList:!list.contains(document.querySelector('#intel-search'))};
+            });
+            assert(stickyIntel.scroll>0&&stickyIntel.searchOutsideList,'The expanded mob list scrolls separately from its search and filters');
+            assert.deepEqual(stickyIntel.after,stickyIntel.before,'Item level and My Class controls remain anchored while the mob list scrolls');
+            await action('intel','font-scale',1.3);
+            await until(async () => execute(panels().intel, () => getComputedStyle(document.documentElement).getPropertyValue('--font-scale').trim()==='1.3'),'Largest Intel text setting');
+            const lastRowActions = await execute(panels().intel, () => {
+                const list=document.querySelector('#intel-body'),controls=document.querySelector('.intel-controls'),row=[...list.querySelectorAll('.npc-row')].at(-1);
+                const before=controls.getBoundingClientRect().top;
+                row.querySelector('.npc-name').focus();
+                const button=row.querySelector('[data-npc-action="map"]');button.focus();
+                const rect=button.getBoundingClientRect(),viewport=list.getBoundingClientRect();
+                return{before,after:controls.getBoundingClientRect().top,focused:document.activeElement===button,tabbable:button.tabIndex>=0,visible:getComputedStyle(button).display!=='none',fits:rect.top>=viewport.top-1&&rect.bottom<=viewport.bottom+1};
+            });
+            assert(lastRowActions.focused&&lastRowActions.tabbable&&lastRowActions.visible&&lastRowActions.fits,'The last mob’s wrapped Map action stays keyboard reachable inside the scroller at Largest text');
+            assert.equal(lastRowActions.after,lastRowActions.before,'Revealing the last action group does not move Intel filters');
+            await action('intel','font-scale',1);
+            await execute(panels().intel, () => {const tier=document.querySelector('#intel-item-tier');tier.value='3';tier.dispatchEvent(new Event('input',{bubbles:true}));tier.dispatchEvent(new Event('change',{bubbles:true}));});
+            await until(async () => (await state()).snapshot.session.intel.itemTier===3,'Intel item level commits to the one session owner');
+            await execute(panels().intel, () => {const tier=document.querySelector('#intel-item-tier');tier.value='0';tier.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('#intel-body').scrollTop=0;});
+            await until(async () => (await state()).snapshot.session.intel.itemTier===0,'Reset fixture item level to Base');
             const completeDrops = await action('intel','session:intel-drops',{npc:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false});
             assert.equal(completeDrops.total,12); assert.equal(completeDrops.items.length,12);
             const raidDrops = await action('intel','session:intel-drops',{npc:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true});
@@ -184,6 +226,13 @@ try {
             assert.equal(mapData.status,'ready'); assert.equal(mapData.lines.length,5); assert.equal(mapData.labels.length,1);
             await until(async () => execute(panels().map, () => document.querySelector('.native-map-note')?.textContent.includes('Default maps')),'native canvas draws local map layers');
             assert(await execute(panels().map, () => document.querySelector('canvas').width > 100 && document.querySelector('canvas').height > 100));
+            assert.equal(await execute(panels().map, () => Boolean(document.querySelector('[data-map-action="fit"],[data-map-action="reload"]'))),false,'Reset replaces Fit and Reload');
+            panels().map.webContents.sendInputEvent({type:'mouseMove',x:150,y:200});
+            await execute(panels().map, () => document.activeElement?.blur());
+            await until(async () => execute(panels().map, () => getComputedStyle(document.querySelector('.native-map-tools')).maxHeight==='0px'),'Viewing the map canvas keeps header controls collapsed');
+            await execute(panels().map, () => document.querySelector('#overlay-header').focus());
+            await until(async () => execute(panels().map, () => document.querySelector('.native-map-tools').getBoundingClientRect().height>30),'Keyboard focus reveals the native header controls');
+            assert.equal(await execute(panels().map, () => document.querySelector('#overlay-header').tabIndex),0,'Collapsed header retains a keyboard reachable handle');
             const slice = await execute(panels().map, () => {
                 const z=document.querySelector('[data-map-z]'),tolerance=document.querySelector('[data-map-tolerance]'),context=document.querySelector('canvas').getContext('2d'),arc=context.arc;
                 const initialPlayerZ=Number(z.value);let count=0;context.arc=function(...args){count++;return arc.apply(this,args);};
@@ -201,9 +250,58 @@ try {
             await wait(1250);
             assert.deepEqual(await execute(panels().map,()=>({z:Number(document.querySelector('[data-map-z]').value),tolerance:Number(document.querySelector('[data-map-tolerance]').value)})),{z:50,tolerance:10},'Heartbeat snapshots preserve the selected Z and tolerance');
             await execute(panels().map, () => document.querySelector('[data-map-action="zoom-in"]').click());
-            await action('map','session:select-npc',{npc:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true});
+            await execute(panels().map, () => document.activeElement?.blur());
+            await wait(100); // Allow header collapse to resize/repaint the real canvas before targeting its text.
+            const labelHit = await execute(panels().map, () => {
+                const canvas=document.querySelector('canvas'),context=canvas.getContext('2d'),texts=[],markers=[];
+                const fillText=context.fillText,arc=context.arc;
+                // Observe the actual paint, independently of the accessibility
+                // button's bounds: a decluttered marker is not a text fixture.
+                context.fillText=function(text,x,y,...rest){texts.push({text,x,y,width:context.measureText(text).width});return fillText.call(this,text,x,y,...rest);};
+                context.arc=function(x,y,radius,...rest){markers.push({x,y,radius});return arc.call(this,x,y,radius,...rest);};
+                try{document.querySelector('[data-map-z]').dispatchEvent(new Event('input',{bubbles:true}));}
+                finally{context.fillText=fillText;context.arc=arc;}
+                const button=[...document.querySelectorAll('.native-map-npc-link')].find(node=>node.getAttribute('aria-label').includes('Synthetic Keeper · Raid Zone'));
+                const names=texts.filter(entry=>entry.text==='Synthetic Keeper'),paint=names[0],rect=canvas.getBoundingClientRect();
+                const diagnostic={texts,markers,canvas:rect.toJSON(),button:button?{id:button.dataset.mapNpc,rect:button.getBoundingClientRect().toJSON()}:null,headerExpanded:document.querySelector('.native-map-tools').getBoundingClientRect().height};
+                if(names.length!==1||!button)return{...diagnostic,valid:false,reason:'Expected exactly one painted raid name and its destination button'};
+                const point={x:paint.x+paint.width-2,y:paint.y+6},client={x:rect.left+point.x,y:rect.top+point.y};
+                const markerDistance=Math.min(...markers.map(marker=>Math.hypot(marker.x-point.x,marker.y-point.y)));
+                const element=document.elementFromPoint(client.x,client.y);
+                const valid=paint.width>40&&markerDistance>12&&element===canvas;
+                if(valid){
+                    const event=type=>new PointerEvent(type,{clientX:client.x,clientY:client.y,pointerId:1,pointerType:'mouse',isPrimary:true,bubbles:true});
+                    // Hidden native windows do not promise OS input delivery.
+                    // Dispatch through the real renderer handlers. DOM events
+                    // have no active native pointer to capture; capture is
+                    // unrelated to this stationary name selection.
+                    canvas.dispatchEvent(event('pointermove'));
+                    const capture=canvas.setPointerCapture;
+                    try{canvas.setPointerCapture=()=>{};canvas.dispatchEvent(event('pointerdown'));canvas.dispatchEvent(event('pointerup'));}
+                    finally{canvas.setPointerCapture=capture;}
+                }
+                return{...diagnostic,valid,point,client,markerDistance,cursor:getComputedStyle(canvas).cursor,inlineCursor:canvas.style.cursor,element:element?{tag:element.tagName,className:element.className}:null,id:button.dataset.mapNpc};
+            });
+            assert(labelHit.valid&&labelHit.cursor==='pointer',`Actual placed NPC name text advertises its click target: ${JSON.stringify(labelHit)}`);
+            await until(async () => (await state()).snapshot.session.map.selectedNpcId===labelHit.id,'Canvas name click selects the exact painted raid source id');
             await until(async () => execute(panels().intel, () => Boolean(document.querySelector('[data-intel-section="raid"] .npc-row.is-focused'))),'map selection focuses the raid variant in Intel');
-            await execute(panels().intel, () => { document.querySelector('#panel-content').scrollTop = 0; });
+            const accessibleTarget=await execute(panels().map, () => {const button=[...document.querySelectorAll('.native-map-npc-link')].find(node=>node.getAttribute('aria-label').startsWith('Unknown Elevation Watcher'));button.focus();const focusable=document.activeElement===button&&button.tabIndex>=0&&button.type==='button';button.click();return focusable;});
+            assert(accessibleTarget,'Unknown-height destinations remain reachable as actual keyboard focusable buttons');
+            await until(async () => (await state()).snapshot.session.map.selectedNpcName==='Unknown Elevation Watcher','Accessible destination activation selects unknown-height NPCs');
+            await execute(panels().map, () => {const button=[...document.querySelectorAll('.native-map-npc-link')].find(node=>node.getAttribute('aria-label').includes('Synthetic Keeper · Raid Zone'));button.focus();button.click();});
+            await until(async () => {const session=(await state()).snapshot.session;return session.map.selectedNpcName==='Synthetic Keeper'&&session.intel.npcs.find(npc=>npc.id===session.map.selectedNpcId)?.raidInstance;},'Accessible name button preserves the exact raid source');
+            await execute(panels().map, () => {const z=document.querySelector('[data-map-z]');z.value='0';z.dispatchEvent(new Event('input',{bubbles:true}));});
+            const loggedPositionBeforeFocus=(await state()).snapshot.session.map.location;
+            await execute(panels().intel, () => document.querySelector('[data-intel-section="raid"] [data-npc-action="map"]').click());
+            await until(async () => execute(panels().map, () => document.querySelector('[data-map-action="mode"]').textContent==='First Person'),'Intel Map requests the real native first-person mode');
+            assert.equal(await execute(panels().map, () => Number(document.querySelector('[data-map-z]').value)),50,'A known-height NPC focus recenters a previously unrelated Z slice');
+            assert.deepEqual((await state()).snapshot.session.map.location,loggedPositionBeforeFocus,'NPC map focus never overwrites the logged player position');
+            await execute(panels().map, () => document.querySelector('[data-map-action="reset"]').click());
+            await wait(1250);
+            assert.deepEqual(await execute(panels().map, () => ({mode:document.querySelector('[data-map-action="mode"]').textContent,follow:document.querySelector('[data-map-action="follow"]').getAttribute('aria-pressed'),z:Number(document.querySelector('[data-map-z]').value),tolerance:Number(document.querySelector('[data-map-tolerance]').value),iframes:document.querySelectorAll('.native-map-3d-stage iframe').length})),{mode:'Map',follow:'true',z:0,tolerance:25,iframes:0},'Reset restores default Map/follow/slice and releases the lazy 3D viewer without replaying old focus');
+            const modes = await execute(panels().map, () => {const button=document.querySelector('[data-map-action="mode"]'),labels=[];for(let index=0;index<3;index++){button.click();labels.push(button.textContent);}return{labels,iframes:document.querySelectorAll('.native-map-3d-stage iframe').length};});
+            assert.deepEqual(modes,{labels:['Top 3D','First Person','Map'],iframes:0},'Native view cycles create/release the 3D controller; its full geometry fixture is a separate smoke');
+            await execute(panels().intel, () => { document.querySelector('#intel-body').scrollTop = 0;document.querySelector('[data-intel-section="raid"] .npc-name').focus(); });
             await screenshot(panels().intel,'intel-raid');
             const beforeKillSequence=(await state()).snapshot.session.intel.focusSequence;
             const beforeKillFocus=focusCalls();
@@ -295,8 +393,8 @@ try {
             await execute(owner, async () => {
                 const { mountAppUpdates } = await import('/app-update-ui.js');
                 window.__tourUpdatePresenter = mountAppUpdates({ bridge:{ getStatus:async () => ({
-                    supported:true, status:'available', availableVersion:'0.8.5',
-                    releaseUrl:'https://github.com/Maergoth/EQL-EOZ/releases/tag/v0.8.5'
+                    supported:true, status:'available', availableVersion:'0.8.6',
+                    releaseUrl:'https://github.com/Maergoth/EQL-EOZ/releases/tag/v0.8.6'
                 }) } });
                 await window.__tourUpdatePresenter.refresh();
                 [...document.querySelectorAll('.settings-grid h2')].find(heading => heading.textContent === 'Window')
@@ -306,7 +404,11 @@ try {
             await execute(owner, () => { window.__tourUpdatePresenter.dispose(); delete window.__tourUpdatePresenter; });
             await execute(owner, () => document.querySelector('[data-view="timers"]').click());
             await screenshot(owner, 'main-timers');
-            for (const [name, window] of Object.entries(panels())) await screenshot(window, name);
+            for (const [name, window] of Object.entries(panels())) {
+                if(name==='map')await execute(window, () => document.querySelector('#overlay-header').focus());
+                if(name==='intel')await execute(window, () => {document.querySelector('#intel-body').scrollTop=0;document.querySelector('[data-intel-section="raid"] .npc-name').focus();});
+                await screenshot(window, name);
+            }
             assert(panels().timers.getBounds().height <= 120, 'timer native window fits compact display rows');
             const parseId = panels().parse.id;
             await panels().parse.webContents.reload();

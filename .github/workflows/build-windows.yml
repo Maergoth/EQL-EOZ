@@ -37,6 +37,8 @@ jobs:
         run: npm run test:window-lifecycle
       - name: Test map sizing and zoom
         run: npm run test:map-layout
+      - name: Test native Map 3D and file isolation
+        run: npm run test:map-overlay-3d
       - name: Test inline wiki discovery and explicit clipboard capture
         run: npm run test:discovery-notices
       - name: Fetch production bootstrap data

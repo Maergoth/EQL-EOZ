@@ -15,7 +15,7 @@ The installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz:
 
 ## A look around
 
-These screenshots show the actual **0.8.4 Electron interface with synthetic log, wiki, map and update-state fixtures**. They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+These screenshots show the actual **0.8.5 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [GitHub CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39658890201). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 
@@ -25,7 +25,7 @@ Move and resize the main window normally. Its size, position and maximized state
 
 ### Maps that stay beside the game
 
-The lightweight native Map reads your client text maps and shares the logged position, named destinations and validated route with the main app. Pan, zoom or follow the player; use its Z controls to inspect another elevation. The complete **Map Explorer** offers First Person 3D, Top Down 3D and Map views, a compact Z slicer, Succor reset and a zoomable Local Map.
+The native Map reads your client text maps and shares the logged position, named destinations and validated route with the main app. Reveal its header for **Reset**, Follow, zoom and a button cycling **Map → Top → First person** in this window. Its 3D scene loads only when used. Use Z controls to inspect another elevation; monster names and markers share interactive pointer targets. The complete main **Map Explorer** keeps its own views and zoomable Local Map.
 
 Routing is an opt-in. A line appears only after collision checks approve it; a guarded Recast/Detour candidate may refine the established route after the same checks. An unreachable or unverified destination remains a marker. Static archives do not reveal live doors or actors. [Route validation](docs/ROUTE_REJECTION_AUDIT.md) records working detours and remaining limits.
 
@@ -33,7 +33,7 @@ Routing is an opt-in. A line appears only after collision checks approve it; a g
 
 ### Named mobs, raid sources and complete loot
 
-**Zone & loot** separates Normal Zone and Raid Zone sources, with red **Raid Zone** intel shown first. Search by mob or item, filter for your classes, and use **Show More** for all matching drops. Class-filtered loot excludes statless and weight-only records. A logged consider or named kill selects and expands its row with a mild visual/audio cue, without activating the window.
+**Zone & loot** separates Normal Zone and Raid Zone sources, with red **Raid Zone** intel shown first. **Item Level Slider** and **My Class** stay anchored above the scrolling list. Hover or keyboard-focus a mob name for Details, Route, Copy /waypoint, Wiki and Map. Its Map action opens a first-person preview at that source, keeping your logged position unchanged. Use **Show More** for all matching drops. Class-filtered loot excludes statless and weight-only records. A logged consider or named kill selects and expands its row with a mild visual/audio cue, without activating the window.
 
 Item details use local wiki icons and Item Level Slider rules. **Through era** includes items through the chosen era. Activating a located NPC name copies a paste-ready `/waypoint Y X [Z]`; row-level Route actions start navigation when routing is enabled.
 

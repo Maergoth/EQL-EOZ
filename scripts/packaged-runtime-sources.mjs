@@ -10,6 +10,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/whats-new.js',
     'app/whats-new.css',
     'app/map-overlay.js',
+    'app/map-overlay-3d.js',
     'app/map-overlay-data.js',
     'app/timer-alerts.js',
     'app/wiki-discovery.js',
@@ -28,6 +29,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/overlay-session.js',
     'app/overlay-controller.js',
     'app/overlay.html',
+    'app/overlay-map.html',
     'app/overlay.css',
     'app/overlay.js',
     'app/item-browse.js',
@@ -46,6 +48,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/recast-route-client.js',
     'app/recast-route-engine.js',
     'app/zoneviewer/viewer.html',
+    'app/zoneviewer/overlay-mode.js',
     'app/zoneviewer/ZoneViewerApp.js',
     'app/zoneviewer/zone-parser.worker.js',
     'app/zoneviewer/navigation.worker.js',
@@ -55,6 +58,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'desktop/preload.cjs',
     'desktop/app-updater.cjs',
     'desktop/overlay-host.cjs',
+    'desktop/overlay-map-policy.cjs',
     'desktop/overlay-preload.cjs'
 ]);
 
