@@ -28,7 +28,7 @@ try {
         meta:{ schemaVersion:3, version:'native-overlay-synthetic', currentEra:'Classic', sample:true },
         zones:[{ name:'Mistmoore Castle', viewerName:'Mistmoore Castle', aliases:['mistmoore', 'The Castle of Mistmoore'] }],
         npcs:[...[false,true].map(raidInstance => ({name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance,avgLevel:26,levelMin:26,levelMax:26,era:'Classic',loc:raidInstance ? [30,20,50] : [10,20,0]})),{name:'Unknown Elevation Watcher',zone:'Mistmoore Castle',avgLevel:30,levelMin:30,levelMax:30,era:'Classic',loc:[60,40]}],
-        items:[...Array.from({length:12},(_,index) => ({name:`Synthetic Charm ${index + 1}`,era:'Classic',classes:['MNK','SHM','BER'],slots:['NECK'],stats:{HP:index + 1},iconId:'fixture',dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false}]})),
+        items:[...Array.from({length:12},(_,index) => ({name:`Synthetic Charm ${index + 1}`,era:'Classic',classes:['MNK','SHM','BER'],slots:['NECK'],stats:{HP:index + 1},iconId:'fixture',dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false},...(index===0 ? [{name:'Unknown Elevation Watcher',zone:'Mistmoore Castle',raidInstance:false}] : [])]})),
             ...Array.from({length:2},(_,index) => ({name:`Raid Charm ${index + 1}`,era:'Classic',classes:['MNK','SHM','BER'],slots:['NECK'],stats:index ? {HP:51} : {HP:50,...Object.fromEntries(Array.from({length:23},(_,stat)=>[`FIXTURE_STAT_${stat}`,stat+1]))},displayLines:index ? [] : Array.from({length:12},(_,line)=>`Synthetic display line ${line+1}: detailed item restrictions for the scrollable stat-block fixture.`),notes:index ? '' : 'Synthetic long item note. '.repeat(45),iconId:'fixture',dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true}]})),
             {name:'Synthetic Wayfarer Ring',era:'Classic',classes:['MNK','SHM','BER'],slots:['FINGER'],stats:{HP:2},dropSources:[{name:'Unknown Elevation Watcher',zone:'Mistmoore Castle'}]},
             ...['Classic','Kunark','Velious'].map(era => ({name:`Era fixture ${era}`,era,classes:['MNK','SHM','BER'],slots:['FINGER'],stats:{HP:1},dropSources:[]}))],
@@ -219,21 +219,46 @@ try {
             await screenshot(panels().intel,'intel-raid-collapsed');
             await execute(panels().intel, () => {const search=document.querySelector('#intel-search');search.value='';search.dispatchEvent(new Event('input'));document.querySelector('[data-intel-section-toggle="raid"]').click();});
             const intelWindow=panels().intel,intelOriginalBounds=intelWindow.getBounds();
+            const inactiveFocus=await execute(intelWindow,()=>{
+                const events=[],record=event=>events.push({type:event.type,action:event.target.dataset?.npcAction||'',trusted:event.isTrusted});
+                for(const type of ['focus','focusin'])document.addEventListener(type,record,true);
+                const name=document.querySelector('.npc-name');name.focus();const map=name.closest('.npc-summary').querySelector('[data-npc-action="map"]');map.focus();
+                const result={hasFocus:document.hasFocus(),activeAction:document.activeElement?.dataset?.npcAction||'',events};
+                map.blur();for(const type of ['focus','focusin'])document.removeEventListener(type,record,true);return result;
+            });
+            console.log('EOZ_INTEL_INACTIVE_FOCUS='+JSON.stringify(inactiveFocus));
+            // activeElement alone is insufficient in a hidden native window:
+            // native focus/focusin delivery requires an active document. Use
+            // the same explicit isolated-window activation as the Map Tab test.
+            showNativeInactive.call(intelWindow);intelWindow.focus();
+            await until(async()=>execute(intelWindow,()=>document.hasFocus()),'Native Intel keyboard geometry uses the active CI document');
             for(const width of [260,520])for(const fontScale of [1,1.3]){
                 intelWindow.setSize(width,intelOriginalBounds.height);await action('intel','font-scale',fontScale);
                 await until(async()=>execute(intelWindow,fontScale=>Number(getComputedStyle(document.documentElement).getPropertyValue('--font-scale'))===fontScale,fontScale),'Intel text scale settles');
-                const geometry=await execute(intelWindow,()=>{
+                const enabledActions=await execute(intelWindow,()=>{
                     const list=document.querySelector('#intel-body'),summary=list.querySelector('.npc-summary'),name=summary.querySelector('.npc-name'),actions=summary.querySelector('.row-actions'),outside=document.querySelector('.intel-controls');
                     document.activeElement?.blur();summary.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:outside}));
                     summary.scrollIntoView({block:'nearest',inline:'nearest'});
                     const measure=()=>({height:list.scrollHeight,summary:summary.getBoundingClientRect().toJSON(),heading:summary.querySelector('.npc-heading').getBoundingClientRect().toJSON(),drops:summary.nextElementSibling.getBoundingClientRect().toJSON()});
                     const before=measure();name.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse'}));const after=measure(),bar=actions.getBoundingClientRect().toJSON();
-                    const map=actions.querySelector('[data-npc-action="map"]');map.focus();const button=map.getBoundingClientRect().toJSON(),strip=actions.getBoundingClientRect().toJSON();
-                    const focused=document.activeElement===map,scroll={scrollLeft:actions.scrollLeft,scrollWidth:actions.scrollWidth,clientWidth:actions.clientWidth,clientLeft:actions.clientLeft};
-                    const details=actions.querySelector('[data-npc-action="details"]');details.focus();const first=details.getBoundingClientRect().toJSON();map.focus();
-                    return{before,after,bar,button,strip,first,scroll,display:getComputedStyle(actions).display,position:getComputedStyle(actions).position,focused};
+                    name.focus();window.__intelGeometry={before,after,bar};
+                    return[...actions.querySelectorAll('[data-npc-action]:not(:disabled)')].map(button=>button.dataset.npcAction);
                 });
+                for(const action of enabledActions){
+                    intelWindow.webContents.sendInputEvent({type:'keyDown',keyCode:'Tab'});intelWindow.webContents.sendInputEvent({type:'keyUp',keyCode:'Tab'});
+                    await until(async()=>execute(intelWindow,action=>document.activeElement?.dataset?.npcAction===action,action),`Native Tab reaches ${action}`);
+                }
+                const geometry=await execute(intelWindow,()=>{
+                    const map=document.activeElement,actions=map.closest('.row-actions');
+                    return{...window.__intelGeometry,button:map.getBoundingClientRect().toJSON(),strip:actions.getBoundingClientRect().toJSON(),scroll:{scrollLeft:actions.scrollLeft,scrollWidth:actions.scrollWidth,clientWidth:actions.clientWidth,clientLeft:actions.clientLeft},hasFocus:document.hasFocus(),display:getComputedStyle(actions).display,position:getComputedStyle(actions).position,focused:map.dataset.npcAction==='map'};
+                });
+                for(const action of enabledActions.slice(0,-1).reverse()){
+                    intelWindow.webContents.sendInputEvent({type:'keyDown',keyCode:'Tab',modifiers:['shift']});intelWindow.webContents.sendInputEvent({type:'keyUp',keyCode:'Tab',modifiers:['shift']});
+                    await until(async()=>execute(intelWindow,action=>document.activeElement?.dataset?.npcAction===action,action),`Native Shift+Tab returns to ${action}`);
+                }
+                geometry.first=await execute(intelWindow,()=>document.activeElement.getBoundingClientRect().toJSON());
                 const detail=JSON.stringify({width,fontScale,...geometry});
+                assert(geometry.hasFocus,`Native keyboard geometry must receive real document focus: ${detail}`);
                 assert.equal(geometry.position,'absolute',`Actions overlay the mob-name row: ${detail}`);
                 assert.deepEqual(geometry.before,geometry.after,`Tier 7 hover never changes list height, mob geometry or drop position: ${detail}`);
                 assert(geometry.bar.top>=geometry.after.heading.top-1&&geometry.bar.bottom<=geometry.after.heading.bottom+1,`Action strip stays inside the original name row: ${detail}`);
@@ -283,6 +308,7 @@ try {
             assert.equal(await execute(panels().intel, () => document.querySelectorAll('.npc-row').length),0);
             await append(['Synthetic Keeper scowls at you (Lvl: 26)']);
             await until(async () => execute(panels().intel, () => document.querySelector('#intel-search').value === '' && Boolean(document.querySelector('.npc-row.is-focused'))),'new named consider reveals a target hidden by a local search');
+            intelWindow.hide();
             const mapData = await action('map','session:map-data',{zone:'Mistmoore Castle'});
             assert.equal(mapData.status,'ready'); assert.equal(mapData.lines.length,5); assert.equal(mapData.labels.length,1);
             await until(async () => execute(panels().map, () => document.querySelector('.native-map-note')?.textContent.includes('Default maps')),'native canvas draws local map layers');
@@ -507,7 +533,7 @@ try {
                 document.addEventListener('pointerover',event=>{const target=event.target.closest?.('[data-item-title]');if(target)window.__mainItemPointer.push({name:target.dataset.itemTitle,trusted:event.isTrusted});},true);
                 const search=document.querySelector('#item-search');search.value='Synthetic Charm 1';search.dispatchEvent(new Event('input'));
             });
-            const mainHover = async selector => {
+            const mainHover = async (selector,expectedItem='') => {
                 const target=await execute(owner,selector=>{
                     const target=document.querySelector(selector);
                     if(!target)throw new Error(`Missing main item hover surface: ${selector}`);
@@ -515,6 +541,7 @@ try {
                     const rect=target.getBoundingClientRect(),identity=target.closest('[data-item-title]');window.__mainItemPointer=[];
                     return{x:Math.round(rect.left+Math.min(8,rect.width/2)),y:Math.round(rect.top+rect.height/2),name:identity.dataset.itemTitle,tag:target.tagName};
                 },selector);
+                if(expectedItem)assert.equal(target.name,expectedItem);
                 owner.webContents.sendInputEvent({type:'mouseMove',x:5,y:5});
                 owner.webContents.sendInputEvent({type:'mouseMove',x:target.x,y:target.y});
                 await until(async()=>execute(owner,name=>{const tooltip=document.querySelector('#item-tooltip');return !tooltip.hidden&&tooltip.querySelector('.itembox-title>span')?.textContent===name&&window.__mainItemPointer.some(event=>event.trusted&&event.name===name);},target.name),`Trusted main hover exposes stats from ${selector}`);
@@ -537,8 +564,22 @@ try {
             const mainNpcName=await mainHover('#npc-list .known-drops .known-drop-name');
             const mainNpcIcon=await mainHover('#npc-list .known-drops img.known-drop-icon');
             assert.equal(mainNpcName.name,mainNpcIcon.name);assert(mainNpcName.stats>0&&mainNpcIcon.stats>0&&/^https?:/.test(mainNpcName.href||''),'NPC loot names and pictures both expose real local stats while preserving their Wiki link');
+            owner.focus();await until(async()=>execute(owner,()=>document.hasFocus()),'Main keyboard hover checks use the active CI document');
             await execute(owner,()=>{const target=document.querySelector('#npc-list .known-drops [data-item-title]');target.focus();});
             assert.equal(await execute(owner,()=>!document.querySelector('#item-tooltip').hidden&&document.activeElement.dataset.itemTitle===document.querySelector('#item-tooltip .itembox-title>span').textContent),true,'Main NPC loot remains available to keyboard focus');
+            await execute(owner,()=>{document.activeElement?.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));const search=document.querySelector('#npc-search');search.value='';search.dispatchEvent(new Event('input'));});
+            const duplicateSelector='#npc-list [data-item-tooltip-source*="unknown elevation watcher"] [data-item-title="Synthetic Charm 1"] .known-drop-name';
+            const duplicateHover=await mainHover(duplicateSelector,'Synthetic Charm 1');
+            await execute(owner,()=>{window.__oldDuplicate=document.querySelector('#npc-list [data-item-tooltip-source*="unknown elevation watcher"] [data-item-title="Synthetic Charm 1"]');});
+            await append(['Unknown Elevation Watcher hits YOU for 1 point of damage.']);
+            await until(async()=>execute(owner,()=>!window.__oldDuplicate.isConnected),'A real NPC damage update replaces the old loot markup');
+            assert.equal(await execute(owner,point=>{const target=document.elementFromPoint(point.x,point.y)?.closest('[data-item-title]');return target?.dataset.itemTitle==='Synthetic Charm 1'&&!document.querySelector('#item-tooltip').hidden;},duplicateHover),true,'A changed NPC redraw keeps the tooltip tied to the actual duplicate under the pointer');
+            await execute(owner,()=>{const search=document.querySelector('#npc-search');search.value='Synthetic Keeper';search.dispatchEvent(new Event('input'));});
+            assert.equal(await execute(owner,()=>document.querySelector('#item-tooltip').hidden),true,'Removing the hovered NPC hides its tooltip even though another NPC still drops the same item');
+            await execute(owner,()=>{const search=document.querySelector('#npc-search');search.value='';search.dispatchEvent(new Event('input'));const target=document.querySelector('#npc-list [data-item-tooltip-source*="unknown elevation watcher"] [data-item-title="Synthetic Charm 1"]');target.focus();window.__oldFocusedDrop=target;});
+            await append(['Unknown Elevation Watcher hits YOU for 2 points of damage.']);
+            await until(async()=>execute(owner,()=>!window.__oldFocusedDrop.isConnected),'A second real NPC redraw replaces the focused loot link');
+            assert.equal(await execute(owner,()=>{const target=document.activeElement;return target?.dataset.itemTitle==='Synthetic Charm 1'&&target.closest('[data-item-tooltip-source]')?.dataset.itemTooltipSource.includes('unknown elevation watcher')&&!document.querySelector('#item-tooltip').hidden;}),true,'Keyboard focus restores the exact NPC occurrence instead of jumping to another copy of its drop');
             await screenshot(owner,'main-item-hover');
             await execute(owner,()=>{document.activeElement?.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));document.querySelector('[data-view="items"]').click();const search=document.querySelector('#item-search');search.value='';search.dispatchEvent(new Event('input'));});
             owner.hide();
@@ -624,7 +665,7 @@ try {
             assert.deepEqual(split.timers.timers.map(({id,expiresAt})=>({id,expiresAt})),deadlines,'Manual session splits preserve all running trigger IDs/deadlines');
             await append(['You slash a synthetic skeleton for 9 points of damage.']);
             await until(async()=>(await state()).snapshot.session.parse.totalDamage===9,'Only newly appended log lines enter the split session');
-            return { ok:true, windows:ids.length, damage:9, timers:split.timers.timers.length, sharedSession:true, screenshots };
+            return { ok:true, windows:ids.length, damage:9, timers:split.timers.timers.length, sharedSession:true, inactiveFocus, screenshots };
         };
         let started = false;
         app.on('browser-window-created', () => { if (!started) { started = true; void inspect().then(result => { console.log('EOZ_NATIVE_OVERLAY_SMOKE=' + JSON.stringify(result)); app.exit(0); }).catch(error => { console.error(error.stack); app.exit(1); }); } });

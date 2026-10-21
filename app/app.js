@@ -50,6 +50,7 @@ let discoveryInNative = false;
 let mapDataRevision = 0;
 let activeTooltipItem = null;
 let activeTooltipTarget = null;
+let activeTooltipMode = '';
 let lastTooltipPointer = null;
 let activeRoute = null;
 let routeRefreshTimer = null;
@@ -269,6 +270,21 @@ function itemHoverAttrs(itemOrName, extraClass = '') {
 function itemIconHtml(item) {
     const icon = itemIconSource(item);
     return `<span ${itemHoverAttrs(item,'item-card-icon')} role="img" aria-label="${esc(`Stats for ${item.name}`)}">${icon ? `<img src="${esc(icon)}" alt="">` : '◇'}</span>`;
+}
+function itemHoverIdentity(target) {
+    if (!target?.dataset?.itemTitle) return '';
+    return JSON.stringify([target.dataset.itemTitle,target.closest('[data-item-tooltip-source]')?.dataset.itemTooltipSource || '',target.classList.contains('item-card-icon') ? 'icon' : target.tagName]);
+}
+function replaceItemList(host,markup) {
+    if (renderedItemLists.get(host) === markup) return false;
+    const focused = document.activeElement?.closest?.('[data-item-title]');
+    const focusKey = focused && host.contains(focused) ? itemHoverIdentity(focused) : '';
+    host.innerHTML = markup; renderedItemLists.set(host,markup);
+    if (focusKey) {
+        const next = [...host.querySelectorAll('[data-item-title]')].find(target => itemHoverIdentity(target) === focusKey);
+        if (next) next.focus({preventScroll:true}); else hideItemTooltip();
+    }
+    return true;
 }
 
 function itemMatchesProfile(item, profile) {
@@ -1044,6 +1060,7 @@ function showItemTooltip(target, event) {
     if (!item || !tooltip) { hideItemTooltip(); return; }
     activeTooltipItem = item;
     activeTooltipTarget = target;
+    activeTooltipMode = Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY) ? 'pointer' : 'focus';
     const rect = target.getBoundingClientRect();
     lastTooltipPointer = Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
         ? { clientX:event.clientX, clientY:event.clientY }
@@ -1056,15 +1073,14 @@ function showItemTooltip(target, event) {
 function refreshItemTooltip() {
     const tooltip = $('#item-tooltip');
     if (!activeTooltipItem || !tooltip || tooltip.hidden) return;
-    activeTooltipItem = itemRecord(activeTooltipItem.name);
+    // A changed list may reorder rows or contain duplicate drops. Resolve the
+    // actual pointer/focus surface, never another occurrence of the old name.
+    const target = activeTooltipMode === 'pointer'
+        ? document.elementFromPoint(lastTooltipPointer?.clientX,lastTooltipPointer?.clientY)?.closest?.('[data-item-title]')
+        : document.activeElement?.closest?.('[data-item-title]');
+    if (!target?.closest('.view.is-active')) { hideItemTooltip(); return; }
+    activeTooltipItem = itemRecord(target.dataset.itemTitle); activeTooltipTarget = target;
     if (!activeTooltipItem) { hideItemTooltip(); return; }
-    // Log updates can replace a visible list without a physical pointer move.
-    // Rebind the same local item instead of retaining a detached hover target.
-    if (!activeTooltipTarget?.isConnected || !activeTooltipTarget.closest('.view.is-active')) {
-        activeTooltipTarget = [...document.querySelectorAll('.view.is-active [data-item-title]')].find(target =>
-            itemRecord(target.dataset.itemTitle) === activeTooltipItem && target.getClientRects().length);
-        if (!activeTooltipTarget) { hideItemTooltip(); return; }
-    }
     tooltip.innerHTML = tooltipHtml(activeTooltipItem);
     if (lastTooltipPointer) positionTooltip(lastTooltipPointer);
 }
@@ -1074,6 +1090,7 @@ function hideItemTooltip() {
     if (tooltip) tooltip.hidden = true;
     activeTooltipItem = null;
     activeTooltipTarget = null;
+    activeTooltipMode = '';
     lastTooltipPointer = null;
 }
 
@@ -1100,7 +1117,7 @@ function renderNpcList(s, profile) {
             itemBrowsePriority(right, s.zone) - itemBrowsePriority(left, s.zone)
         ).slice(0, 4);
         const worldLocation = wikiLocationToWorld(n.loc);
-        return `<article class="data-card npc-card npc-con-${con.key}">
+        return `<article class="data-card npc-card npc-con-${con.key}" data-item-tooltip-source="${esc(intelIdentity(n))}">
             <div class="card-top">
                 <div><h3>${waypointNameControl(n.name, worldLocation)}</h3><div class="sub">${esc(n.zone || 'Unknown zone')}</div></div>
                 <span class="pill ${conClass(con.key)}">${esc(con.label)}</span>
@@ -1122,8 +1139,7 @@ function renderNpcList(s, profile) {
         markup += `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`;
     }
     const host = $('#npc-list');
-    if (renderedItemLists.get(host) !== markup) {
-        host.innerHTML = markup; renderedItemLists.set(host,markup);
+    if (replaceItemList(host,markup)) {
         bindPathButtons(host); bindWaypointButtons(host);
     }
     refreshItemTooltip();
@@ -1157,7 +1173,7 @@ function renderItems(s, profile) {
     let markup = visible.map(item => {
         const stats = scaledItemStats(item, tier);
         const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
-        return `<article class="data-card">
+        return `<article class="data-card" data-item-tooltip-source="${esc(`item:${item.wikiTitle || item.name}`)}">
             <div class="card-top">
                 <div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}${tier ? ` · Tier ${tier}` : ''}</div></div></div>
                 <span class="pill">${esc(item.era || '')}</span>
@@ -1176,8 +1192,7 @@ function renderItems(s, profile) {
         markup += `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`;
     }
     const host = $('#item-list');
-    if (renderedItemLists.get(host) !== markup) {
-        host.innerHTML = markup; renderedItemLists.set(host,markup);
+    if (replaceItemList(host,markup)) {
         bindPathButtons(host);
         host.querySelector('[data-broaden-items]')?.addEventListener('click', () => {
             itemZoneFilterExplicit = true;
@@ -2069,7 +2084,7 @@ function wireUi() {
     document.addEventListener('pointermove', event => {
         const target = event.target.closest?.('[data-item-title]');
         if (target && (activeTooltipTarget !== target || !activeTooltipItem)) showItemTooltip(target,event);
-        if (activeTooltipItem) lastTooltipPointer = { clientX:event.clientX, clientY:event.clientY };
+        if (activeTooltipItem && activeTooltipMode === 'pointer') lastTooltipPointer = { clientX:event.clientX, clientY:event.clientY };
         positionTooltip(event);
     });
     document.addEventListener('pointerout', event => {

@@ -375,8 +375,8 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     // Focusing a button can reveal its previously hidden strip after Chromium
     // has chosen a native focus scroll. Settle layout, then reveal its full
     // bounds within this horizontal scroller without moving the mob list.
-    listen($('#intel-body'),'focusin',event => {
-        const button = event.target.closest?.('[data-npc-action]'), strip = button?.closest('.row-actions');
+    function revealIntelAction(button) {
+        const strip = button?.closest('.row-actions');
         if (!strip) return;
         for (let pass = 0; pass < 2; pass++) {
             const viewport = strip.getBoundingClientRect(), bounds = button.getBoundingClientRect();
@@ -385,6 +385,13 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             if (!delta) break;
             strip.scrollLeft = Math.max(0,Math.min(strip.scrollWidth - strip.clientWidth,strip.scrollLeft + delta));
         }
+    }
+    listen($('#intel-body'),'focusin',event => {
+        const button = event.target.closest?.('[data-npc-action]'); if (!button) return;
+        revealIntelAction(button);
+        // Keep the measured correction after the browser completes its own
+        // focusing steps as well as during the synchronous focus event.
+        queueMicrotask(() => { if (!disposed && document.activeElement === button) revealIntelAction(button); });
     });
     listen($('#intel-body'),'pointerover',event => { const target = event.target.closest?.('[data-item-hover]'); if (target) showItemTooltip(target,event); });
     listen($('#intel-body'),'pointermove',event => { const target = event.target.closest?.('[data-item-hover]'); if (target && activeItemTooltip) { activeItemTooltip.point = {clientX:event.clientX,clientY:event.clientY}; positionItemTooltip(target,event); } });
