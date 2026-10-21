@@ -7,15 +7,23 @@ import {basename,dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 // CI integration proof for the real native Map/iframe/WebGL/camera boundary.
-// Only archive setup is substituted, using a clearly synthetic plane assembled
-// from constructors in the shipped viewer. No proprietary archive is decoded,
-// no installed profile is read, and no local game/player file is required.
+// Real configured-folder indexing, S3D/EQG source hydration and the shipped
+// parser Worker read synthetic empty PFS archives first. Only geometry parsing
+// and display are then substituted for camera assertions; these empty archives
+// deliberately have no zone WLD. No installed profile/game files are required.
 const root=fileURLToPath(new URL('../',import.meta.url)),require=createRequire(import.meta.url),electron=require('electron');
 const temporary=await mkdtemp(join(tmpdir(),'eoz-map-3d-smoke-'));
 try{
     const profile=join(temporary,'profile'),game=join(temporary,'synthetic-game'),log=join(game,'Logs','eqlog_Fixture_Test.txt');
     await mkdir(join(profile,'data'),{recursive:true});await mkdir(join(game,'Maps'),{recursive:true});await mkdir(join(game,'Logs'),{recursive:true});
     await writeFile(join(game,'Maps','mistmoore.txt'),'L -200,-200,12,200,-200,12,180,190,210\nL 200,-200,12,200,200,12,180,190,210\nP -80,-100,12,216,183,92,2,Synthetic_Keeper\n');
+    // A valid PFS header with an empty directory: synthetic, no game content.
+    const emptyPfs=Buffer.alloc(16);emptyPfs.writeUInt32LE(12,0);emptyPfs.write('PFS ',4,'ascii');emptyPfs.writeUInt32LE(0x20000,8);
+    for(const name of ['mistmoore.s3d','mistmoore.eqg','eozsynthetic.eqg'])await writeFile(join(game,name),emptyPfs);
+    await writeFile(join(game,'mp3index.txt'),'1,synthetic-silence.mp3\r\n');
+    await writeFile(join(game,'mistmoore_assets.txt'),'eozsynthetic.eqg\r\n');
+    await writeFile(join(game,'mistmoore_private.txt'),'Synthetic unrelated root text must not enter the zone source.\n');
+    await writeFile(join(game,'mistmoore_chr.txt'),'Synthetic unused character-list text.\n');
     await writeFile(log,`[${new Date().toISOString()}] Synthetic 3D boundary smoke begins.\n`);
     await symlink(join(game,'Logs'),join(game,'Maps','Linked'),'junction');
     await writeFile(join(profile,'eye-of-zomm-config.json'),JSON.stringify({eqRootPath:game,logPath:log,logSelection:'manual'}));
@@ -73,20 +81,47 @@ try{
                     main:typeof window.eyeOfZommOverlays,updater:typeof window.eyeOfZommUpdates,native:typeof window.eyeOfZommOverlay,window:typeof window.eyeOfZommWindow,require:typeof window.require};
             });
             assert.deepEqual(policy,{info:true,log:true,rawLog:true,mutation:true,manifest:true,map:true,linkedLogDenied:true,junctionOmitted:true,main:'undefined',updater:'undefined',native:'undefined',window:'undefined',require:'undefined'},'The real child partition allows maps while denying private/mutation APIs, canonical junction escapes and native preloads');
+            const hydrated=await childExecute(async()=>{
+                const app=window.eqlZoneViewer,api=window.eqlEyeOfZommViewer;
+                const configured=await api.useConfiguredFolder();
+                if(!configured.ok)throw Error('Real configured-folder restoration failed: '+configured.reason);
+                const s3d=app.zones.find(record=>record.id==='mistmoore'&&record.format==='S3D');
+                const eqg=app.zones.find(record=>record.id==='mistmoore'&&record.format==='EQG');
+                if(!s3d||!eqg)throw Error('The real folder index did not identify both synthetic archive formats.');
+                const first=await app.source.filesForZone(s3d),second=await app.source.filesForZone(eqg);
+                const summarize=async files=>Promise.all(files.map(async file=>({name:file.name,native:file instanceof File,
+                    text:/\.txt$/i.test(file.name)?await file.text():null,bytes:(await file.arrayBuffer()).byteLength})));
+                // Exercise structured cloning and the actual shipped parser,
+                // whose honest result is no geometry for this empty archive.
+                const workerResult=await new Promise((resolve,reject)=>{
+                    const worker=new Worker('./zone-parser.worker.js'),progress=[];
+                    const timeout=setTimeout(()=>{worker.terminate();reject(Error('Synthetic PFS Worker timed out.'));},10000);
+                    worker.onmessage=event=>{const value=event.data||{};if(value.type==='progress')progress.push(value.message);
+                        if(value.type==='error'||value.type==='complete'){clearTimeout(timeout);worker.terminate();resolve({type:value.type,message:value.message||'',progress});}};
+                    worker.onerror=event=>{clearTimeout(timeout);worker.terminate();reject(Error(event.message||'Synthetic PFS Worker failed.'));};
+                    worker.postMessage({id:845,action:'parse',zone:'mistmoore',format:'S3D',files:first});
+                });
+                return{source:configured.source,s3d:await summarize(first),eqg:await summarize(second),worker:workerResult,
+                    excluded:!app.source.files.has('mistmoore_private.txt')&&!app.source.files.has('mistmoore_chr.txt')};
+            });
+            assert.equal(hydrated.source,'settings','The smoke must restore the actual configured folder, not replace the API');
+            assert.deepEqual(hydrated.s3d.map(file=>file.name).sort(),['mistmoore.s3d','mp3index.txt']);
+            assert.deepEqual(hydrated.eqg.map(file=>file.name).sort(),['eozsynthetic.eqg','mistmoore.eqg','mistmoore_assets.txt','mp3index.txt']);
+            assert(hydrated.s3d.concat(hydrated.eqg).every(file=>file.native&&file.bytes>0),'Actual source hydration reads native cloneable File bytes over the restricted bridge');
+            assert.equal(hydrated.s3d.find(file=>file.name==='mp3index.txt').text,'1,synthetic-silence.mp3\r\n');
+            assert.equal(hydrated.eqg.find(file=>file.name==='mistmoore_assets.txt').text,'eozsynthetic.eqg\r\n');
+            assert.equal(hydrated.excluded,true,'Zone-prefixed private/unused root text cannot be swept into EQG hydration');
+            assert.equal(hydrated.worker.type,'error');assert.match(hydrated.worker.message,/The parser did not produce a zone GLB/);
+            assert(hydrated.worker.progress.some(message=>message==='Decoding mistmoore (S3D)…'),'The real parser Worker receives hydrated source files before reporting the expected empty-archive result');
             await childExecute(()=>{
                 const app=window.eqlZoneViewer,api=window.eqlEyeOfZommViewer,V=app.perspective.position.constructor;
                 window.syntheticFocusResults=[];
                 const focus=api.focusAtLocation.bind(api);
                 api.focusAtLocation=(...args)=>{const result=focus(...args);window.syntheticFocusResults.push(result);return result;};
                 const select=api.setOverlaySelection.bind(api);api.setOverlaySelection=id=>{window.syntheticSelection=id;return select(id);};
-                // Substitute only folder/archive setup. Cameras, FP controls,
-                // projection, ray-grounding, clipping and adapter methods stay real.
-                api.useConfiguredFolder=async()=>({ok:true,source:'synthetic-fixture'});
-                const record={id:'mistmoore',format:'S3D',name:'Synthetic plane (no archive)',synthetic:true};
-                app.zones=[record];app.source={filesForZone:async()=>[{name:'synthetic-plane.s3d'}],signature:()=> 'synthetic-plane-no-archive'};
-                app.els.zoneSelect.replaceChildren(new Option('Choose synthetic zone',''),new Option('Mistmoore Castle','S3D:mistmoore'));app.els.zoneSelect.disabled=false;app.els.zoneSelect.value='S3D:mistmoore';
+                // Keep real folder restoration, zone selection, maps and lazy
+                // archive reads. Substitute geometry only for camera checks.
                 app.cache.get=async()=>null;app.cache.set=async()=>{};app.cache.clearPrefix=async()=>{};
-                app.loadLocalMapData=async()=>({sourceLabel:'Synthetic test map',points:[],lines:[{x1:-200,y1:-200,z1:12,x2:200,y2:-200,z2:12,r:180,g:190,b:210,layer:0}]});
                 app.parse=async()=>({objects:{},textures:{},stats:{},synthetic:true});
                 // Leave api.loadZone and its real zone-ready guard intact so
                 // last-logged HUD/route state follows the normal loaded identity.
@@ -104,7 +139,7 @@ try{
                         app.fp.setScene(app.scene);app.requestRender();
                 };
             });
-            await until(()=>childExecute(()=>window.eqlZoneViewer.currentZoneRecord?.synthetic&&window.eqlZoneViewer.mode==='top'),'real Top camera on synthetic geometry');
+            await until(()=>childExecute(()=>window.eqlZoneViewer.currentZoneRecord?.id==='mistmoore'&&window.eqlZoneViewer.zoneGroup.getObjectByName('synthetic-ci-plane-not-an-archive')&&window.eqlZoneViewer.mode==='top'),'real Top camera on synthetic geometry');
             const top=await childExecute(()=>{const app=window.eqlZoneViewer;app.renderer.render(app.scene,app.camera);return{mode:app.mode,webgl:app.renderer.getContext().getParameter(app.renderer.getContext().VERSION),lost:app.renderer.getContext().isContextLost(),triangles:app.renderer.info.render.triangles,canvas:app.renderer.domElement instanceof HTMLCanvasElement};});
             assert(top.canvas&&!top.lost&&/WebGL/.test(top.webgl)&&top.triangles>=2,'Actual shipped WebGL renderer draws the synthetic plane');
             await click('mode');await until(()=>childExecute(()=>window.eqlZoneViewer.mode==='first'),'real First Person mode');
@@ -134,7 +169,7 @@ try{
             await click('mode');await until(()=>Boolean(frame()),'new lazy iframe after choosing Top');
             await control('hide','map');await until(()=>mainExecute(map,()=>!document.querySelector('.native-map-3d-frame')),'hiding Map unloads iframe');
             assert.equal((await state()).snapshot.sessionId,sessionId);assert.equal(owner.isDestroyed(),false);
-            console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,unknownHeightGrounded:true,resetAndHideUnload:true}));
+            console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,realConfiguredFolder:true,realS3dEqgHydration:true,realParserWorker:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,unknownHeightGrounded:true,resetAndHideUnload:true}));
             BrowserWindow.prototype.focus=originalFocus;app.exit(0);
         }
         app.on('browser-window-created',()=>{if(started)return;started=true;void inspect().catch(error=>{console.error(error.stack);app.exit(1);});});

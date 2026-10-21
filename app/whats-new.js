@@ -5,7 +5,7 @@ export const WHATS_NEW_STEPS = Object.freeze([
         copy:'The main app remembers its size, position and maximized state in a standard Windows frame. Choose Minimize to tray and Start minimized in Settings. A green Update available button appears in the header when a newer release is offered; Settings also links to the project on GitHub.',
         alt:'Eye of Zomm main workspace showing the current desktop layout and settings.',caption:'Current app capture with a disposable demonstration profile.'}),
     Object.freeze({title:'Keep the map in view',image:'map',view:'map',action:'Open Map',
-        copy:'Reveal the native Map header to Reset, Follow, zoom or cycle Map, Top and navigable First person in this window. Use the Z slider and tolerance to choose nearby floors; unknown-height markers stay visible. Monster names are interactive.',
+        copy:'Hover the zone-title row to reveal Reset, Follow, zoom and the Map, Top and navigable First person cycle beside its name. Use the separate grip to move an unlocked window. Z and tolerance choose nearby floors; unknown-height markers stay visible. Monster names are interactive.',
         alt:'Eye of Zomm native Map with its horizontal Z slice slider and nearby-floor controls.',caption:'The current native Map and its controls, using demonstration data.'}),
     Object.freeze({title:'Follow named mobs and their loot',image:'intel',view:'npcs',action:'Open NPCs',
         copy:'Item Level Slider and My Class stay above the scrolling list. Raid Zone comes first, with separate drops. Hover or focus a mob name for actions; its Map button previews that source in first person. Show More expands every matching drop.',

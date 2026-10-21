@@ -40,7 +40,7 @@ try {
     await writeFile(join(profile, 'eye-of-zomm-config.json'), JSON.stringify({ eqRootPath:game, logPath:log, logSelection:'manual' }));
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
     await writeFile(join(temporary, 'package.json'), JSON.stringify({ name:'eoz-native-overlay-smoke', version:pkg.version, main:'main.cjs' }));
-    const run = async ({ root, log, screenshots }) => {
+    const run = async ({ root, log, screenshots, fixtureUpdateVersion }) => {
         const electron = require('electron');
         const { app, BrowserWindow } = electron;
         const fs = require('node:fs/promises');
@@ -75,6 +75,7 @@ try {
         };
         // Keep test windows hidden. capturePage still paints the real renderer;
         // this does not test physical foreground-game compositing or focus.
+        const showNativeInactive=BrowserWindow.prototype.showInactive;
         BrowserWindow.prototype.show = () => {};
         BrowserWindow.prototype.showInactive = () => {};
         global.fetch = async () => { throw new Error('External network disabled for synthetic smoke'); };
@@ -227,11 +228,68 @@ try {
             await until(async () => execute(panels().map, () => document.querySelector('.native-map-note')?.textContent.includes('Default maps')),'native canvas draws local map layers');
             assert(await execute(panels().map, () => document.querySelector('canvas').width > 100 && document.querySelector('canvas').height > 100));
             assert.equal(await execute(panels().map, () => Boolean(document.querySelector('[data-map-action="fit"],[data-map-action="reload"]'))),false,'Reset replaces Fit and Reload');
-            panels().map.webContents.sendInputEvent({type:'mouseMove',x:150,y:200});
-            await execute(panels().map, () => document.activeElement?.blur());
-            await until(async () => execute(panels().map, () => getComputedStyle(document.querySelector('.native-map-tools')).maxHeight==='0px'),'Viewing the map canvas keeps header controls collapsed');
+            const mapWindow=panels().map,mapBoundsBeforeHeader=mapWindow.getBounds(),headerHoverCases=[];
+            // A DOM focus-only test missed Windows' native drag-region hover
+            // interception. Briefly show just this window without activation,
+            // then require acknowledged, trusted Electron mouse input over the
+            // actual zone title in both layout-lock states and window sizes.
+            showNativeInactive.call(mapWindow);
+            assert(mapWindow.isVisible(),'The header regression uses a real visible, nonactivating native Map window');
+            await execute(mapWindow, () => {
+                window.__eozHeaderPointer=[];
+                window.__eozHeaderPointerListener=event=>window.__eozHeaderPointer.push({type:event.type,key:event.key||'',id:event.target.id,action:event.target.dataset?.mapAction||'',trusted:event.isTrusted});
+                for(const type of ['pointerover','click','keydown'])document.addEventListener(type,window.__eozHeaderPointerListener);
+            });
+            try{
+                for(const width of [260,460])for(const locked of [false,true]){
+                    await action('map','lock',false);mapWindow.setSize(width,mapBoundsBeforeHeader.height);await action('map','lock',locked);
+                    await until(async () => execute(mapWindow,locked=>document.querySelector('#overlay').classList.contains('is-locked')===locked,locked),'Map layout lock reaches the native renderer');
+                    assert.equal(mapWindow.isMovable(),!locked,'The dedicated drag grip preserves unlocked native window movement');
+                    const outside=await execute(mapWindow,()=>{document.activeElement?.blur();const rect=document.querySelector('canvas').getBoundingClientRect();return{x:Math.round(rect.left+rect.width/2),y:Math.round(rect.bottom-30)};});
+                    mapWindow.webContents.sendInputEvent({type:'mouseMove',...outside});
+                    await until(async () => execute(mapWindow,()=>getComputedStyle(document.querySelector('.native-map-tools')).visibility==='hidden'),'Leaving the full header band collapses primary controls');
+                    const titlePoint=await execute(mapWindow,()=>{window.__eozHeaderPointer=[];const rect=document.querySelector('#overlay-title').getBoundingClientRect();return{x:Math.round(rect.left+6),y:Math.round(rect.top+rect.height/2)};});
+                    mapWindow.webContents.sendInputEvent({type:'mouseMove',...titlePoint});
+                    await until(async () => execute(mapWindow,()=>window.__eozHeaderPointer.some(event=>event.id==='overlay-title'&&event.trusted)&&getComputedStyle(document.querySelector('.native-map-tools')).visibility==='visible'),`Trusted title hover reveals controls at ${width}px, locked=${locked}`);
+                    const geometry=await execute(mapWindow,()=>{
+                        const header=document.querySelector('#overlay-header'),title=document.querySelector('#overlay-title'),tools=document.querySelector('.native-map-tools'),grip=document.querySelector('.native-map-drag-grip'),menu=document.querySelector('.hover-menu');
+                        const band=header.getBoundingClientRect(),name=title.getBoundingClientRect(),buttons=[...tools.querySelectorAll('button')].map(button=>({action:button.dataset.mapAction,...button.getBoundingClientRect().toJSON()}));
+                        return{band:band.toJSON(),title:name.toJSON(),tools:tools.getBoundingClientRect().toJSON(),menu:menu.getBoundingClientRect().toJSON(),buttons,titleRegion:getComputedStyle(title).webkitAppRegion,headerRegion:getComputedStyle(header).webkitAppRegion,gripRegion:getComputedStyle(grip).webkitAppRegion,ack:window.__eozHeaderPointer};
+                    });
+                    const details=JSON.stringify({width,locked,...geometry});
+                    assert(geometry.band.height>=36&&geometry.title.height>=36&&geometry.title.width>=28,`The full title band remains a usable hover target: ${details}`);
+                    assert.equal(geometry.headerRegion,'no-drag',`Header hover must reach Chromium: ${details}`);assert.equal(geometry.titleRegion,'no-drag',`Zone title must not be a native drag region: ${details}`);
+                    assert.equal(geometry.gripRegion,locked?'no-drag':'drag',`Only the unlocked grip owns native dragging: ${details}`);
+                    assert(geometry.buttons.every(button=>button.top>=geometry.title.top&&button.bottom<=geometry.title.bottom&&button.right<=geometry.menu.left+1),`Title and every primary control share one unclipped row: ${details}`);
+                    const last=geometry.buttons.at(-1),controlPoint={x:Math.round(last.left+last.width/2),y:Math.round(last.top+last.height/2)};
+                    mapWindow.webContents.sendInputEvent({type:'mouseMove',...controlPoint});
+                    await until(async () => execute(mapWindow,()=>window.__eozHeaderPointer.some(event=>event.action==='mode'&&event.trusted)&&getComputedStyle(document.querySelector('.native-map-tools')).visibility==='visible'),'Pointer can traverse from title to its same-row controls');
+                    const follow=geometry.buttons.find(button=>button.action==='follow'),followPoint={x:Math.round(follow.left+follow.width/2),y:Math.round(follow.top+follow.height/2)};
+                    mapWindow.webContents.sendInputEvent({type:'mouseMove',...followPoint});
+                    for(let click=0;click<2;click++){
+                        mapWindow.webContents.sendInputEvent({type:'mouseDown',...followPoint,button:'left',clickCount:1});
+                        mapWindow.webContents.sendInputEvent({type:'mouseUp',...followPoint,button:'left',clickCount:1});
+                    }
+                    await until(async () => execute(mapWindow,()=>window.__eozHeaderPointer.filter(event=>event.type==='click'&&event.action==='follow'&&event.trusted).length===2),'Trusted primary control clicks reach the window without becoming a drag');
+                    mapWindow.webContents.sendInputEvent({type:'mouseMove',...outside});
+                    assert.equal(await execute(mapWindow,()=>getComputedStyle(document.querySelector('.native-map-tools')).visibility),'visible','A short exit grace prevents accidental collapse while traversing controls');
+                    await until(async () => execute(mapWindow,()=>getComputedStyle(document.querySelector('.native-map-tools')).visibility==='hidden'),'A mouse-clicked primary control does not pin the header after pointer exit');
+                    headerHoverCases.push({width,locked,titleHover:true,sameRow:true,nativeDragGrip:true});
+                }
+                // This one keyboard case intentionally activates the isolated
+                // CI window. Pointer cases above used showInactive throughout.
+                mapWindow.focus();
+                await execute(mapWindow,()=>{window.__eozBodyTabindex=document.body.getAttribute('tabindex');document.body.tabIndex=-1;document.body.focus();});
+                mapWindow.webContents.sendInputEvent({type:'keyDown',keyCode:'Tab'});mapWindow.webContents.sendInputEvent({type:'keyUp',keyCode:'Tab'});
+                await until(async () => execute(mapWindow,()=>window.__eozHeaderPointer.some(event=>event.type==='keydown'&&event.key==='Tab'&&event.trusted)&&document.activeElement.id==='overlay-header'&&document.activeElement.matches(':focus-visible')&&getComputedStyle(document.querySelector('.native-map-tools')).visibility==='visible'),'Real Tab focus reveals controls and retains them while the pointer is outside the header');
+                await execute(mapWindow,()=>{if(window.__eozBodyTabindex===null)document.body.removeAttribute('tabindex');else document.body.setAttribute('tabindex',window.__eozBodyTabindex);delete window.__eozBodyTabindex;});
+            }finally{
+                await execute(mapWindow,()=>{for(const type of ['pointerover','click','keydown'])document.removeEventListener(type,window.__eozHeaderPointerListener);delete window.__eozHeaderPointerListener;delete window.__eozHeaderPointer;});
+                await action('map','lock',false);mapWindow.setBounds(mapBoundsBeforeHeader);mapWindow.hide();
+            }
+            assert.equal(headerHoverCases.length,4,'Native header input covers narrow/normal windows, each locked and unlocked');
             await execute(panels().map, () => document.querySelector('#overlay-header').focus());
-            await until(async () => execute(panels().map, () => document.querySelector('.native-map-tools').getBoundingClientRect().height>30),'Keyboard focus reveals the native header controls');
+            await until(async () => execute(panels().map, () => getComputedStyle(document.querySelector('.native-map-tools')).visibility==='visible'),'Keyboard focus reveals the same-row native header controls');
             assert.equal(await execute(panels().map, () => document.querySelector('#overlay-header').tabIndex),0,'Collapsed header retains a keyboard reachable handle');
             const slice = await execute(panels().map, () => {
                 const z=document.querySelector('[data-map-z]'),tolerance=document.querySelector('[data-map-tolerance]'),context=document.querySelector('canvas').getContext('2d'),arc=context.arc;
@@ -251,7 +309,8 @@ try {
             assert.deepEqual(await execute(panels().map,()=>({z:Number(document.querySelector('[data-map-z]').value),tolerance:Number(document.querySelector('[data-map-tolerance]').value)})),{z:50,tolerance:10},'Heartbeat snapshots preserve the selected Z and tolerance');
             await execute(panels().map, () => document.querySelector('[data-map-action="zoom-in"]').click());
             await execute(panels().map, () => document.activeElement?.blur());
-            await wait(100); // Allow header collapse to resize/repaint the real canvas before targeting its text.
+            await until(async () => execute(panels().map,()=>getComputedStyle(document.querySelector('.native-map-tools')).visibility==='hidden'),'Keyboard departure closes the header before targeting map text');
+            await wait(100); // Allow the Z row collapse to resize/repaint the real canvas before targeting its text.
             const labelHit = await execute(panels().map, () => {
                 const canvas=document.querySelector('canvas'),context=canvas.getContext('2d'),texts=[],markers=[];
                 const fillText=context.fillText,arc=context.arc;
@@ -390,24 +449,30 @@ try {
             await screenshot(owner, 'main-controller');
             // Tour/README media uses the real update presenter with a clearly
             // synthetic metadata offer. No download or installer is invoked.
-            await execute(owner, async () => {
+            await execute(owner, async fixtureUpdateVersion => {
                 const { mountAppUpdates } = await import('/app-update-ui.js');
                 window.__tourUpdatePresenter = mountAppUpdates({ bridge:{ getStatus:async () => ({
-                    supported:true, status:'available', availableVersion:'0.8.6',
-                    releaseUrl:'https://github.com/Maergoth/EQL-EOZ/releases/tag/v0.8.6'
+                    supported:true, status:'available', availableVersion:fixtureUpdateVersion,
+                    releaseUrl:`https://github.com/Maergoth/EQL-EOZ/releases/tag/v${fixtureUpdateVersion}`
                 }) } });
                 await window.__tourUpdatePresenter.refresh();
                 [...document.querySelectorAll('.settings-grid h2')].find(heading => heading.textContent === 'Window')
                     .closest('article').scrollIntoView({ block:'start' });
-            });
+            },fixtureUpdateVersion);
             await screenshot(owner, 'workspace');
             await execute(owner, () => { window.__tourUpdatePresenter.dispose(); delete window.__tourUpdatePresenter; });
             await execute(owner, () => document.querySelector('[data-view="timers"]').click());
             await screenshot(owner, 'main-timers');
             for (const [name, window] of Object.entries(panels())) {
-                if(name==='map')await execute(window, () => document.querySelector('#overlay-header').focus());
+                if(name==='map'){
+                    showNativeInactive.call(window);
+                    const point=await execute(window,()=>{const rect=document.querySelector('#overlay-title').getBoundingClientRect();return{x:Math.round(rect.left+6),y:Math.round(rect.top+rect.height/2)};});
+                    window.webContents.sendInputEvent({type:'mouseMove',...point});
+                    await until(async () => execute(window,()=>getComputedStyle(document.querySelector('.native-map-tools')).visibility==='visible'),'Map tour capture shows the same-row header after actual title hover');
+                }
                 if(name==='intel')await execute(window, () => {document.querySelector('#intel-body').scrollTop=0;document.querySelector('[data-intel-section="raid"] .npc-name').focus();});
                 await screenshot(window, name);
+                if(name==='map')window.hide();
             }
             assert(panels().timers.getBounds().height <= 120, 'timer native window fits compact display rows');
             const parseId = panels().parse.id;
@@ -437,7 +502,8 @@ try {
         setTimeout(() => { console.error('Native overlay smoke exceeded 45 seconds.'); app.exit(2); }, 45000).unref();
         require(path.join(root, 'desktop/main.cjs'));
     };
-    await writeFile(join(temporary, 'main.cjs'), `const { app } = require('electron');\napp.setPath('userData', ${JSON.stringify(profile)});\n(${run.toString()})(${JSON.stringify({root, log, screenshots})}).catch(error => { console.error(error.stack); app.exit(1); });\n`);
+    const fixtureVersionParts=pkg.version.split('.');fixtureVersionParts[2]=String(Number(fixtureVersionParts[2])+1);const fixtureUpdateVersion=fixtureVersionParts.join('.');
+    await writeFile(join(temporary, 'main.cjs'), `const { app } = require('electron');\napp.setPath('userData', ${JSON.stringify(profile)});\n(${run.toString()})(${JSON.stringify({root, log, screenshots, fixtureUpdateVersion})}).catch(error => { console.error(error.stack); app.exit(1); });\n`);
     const result = await new Promise((resolve, reject) => {
         const child = spawn(electron, [temporary, '--disable-gpu', '--mute-audio'], { windowsHide:true, stdio:['ignore', 'pipe', 'pipe'] });
         let output = '';

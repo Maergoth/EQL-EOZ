@@ -2,6 +2,16 @@
 
 ## Approved follow-up
 
+The 0.8.6 repair responds to live 0.8.5 feedback: put the zone title and controls
+on one row, make the whole title band a dependable hover target, retain a
+separate unlocked drag grip, and fix the read-policy mismatch for required
+archive support files. CI must exercise native mouse input over the title and
+real configured-folder/file hydration, not replace that loading boundary.
+The Intel follow-up also repairs template-shaped item drop sources in the
+producer. Keep `server/BuildEyeOfZommPack.php` aligned with the wiki's active
+`maintenance/BuildEyeOfZommPack.php`, promote only the reviewed producer change,
+then run the existing filtered-dataset refresh before releasing the desktop.
+
 The 0.8.5 follow-up keeps Map and Intel as real independent native windows.
 Map controls collapse when the pointer/focus leaves the header; Reset replaces
 Fit and Reload is removed. One button cycles the client line map, top-down 3D
@@ -42,5 +52,6 @@ synthetic fixtures; refresh affected product captures without publishing game
 files, logs, local paths or private content. Physical game focus, pointer-lock
 comfort, monitor/DPI transitions and route quality remain manual evidence.
 
-Work starts from main `58c760f` on `codex/overlay-map-workspace`. This file is the
-continuation index if task context is compacted.
+The 0.8.5 release merged as `4787890`. The 0.8.6 repair starts there on
+`codex/map-header-fetch-fix`. This file is the continuation index if task
+context is compacted.

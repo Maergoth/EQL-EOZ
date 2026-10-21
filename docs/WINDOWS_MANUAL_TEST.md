@@ -1,14 +1,14 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.5-x64.exe`.
+Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.6-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.5` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.6` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
 
 ## 0c. Overlay map and anchored Intel
 
-1. Hover or keyboard-focus the Map header to reveal Reset, Follow, view cycle and zoom. Move onto the canvas: controls collapse. Verify no Reload remains and Reset restores the default Map/follow/zoom state.
+1. Move onto the zone title anywhere across the Map header: Reset, Follow, view cycle and zoom reveal on the same row as the title. Move to each button without losing controls, then leave for the canvas and confirm collapse. Repeat locked/unlocked and at narrow widths/largest text. The explicit drag grip moves only an unlocked window. Keyboard focus must also reveal controls. Verify no Reload remains and Reset restores the default Map/follow/zoom state.
 2. Hover/click a monster's actual drawn name, including a name far from its dot. The pointer cursor and selected source must agree. Repeat using its keyboard target.
-3. Cycle Map → Top → First inside the same native window. Navigate the first-person viewer, exit pointer lock with Escape and return to Map. Hiding Map must release the extra scene; showing it remains recoverable.
+3. Cycle Map → Top → First inside the same native window using an installation containing normal archive support files, including `mp3index.txt` and an EQG asset-list file. No required support file may produce Failed to fetch. Navigate the first-person viewer, exit pointer lock with Escape and return to Map. Hiding Map must release the extra scene; showing it remains recoverable.
 4. In Intel, scroll a long list while Item Level Slider and My Class remain visible. Changing tier updates the same saved main-app slider and drop stats. Dragging must survive session heartbeats.
 5. Hover/focus a mob name, move onto its actions and activate Details/Route/Copy/Wiki/Map. Controls stay reachable across the gap. Each Map action opens the correct normal/raid source in first person without moving the logged player marker or route start. No global Intel Map button remains.
 6. Change zones/folders while 3D loads, reload/hide/show the panel and enable/restore Ignore mouse. No stale camera target or scene may appear. Compare known-Z and unknown-Z markers against the selected slice.

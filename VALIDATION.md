@@ -1,4 +1,28 @@
-# Validation report — v0.8.5
+# Validation report — v0.8.6
+
+## 0.8.6 map interaction and Intel source repair
+
+The live 0.8.5 report exposed gaps in the earlier synthetic acceptance checks:
+keyboard focus revealed the header, but did not prove mouse hover over its
+Windows drag region; substituted folder/archive setup did not exercise the
+loader's complete support-file requests. The new header uses a full-width
+pointer surface with a separate drag grip, and the loading regression must use
+the real configured directory and file hydration code.
+
+Source inspection confirms `filesForZone` includes `mp3index.txt` for S3D and
+EQG, and reads EQG asset-list text. The 0.8.5 Map policy rejected those paths.
+The selected local installation contains `mp3index.txt`; no game file was
+changed or published. Execution remains in GitHub CI per owner preference,
+with physical game input and complete proprietary-zone acceptance separate.
+
+The Intel screenshot also exposed raw `Loc` and `VeliousGray` templates in item
+drop sources, which Intel projects into mob rows. The current production pack
+contains 145 template-shaped drop sources (64 location notes and 68 styled
+labels among them), while its actual NPC records have no template-shaped names.
+The producer must interpret supported style/link syntax, exclude annotation
+templates and resolve styled zone headings before associating drops. The live
+producer and filtered dataset require their separate reviewed deployment and
+refresh; changing the desktop alone does not repair existing cached records.
 
 ## 0.8.5 native Map and Intel workspace
 

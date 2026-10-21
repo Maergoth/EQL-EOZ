@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-21
 
-Code baseline: 0.8.5
+Code baseline: 0.8.6
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 

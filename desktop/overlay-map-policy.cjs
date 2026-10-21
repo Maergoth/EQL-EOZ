@@ -3,7 +3,10 @@
 function safeMapFile(value){
     const relative=String(value||'').replace(/\\/g,'/');
     if(!relative||/[\x00-\x1f\x7f:]/.test(relative)||relative.split('/').some(part=>!part||part==='.'||part==='..'||/[. ]$/.test(part)||/^logs$/i.test(part)))return false;
-    if(/\.txt$/i.test(relative))return /^maps\//i.test(relative);
+    // The bundled loader hydrates mp3index for every S3D/EQG and reads the
+    // zone's EQG dependency list before parsing. Other root text (including
+    // player INI exports and unrelated zone-prefixed text) is not map input.
+    if(/\.txt$/i.test(relative))return /^maps\//i.test(relative)||/^(?:mp3index|[a-z0-9][a-z0-9_-]*_assets)\.txt$/i.test(relative);
     return /\.(?:s3d|eqg|eff|xmi|emt|zon)$/i.test(relative);
 }
 

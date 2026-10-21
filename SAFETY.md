@@ -27,6 +27,11 @@ EQLWiki - Eye of Zomm is intentionally designed around a narrow, auditable bound
 
 The desktop service binds only to `127.0.0.1`. Renderer polling therefore stays on the user's own PC.
 
+The native Map's archive bridge admits client maps, supported archives and only
+the root text sidecars required by the decoder (`mp3index.txt`, `*_assets.txt`).
+It excludes arbitrary root text, logs, settings and mutation endpoints. An
+asset-list reference does not grant permission to read another file type.
+
 Native overlays are separate transparent app windows, never injected into the
 game. One main renderer owns log parsing and timers; sandboxed panels receive
 bounded local snapshots without raw lines, paths or installer access. The host

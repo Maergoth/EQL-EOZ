@@ -120,9 +120,14 @@ class LocalFileHandle {
     }
 
     async readFile() {
-        const response = await localApi(`/api/eq-file?path=${encodeURIComponent(this.entry.path)}${overlayMode?'&surface=overlay-map':''}`);
-        const bytes = await response.arrayBuffer();
-        return new File([bytes], this.name, { lastModified:Number(this.entry.lastModified) || Date.now() });
+        try {
+            const response = await localApi(`/api/eq-file?path=${encodeURIComponent(this.entry.path)}${overlayMode?'&surface=overlay-map':''}`);
+            const bytes = await response.arrayBuffer();
+            return new File([bytes], this.name, { lastModified:Number(this.entry.lastModified) || Date.now() });
+        } catch (error) {
+            if (overlayMode) throw new Error(`Unable to read local game asset "${this.name}". Check the selected EverQuest folder.`, { cause:error });
+            throw error;
+        }
     }
 
     async getFile() {
@@ -159,8 +164,15 @@ async function configuredDirectoryHandle() {
     if(overlayMode&&manifest.truncated)throw new Error('The local file inventory is incomplete. Choose the installation folder in the main Settings.');
     if (!manifest.rootName || !Array.isArray(manifest.files)) return null;
     const rootHandle = new LocalDirectoryHandle(manifest.rootName);
-    rootHandle.eyeOfZommHasZoneArchives = manifest.files.some(entry => /\.(?:s3d|eqg)$/i.test(String(entry.path || '')));
-    for (const entry of manifest.files) {
+    // EQG filesForZone also sweeps <zone>_*.txt. Only its dependency list is
+    // parsed as game data; omit other root text rather than attempting reads
+    // that the Map partition correctly denies. Main's file index is unchanged.
+    const files = overlayMode ? manifest.files.filter(entry => {
+        const relative = String(entry.path || '').replace(/\\/g, '/');
+        return !/\.txt$/i.test(relative) || /^maps\//i.test(relative) || /^(?:mp3index|[a-z0-9][a-z0-9_-]*_assets)\.txt$/i.test(relative);
+    }) : manifest.files;
+    rootHandle.eyeOfZommHasZoneArchives = files.some(entry => /\.(?:s3d|eqg)$/i.test(String(entry.path || '')));
+    for (const entry of files) {
         const parts = String(entry.path || '').split('/').filter(Boolean);
         if (!parts.length) continue;
         let directory = rootHandle;
