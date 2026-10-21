@@ -118,6 +118,7 @@ foreach ($fixtures as $name => $fixture) {
     $npcs = array_merge($npcs, $call('buildNpcRecords', $factory, (object)['page_namespace'=>0,'page_title'=>str_replace(' ','_',$name)], $fixture['categories'] ?? []));
 }
 $npcs = $call('applyNpcInstanceVariants', $npcs);
+$npcs = $call('sortNpcRecords', $npcs);
 foreach ($fixtures as $name => $fixture) {
     if (strpos($fixture['text'], '{{Itempage') === false) continue;
     $item = $call('buildItemRecord', $factory, (object)['page_namespace'=>0,'page_title'=>str_replace(' ','_',$name)], []);
@@ -140,17 +141,24 @@ const raid = name => records(name).filter(record => record.raidInstance);
 assert.deepEqual(records('King Tranix').map(record => record.raidInstance), [true], 'An explicit zone Raid Instance Only reference makes the boss raid-only.');
 assert.deepEqual(records('Synthetic future raid NPC').map(record => [record.zone,record.raidInstance]), [['Synthetic future zone',true]], 'A newly categorized zone and nested Raid Instance heading require no hardcoded zone list.');
 assert.deepEqual(records('Synthetic future public NPC').map(record => [record.zone,record.raidInstance]), [['Synthetic future zone',false]], 'A same-level normal sibling ends the nested raid scope.');
-assert.deepEqual(records('Fire Giant Warrior').map(record => record.raidInstance), [false, true], 'A shared NPC keeps distinct normal and raid identities.');
-assert.deepEqual(records('Fire Giant Warrior')[0].loc, [10, 20, 30]);
+assert.deepEqual(records('Fire Giant Warrior').map(record => record.raidInstance), [true, false], 'A shared NPC keeps distinct raid and normal identities in backward-compatible order.');
+assert.deepEqual(records('Fire Giant Warrior')[1].loc, [10, 20, 30]);
 assert.equal(raid('Fire Giant Warrior')[0].loc, undefined, 'A public spawn location must not be copied into a separate raid instance.');
 assert.equal(raid('Fire Giant Warrior')[0].instanceSources[0].revisionId, 501);
 assert.deepEqual(records('Synthetic raid boss').map(record => record.raidInstance), [true], 'Raid category evidence must not create a duplicate public boss.');
 for (const name of ['Voidling', 'Synthetic normal guard', 'Synthetic neighbour', 'Synthetic comparison NPC', 'Synthetic after-header NPC', 'Synthetic description NPC']) {
     assert.deepEqual(records(name).map(record => record.raidInstance), [false], `${name}: entrances, prose, neighbouring links, sibling sections and nested descriptions are not raid NPC lists.`);
 }
-assert.deepEqual(records('Synthetic section NPC').map(record => record.raidInstance), [false, true]);
+assert.deepEqual(records('Synthetic section NPC').map(record => record.raidInstance), [true, false]);
 assert.deepEqual(raid('Synthetic section NPC')[0].loc, [90, 80, 70], 'An explicit raid-template spawn location remains authoritative.');
 assert.equal(raid('Synthetic section NPC')[0].avgLevel, 50);
+const legacyNpcs = new Map(actual.npcs.map(record => [`${record.zone.toLowerCase()}|${record.name.toLowerCase()}`,record]));
+const legacyRecord = name => legacyNpcs.get(`${records(name)[0].zone.toLowerCase()}|${name.toLowerCase()}`);
+assert.deepEqual(legacyRecord('Fire Giant Warrior').loc,[10,20,30],'Legacy zone/name last-wins clients retain the normal coordinate instead of a coordinate-free raid clone.');
+assert.equal(legacyRecord('Fire Giant Warrior').raidInstance,false);
+assert.equal(legacyRecord('Synthetic section NPC').avgLevel,12,'Legacy clients retain normal stats even when an explicit raid template has different stats and a coordinate.');
+assert.deepEqual(legacyRecord('Synthetic section NPC').loc,[10,20,30]);
+assert.equal(legacyRecord('King Tranix').raidInstance,true,'Raid-only NPCs remain present in legacy projections.');
 assert.deepEqual(sources('Synthetic raid crown').map(source => source.raidInstance), [true]);
 assert.deepEqual(sources('Synthetic shared item').map(source => source.raidInstance), [false, true]);
 for (const name of ['Synthetic section item', 'Synthetic anchor item']) assert.deepEqual(sources(name).map(source => source.raidInstance), [false, true], `${name}: source sections/anchors preserve both same-name variants.`);
@@ -172,7 +180,8 @@ for (const name of ['Synthetic statless item', 'Synthetic alternate item', 'Synt
 assert(actual.wikiEntities.titles.includes('Synthetic public redirect'), 'Public redirect titles prevent false missing-page prompts.');
 assert(actual.wikiEntities.titles.includes(zone), 'Uncategorized public main-namespace pages remain known.');
 const source = readFileSync(sourcePath, 'utf8');
+assert(source.includes('$npcs = $this->sortNpcRecords( $npcs );'),'Production export uses the same ordering exercised by the legacy projection fixture.');
 assert(source.includes("'wikiEntitiesComplete' => $limit === 0"), 'Limited test exports cannot authorize absence prompts.');
 assert(source.includes("[ 'page_namespace' => NS_MAIN ]"), 'The presence index excludes private/user namespaces.');
-console.log('Wiki raid instances: section-scoped NPC/item variants, shared/exclusive bosses, entrance exclusion, source provenance, locations and independent bounds passed.');
+console.log('Wiki raid instances: section-scoped variants, shared/exclusive bosses, source provenance, locations, bounds and legacy last-wins projection passed.');
 console.log('Wiki presence index: skipped entity pages, template name aliases, public title/redirect fallback and limited-export completeness passed.');

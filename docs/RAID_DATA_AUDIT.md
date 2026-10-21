@@ -38,6 +38,8 @@ Identity and deduplication include canonical zone, NPC name, and instance varian
 
 Cloning a shared NPC does not establish a raid spawn coordinate. Derived raid copies omit the public `loc`; an explicit raid-template location remains available. Levels and class metadata still come from the NPC article and are not asserted to match every game difficulty. Wiki spelling/redirect coverage can leave unmatched references; the exporter does not guess NPC identities from nearby prose.
 
+Within an identical canonical zone and NPC name, the producer emits the raid variant first and the normal variant last. Eye of Zomm 0.8.1/0.8.2 collapses these keys with last-record-wins; this ordering preserves its normal coordinates and stats. Variant-aware clients retain both records. Source identities, record fields, counts, and item-source ordering are unchanged. Both source harnesses project the final producer order through the legacy key to verify this compatibility contract.
+
 ## Presence catalog
 
 `wikiEntities` contains sorted `npcs`, `items`, and `titles` arrays. NPC/item category candidates are indexed before record validation; recognized template name aliases are added even when an item lacks a usable stats block. `titles` includes only main-namespace public page titles, including redirect aliases, as a fallback for uncategorized pages. No account data, private namespaces, page contents, or revision history enter this presence-only index.
