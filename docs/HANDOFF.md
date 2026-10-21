@@ -42,8 +42,8 @@ routing; both engines are checked before drawing. The reviewed exporter/catalog
 is deployed separately from the desktop; official installers fetch and verify
 the current [dataset manifest](https://github.com/Maergoth/EQL-EOZ/blob/dataset/manifest.json)
 before packaging. The 0.8.6 producer repair resolves styled drop-source links
-and excludes location annotations. Wiki PRs #43/#44 record its source review
-and deployment; the filtered dataset must be rebuilt and audited before desktop
+and excludes location annotations. Wiki PRs #43/#44 record that correction;
+#45/#46 retain valid structured item-source rows. The filtered dataset must be rebuilt and audited before desktop
 release. The integration audit preserves the earlier export/checksum history.
 
 Desktop zone indexing remains metadata-only and hydrates the selected archive on demand. The WLD exporter advances across skipped material groups so later textures stay assigned to their actual polygon ranges; bitmap aliases and repeating UV sampling remain in place. EQEmu's sequential WLD polygon/material assignment independently supports this repair. The local rendered pass now confirms Mistmoore and Commonlands textures; live game comparison remains separate.

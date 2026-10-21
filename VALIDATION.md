@@ -40,6 +40,13 @@ isolated production promotion #44. Production deployment
 passed; the installed producer hash matched the reviewed source. Dataset rebuild,
 before/after filtered-pack audit and publication remain separate release gates.
 
+The complete source audit found one valid structured `ItemWhereRow` association
+among the remaining malformed entries. Narrow positional parsing preserves its
+Zone/NPC fields, including balanced multiline/piped/numeric arguments and explicit
+instance anchors. Area/Loc links, commented rows and unrelated transclusions do
+not establish sources; a row cannot change the surrounding list's zone. Wiki
+PRs #45/#46 carry the isolated follow-up and matching PHP regression fixtures.
+
 ## 0.8.5 native Map and Intel workspace
 
 This slice adds a collapsing Map header, Reset/default view, matching monster
