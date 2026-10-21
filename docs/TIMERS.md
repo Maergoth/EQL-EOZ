@@ -5,6 +5,8 @@ windows receive snapshots and send commands to that session; opening another
 panel must never create another parser or timer engine. Definitions, active
 absolute deadlines, paused remaining durations, zone filters, swing settings
 and replay guards are saved locally. Nothing is sent to game chat or shared.
+All creation, editing and timer controls live in the main app's **Timers** page. The floating Timers window is a compact display of
+countdowns and the swing bar; it contains no timer editor or management forms.
 
 The interaction reference is PNUT M&M at commit
 [`28bbf8d39fdd52074c39cf2542ec65f7ccf104f0`](https://github.com/Maergoth/pnut-mnm/tree/28bbf8d39fdd52074c39cf2542ec65f7ccf104f0):
@@ -21,6 +23,9 @@ The interaction reference is PNUT M&M at commit
 - [One-time timer tests](https://github.com/Maergoth/pnut-mnm/blob/28bbf8d39fdd52074c39cf2542ec65f7ccf104f0/tests/test_one_time_timers.py#L24)
   and [`start_one_time_timer`](https://github.com/Maergoth/pnut-mnm/blob/28bbf8d39fdd52074c39cf2542ec65f7ccf104f0/mnmparse/app/triggers_runtime.py#L504):
   independent spawn reminders do not become persistent chat triggers.
+- [Main-app trigger editor](https://github.com/Maergoth/pnut-mnm/blob/28bbf8d39fdd52074c39cf2542ec65f7ccf104f0/mnmparse/app/triggers_page.py#L66):
+  saved definitions, an editing surface and explicit overlap choices stay in
+  the complete app while the floating timer panel presents active countdowns.
 
 The JavaScript implementation follows those interaction rules with EQL's log
 timestamps. It does not use PNUT's OCR timing, hand inference or Python runtime.
@@ -33,14 +38,20 @@ their original phase after sleep/restart; the engine computes elapsed cycles
 directly instead of running missed callbacks. Ended one-time timers stay at zero
 until reset or dismissed. Definitions and timer rows are separate: resetting or
 closing a row does not create or edit a reusable definition.
+The main editor provides a quick countdown, a saved-definition list with
+Start/Edit/Delete actions, active countdown controls and a reminder from the
+last logged kill. Editing a saved definition preserves its ID and does not
+overwrite an already running countdown. New live snapshots leave unsaved
+editor fields intact. Definitions can be disabled without deleting them;
+Start now remains available for manual testing. Errors appear in the editor.
 
 Text-trigger definitions match literal text using Contains, Starts with or
 Whole line. Matching ignores case and repeated whitespace, and strips a log
 timestamp. Punctuation remains significant. No regular expression, script,
 audio file, speech, OCR typo matching or timer-sharing code executes. A text
-trigger engine can replace its prior timer, retain the existing one or add
-another; the current native editor uses Replace. Its optional zone filter
-controls where new triggers may start. Existing
+trigger can replace its prior timer, retain the existing one or add another.
+All three choices are available under **If already running** in the main
+editor. Its optional zone filter controls where new triggers may start. Existing
 zone-bound timers keep counting while another zone is active and expose
 `visible:false` to the panel; zoning never pauses their deadlines.
 
@@ -155,5 +166,9 @@ replay handling, periodic expiry, storage/transport recovery and disposal.
 UTF-8 stress cases also verify that oversized native snapshots shrink feeds
 and details below the broker limit while preserving damage/healing/rune totals,
 action counts, timer deadlines and panel-targeted error notices.
+`node tests/timer-settings.mjs` exercises the main editor against the real timer
+engine, including editing without duplicate definitions, draft retention during
+live updates, all countdown controls, literal/zone/overlap choices, kill-time
+reminders, swing controls, unavailable-session handling and visible errors.
 These tests do not establish live-game attack precision or
 an NPC's actual respawn time.

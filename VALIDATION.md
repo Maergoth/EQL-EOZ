@@ -23,7 +23,7 @@ parser/timer/session/controller modules, panel HTML/CSS/JS and Settings markup. 
 and was not installed or used to perform an upgrade.
 
 The overlay implementation now creates four actual independent transparent
-BrowserWindows: Parse, Zone & loot, Consider and Timers. Twenty mocked native
+BrowserWindows: Parse, Zone & loot, Consider and Timers. Twenty-one mocked native
 checks cover bounds/default grid, trust, independent preferences, lock versus
 passthrough, unavailable recovery controls, stale/crashed owner, explicit recovery
 and route actions that span a zone/opt-in change. Renderer tests cover complete
@@ -185,3 +185,27 @@ The repository cannot redistribute proprietary S3D/EQG archives. Authorized loca
 The final Windows NSIS compilation runs in GitHub Actions. The workflow installs the locked Electron/Electron Builder versions, runs the test suite, and requires the schema-v3 GitHub dataset. When both trusted PFX secrets are configured it signs and verifies the application and installer; otherwise it records an unsigned-build warning and still uploads the installer.
 
 A release tag uses the same gates. It attaches a verified signed installer when credentials are configured, or a clearly identified unsigned installer while signing is deferred.
+
+## PNUT layout correction in the 0.8.2 PR
+
+The native UI now directly follows PNUT's compact encounter header, exact
+Overview/Damage/Healing/Taken/Session tabs, flat meter tables, radial timer rows
+and thin attack bar. All timer forms, countdown actions and swing configuration
+are in the main Timers page. The native timer window fits its visible rows,
+with a 36px minimum; it no longer retains a 420px configuration window.
+The pinned PNUT MIT attribution is bundled and checked in the ASAR.
+
+Taken grammar is backed by a read-only local-log pattern audit and synthetic
+regressions for own incoming melee, direct spells, DoTs, unknown casters,
+player/pet exclusion, rune capacity, mixed encounters and counts/rates. No raw
+logs or player names are committed. Main editor tests cover editing, all overlap
+modes, live draft retention, pause/resume/reset/dismiss, kill reminders, swing
+preferences and visible error handling.
+
+The read-only grammar rerun recognized 135,916/135,916 candidate incoming lines
+across 11 local logs: 115,341 melee, 11,251 direct/unknown-caster non-melee and
+9,324 DoT lines. This measures recognition of those grammar families, not an
+independent gameplay damage total. Nine synthetic Taken regressions retain the
+observed multiword-attacker and additional-verb forms. A native geometry check
+also prevents Chromium table pseudo-elements from creating an empty first cell
+and clipping attacker/ability names.

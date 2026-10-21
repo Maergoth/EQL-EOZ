@@ -76,7 +76,7 @@ test('stored preferences are bounded and contain no session/log data', () => {
     assert.deepEqual(Object.keys(prefs), ['schemaVersion', 'panels']);
     assert.equal(prefs.panels.parse.visible, true); assert.equal(prefs.panels.parse.locked, false);
     assert.equal(prefs.panels.parse.backgroundOpacity, 1); assert.equal(prefs.panels.parse.fontScale, 0.75);
-    assert.deepEqual(prefs.panels.parse.bounds, { x:720, y:0, width:1200, height:300 });
+    assert.deepEqual(prefs.panels.parse.bounds, { x:720, y:0, width:1200, height:220 });
     assert.equal(prefs.panels.parse.unsafe, undefined);
     assert.equal(normalizePreferences({}, [display()]).panels.timers.visible, false);
 });
@@ -87,14 +87,14 @@ test('bounds stay on the correct monitor and recover after disconnection', () =>
     assert.deepEqual(clampBounds({ x:-500, y:-100, width:800, height:900 }, [display(-1280, -900, 1280, 900)]), { x:-800, y:-900, width:800, height:900 });
 });
 
-test('fresh and reset layouts use four separate corners at normal desktop sizes', () => {
+test('fresh layouts keep compact timers below the parse without overlapping other panels', () => {
     for (const [width, height] of [[1280, 720], [1920, 1080]]) {
         const panels = normalizePreferences({}, [display(0, 0, width, height)]).panels;
         const rectangles = PANEL_IDS.map(id => panels[id].bounds);
         for (let index = 0; index < rectangles.length; index++) {
             const bounds = rectangles[index];
             assert(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= width && bounds.y + bounds.height <= height);
-            assert(bounds.width >= 260 && bounds.height >= 160);
+            assert(bounds.width >= 260 && bounds.height >= (PANEL_IDS[index] === 'timers' ? 36 : 160));
             for (const other of rectangles.slice(index + 1)) {
                 const overlap = Math.max(0, Math.min(bounds.x + bounds.width, other.x + other.width) - Math.max(bounds.x, other.x)) *
                     Math.max(0, Math.min(bounds.y + bounds.height, other.y + other.height) - Math.max(bounds.y, other.y));
@@ -113,6 +113,23 @@ test('fresh and reset layouts use four separate corners at normal desktop sizes'
         assert(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 300 && bounds.y + bounds.height <= 200);
     }
 });
+
+test('timer windows fit only visible countdown rows and the swing bar without a large minimum height', () => fixture(async ({ host, mainEvent }) => {
+    await host.control('show', 'timers');
+    const sendTimers = timers => host.handleMainRequest(mainEvent, 'publish', {
+        schemaVersion:1, session:{ timers }
+    });
+    await sendTimers({ timers:[], swing:{ enabled:false } });
+    assert.equal(host.windows.get('timers').getBounds().height, 36);
+    assert.equal(host.windows.get('timers').options.minHeight, 36);
+    await sendTimers({ timers:[{ visible:true }, { visible:false }, { visible:true }], swing:{ enabled:true } });
+    assert.equal(host.windows.get('timers').getBounds().height, 98);
+    await sendTimers({ timers:Array.from({ length:100 }, () => ({ visible:true })), swing:{ enabled:true } });
+    assert.equal(host.windows.get('timers').getBounds().height, 296, 'eight visible rows cap the panel and leave scrolling');
+    await host.control('font-scale', 'timers', 1.3);
+    await sendTimers({ timers:[{ visible:true }], swing:{ enabled:true } });
+    assert.equal(host.windows.get('timers').getBounds().height, 81);
+}));
 
 test('startup restores only the selected native panels with their independent lock and mouse state', () => fixture(async ({ host, nativeWindows }) => {
     assert.equal(nativeWindows.length, 1);

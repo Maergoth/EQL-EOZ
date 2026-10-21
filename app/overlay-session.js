@@ -7,45 +7,59 @@ const TIMER_ACTIONS = new Set(['save-definition', 'remove-definition', 'start', 
 
 function eventSummary(event) {
     const result = {};
-    for (const key of ['type', 'source', 'kind', 'victim', 'item', 'zone']) if (event[key] != null) result[key] = text(event[key]);
+    for (const key of ['type', 'source', 'kind', 'victim', 'attacker', 'item', 'zone']) if (event[key] != null) result[key] = text(event[key]);
     for (const key of ['at', 'amount', 'quantity']) if (Number.isFinite(event[key])) result[key] = event[key];
     if (event.target) result.target = typeof event.target === 'object' ? { name:text(event.target.name), level:amount(event.target.level) } : text(event.target);
     return result;
 }
 
-function aggregate(events, into = { damage:[], healing:[], runes:[] }) {
-    const keys = { damage:'damage', heal:'healing', rune:'runes' };
-    for (const event of events || []) {
-        const key = keys[event.type];
-        if (!key) continue;
-        const rows = into[key];
-        const name = text(event.source || event.kind || (key === 'runes' ? 'Rune capacity granted' : 'Unknown ability'));
+function aggregate(events, into = { damage:[], healing:[], runes:[], taken:[], takenAbilities:[] }) {
+    const keys = { damage:'damage', heal:'healing', rune:'runes', taken:'taken' };
+    const add = (key, name, value) => {
+        const rows = into[key] ||= [];
         let row = rows.find(row => row.name === name);
         if (!row) {
             // Preserve totals even for an unusually varied session.
-            const label = rows.length < 120 ? name : 'Other abilities';
+            const label = rows.length < 120 ? name : key === 'taken' ? 'Other attackers' : 'Other abilities';
             row = rows.find(row => row.name === label);
             if (!row) { row = { name:label, total:0, count:0 }; rows.push(row); }
         }
-        row.total += amount(event.amount); row.count++;
+        row.total += amount(value); row.count++;
+    };
+    for (const event of events || []) {
+        const key = keys[event.type];
+        if (!key) continue;
+        const name = key === 'taken' ? text(event.attacker || 'Unknown attacker') :
+            text(event.source || event.kind || (key === 'runes' ? 'Rune capacity granted' : 'Unknown ability'));
+        add(key, name, event.amount);
+        if (key === 'taken') add('takenAbilities', text(event.source || 'Unknown ability'), event.amount);
     }
     return into;
+}
+
+function withTakenRates(breakdowns, seconds) {
+    for (const key of ['taken', 'takenAbilities']) for (const row of breakdowns[key] || []) row.rate = row.total / Math.max(1, amount(seconds));
+    return breakdowns;
 }
 
 // Native panels receive bounded presentation data, never log lines or paths.
 // Aggregate the complete retained encounter before bounding its event feed.
 export function compactParseSnapshot(source = {}) {
     const encounters = source.encounters || [];
-    const breakdowns = { damage:[], healing:[], runes:[] };
+    const breakdowns = { damage:[], healing:[], runes:[], taken:[], takenAbilities:[] };
     for (const encounter of encounters) aggregate(encounter.events, breakdowns);
     return {
         character:text(source.character), totalDamage:amount(source.totalDamage), totalHealing:amount(source.totalHealing),
-        sessionDps:amount(source.sessionDps), sessionSeconds:amount(source.sessionSeconds), breakdowns,
+        totalTaken:amount(source.totalTaken), totalTakenHits:amount(source.totalTakenHits), takenSeconds:amount(source.takenSeconds),
+        sessionTakenPerSecond:amount(source.sessionTakenPerSecond), totalKills:amount(source.totalKills), totalOwnKills:amount(source.totalOwnKills),
+        totalLoot:amount(source.totalLoot), encounterCount:amount(source.encounterCount),
+        sessionDps:amount(source.sessionDps), sessionSeconds:amount(source.sessionSeconds), breakdowns:withTakenRates(breakdowns, source.takenSeconds),
         encounters:encounters.slice(0, 20).map(encounter => ({
             id:text(encounter.id), name:text(encounter.name), active:Boolean(encounter.active),
             startAt:amount(encounter.startAt), lastAt:amount(encounter.lastAt), duration:amount(encounter.duration),
             damage:amount(encounter.damage), healing:amount(encounter.healing), dps:amount(encounter.dps),
-            breakdowns:aggregate(encounter.events), eventsTruncated:(encounter.events?.length || 0) > 120,
+            taken:amount(encounter.taken), takenHits:amount(encounter.takenHits), takenPerSecond:amount(encounter.takenPerSecond),
+            breakdowns:withTakenRates(aggregate(encounter.events), encounter.duration), eventsTruncated:(encounter.events?.length || 0) > 120,
             events:(encounter.events || []).slice(-120).map(eventSummary)
         })),
         recentEvents:(source.recentEvents || []).slice(0, 60).map(eventSummary)
@@ -54,11 +68,13 @@ export function compactParseSnapshot(source = {}) {
 
 const snapshotBytes = value => new TextEncoder().encode(JSON.stringify(value)).byteLength;
 function shrinkBreakdowns(breakdowns, limit) {
-    for (const rows of Object.values(breakdowns || {})) {
+    for (const [key, rows] of Object.entries(breakdowns || {})) {
         if (!Array.isArray(rows) || rows.length <= limit) continue;
         rows.sort((left, right) => right.total - left.total);
         const rest = rows.splice(limit);
-        rows.push({ name:'Other abilities', total:rest.reduce((sum, row) => sum + row.total, 0), count:rest.reduce((sum, row) => sum + row.count, 0) });
+        rows.push({ name:key === 'taken' ? 'Other attackers' : 'Other abilities',
+            total:rest.reduce((sum, row) => sum + row.total, 0), count:rest.reduce((sum, row) => sum + row.count, 0),
+            ...(key.startsWith('taken') ? { rate:rest.reduce((sum, row) => sum + amount(row.rate), 0) } : {}) });
     }
 }
 
@@ -85,9 +101,12 @@ export function fitOverlaySnapshot(snapshot) {
     return { ...snapshot, session:{ character:text(session.character), zone:text(session.zone),
         logStatus:'Open the main app for full session details.', timers:session.timers, notice:session.notice,
         parse:{ totalDamage:parse.totalDamage, totalHealing:parse.totalHealing, sessionDps:parse.sessionDps, sessionSeconds:parse.sessionSeconds,
-            breakdowns:Object.fromEntries(['damage', 'healing', 'runes'].map(key => [key, [{ name:'Other abilities',
+            totalTaken:parse.totalTaken, totalTakenHits:parse.totalTakenHits, takenSeconds:parse.takenSeconds, sessionTakenPerSecond:parse.sessionTakenPerSecond,
+            totalKills:parse.totalKills, totalOwnKills:parse.totalOwnKills, totalLoot:parse.totalLoot, encounterCount:parse.encounterCount,
+            breakdowns:Object.fromEntries(['damage', 'healing', 'runes', 'taken', 'takenAbilities'].map(key => [key, [{ name:key === 'taken' ? 'Other attackers' : 'Other abilities',
                 total:(parse.breakdowns?.[key] || []).reduce((sum, row) => sum + amount(row.total), 0),
-                count:(parse.breakdowns?.[key] || []).reduce((sum, row) => sum + amount(row.count), 0) }]])) },
+                count:(parse.breakdowns?.[key] || []).reduce((sum, row) => sum + amount(row.count), 0),
+                ...(key.startsWith('taken') ? { rate:(parse.breakdowns?.[key] || []).reduce((sum, row) => sum + amount(row.rate), 0) } : {}) }]])) },
         intel:{ npcs:[], zone:text(session.zone) }, consider:{} } };
 }
 
@@ -101,6 +120,12 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
     const engine = new TimerEngine({ now, state:saved });
     const sessionId = `session-${now()}-${Math.random().toString(36).slice(2)}`;
     let sequence = 0, disposed = false, busy = false, lastSaved = '', storageWarning = false, notice = null;
+    const timerListeners = new Set();
+    function emitTimers(snapshot) {
+        for (const listener of timerListeners) {
+            try { listener(snapshot); } catch { /* One presentation cannot stop the shared clock. */ }
+        }
+    }
     function persist() {
         const json = JSON.stringify(engine.exportState());
         if (json === lastSaved) return;
@@ -120,6 +145,7 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
         try {
             const timers = engine.snapshot(now());
             persist();
+            emitTimers(timers);
             if (api?.publish) await api.publish(fitOverlaySnapshot({ schemaVersion:1, sessionId, sequence:++sequence, at:now(), session:{ ...getSession(), timers, notice } }));
         } catch { /* A closing renderer or unavailable panel cannot stop the owner. */ }
         finally { busy = false; }
@@ -143,8 +169,22 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
     const interval = setInterval(() => { void publish(); }, 1000);
     return {
         engine, publish,
+        getTimers:() => engine.snapshot(now()),
+        onTimers(listener) {
+            if (typeof listener !== 'function' || disposed) return () => {};
+            timerListeners.add(listener);
+            listener(engine.snapshot(now()));
+            return () => timerListeners.delete(listener);
+        },
+        async commandTimer(action, payload = {}) {
+            if (disposed) throw new Error('The timer session has closed.');
+            if (!TIMER_ACTIONS.has(action)) throw new Error('Unknown timer action.');
+            const snapshot = engine.command(action, payload);
+            persist(); emitTimers(snapshot); await publish();
+            return snapshot;
+        },
         consume(event, context) { engine.consume(event, context); },
         flush:persist,
-        dispose() { if (disposed) return; persist(); disposed = true; clearInterval(interval); unsubscribe?.(); }
+        dispose() { if (disposed) return; persist(); disposed = true; timerListeners.clear(); clearInterval(interval); unsubscribe?.(); }
     };
 }

@@ -162,3 +162,25 @@ assert.equal(typeof scheduled, 'function');
 session.dispose();
 
 console.log('Overlay session: complete parse aggregates, bounded/private snapshots, timer actions, batch persistence, restart/replay and failure recovery passed.');
+
+// The main-window editor uses the same engine and observer stream as overlays.
+{
+    const listeners = [], localPublished = [];
+    const editorSession = createOverlaySession({ now:() => clock, storage:{ getItem() {}, setItem() {} },
+        api:{ async publish(value) { localPublished.push(value); } }, getSession:() => ({}),
+        setInterval() { return 88; }, clearInterval() {} });
+    const stop = editorSession.onTimers(value => listeners.push(value));
+    assert.equal(listeners.length, 1, 'main editor receives current state immediately');
+    await editorSession.commandTimer('start', { label:'Main editor timer', durationSeconds:60 });
+    assert.equal(editorSession.getTimers().timers.length, 1);
+    assert.equal(listeners.at(-1).timers[0].label, 'Main editor timer');
+    assert.equal(localPublished.at(-1).session.timers.timers[0].id, editorSession.getTimers().timers[0].id);
+    await assert.rejects(editorSession.commandTimer('missing-action'), /Unknown timer action/);
+    await assert.rejects(editorSession.commandTimer('start', { label:'Invalid', durationSeconds:0 }), /duration/);
+    stop(); const notificationsBefore = listeners.length;
+    await editorSession.commandTimer('pause', { id:editorSession.getTimers().timers[0].id });
+    assert.equal(listeners.length, notificationsBefore, 'disposing the editor only removes its observer');
+    assert.equal(editorSession.getTimers().timers[0].status, 'paused');
+    editorSession.dispose();
+    await assert.rejects(editorSession.commandTimer('cancel-all'), /closed/);
+}

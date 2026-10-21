@@ -5,6 +5,9 @@
 - Add a separate Application updates card and header badge, with compatible beta-release discovery, verified downloads, cancellation, Later, and explicit installer approval.
 - Keep verified downloads across relaunches, make startup downloading opt-in, and preserve the normal NSIS app identity and user-data profile.
 - Reject mismatched installer names, sizes, hashes, redirects and downgrades; permit a replacement download when staged files change and retain the app if Windows handoff fails.
+- Translate PNUT’s compact encounter header, exact Overview/Damage/Healing/Taken/Session tabs and flat metric tables into the EQL-themed overlays.
+- Replace the large floating timer editor with display-only radial countdown rows and a thin swing bar; all configuration and countdown actions live on the main Timers page.
+- Parse own incoming melee, spell, DoT and unknown-caster damage for Taken, with attacker/ability counts and rates while preserving outgoing totals.
 - Add four actual transparent native overlay windows for Parse, Zone & loot, Consider and Timers, with saved independent positions/sizes, layout locks, background opacity, font scale and mouse passthrough.
 - Keep one shared log/parser/timer session alive when the main window hides; retain player parse tabs, complete ability totals, encounter selection, class-aware scaled loot, waypoint/wiki actions and opt-in routes into the existing Map Explorer.
 - Add tray/main/checked-shortcut recovery, monitor clamping, crash recovery and stale-session feedback; sandbox each lightweight renderer with restricted IPC.

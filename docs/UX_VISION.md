@@ -159,7 +159,7 @@ this implementation does not claim docking or hand-precise swing timing.
 
 ## 5. Information architecture
 
-The application has seven destinations, ordered by frequency and immediacy:
+The application has eight destinations, ordered by frequency and immediacy:
 
 1. **Overview** — session orientation and recent activity.
 2. **Live Map** — position, navigation, named mobs, and minimal-mode workspace.

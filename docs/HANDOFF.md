@@ -75,6 +75,13 @@ from the tail while saved timer deadlines survive. Timers include manual/repeat,
 literal log triggers, user-duration kill reminders and an observed melee swing
 estimate. Only fresh appended timestamps drive them. Read [TIMERS.md](TIMERS.md)
 for precision/replay rules. The single Map Explorer remains in the main app.
+The native Parse UI directly translates PNUT's compact header, flat meter
+rows and exact Overview/Damage/Healing/Taken/Session tabs. Taken uses own incoming
+melee/spell/DoT events; rune grants remain capacity, not observed absorption.
+The timer window is display-only radial rows plus a thin swing bar, fitted to
+its contents. All timer configuration and actions live on the main Timers page.
+The PNUT MIT notice ships under THIRD_PARTY/PNUT.
+
 Preserve player-only parses and rune-capacity semantics; Revenge and
 Elitist/Carebear remain excluded.
 

@@ -24,7 +24,9 @@ These source locations are the context to retain when resuming:
 | Branding and existing product contracts | [styles.css](../app/styles.css) root tokens; [UX_VISION.md](UX_VISION.md), [HANDOFF.md](HANDOFF.md), [MAP_VALIDATION.md](MAP_VALIDATION.md) |
 
 PNUT is a Python/Qt portable application; EoZ is an Electron/NSIS application.
-Reuse its interaction model, not its ZIP replacement implementation or Python UI.
+Translate its compact Qt header, five tabs, flat metric tables, timer rings and
+attack bar into HTML/CSS. Retain EQL colors. The pinned MIT license and attribution
+ship under THIRD_PARTY/PNUT; the Python runtime is not bundled.
 The EoZ implementation adds no runtime package dependency.
 
 ## Application updates in 0.8.2
@@ -70,10 +72,22 @@ numbers and hover/click/focus menus apply throughout.
 
 | Native window | Interactions and retained content |
 | --- | --- |
-| Parse | Damage, Healing, Rune capacity and Feed tabs; Live, Previous, Session and saved encounters; complete ability aggregates with a bounded recent feed |
+| Parse | Overview, Damage, Healing, Taken and Session tabs; Live, Previous, Session and saved encounters; complete ability aggregates with a bounded recent feed |
 | Zone & loot | Named/rare NPCs, con colors, distance, class filter, tier-scaled drops, wiki links, waypoint copying and opt-in routing |
 | Consider | Current considered target, con, class filter and known drops; opens full item/NPC views |
-| Timers | Manual/repeating countdowns, reusable literal log triggers and kill-triggered reminders, one-time reminder from the latest kill, pause/resume/reset/dismiss and observed swing bar |
+| Timers | Display-only PNUT ring/label/countdown rows and a thin observed swing bar; edits and actions live on the main Timers page |
+
+The parse header embeds its encounter dropdown and duration/total/rate; there
+is no second View toolbar, character strip or permanent explanatory footer.
+Tables use PNUT's 13px Segoe UI density and full-row meter bars. Runes and Feed
+are not overlay tabs. The Session tab shows supported whole-session activity.
+
+The timer window has no persistent title bar, forms, saved definitions, delay
+input, checkbox or per-row action buttons. It fits up to eight rows plus a
+22px swing bar (36px minimum), with controls available on hover. New/reset
+layouts place it beneath Parse. All configuration, countdown actions, trigger
+editing and swing preferences are on the main app's Timers page. Timer deadlines
+and rules are unchanged.
 
 The main app retains the complete item browser and the single heavy Map
 Explorer. A panel's Map Explorer or Route action opens it explicitly. Opening
@@ -124,7 +138,8 @@ aggregates cover every retained encounter; the recent session feed has 60 events
 Intel previews up to 50 NPCs and five drops each; considers show 16 drops, with
 full drop counts. Item icons share a 240 KiB budget. Host snapshots are ephemeral
 and stay in local app processes. The metrics remain player outgoing damage,
-healing and rune **capacity granted**, not absorption or a group leaderboard.
+healing and incoming Taken damage. Rune **capacity granted** remains a separate
+session value and never counts as observed absorption. No group leaderboard is inferred.
 No game hook, process inspection, synthetic input, OCR or game-file write is
 added. Revenge and Elitist/Carebear controls remain excluded.
 
@@ -135,7 +150,7 @@ added. Revenge and Elitist/Carebear controls remain excluded.
 | Native lifecycle, trust, layout and rescue | `desktop/overlay-host.cjs`, `desktop/overlay-preload.cjs`, `desktop/main.cjs`; `tests/native-overlays.mjs` |
 | Sole session, bounded summaries, timer persistence | `app/overlay-session.js`, `app/app.js`; `tests/overlay-session.mjs`, freshness integration in `tests/map-sync-integration.mjs` |
 | Native renderers and main controls | `app/overlay.html`, `app/overlay.css`, `app/overlay.js`, `app/overlay-controller.js`; `tests/overlay-ui.mjs` |
-| Timer rules and log grammar | `app/timer-engine.js`, `app/parser.js`; `tests/timer-engine.mjs`, `docs/TIMERS.md`; pinned PNUT `swing.py`, `timer_panel.py`, `triggers_runtime.py` |
+| Timer rules and log grammar | `app/timer-engine.js`, `app/timer-settings.js`, `app/parser.js`; `tests/timer-engine.mjs`, `tests/timer-settings.mjs`, `tests/damage-taken.mjs`, `docs/TIMERS.md`; pinned PNUT `swing.py`, `timer_panel.py`, `triggers_runtime.py` |
 | Actual Windows runtime | `scripts/test-native-overlays.mjs`; isolated profile and synthetic log, never player files |
 | Installer source parity | `scripts/packaged-runtime-sources.mjs`, `scripts/check-packaged-artifact.mjs` |
 
@@ -145,3 +160,14 @@ gate. These establish synthetic-input behavior. Complete [Windows acceptance](WI
 separately for physical click-through over the game, 100/125/150% OS scaling,
 monitor removal, sleep and live log grammar. Building an installer does not prove
 an installed upgrade. Keep the guarded routing-engine policy unchanged.
+
+## Incoming Taken evidence
+
+A read-only grammar audit of local Legends logs identified incoming melee,
+direct spell, DoT and classic unknown-caster non-melee output. The parser accepts
+only YOU or the current selected character as the target, preserving attacker,
+ability, counts and rates without modifying outgoing totals. Raw captures,
+player names and game logs are excluded from the repository; synthetic matching
+grammars are in tests/damage-taken.mjs. Nearby-player, pet, miss and rune-grant
+text cannot count as your incoming damage. Existing killCounts include nearby
+observations, so Session's Own kills uses its separate own-kill counter.

@@ -10,6 +10,7 @@ import { resolveZoneRecord } from './zone-identity.js';
 import { mountAppUpdates } from './app-update-ui.js';
 import { compactParseSnapshot, createOverlaySession } from './overlay-session.js';
 import { mountOverlayController } from './overlay-controller.js';
+import { mountTimerSettings } from './timer-settings.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -79,7 +80,7 @@ let settings = Object.assign({
 }, prefs.load());
 if (!['first', 'top', 'map'].includes(settings.mapMode)) settings.mapMode = 'first';
 if (!['recommended', 'name'].includes(settings.itemSort)) settings.itemSort = 'recommended';
-if (!['overview', 'map', 'npcs', 'items', 'drops', 'combat', 'settings'].includes(settings.lastView)) settings.lastView = 'overview';
+if (!['overview', 'map', 'npcs', 'items', 'drops', 'combat', 'timers', 'settings'].includes(settings.lastView)) settings.lastView = 'overview';
 let itemZoneFilterExplicit = Boolean(settings.itemZoneFilterExplicit || settings.itemCurrentZoneOnly === false);
 parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
@@ -566,7 +567,7 @@ async function handleOverlayCommand({ action, payload = {} }) {
         await pathToNpc(npc.name); return;
     }
     if (action === 'session:open') {
-        if (!['map', 'items', 'npcs', 'combat', 'settings'].includes(payload.view)) return;
+        if (!['map', 'items', 'npcs', 'combat', 'timers', 'settings'].includes(payload.view)) return;
         const npc = payload.npc ? resolveNpc() : null;
         const item = payload.item ? itemRecord(payload.item) : null;
         if (payload.item && !item) throw new Error('That item is no longer available in the current dataset.');
@@ -2272,6 +2273,7 @@ wireUi();
 const overlaySession = createOverlaySession({ api:window.eyeOfZommOverlays, getSession:overlaySessionSnapshot,
     onCommand:handleOverlayCommand, notify:message => showNotice(message, { tone:'warning' }) });
 const overlayController = mountOverlayController({ root:document.getElementById('overlay-controller'), api:window.eyeOfZommOverlays });
+const timerSettings = mountTimerSettings({ root:document.getElementById('timer-settings'), session:overlaySession });
 $('#open-native-overlays').addEventListener('click', async () => {
     try { await window.eyeOfZommOverlays.control('show-all'); }
     catch { showNotice('Native overlays require the Eye of Zomm desktop app.', { tone:'warning' }); }
@@ -2283,7 +2285,7 @@ const appUpdatesUi = mountAppUpdates({
         document.getElementById('check-app-update').focus();
     }
 });
-window.addEventListener('pagehide', () => { appUpdatesUi.dispose(); overlaySession.dispose(); overlayController.dispose(); }, { once:true });
+window.addEventListener('pagehide', () => { appUpdatesUi.dispose(); timerSettings.dispose(); overlaySession.dispose(); overlayController.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

@@ -15,7 +15,7 @@ const SESSION_ACTIONS = new Set([
     'timer:reset', 'timer:cancel', 'timer:delete', 'timer:create-spawn', 'timer:reset-swing',
     'timer:set-zone', 'timer:cancel-all', 'timer:set-swing-enabled', 'timer:set-swing-delay'
 ]);
-const SIZES = { parse:[380, 300], intel:[400, 420], consider:[380, 360], timers:[360, 420] };
+const SIZES = { parse:[420, 220], intel:[400, 420], consider:[380, 360], timers:[420, 64] };
 // A small gold eye is embedded so the packaged tray never depends on build resources.
 const TRAY_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAATklEQVR4nGNgGAWjgObg6saw//gwTQwl2zJcGjkEpLFikiwixlBi5LBaQo5riVFHtAWkBN3gtIDiIKJ5JNMlmRJj0YDkarIMHQWjgCQAAOw009RU8GzvAAAAAElFTkSuQmCC';
 
@@ -24,7 +24,7 @@ function finite(value, fallback) { return typeof value === 'number' && Number.is
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function panelId(value) { return PANEL_IDS.includes(value) ? value : null; }
 
-function clampBounds(input, displays, fallback = { x:40, y:40, width:380, height:320 }) {
+function clampBounds(input, displays, fallback = { x:40, y:40, width:380, height:320 }, minimumHeight = 160) {
     const areas = displays.map(display => display.workArea).filter(area => area && area.width > 0 && area.height > 0);
     if (!areas.length) areas.push({ x:0, y:0, width:1280, height:720 });
     const requested = {
@@ -40,7 +40,7 @@ function clampBounds(input, displays, fallback = { x:40, y:40, width:380, height
         if (overlap > largest) { largest = overlap; best = area; }
     }
     const width = clamp(requested.width, Math.min(260, best.width), Math.min(1200, best.width));
-    const height = clamp(requested.height, Math.min(160, best.height), Math.min(1200, best.height));
+    const height = clamp(requested.height, Math.min(minimumHeight, best.height), Math.min(1200, best.height));
     return { x:clamp(requested.x, best.x, best.x + best.width - width),
         y:clamp(requested.y, best.y, best.y + best.height - height), width, height };
 }
@@ -61,12 +61,13 @@ function normalizePreferences(raw, displays) {
         // saved positions are used directly and only clamped to live screens.
         const fallback = { x:primary.x + (right ? primary.width - margin - width : margin),
             y:primary.y + (bottom ? primary.height - margin - height : margin), width, height };
+        if (id === 'timers') fallback.y = primary.y + margin + Math.min(SIZES.parse[1], rowHeight) + 6;
         panels[id] = {
             visible:saved.visible === true, locked:saved.locked !== false,
             passThrough:saved.passThrough === true,
             backgroundOpacity:clamp(finite(saved.backgroundOpacity, 0.9), 0.15, 1),
             fontScale:clamp(finite(saved.fontScale, 1), 0.75, 1.75),
-            bounds:clampBounds(saved.bounds, displays, fallback)
+            bounds:clampBounds(saved.bounds, displays, fallback, id === 'timers' ? 36 : 160)
         };
     });
     return { schemaVersion:1, panels };
@@ -83,7 +84,7 @@ function jsonObject(value, maxBytes) {
 function sessionCommand(action, payload) {
     if (!SESSION_ACTIONS.has(action)) throw new Error('Unknown overlay session action.');
     const value = jsonObject(payload || {}, MAX_COMMAND_BYTES);
-    if (action === 'session:open' && !['map', 'items', 'npcs', 'combat', 'settings'].includes(value.view)) throw new Error('Unknown application view.');
+    if (action === 'session:open' && !['map', 'items', 'npcs', 'combat', 'timers', 'settings'].includes(value.view)) throw new Error('Unknown application view.');
     if (action === 'session:open' && ['npc', 'item'].some(key => value[key] !== undefined &&
         (typeof value[key] !== 'string' || value[key].length > 240))) throw new Error('Invalid application selection.');
     if (['session:route', 'session:copy-waypoint', 'session:wiki'].includes(action) &&
@@ -172,6 +173,7 @@ class OverlayHost {
             const snapshot = jsonObject(value, MAX_SNAPSHOT_BYTES);
             if (snapshot.schemaVersion !== 1 || !snapshot.session || typeof snapshot.session !== 'object') throw new Error('Invalid overlay snapshot.');
             this.snapshot = snapshot;
+            this.fitTimerWindow();
             this.snapshotAt = this.now();
             this.sessionAvailable = true;
             this.broadcast(false);
@@ -202,7 +204,7 @@ class OverlayHost {
         if (this.windows.has(id)) return this.windows.get(id);
         const prefs = this.preferences.panels[id];
         const win = new this.electron.BrowserWindow({
-            ...prefs.bounds, minWidth:260, minHeight:160, maxWidth:1200, maxHeight:1200,
+            ...prefs.bounds, minWidth:260, minHeight:id === 'timers' ? 36 : 160, maxWidth:1200, maxHeight:1200,
             title:`Eye of Zomm — ${PANEL_NAMES[id]}`, frame:false, transparent:true,
             backgroundColor:'#00000000', autoHideMenuBar:true, show:false,
             skipTaskbar:true, alwaysOnTop:true, hasShadow:false,
@@ -230,7 +232,7 @@ class OverlayHost {
         win.on('will-resize', event => { if (prefs.locked) event.preventDefault(); });
         const saveBounds = () => {
             if (win.isDestroyed() || this.disposed) return;
-            prefs.bounds = clampBounds(win.getBounds(), this.displays(), prefs.bounds);
+            prefs.bounds = clampBounds(win.getBounds(), this.displays(), prefs.bounds, id === 'timers' ? 36 : 160);
             this.scheduleSave();
         };
         win.on('move', saveBounds);
@@ -299,6 +301,17 @@ class OverlayHost {
         else if (this.ready.has(id)) win.showInactive();
     }
 
+    fitTimerWindow() {
+        const prefs = this.preferences?.panels.timers;
+        if (!prefs) return;
+        const timers = this.snapshot?.session?.timers || {};
+        const count = Math.min(8, (timers.timers || []).filter(timer => timer.visible !== false).length);
+        const swingHeight = timers.swing?.enabled === false ? 0 : 22;
+        const height = Math.max(36, Math.ceil(10 + count * (30 * prefs.fontScale + 3) + swingHeight * prefs.fontScale));
+        prefs.bounds = clampBounds({ ...prefs.bounds, height }, this.displays(), prefs.bounds, 36);
+        this.apply('timers');
+    }
+
     hasVisiblePanels() { return Boolean(this.preferences && PANEL_IDS.some(id => this.preferences.panels[id].visible)); }
     hasRecoveryControl() { return Boolean(this.tray || this.recoveryShortcutRegistered); }
     markSessionUnavailable() { this.sessionAvailable = false; if (this.preferences) this.broadcast(); }
@@ -307,7 +320,7 @@ class OverlayHost {
         if (!this.preferences || this.disposed) return;
         for (const id of PANEL_IDS) {
             const prefs = this.preferences.panels[id];
-            prefs.bounds = clampBounds(prefs.bounds, this.displays(), prefs.bounds);
+            prefs.bounds = clampBounds(prefs.bounds, this.displays(), prefs.bounds, id === 'timers' ? 36 : 160);
             this.apply(id);
         }
         this.broadcast();

@@ -33,7 +33,7 @@ Eye of Zomm does **not** inspect process memory, inject code, load into the game
 - Detects the active character from the log filename.
 - Detects zones from normal zoning output or the current character's Legends `/who` row, using its stable parenthesized short name rather than the changing instance number.
 - Detects level/classes from that same `/who` row and follows later level-up messages while ignoring other listed players.
-- Parses considers, outgoing damage, DoTs, heals, runes, kills, loot, and recent activity.
+- Parses considers, outgoing and incoming damage, DoTs, heals, runes, kills, loot, and recent activity.
 - Groups combat into timestamped encounters using a configurable quiet-period threshold.
 - Records looted items and their sources, with observed drop rates derived from nearby logged kills.
 - Shows current-zone NPCs with EQ-style con labels and color-tinted cards relative to the player's level.
@@ -145,10 +145,14 @@ Each panel remembers its layout, opacity and font scale. Closing the main app
 while panels are visible keeps the shared session running; use the tray's
 **Quit Eye of Zomm** to exit. The complete Map Explorer opens from panel actions.
 
-The Timers panel supports manual/repeating countdowns, saved literal log
+The overlay follows PNUT’s compact header and **Overview / Damage / Healing /
+Taken / Session** tabs. The Timers overlay displays only radial countdown rows
+and a thin swing bar. Configure everything on the main **Timers** page.
+
+The main Timers page supports manual/repeating countdowns, saved literal log
 triggers and target-kill reminders, plus a one-time reminder from the latest
 logged kill. You supply the duration; EoZ does not know a mob's respawn period.
-Pause, resume, reset or dismiss rows. Its observed swing bar learns your own
+Pause, resume, reset or dismiss rows. The overlay’s observed swing bar learns your own
 melee rounds, accepts an optional weapon-delay seed and waits for real attacks.
 EQL's one-second log timestamps make this an estimate. See [timer behavior](docs/TIMERS.md)
 for limits, replay protection and cast handling.

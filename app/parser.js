@@ -2,6 +2,10 @@ import { loggedLocationToWorld } from './coordinate-system.js';
 
 const LINE_RE = /^\[([^\]]+)\]\s*(.*)$/;
 const AUTO_ATTACK_VERBS = new Set(['hit', 'slash', 'crush', 'pierce', 'punch', 'claw', 'bite', 'maul']);
+// A one-token target fixes the attacker/verb boundary even for multiword NPC
+// names. Exact own-target validation follows; combat verbs such as cleaves,
+// slices, stings and smashes need no outgoing swing-eligibility whitelist.
+const INCOMING_MELEE_RE = /^(.+) ([a-z]{3,24}) (?:on )?(\S+) for ([\d,]+) points? of damage\.?(?:\s*\([^)]+\))?$/i;
 
 function parseNumber(text) {
     return Number(String(text || '').replace(/,/g, ''));
@@ -51,6 +55,12 @@ export class EQLogParser {
         this.observed = new Map();
         this.totalDamage = 0;
         this.totalHealing = 0;
+        this.totalTaken = 0;
+        this.totalTakenHits = 0;
+        this.takenStartedAt = null;
+        this.lastTakenAt = null;
+        this.totalLoot = 0;
+        this.totalOwnKills = 0;
         this.sessionStartedAt = null;
         this.lastCombatAt = null;
         this.currentFight = null;
@@ -101,18 +111,22 @@ export class EQLogParser {
                 firstTarget: '',
                 damage: 0,
                 healing: 0,
+                taken: 0,
+                takenHits: 0,
                 events: []
             };
             this.encounters.push(encounter);
         }
 
         const target = this.encounterTarget(event);
-        if (!encounter.firstTarget && target && ['damage', 'kill'].includes(event.type)) {
+        if (!encounter.firstTarget && target && ['damage', 'taken', 'kill'].includes(event.type)) {
             encounter.firstTarget = target;
         }
         encounter.lastAt = Math.max(encounter.lastAt, event.at);
         encounter.damage += event.type === 'damage' ? Number(event.amount || 0) : 0;
         encounter.healing += event.type === 'heal' ? Number(event.amount || 0) : 0;
+        encounter.taken += event.type === 'taken' ? Number(event.amount || 0) : 0;
+        encounter.takenHits += event.type === 'taken' ? 1 : 0;
         encounter.events.push(event);
     }
 
@@ -139,6 +153,7 @@ export class EQLogParser {
         const at = this.currentLineAt || Date.now();
         const key = this.observationKey(this.zone, victim);
         this.killCounts.set(key, (this.killCounts.get(key) || 0) + 1);
+        if (addToEncounter) this.totalOwnKills += 1;
         this.lastKill = { name: victim, zone: this.zone, at };
         this.rememberNpc(victim, { killed: true });
         if (addToEncounter) {
@@ -167,6 +182,7 @@ export class EQLogParser {
             }
         }
         if (!item || isCurrencyLoot(item)) return null;
+        this.totalLoot += parsedItem.quantity;
 
         const sourceKey = this.observationKey(this.zone, source || 'Unknown');
         const lootKey = `${sourceKey}|${item.toLowerCase()}`;
@@ -224,6 +240,26 @@ export class EQLogParser {
             event.swingEligible = AUTO_ATTACK_VERBS.has(event.skill);
         }
         return this.rememberCombatEvent(event);
+    }
+
+    isPlayerTarget(name) {
+        const target = normalizeName(name).toLowerCase();
+        return target === 'you' || Boolean(this.character && target === this.character.toLowerCase());
+    }
+
+    noteTaken(attacker, amount, source, kind, target = 'You') {
+        const n = parseNumber(amount);
+        if (!this.isPlayerTarget(target) || !Number.isFinite(n) || n < 0) return null;
+        const at = this.currentLineAt || Date.now();
+        if (!this.takenStartedAt) this.takenStartedAt = at;
+        this.lastTakenAt = at;
+        this.totalTaken += n;
+        this.totalTakenHits += 1;
+        attacker = normalizeName(attacker) || 'Unknown attacker';
+        // Incoming activity joins the encounter, but never touches outgoing
+        // damage/currentFight/session-DPS clocks or NPC damageDone observations.
+        return this.rememberCombatEvent({ type:'taken', attacker, target:this.character || 'You',
+            encounterTarget:attacker, amount:n, source:normalizeName(source) || 'Unknown ability', kind });
     }
 
     parse(rawLine) {
@@ -309,6 +345,25 @@ export class EQLogParser {
             return this.rememberEvent({ type: 'consider', target: { name, level, at: this.currentLineAt || Date.now() } });
         }
 
+        // Incoming Legends direct spells, DoTs and melee. Only YOU or the
+        // currently selected character is an authoritative player target;
+        // nearby players, pets, grants of rune capacity and misses are excluded.
+        x = text.match(/^(.+) hits? (\S+) for ([\d,]+) points? of ([\w-]+) damage by (.+?)\.(?:\s*\([^)]+\))?$/i);
+        if (x && this.isPlayerTarget(x[2])) return this.noteTaken(x[1], x[3], x[5], 'spell', x[2]);
+
+        x = text.match(/^(\S+) ha(?:s|ve) taken ([\d,]+) damage from (.+?) by (.+?)\.(?:\s*\([^)]+\))?$/i);
+        if (x && this.isPlayerTarget(x[1])) return this.noteTaken(x[4], x[2], x[3], 'dot', x[1]);
+
+        x = text.match(INCOMING_MELEE_RE);
+        if (x && this.isPlayerTarget(x[3])) {
+            return this.noteTaken(x[1], x[4], x[2].toLowerCase(), 'melee', x[3]);
+        }
+
+        // Classic non-melee output identifies the player, but supplies neither
+        // a caster nor a spell. Retain that uncertainty rather than infer one.
+        x = text.match(/^You were hit by non-melee for ([\d,]+) damage\.(?:\s*\([^)]+\))?$/i);
+        if (x) return this.noteTaken('', x[1], 'Unknown non-melee', 'spell');
+
         // Outgoing spell direct damage.
         x = text.match(/^You hit (.+?) for ([\d,]+) points? of (\w+) damage by (.+?)\.(?:\s*\(([^)]+)\))?$/i);
         if (x) return this.noteDamage(x[1], x[2], x[4], 'spell');
@@ -385,6 +440,9 @@ export class EQLogParser {
         const sessionSeconds = this.sessionStartedAt && this.lastCombatAt
             ? Math.max(1, (this.lastCombatAt - this.sessionStartedAt) / 1000)
             : 0;
+        const takenSeconds = this.takenStartedAt && this.lastTakenAt
+            ? Math.max(1, (this.lastTakenAt - this.takenStartedAt) / 1000)
+            : 0;
         const encounters = this.encounters.slice().reverse().map(encounter => {
             const duration = Math.max(1, (encounter.lastAt - encounter.startAt) / 1000);
             return {
@@ -392,6 +450,7 @@ export class EQLogParser {
                 name: encounter.firstTarget || 'Encounter',
                 duration,
                 dps: encounter.damage / duration,
+                takenPerSecond: encounter.taken / duration,
                 active: now - encounter.lastAt <= this.encounterGapSeconds * 1000,
                 events: encounter.events.slice()
             };
@@ -418,6 +477,14 @@ export class EQLogParser {
             location: this.location ? { ...this.location } : null,
             totalDamage: this.totalDamage,
             totalHealing: this.totalHealing,
+            totalTaken: this.totalTaken,
+            totalTakenHits: this.totalTakenHits,
+            takenSeconds,
+            sessionTakenPerSecond: takenSeconds ? this.totalTaken / takenSeconds : 0,
+            totalKills: Array.from(this.killCounts.values()).reduce((sum, count) => sum + count, 0),
+            totalOwnKills: this.totalOwnKills,
+            totalLoot: this.totalLoot,
+            encounterCount: this.encounters.length,
             sessionSeconds,
             sessionDps: sessionSeconds ? this.totalDamage / sessionSeconds : 0,
             fight,

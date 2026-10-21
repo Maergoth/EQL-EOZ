@@ -40,17 +40,22 @@ not establish Authenticode signing; record signature status separately.
 5. Repeat at 100/125/150% OS scaling, across monitors and after monitor removal.
    Saved bounds must remain reachable; Reset positions restores input/layout.
    Check real game foreground focus behavior in both locked and unlocked modes.
-6. Add manual/repeating and literal log-trigger timers. Pause/resume/reset,
+6. On the main **Timers** page, add manual/repeating and literal log-trigger timers. Pause/resume/reset,
    restart EoZ and sleep/wake: absolute deadlines remain accurate. Confirm zone
    filters, one-time latest-kill reminders and supplied durations; a reminder is
    not evidence of a spawn. Initial tails, stale/replayed or timestamp-free text
    cannot start timers. Normal parse history must still populate.
-7. Compare swing learning to own hits/misses, multi-attacks in one second,
+7. Confirm the native timer panel has only ring/label/countdown rows and a thin
+   swing bar; configuration opens the main Timers page. Parse has exactly
+   Overview, Damage, Healing, Taken, Session; no duplicate View toolbar or
+   permanent explanatory status chrome. Verify own incoming melee/spell/DoT
+   damage in Taken, excluding other players, pets, rune capacity and misses.
+8. Compare swing learning to own hits/misses, multi-attacks in one second,
    specials, casts/interruption, idle gaps and haste/weapon changes. The bar must
    wait at full for a real attack, never cycle independently. Check Delay 36
    seeds 3.6s after a real swing; 0 learns automatically. Record unsupported log
    wording without weakening own-action or timestamp guards.
-8. Confirm stale/crashed owner status disables session actions. Explicit Open
+9. Confirm stale/crashed owner status disables session actions. Explicit Open
    main recovers it; saved timer deadlines remain, parse history is rebuilt from
    the tail. Verify NPC/waypoint/wiki actions remain current-zone scoped and
    Route respects the user's path-controls opt-in.
