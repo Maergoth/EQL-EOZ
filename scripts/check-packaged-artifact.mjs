@@ -82,6 +82,11 @@ if (bootstrap.meta.wikiEntitiesComplete !== true || !['npcs','items','titles'].e
     !bootstrap.npcs.some(npc => npc.raidInstance === true)) {
     throw new Error('Packaged bootstrap must include the complete wiki presence catalog and exported raid variants.');
 }
+const npcKey = npc => JSON.stringify([String(npc.zone).toLowerCase(),String(npc.name).toLowerCase()]);
+const legacyNpcs = new Map(bootstrap.npcs.map(npc => [npcKey(npc),npc]));
+if (bootstrap.npcs.some(npc => !npc.raidInstance && legacyNpcs.get(npcKey(npc))?.raidInstance)) {
+    throw new Error('Packaged bootstrap must preserve normal NPC coordinates for older clients.');
+}
 
 console.log(`Packaged app verified as v${packagedPackage.version} with production data and current coordinate, texture, and spatial-candidate code.`);
 console.log(`Bundled dataset verified against freshly fetched source: manifest ${bootstrap.meta.manifestVersion}, pack ${bootstrap.meta.version}; ${bootstrap.zones.length} zones, ${bootstrap.npcs.length} NPCs, ${bootstrap.items.length} items.`);

@@ -52,6 +52,16 @@ Node 22 and Node 25, including a distinct real 8.3 alias, case variants,
 verified handoff, restore and redirected-parent rejection. PR CI now runs the
 entire source suite on Windows as well as Linux before release.
 
+The follow-up producer ordering fix passed wiki staging #41 and scoped main
+promotion #42 (`c1fe84d2`). Its installed source hash was verified after a
+successful deployment. Only NPC ordering changed in the fresh filtered public
+export; an unordered content digest, round-trip check and unchanged counts
+proved every field and NPC record was preserved. Normal coordinates for 25
+shared NPCs survive older clients' last-record-wins behavior again. The existing
+publisher/syncer published `20261021T101150Z-dd346c8cc55d`; that verified pack is
+the final 0.8.3 bootstrap. Catalog and artifact gates reject the earlier unsafe
+ordering. The previous filtered manifest/gzip pair remains available privately.
+
 ## 0.8.2 application updates, native overlays and timers
 
 The dependency-free updater has 22 mocked lifecycle/network/IPC checks plus
