@@ -60,6 +60,22 @@ try {
     for (const sourceId of ['window:app', 'window:vanished', {}]) await assert.rejects(f.host.handle(f.timerEvent, 'capture', { id:'one', sourceId }), /available/);
     await f.host.handle(f.timerEvent, 'capture', { id:'one', sourceId:'screen:one' });
     assert.equal(f.images.length, written + 1, 'exact native Timers frame can request an explicit screenshot');
+    for (const thumbnail of [image(true), null]) {
+        const displayImage = image();
+        f.setSources([{ id:'window:game', name:'EverQuest Legends', thumbnail },
+            { id:'screen:fallback', name:'Screen 2', thumbnail:displayImage },
+            { id:'window:empty', name:'Minimized Notes', thumbnail:image(true) }]);
+        const beforeFallback = f.images.length;
+        result = await f.host.handle(f.timerEvent, 'capture', { id:'one' });
+        assert.deepEqual(result, { choices:[{ id:'screen:fallback', name:'Screen 2' }] });
+        assert.equal(f.images.length, beforeFallback, 'an unusable preferred game requires an explicit fallback choice');
+        await assert.rejects(f.host.handle(f.timerEvent, 'capture', { id:'one', sourceId:'window:game' }), /could not be captured/);
+        assert.equal(f.images.length, beforeFallback, 'an explicit unusable source never silently falls back');
+        result = await f.host.handle(f.timerEvent, 'capture', { id:'one', sourceId:'screen:fallback' });
+        assert.equal(result.captured, true);
+        assert.equal(f.images.length, beforeFallback + 1);
+        assert.equal(f.images.at(-1), displayImage, 'only the explicitly chosen display is copied exactly once');
+    }
     f.setSources([{ id:'window:game', name:'EverQuest', thumbnail:image(true) }]);
     await assert.rejects(f.host.handle(f.mainEvent, 'capture', { id:'one' }), /could not be captured/);
     f.setSources([{ id:'window:game', name:'EverQuest', thumbnail:null }]);

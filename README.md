@@ -168,7 +168,8 @@ for limits, replay protection and cast handling.
 When a complete wiki catalog verifies that an encountered NPC or looted item is
 missing, a notice appears inside Timers/Triggers: the visible interactive native
 Timers window takes priority, with the main Timers page as fallback. **Screenshot** offers a local
-window/display choice and copies the image to the clipboard; paste it yourself
+window/display choice and copies the image to the clipboard; an unavailable
+game-window image offers usable alternatives for explicit selection. Paste it yourself
 where needed. Nothing uploads automatically. **Ignore** persists locally.
 Notices fade after 15 visible seconds, pausing on hover or keyboard focus.
 
