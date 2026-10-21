@@ -96,7 +96,11 @@ assert.match(collapsed,/class="npc-summary"[\s\S]*class="npc-name"[\s\S]*class="
 assert.match(collapsed,/data-npc-action="map" data-npc-index="1"/,'Each raid/normal mob owns its Map action');
 const overlayStyles = readFileSync(new URL('../app/overlay.css',import.meta.url),'utf8');
 assert.match(overlayStyles,/\.npc-summary \.row-actions\{[^}]*display:none;position:static;/,'Closed actions leave the tab order; opened actions contribute to scroll height at the final mob');
-assert.match(overlayStyles,/\.npc-summary:hover \.row-actions,\.npc-summary:focus-within \.row-actions\{display:flex\}/,'Both pointer travel inside the summary and keyboard focus retain the complete action group');
+assert.match(overlayStyles,/\.npc-summary\.is-actions-open \.row-actions,\.npc-summary:focus-within \.row-actions\{display:flex\}/,'Name-armed pointer travel and keyboard focus retain the complete action group');
+assert.doesNotMatch(overlayStyles,/\.npc-summary:hover \.row-actions/,'Hovering metadata alone does not reveal actions');
+const armedActions = renderIntel(intel,{actionKey:key});
+assert.equal((armedActions.match(/class="npc-summary is-actions-open"/g)||[]).length,1,'Pointer activation belongs to exactly one source, preserving its raid/normal identity');
+assert.match(armedActions,/data-intel-section="normal"[\s\S]*class="npc-summary is-actions-open"/,'The armed mob remains open in subsequent snapshot markup');
 assert.match(collapsed,/Show More \(22\)/);
 assert.match(renderIntel({npcs:[{id:'budgeted',name:'Small omitted preview',drops:[],dropCount:2}]}),/Show More \(2\)/,'Snapshot budget can omit even a small preview without losing access to its drops');
 assert.doesNotMatch(collapsed,/Synthetic drop 25/,'Heartbeat snapshot holds only a small preview');

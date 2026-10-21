@@ -24,5 +24,5 @@ body[data-panel=intel] #panel-content{display:flex;flex-direction:column;overflo
 .npc-heading .npc-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:transparent;border:0;padding:0;color:var(--con);font-size:1em;font-weight:600;text-align:left}
 .npc-heading .npc-name:hover{color:var(--con);text-decoration:underline;text-underline-offset:2px}
 .npc-summary .row-actions{display:none;position:static;max-width:100%;margin:3px 0 0;padding:5px;gap:4px;border:1px solid #d8b75c50;border-radius:4px;background:#0c121d;scroll-margin-block:5px}
-.npc-summary:hover .row-actions,.npc-summary:focus-within .row-actions{display:flex}
+.npc-summary.is-actions-open .row-actions,.npc-summary:focus-within .row-actions{display:flex}
 .npc-summary .row-actions button{font-size:.78em;padding:3px 5px}
