@@ -229,7 +229,7 @@ try {
                     const measure=()=>({height:list.scrollHeight,summary:summary.getBoundingClientRect().toJSON(),heading:summary.querySelector('.npc-heading').getBoundingClientRect().toJSON(),drops:summary.nextElementSibling.getBoundingClientRect().toJSON()});
                     const before=measure();name.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse'}));const after=measure(),bar=actions.getBoundingClientRect().toJSON();
                     const map=actions.querySelector('[data-npc-action="map"]');map.focus();const button=map.getBoundingClientRect().toJSON(),strip=actions.getBoundingClientRect().toJSON();
-                    const focused=document.activeElement===map,scroll={left:actions.scrollLeft,width:actions.scrollWidth,clientWidth:actions.clientWidth,clientLeft:actions.clientLeft};
+                    const focused=document.activeElement===map,scroll={scrollLeft:actions.scrollLeft,scrollWidth:actions.scrollWidth,clientWidth:actions.clientWidth,clientLeft:actions.clientLeft};
                     const details=actions.querySelector('[data-npc-action="details"]');details.focus();const first=details.getBoundingClientRect().toJSON();map.focus();
                     return{before,after,bar,button,strip,first,scroll,display:getComputedStyle(actions).display,position:getComputedStyle(actions).position,focused};
                 });
