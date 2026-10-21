@@ -161,7 +161,7 @@ for (const fail of [false, true]) {
             else this.currentZoneRecord = this.selectedZoneRecord();
         }
     };
-    const context = vm.createContext({ app, selectViewerZoneOption,
+    const context = vm.createContext({ app, selectViewerZoneOption, overlayMode:false,
         Event:class {}, clearRareMobs() {}, collisionGeometryPromise:Promise.resolve(), loadedZoneIdentity:'',
         startCollisionGeometryExport() {}, root:{}, waitForZoneSelect:async () => select
     });

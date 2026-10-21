@@ -41,6 +41,13 @@ app or the authenticated native Timers panel and a current discovery ID.
 
 The embedded Zone Viewer receives bounded, read-only access to supported zone/map files under the selected folder. Its parsed/cached data is maintained by the viewer runtime and is never written back into the EverQuest installation.
 
+The native Map can lazily embed that viewer for Top/First modes. Its isolated
+session permits only packaged viewer resources and bounded read-only zone/map
+files, denying log/configuration endpoints and mutations. This camera preview
+does not set the logged player position or send game input. Other panels keep
+their no-frame/no-file bridge. Hiding Map or returning to its line map releases
+the extra scene.
+
 Remote structured knowledge arrives from GitHub as a static gzip data pack originally generated on EQLWiki. The app verifies the published SHA-256 before replacing the previous local pack.
 
 Application updates use a separate bounded release check and SHA-256-verified

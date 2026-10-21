@@ -43,6 +43,8 @@ let viewerFolderStatus = 'idle';
 let viewerZoneState = { zone:'', status:'idle', message:'' };
 let focusedIntelTarget = null;
 let intelFocusSequence = 0;
+let overlayMapFocus = null;
+let overlayMapFocusSequence = 0;
 let nativeMapVisible = false;
 let discoveryInNative = false;
 let mapDataRevision = 0;
@@ -558,10 +560,11 @@ function overlaySessionSnapshot() {
     const selected = focusedIntelTarget && zoneKey(focusedIntelTarget.zone) === zoneKey(s.zone) ? focusedIntelTarget : null;
     const navigation = activeRoute?.status === 'ready' && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? viewerApi()?.overlayNavigation?.() : null;
     return { character:s.character, zone:s.zone, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
-        parse:compactParseSnapshot(s), discovery:discoveryInNative ? wikiDiscovery.snapshot().pending : [], intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), canRoute,
+        parse:compactParseSnapshot(s), discovery:discoveryInNative ? wikiDiscovery.snapshot().pending : [], intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
             packVersion:pack.meta?.manifestVersion || pack.meta?.version || '', profileKey:JSON.stringify([profile.classes.slice().sort(),settings.itemTier,settings.era]),
             focusedNpcId:selected?.id || '', focusSequence:intelFocusSequence },
-        map:{ zone:s.zone, dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
+        map:{ zone:s.zone, viewerZone:zoneRecord(s.zone)?.viewerName || zoneRecord(s.zone)?.name || s.zone, dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
+            focus:overlayMapFocus && overlayMapFocus.dataVersion === mapDataRevision && zoneKey(overlayMapFocus.zone) === zoneKey(s.zone) ? overlayMapFocus : null,
             npcs:sources.filter(source => source.loc?.length >= 2).map(source => ({id:intelIdentity(source),name:source.name,loc:source.loc,raidInstance:raidVariant(source)})),
             route:{ points:navigation?.points || [], message:activeRoute && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? activeRoute.message : '' } } };
 }
@@ -574,8 +577,14 @@ async function handleOverlayCommand({ action, payload = {} }) {
             (payload.zone && zoneKey(payload.zone) !== zoneKey(currentZone))) throw new Error('That NPC belongs to a previous zone.');
         const npc = npcRecordForName(payload.npc, currentZone, payload.raidInstance);
         if (!npc || (npc.zone && zoneKey(npc.zone) !== zoneKey(currentZone))) throw new Error('That NPC is no longer available in the current zone.');
+        if (payload.id !== undefined && payload.id !== intelIdentity(npc)) throw new Error('That NPC source is no longer available.');
         return npc;
     };
+    if (action === 'session:item-tier') {
+        if (!Number.isInteger(payload.tier) || payload.tier < 0 || payload.tier > 10) throw new Error('Choose an item level from Base to 10.');
+        settings.itemTier = payload.tier;
+        prefs.save(settings); renderAll(); refreshItemTooltip(); return;
+    }
     if (action === 'session:class-filter') {
         if (payload.panel !== 'intel' || typeof payload.enabled !== 'boolean') return;
         settings.intelMyClassOnly = payload.enabled;
@@ -596,6 +605,15 @@ async function handleOverlayCommand({ action, payload = {} }) {
     }
     if (action === 'session:select-npc') {
         const npc = resolveNpc(); focusedIntelTarget = {id:intelIdentity(npc),name:npc.name,zone:requestedZone,raidInstance:raidVariant(npc)}; intelFocusSequence++; return;
+    }
+    if (action === 'session:map-focus') {
+        const npc = resolveNpc(), loc = wikiLocationToWorld(npc.loc);
+        if (!loc || loc.length < 2) throw new Error('No map location is known for this NPC.');
+        overlayMapFocus = {sequence:++overlayMapFocusSequence,id:intelIdentity(npc),name:npc.name,zone:requestedZone,
+            loc,mode:'first',dataVersion:mapDataRevision};
+        focusedIntelTarget = {id:intelIdentity(npc),name:npc.name,zone:requestedZone,raidInstance:raidVariant(npc)};
+        // Camera preview is independent of the log parser and its route start.
+        await window.eyeOfZommOverlays.control('show','map'); return;
     }
     if (action === 'session:cancel-route') { clearActiveRoute(); return; }
     if (action === 'session:copy-waypoint') {

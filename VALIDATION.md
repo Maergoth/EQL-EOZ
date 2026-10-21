@@ -1,4 +1,24 @@
-# Validation report — v0.8.4
+# Validation report — v0.8.5
+
+## 0.8.5 native Map and Intel workspace
+
+This slice adds a collapsing Map header, Reset/default view, matching monster
+name/marker hit targets, on-demand Top/First modes in the native window, pinned
+Intel tier/class controls and source-specific first-person camera previews.
+The source and security map lives in
+[OVERLAY_MAP_WORKSPACE.md](docs/OVERLAY_MAP_WORKSPACE.md).
+
+Regression coverage is authored for GitHub execution: exact source identity,
+camera-only focus without changing logged position, shared tier persistence,
+header/hover/keyboard behavior, label hit rectangles, Map-only request policy,
+stale iframe cancellation and actual Electron wiring. The additional viewer
+reuses the shipped parser/rendering code; synthetic camera/scene fixtures do
+not prove every proprietary zone, physical pointer-lock comfort or game focus.
+
+The owner requested no local test/build/install runs. Current UI screenshots
+are collected by GitHub's synthetic Electron fixture and reviewed before
+packaging. All existing source, native-window, worker, discovery, catalog and
+exact ASAR source/image/bootstrap gates remain required.
 
 ## 0.8.4 window and map follow-up
 

@@ -37,5 +37,13 @@ jobs:
       - run: npm run test:desktop-worker
       - run: npm run test:window-lifecycle
       - run: npm run test:map-layout
-      - run: npm run test:native-overlays
+      - run: npm run test:map-overlay-3d
+      - run: npm run test:native-overlays -- --screenshots ci-screenshots
       - run: npm run test:discovery-notices
+      - name: Upload synthetic interface captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EoZ-interface-captures
+          path: ci-screenshots/*.png
+          if-no-files-found: ignore

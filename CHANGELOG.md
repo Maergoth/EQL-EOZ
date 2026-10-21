@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.5 - Map modes and compact overlay controls
+
+- Collapse native Map controls when its header is idle; replace Fit with Reset and remove Reload.
+- Cycle Map, top-down 3D and navigable first person inside the native Map window, loading 3D only when used.
+- Make monster names and markers share accurate pointer/click targets and keyboard selection.
+- Pin Item Level Slider and My Class above the scrolling Intel list, sharing the main app's saved tier.
+- Reveal mob actions on hover or keyboard focus. Each mob's Map action opens a first-person camera preview at that source; remove the global Intel Map button.
+
 ## 0.8.4 - Window recovery and Local Map controls
 
 - Remember the main window's size, monitor position and maximized state; recover saved windows when a display is removed.

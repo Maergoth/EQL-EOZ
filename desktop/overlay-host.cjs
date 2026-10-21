@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('node:path');
+const {allowMapRequest}=require('./overlay-map-policy.cjs');
 
 const PANEL_IDS = Object.freeze(['parse', 'map', 'intel', 'timers']);
 const PANEL_NAMES = Object.freeze({ parse:'Combat parse', map:'Map & intel', intel:'Zone intel', timers:'Timers' });
@@ -11,8 +12,8 @@ const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 const MAX_COMMAND_BYTES = 16 * 1024;
 const MAX_REPLY_BYTES = 8 * 1024 * 1024;
 const SESSION_ACTIONS = new Set([
-    'session:open', 'session:route', 'session:copy-waypoint', 'session:class-filter', 'session:wiki',
-    'session:map-data', 'session:intel-drops', 'session:select-npc', 'session:cancel-route',
+    'session:open', 'session:route', 'session:copy-waypoint', 'session:class-filter', 'session:item-tier', 'session:wiki',
+    'session:map-data', 'session:map-focus', 'session:intel-drops', 'session:select-npc', 'session:cancel-route',
     'timer:fire-definition', 'timer:save-definition', 'timer:remove-definition', 'timer:start', 'timer:pause', 'timer:resume',
     'timer:reset', 'timer:cancel', 'timer:delete', 'timer:create-spawn', 'timer:reset-swing',
     'timer:set-zone', 'timer:cancel-all', 'timer:set-swing-enabled', 'timer:set-swing-delay'
@@ -92,12 +93,14 @@ function sessionCommand(action, payload) {
     if (action === 'session:open' && !['map', 'items', 'npcs', 'combat', 'timers', 'settings'].includes(value.view)) throw new Error('Unknown application view.');
     if (action === 'session:open' && ['npc', 'item'].some(key => value[key] !== undefined &&
         (typeof value[key] !== 'string' || value[key].length > 240))) throw new Error('Invalid application selection.');
-    if (['session:route', 'session:copy-waypoint', 'session:wiki', 'session:intel-drops', 'session:select-npc'].includes(action) &&
+    if (['session:route', 'session:copy-waypoint', 'session:wiki', 'session:intel-drops', 'session:select-npc', 'session:map-focus'].includes(action) &&
         (typeof value.npc !== 'string' || !value.npc.trim() || value.npc.length > 240 ||
         (value.zone !== undefined && (typeof value.zone !== 'string' || value.zone.length > 160)))) throw new Error('Invalid NPC action.');
     if (value.raidInstance !== undefined && typeof value.raidInstance !== 'boolean') throw new Error('Invalid NPC variant.');
+    if(value.id!==undefined&&(typeof value.id!=='string'||value.id.length>512))throw new Error('Invalid NPC identity.');
     if (action === 'session:map-data' && (typeof value.zone !== 'string' || value.zone.length > 160)) throw new Error('Invalid map zone.');
     if (action === 'session:class-filter' && (value.panel !== 'intel' || typeof value.enabled !== 'boolean')) throw new Error('Invalid class filter.');
+    if(action==='session:item-tier'&&(!Number.isInteger(value.tier)||value.tier<0||value.tier>10))throw new Error('Invalid item tier.');
     return value;
 }
 
@@ -168,7 +171,7 @@ class OverlayHost {
         }
         return null;
     }
-    panelUrl(id) { return `${this.origin}/overlay.html?panel=${id}`; }
+    panelUrl(id) { return `${this.origin}/${id==='map'?'overlay-map.html':'overlay.html'}?panel=${id}`; }
     getState(id = null) {
         const common = { snapshot:this.snapshot, sessionAvailable:this.sessionAvailable,
             lastSnapshotAt:this.snapshotAt, sessionRestartCount:this.sessionRestartCount, recoveryShortcut:RECOVERY_SHORTCUT,
@@ -252,6 +255,7 @@ class OverlayHost {
                 partition:`eoz-overlay-${id}` }
         });
         this.windows.set(id, win);
+        if(id==='map')win.webContents.session.webRequest.onBeforeRequest({urls:['<all_urls>']},(details,callback)=>callback({cancel:!allowMapRequest(details,this.origin)}));
         win.setAlwaysOnTop(true, 'screen-saver');
         win.setIgnoreMouseEvents(prefs.passThrough, { forward:true });
         win.webContents.setWindowOpenHandler(() => ({ action:'deny' }));

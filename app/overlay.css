@@ -11,3 +11,18 @@ body[data-panel=timers] .overlay-shell{padding:4px 7px;border-radius:8px}body[da
 @media(max-width:360px){.parse-tabs button{flex:1;padding:0 4px}.encounter-stats{gap:5px;font-size:.8em}.encounter-stats .header-total{display:none}}@media(max-width:300px){.encounter-stats .ended{display:none}.overlay-shell{padding-left:6px;padding-right:6px}.meter-table th:first-child,.meter-table td:first-child{width:40%}}
 .intel-search{display:block;width:100%;margin:3px 0 6px;padding:4px 6px!important;font-size:.85em!important;border-color:#d8b75c32!important}.intel-group{padding:4px 5px;margin:5px 0 9px;border:1px solid #ffffff0c;border-radius:4px}.intel-group>h2{display:flex;align-items:center;justify-content:space-between;font-size:.87em;color:var(--gold2);font-weight:600;margin:0;padding:2px 0 5px;border-bottom:1px solid #ffffff0d}.intel-group>h2 span{font-size:.83em;font-weight:400;color:var(--muted)}.intel-group.is-raid{background:rgba(118,35,43,.13);border-color:rgba(206,102,111,.2)}.intel-group.is-raid>h2{color:#e4afb2}.intel-empty{font-size:.8em;color:var(--muted);padding:7px 0}.raid-source-badge{font-size:.65em;font-weight:600;padding:1px 4px;color:#e9a9ad;background:#b9424b20;border:1px solid #c6646d40;border-radius:3px}.show-more-drops{padding:3px 6px;margin:5px 0 2px;color:var(--gold2);font-size:.76em;background:transparent;border-color:#d8b75c32}.intel-drop-error{font-size:.78em;color:#eda0a0;line-height:1.4;padding-top:4px}.npc-row.is-focused{border-left:2px solid var(--gold);padding-left:5px;margin-left:-3px;background:#d8b75c09;scroll-margin-top:4px}body[data-panel=map] #panel-content{overflow:hidden}#native-map-root{height:100%;min-height:0}
 .timer-notification{height:22px;line-height:22px;font-size:.9em;color:var(--gold2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-left:2px solid #d8b75c80;padding-left:6px;margin:1px 0}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.intel-focus-flash{animation:intel-attention .8s ease-out}@keyframes intel-attention{0%,100%{box-shadow:inset 0 0 0 0 transparent}30%{box-shadow:inset 0 0 0 2px rgba(240,215,127,.65)}}@media(prefers-reduced-motion:reduce){.intel-focus-flash{animation:none}}
+/* Keep research controls anchored while the mob list scrolls independently. */
+body[data-panel=intel] #panel-content{display:flex;flex-direction:column;overflow:hidden}
+.intel-controls{flex:0 0 auto;border-bottom:1px solid #ffffff12;padding-bottom:2px}
+.intel-filter-row{display:grid;grid-template-columns:auto minmax(40px,1fr) auto;gap:7px;padding:3px 0}
+.intel-filter-row .intel-tier-label{flex-direction:column;align-items:flex-start;gap:0;white-space:nowrap;font-size:.9em;color:var(--muted)}
+.intel-tier-label output{font-size:1em;font-weight:600;color:var(--gold2)}
+.intel-filter-row input[type=range]{width:100%;min-width:0;margin:0}
+.intel-class-label{white-space:nowrap}
+.intel-mob-list{flex:1;min-height:0;overflow:auto;padding-right:3px;scrollbar-width:thin;scrollbar-color:#71603c transparent}
+.npc-summary{position:relative}
+.npc-heading .npc-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:transparent;border:0;padding:0;color:var(--con);font-size:1em;font-weight:600;text-align:left}
+.npc-heading .npc-name:hover{color:var(--con);text-decoration:underline;text-underline-offset:2px}
+.npc-summary .row-actions{display:none;position:static;max-width:100%;margin:3px 0 0;padding:5px;gap:4px;border:1px solid #d8b75c50;border-radius:4px;background:#0c121d;scroll-margin-block:5px}
+.npc-summary:hover .row-actions,.npc-summary:focus-within .row-actions{display:flex}
+.npc-summary .row-actions button{font-size:.78em;padding:3px 5px}

@@ -53,7 +53,7 @@ try {
             throw new Error(`Timed out: ${label}`);
         };
         const execute = (window, fn, ...args) => window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
-        const panels = () => Object.fromEntries(BrowserWindow.getAllWindows().filter(window => window.webContents.getURL().includes('/overlay.html?panel=')).map(window => [new URL(window.webContents.getURL()).searchParams.get('panel'), window]));
+        const panels = () => Object.fromEntries(BrowserWindow.getAllWindows().filter(window => /\/overlay(?:-map)?\.html\?panel=/.test(window.webContents.getURL())).map(window => [new URL(window.webContents.getURL()).searchParams.get('panel'), window]));
         const append = async text => fs.appendFile(log, `[${new Date().toString().replace(/ GMT.*$/, '')}] ${text}\n`);
         const card = window => execute(window, () => document.querySelector('#wiki-discovery-notices .wiki-discovery-card')?.textContent || '');
         const control = (owner, name, value) => execute(owner, (name, value) => window.eyeOfZommOverlays.control(name, 'timers', value), name, value);

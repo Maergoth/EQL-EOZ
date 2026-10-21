@@ -13,7 +13,7 @@ const test = (name, run) => tests.push({ name, run });
 const display = (x = 0, y = 0, width = 1920, height = 1040) => ({ workArea:{ x, y, width, height } });
 
 class Contents extends EventEmitter {
-    constructor() { super(); this.mainFrame = { url:'' }; this.sent = []; }
+    constructor() { super(); this.mainFrame = { url:'' }; this.sent = [];this.session={webRequest:{onBeforeRequest:(_filter,callback)=>{this.requestPolicy=callback;}}}; }
     setWindowOpenHandler(handler) { this.openHandler = handler; }
     send(...args) { this.sent.push(args); }
 }
@@ -262,6 +262,17 @@ test('every panel is a separate hardened native window without a parent', () => 
         win.webContents.emit('will-navigate', { preventDefault:() => { prevented = true; } }, 'https://example.com');
         assert.equal(prevented, true);
         assert.equal((await host.handleOverlayRequest(overlayEvent(id), 'get-state')).panel, id);
+    }
+}));
+
+test('only Map opts into the scoped readonly game-file frame bridge', () => fixture(async ({host})=>{
+    await host.control('show-all');
+    assert.equal(host.windows.get('parse').webContents.requestPolicy,undefined);
+    assert.equal(host.panelUrl('map'),'http://127.0.0.1:53147/overlay-map.html?panel=map');
+    const policy=host.windows.get('map').webContents.requestPolicy;
+    assert.equal(typeof policy,'function');
+    for(const [path,cancel] of [['/api/log',true],['/api/info',true],['/api/eq-file?path=Logs%2Feqlog_Fixture_Test.txt&surface=overlay-map',true],['/api/eq-file?path=Maps%2Fmistmoore.txt',true],['/api/eq-file?path=Maps%2Fmistmoore.txt&surface=overlay-map',false]]){
+        let reply;policy({url:'http://127.0.0.1:53147'+path,method:'GET',resourceType:'xhr'},value=>{reply=value;});assert.equal(reply.cancel,cancel);
     }
 }));
 

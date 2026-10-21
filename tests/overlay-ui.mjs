@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { TABS, parseView, renderParseContent, renderIntel, renderItem, durationLabel, timerView, renderTimerRows, renderTimerNotifications, renderSwing, escapeHtml, intelNpcKey, isRaidSource } from '../app/overlay.js';
+import {readFileSync} from 'node:fs';
+import { TABS, parseView, renderParseContent, renderIntel, renderItem, durationLabel, timerView, renderTimerRows, renderTimerNotifications, renderSwing, escapeHtml, intelNpcKey, isRaidSource, intelTierValue, intelMobAction, panelMarkup } from '../app/overlay.js';
 import { overlayControllerPresentation } from '../app/overlay-controller.js';
 
 const event = (type, amount, source = 'Slash') => ({ type, amount, source, victim:'a skeleton' });
@@ -79,10 +80,23 @@ const intel = {zone:'Fixture Zone',packVersion:'pack1',profileKey:'MNK|base|Clas
     {id:'raid-keeper',name:'Synthetic Keeper',raidInstance:true,drops:[{name:'Raid-only item'}],dropCount:1}
 ]};
 const key = intelNpcKey(intel.npcs[0],intel);
+const intelShell = panelMarkup('intel');
+assert.match(intelShell,/<div class="intel-controls">[\s\S]*id="intel-item-tier"[\s\S]*id="class-filter"[\s\S]*<\/div><div id="intel-body" class="intel-mob-list"/,'Tier and class controls precede the independent scrolling mob list');
+assert.match(intelShell,/<input id="intel-item-tier" type="range" min="0" max="10" step="1"/,'Overlay item level shares the main item-tier bounds');
+assert.doesNotMatch(intelShell,/data-open-view="map"/,'There is no global Intel Map button');
+for(const [value,expected] of [[-1,0],[0,0],[3,3],[10,10],[100,10],[undefined,0]]) assert.equal(intelTierValue(value),expected);
+assert.notEqual(key,intelNpcKey(intel.npcs[0],{...intel,itemTier:3}),'Explicit item tier invalidates old lazy stats even without a profile-key change');
+assert.deepEqual(intelMobAction('map',intel.npcs[1],intel.zone),{action:'session:map-focus',payload:{id:'raid-keeper',npc:'Synthetic Keeper',zone:'Fixture Zone',raidInstance:true}},'Map focus carries exact source ID/name, zone and variant');
+assert.deepEqual(intelMobAction('details',intel.npcs[0],intel.zone),{action:'session:open',payload:{view:'npcs',npc:'Synthetic Keeper',zone:'Fixture Zone',raidInstance:false}});
 const collapsed = renderIntel(intel);
 assert.match(collapsed,/Normal Zone/); assert.match(collapsed,/Raid Zone/);
 assert(collapsed.indexOf('data-intel-section="raid"') < collapsed.indexOf('data-intel-section="normal"'), 'Raid Zone is listed before Normal Zone');
 assert.match(collapsed,/raid-source-badge/);
+assert.match(collapsed,/class="npc-summary"[\s\S]*class="npc-name"[\s\S]*class="row-actions" role="group"/,'Keyboard-focusable mob names and grouped actions share the reveal surface');
+assert.match(collapsed,/data-npc-action="map" data-npc-index="1"/,'Each raid/normal mob owns its Map action');
+const overlayStyles = readFileSync(new URL('../app/overlay.css',import.meta.url),'utf8');
+assert.match(overlayStyles,/\.npc-summary \.row-actions\{[^}]*display:none;position:static;/,'Closed actions leave the tab order; opened actions contribute to scroll height at the final mob');
+assert.match(overlayStyles,/\.npc-summary:hover \.row-actions,\.npc-summary:focus-within \.row-actions\{display:flex\}/,'Both pointer travel inside the summary and keyboard focus retain the complete action group');
 assert.match(collapsed,/Show More \(22\)/);
 assert.match(renderIntel({npcs:[{id:'budgeted',name:'Small omitted preview',drops:[],dropCount:2}]}),/Show More \(2\)/,'Snapshot budget can omit even a small preview without losing access to its drops');
 assert.doesNotMatch(collapsed,/Synthetic drop 25/,'Heartbeat snapshot holds only a small preview');

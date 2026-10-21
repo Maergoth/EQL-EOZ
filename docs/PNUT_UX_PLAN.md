@@ -94,11 +94,15 @@ matching, PNUT named captures, preview, cooldown/overlap/enable rules, warning/e
 colors and optional sound/speech, plus notifications without a countdown. Regex
 work runs in an isolated deadline-limited worker.
 
-The main app retains the complete item browser and the single heavy Map
-Explorer. The lightweight native Map shares its owner data; a Map Explorer action
+The main app retains the complete item browser and route owner. The native Map
+shares that owner data and, since 0.8.5, lazily embeds the same viewer for Top/First
+inside its own window. Returning to the line map or hiding the panel releases the
+extra scene. See [overlay workspace contracts](OVERLAY_MAP_WORKSPACE.md).
+A complete Map Explorer action
 opens the full viewer explicitly. Intel Route stays in the overlay. Opening
-panels never enables map/routing preferences that the player left off. This
-slice adds no duplicate 3D window, archive decoder, meshes or route worker.
+panels never enables routing preferences that the player left off. Overlay
+3D is explicit and adds one selected-zone scene only while active; authoritative
+route computation and the log session remain in the main owner.
 Native docking and layout presets are not implemented.
 
 ### Interaction and recovery

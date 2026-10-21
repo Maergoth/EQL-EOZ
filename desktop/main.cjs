@@ -11,6 +11,7 @@ const zlib = require('node:zlib');
 const { URL } = require('node:url');
 const { AppUpdater, isReleaseNotesUrl } = require('./app-updater.cjs');
 const { OverlayHost } = require('./overlay-host.cjs');
+const { safeMapFile } = require('./overlay-map-policy.cjs');
 const { DiscoveryHost } = require('./discovery-host.cjs');
 const { normalizeWindowPlacement, WindowPlacement } = require('./window-placement.cjs');
 const {
@@ -481,7 +482,7 @@ async function eqFileManifest() {
     return { rootName: path.basename(rootReal), files, truncated: files.length >= MAX_EQ_FILE_COUNT };
 }
 
-async function readEqFile(relativeValue) {
+async function readEqFile(relativeValue, {mapOnly=false} = {}) {
     const config = await readConfig();
     const root = String(config.eqRootPath || '');
     const relative = String(relativeValue || '').replace(/\\/g, '/');
@@ -495,6 +496,9 @@ async function readEqFile(relativeValue) {
         fsp.realpath(candidate).catch(() => '')
     ]);
     if (!rootReal || !candidateReal || !isPathInside(rootReal, candidateReal)) return null;
+    // Map's optional 3D frame has no log-reading capability, including through
+    // a guessed Maps junction/symlink that resolves elsewhere in the game root.
+    if (mapOnly && !safeMapFile(path.relative(rootReal, candidateReal).split(path.sep).join('/'))) return null;
     const stat = await fsp.stat(candidateReal).catch(() => null);
     if (!stat?.isFile() || stat.size > MAX_EQ_FILE_BYTES) return null;
     return fsp.readFile(candidateReal);
@@ -606,7 +610,7 @@ async function requestHandler(req, res) {
         if (pathname === '/api/log') return sendJson(res, 200, await readLogWindow(url.searchParams.get('offset')));
         if (pathname === '/api/eq-files') return sendJson(res, 200, await eqFileManifest());
         if (pathname === '/api/eq-file') {
-            const body = await readEqFile(url.searchParams.get('path'));
+            const body = await readEqFile(url.searchParams.get('path'), {mapOnly:url.searchParams.get('surface') === 'overlay-map'});
             if (!body) return sendJson(res, 404, { error: 'EverQuest file not available' });
             return sendBuffer(req, res, 200, 'application/octet-stream', body, 'no-store');
         }

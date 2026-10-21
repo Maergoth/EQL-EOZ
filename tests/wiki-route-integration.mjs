@@ -78,6 +78,7 @@ function harness({ realModeTransitions = false } = {}) {
         app.resize = app.updateCoordinateHud = app.drawMiniMap = () => {};
     }
     const context = vm.createContext({
+        overlayMode:false,
         app, A:Point, worldToClientMap, document:{ createElement:node, createTextNode:value => value },
         rareLayer:node(), renderRareMobs() {}, renderRouteGuidance() {},
         navigationResult(label, source) { return { ok:true, label, source }; },
