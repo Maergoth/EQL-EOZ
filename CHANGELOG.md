@@ -11,6 +11,7 @@
 - Apply the wiki's +10 Range per tier to every item with a listed Range, including bows and throwing weapons.
 - Honor `Class: ALL except ...` in existing packs and export the actual allowed classes in future packs, keeping unusable loot out of class-filtered recommendations.
 - Extend the exporter's exact zone aliases so current wiki zone names retain their NPCs. Installing the reviewed server catalog and rebuilding the dataset is a separate operator step.
+- Preserve every recognized explicit NPC template zone before category/title fallbacks, so stale categories cannot move a spawn or discard its second zone.
 - Repair a corrupted local dataset on Sync, require SHA-256 verification, and enforce timeouts and size limits through dataset reads.
 - Require the installer to embed the exact verified dataset fetched for its build, with bundled dataset versions and record counts in the build log.
 - Update Electron within major version 43 and compatible transitive dependencies so the high-severity dependency audit passes.

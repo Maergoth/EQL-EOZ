@@ -122,6 +122,10 @@ then run the existing refresh command once. Check the new manifest version,
 gzip checksum, affected zone NPC coverage, and class-excluded items. The EoZ
 client also understands exclusions in legacy packs while that rebuild is pending.
 
+Recognized explicit NPC template zones take precedence and retain every listed
+zone. Categories and article-title suffixes are fallbacks; newly recognized
+categories must not override a field or remove a second spawn zone.
+
 The October 21, 2026 owner-approved rollout completed staging and production
 deployment via EQLWiki PRs #35/#36, then rebuilt and published manifest
 `20261021T060010Z-b9ad50c7439d`: 124 zones, 8,426 NPC records, 11,262 items.
