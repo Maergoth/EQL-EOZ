@@ -1,10 +1,15 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.8.6
+Baseline: 0.8.7
 Last updated: 2026-10-21
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
+
+The current Intel/session follow-up is indexed in
+[OVERLAY_MAP_WORKSPACE.md](OVERLAY_MAP_WORKSPACE.md). Triggers retains the
+existing countdown engine; New session splits parsing while preserving that
+engine, the live log cursor and map context.
 
 ## 1. Product promise
 
