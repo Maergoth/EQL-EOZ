@@ -50,6 +50,8 @@ export function compactParseSnapshot(source = {}) {
     for (const encounter of encounters) aggregate(encounter.events, breakdowns);
     return {
         character:text(source.character), totalDamage:amount(source.totalDamage), totalHealing:amount(source.totalHealing),
+        totalRuneCapacity:Number.isFinite(source.totalRuneCapacity) ? amount(source.totalRuneCapacity) : breakdowns.runes.reduce((sum,row) => sum + row.total,0),
+        sessionNumber:amount(source.sessionNumber), sessionStartedAt:amount(source.sessionStartedAt),
         totalTaken:amount(source.totalTaken), totalTakenHits:amount(source.totalTakenHits), takenSeconds:amount(source.takenSeconds),
         sessionTakenPerSecond:amount(source.sessionTakenPerSecond), totalKills:amount(source.totalKills), totalOwnKills:amount(source.totalOwnKills),
         totalLoot:amount(source.totalLoot), encounterCount:amount(source.encounterCount),
@@ -100,7 +102,8 @@ export function fitOverlaySnapshot(snapshot) {
     // player totals; defer details to the complete app.
     return { ...snapshot, session:{ character:text(session.character), zone:text(session.zone),
         logStatus:'Open the main app for full session details.', timers:session.timers, notice:session.notice,
-        parse:{ totalDamage:parse.totalDamage, totalHealing:parse.totalHealing, sessionDps:parse.sessionDps, sessionSeconds:parse.sessionSeconds,
+        parse:{ totalDamage:parse.totalDamage, totalHealing:parse.totalHealing, totalRuneCapacity:parse.totalRuneCapacity,
+            sessionNumber:parse.sessionNumber, sessionStartedAt:parse.sessionStartedAt, sessionDps:parse.sessionDps, sessionSeconds:parse.sessionSeconds,
             totalTaken:parse.totalTaken, totalTakenHits:parse.totalTakenHits, takenSeconds:parse.takenSeconds, sessionTakenPerSecond:parse.sessionTakenPerSecond,
             totalKills:parse.totalKills, totalOwnKills:parse.totalOwnKills, totalLoot:parse.totalLoot, encounterCount:parse.encounterCount,
             breakdowns:Object.fromEntries(['damage', 'healing', 'runes', 'taken', 'takenAbilities'].map(key => [key, [{ name:key === 'taken' ? 'Other attackers' : 'Other abilities',

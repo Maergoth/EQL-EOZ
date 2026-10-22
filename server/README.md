@@ -81,17 +81,28 @@ manifest.json
 eqlwiki-eye-of-zomm-data.json.gz
 ```
 
-The force push is intentional and limited to the `dataset` branch. Keeping the branch at one commit prevents weekly binary snapshots from bloating repository history.
+The force push is intentional and limited to the `dataset` branch. Keeping the branch at one commit prevents repeated binary snapshots from bloating repository history.
 
-## Weekly cron
+## Coordinated refresh timing
 
 Recommended example: Monday at 4:17 AM server time.
 
 ```cron
-17 4 * * 1 /bin/bash /home/eqlwikdq/bin/eoz-pack-refresh.sh >> /home/eqlwikdq/private-cache/mediawiki/eoz-pack-refresh.log 2>&1
+17 * * * * /bin/bash /home/eqlwikdq/bin/eoz-pack-refresh.sh --if-stale >> /home/eqlwikdq/private-cache/mediawiki/eoz-pack-refresh.log 2>&1
 ```
 
-Adjust the account path if needed.
+The host uses UTC. Each hourly invocation checks eligibility under the existing
+lock; the expensive export runs only after 24 hours since the last successful
+GitHub publication. The private `eoz-pack-last-success` completion marker advances
+only after sync succeeds. A local-only review or failed attempt does not make
+unpublished data look fresh. Default/manual refresh and `--local-only` bypass age.
+Adjust the account path if needed. Install reviewed private host scripts explicitly;
+an application deployment does not install them.
+
+The wiki's separate staging workflow checks eligibility hourly at minute 47,
+using its existing 24-hour successful-refresh guard, deployment lock and failure
+recovery rules. An explicit manual staging refresh can force replacement. Both
+derivatives read production independently; staging database copies stay private.
 
 The refresh wrapper uses:
 
@@ -138,6 +149,26 @@ piped links and multiline rows; their Area/Loc columns and surrounding
 `ItemWhereTable` wrapper never become NPC identities or change another list's zone.
 Explicit normal/raid zone anchors override the enclosing section for that row.
 
+The producer also reconciles the NPC template's `known_loot` with item
+`dropsfrom`. A leading item transclusion or direct item link in a loot entry
+adds that NPC's zone/instance source to the existing canonical item record.
+It does not create missing item stats or alter item eras/classes. Exact item
+page titles win over display names and retain internal case after MediaWiki's
+normal first-letter/space normalization; a bounded local redirect lookup supports
+item aliases. Public NPC revision/field evidence is retained in `lootSources`.
+Normal/raid NPC template and loot-section scope still apply, with shared NPC
+variants derived through the existing instance index.
+An unlabeled public NPC template preceding a separate explicit raid NPC template
+retains its own loot; a single shared template still supplies both known variants.
+Explicit loot sections preserve their scope even when that instance has no stat
+block; the client can still display its documented source row. Sibling sections
+return to the enclosing template's default instance. Notes, unknown templates,
+comments, namespace links and prose do not establish additional drops.
+`meta.npcLootSourcesIncluded` marks completed reconciliation;
+`npcLootSourceCounts` reports candidate titles, distinct resolved items,
+unresolved candidate titles, enriched items and added unique source variants.
+These additions require producer deployment and a new published dataset.
+
 The October 21, 2026 owner-approved rollout completed staging and production
 deployment via EQLWiki PRs #35/#36 and the explicit-zone precedence follow-up
 #37/#38, then rebuilt and published final manifest
@@ -159,4 +190,10 @@ https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json
 https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/eqlwiki-eye-of-zomm-data.json.gz
 ```
 
-The manifest is checked once on each application startup and when the user presses **Sync with Wiki**. The gzip is downloaded only when the manifest version changes.
+The manifest is checked on startup, hourly while the application remains open,
+and when the user presses **Sync with Wiki**. These requests share one in-flight
+operation; the next automatic attempt is one hour after completion, including
+failure. The gzip is downloaded only when the manifest version changes or a
+matching local copy is invalid. A verified pack replaces the cache atomically.
+Settings distinguishes check/success/download times from the dataset's own
+generation time. Offline or invalid downloads retain the last valid pack.

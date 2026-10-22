@@ -1,6 +1,6 @@
 # EQLWiki — Eye of Zomm
 
-**Eye of Zomm** is a local-first Windows app for **EverQuest Legends**. It reads ordinary game logs, combines them with cached EQLWiki knowledge, and keeps maps, named-mob loot, combat parses and timers in separate desktop windows.
+**Eye of Zomm** is a local-first Windows app for **EverQuest Legends**. It reads ordinary game logs, combines them with cached EQLWiki knowledge, and keeps maps, named-mob loot, combat parses and triggers in separate desktop windows.
 
 [Download latest installer](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
@@ -9,13 +9,13 @@
 1. Install the latest `EQLWiki-Eye-of-Zomm-Setup-<version>-x64.exe` from [Releases](https://github.com/Maergoth/EQL-EOZ/releases).
 2. Choose your EverQuest Legends folder on first launch. Enable logging in the game; EoZ follows the newest `eqlog_*.txt` under `Logs`, or a specific file selected in Settings.
 3. Emit `/who` to establish your character's zone, level and classes, and `/loc` to place your position on the map. Later logged locations update it automatically.
-4. Open **Overlays** to arrange Parse, Map, Zone & loot and Timers. Configure them in **Settings → Native overlays**. Reopen **Settings → About Eye of Zomm → What's new** for the illustrated tour.
+4. Open **Overlays** to arrange Parse, Map, Zone & loot and Triggers. Configure them in **Settings → Native overlays**. Reopen **Settings → About Eye of Zomm → What's new** for the illustrated tour.
 
 The installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz://` so EQLWiki can open the app. Beta installers may be unsigned and show a Windows publisher prompt; see [signing status](SIGNING.md).
 
 ## A look around
 
-These screenshots show the actual **0.8.6 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [GitHub CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39687241470). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+These screenshots show the actual **0.8.7 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [GitHub CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39698239325). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 
@@ -33,17 +33,21 @@ Routing is an opt-in. A line appears only after collision checks approve it; a g
 
 ### Named mobs, raid sources and complete loot
 
-**Zone & loot** separates Normal Zone and Raid Zone sources, with red **Raid Zone** intel shown first. **Item Level Slider** and **My Class** stay anchored above the scrolling list. Hover or keyboard-focus a mob name for Details, Route, Copy /waypoint, Wiki and Map. Its Map action opens a first-person preview at that source, keeping your logged position unchanged. Use **Show More** for all matching drops. Class-filtered loot excludes statless and weight-only records. A logged consider or named kill selects and expands its row with a mild visual/audio cue, without activating the window.
+**Zone & loot** separates Normal Zone and Raid Zone sources, with red **Raid Zone** intel shown first. Click a section heading to collapse it. **Item Level Slider** and **My Class** stay anchored above the scrolling list. Hover or keyboard-focus a mob name for Details, Route, Copy /waypoint, Wiki and Map in the same row, without moving the list. Its Map action opens a first-person preview at that source, keeping your logged position unchanged. Use **Show More** for all matching drops. Class filtering retains usable equipment/effects and excludes statless and weight-only quest/junk records. A logged consider or named kill selects and expands its row and section with a mild visual/audio cue, without activating the window.
 
-Item details use local wiki icons and Item Level Slider rules. **Through era** includes items through the chosen era. Activating a located NPC name copies a paste-ready `/waypoint Y X [Z]`; row-level Route actions start navigation when routing is enabled.
+Hover or focus an item's name or icon for its local stat block, including tier-adjusted values and base comparisons. **Through era** includes items through the chosen era. Activating a located NPC name copies a paste-ready `/waypoint Y X [Z]`; row-level Route actions start navigation when routing is enabled. Plane of Hate starts at Z 120; its slice remains adjustable.
 
-![Raid and normal named-mob loot from a synthetic wiki pack](app/assets/whats-new/intel.png)
+![Raid loot and same-row mob actions from a synthetic wiki pack](app/assets/whats-new/intel.png)
 
-### Timers, triggers and combat parses
+The main Item and NPC browsers use the same local stat data. Item names and pictures support mouse hover and keyboard focus, including when logged activity updates a card.
 
-Create manual countdowns or literal/regex log triggers on the main **Timers** page. Test a match, use named captures, set cooldowns and choose local sound/speech cues. Running timers and the observed swing bar appear in the compact Timers window. You supply reminder durations; EoZ does not know a mob's respawn period.
+![Main NPC browser item stat block with synthetic loot](docs/screenshots/main-item-hover.png)
 
-The independent **Parse** window has **Overview / Damage / Healing / Taken / Session** tabs and encounter selection. One shared session reads the log for every panel. The swing bar estimates your outgoing melee rounds from logged hits and misses; one-second log timestamps limit its precision. See [timer behavior](docs/TIMERS.md).
+### Triggers and combat parses
+
+Create manual countdowns or literal/regex log triggers on the main **Triggers** page. Test a match, use named captures, set cooldowns and choose local sound/speech cues. Running countdowns and the observed swing bar appear in the compact Triggers window. You supply reminder durations; EoZ does not know a mob's respawn period.
+
+The independent **Parse** window has **Overview / Damage / Healing / Taken / Session** tabs and encounter selection. Healing includes a separately labeled rune-capacity subsection; capacity is not measured absorption or healing. **New session** in Combat or the Parse Session tab clears parse/loot totals while retaining the live log position, profile, map and triggers. One shared session reads the log for every panel. The swing bar estimates your outgoing melee rounds from logged hits and misses; one-second log timestamps limit its precision. See [trigger and countdown behavior](docs/TIMERS.md).
 
 ![Timer trigger editor with synthetic match preview](app/assets/whats-new/timers.png)
 
@@ -53,7 +57,7 @@ Unlock an overlay to move/resize it. Locking leaves its tabs and menus interacti
 
 EoZ reads logs and supported map/archive files under the folder you choose. It never reads game-process memory, injects code, patches game files, sends game commands or synthesizes gameplay input. See [SAFETY.md](SAFETY.md).
 
-When a complete wiki catalog confirms that an encountered NPC or looted item is missing, an inline Timers notice offers **Screenshot** or **Ignore**. Screenshot opens an explicit window/display choice and copies the selected image to your local clipboard. You decide where to paste it; nothing uploads automatically. Notices pause their dismissal timer while hovered or keyboard-focused.
+When a complete wiki catalog confirms that an encountered NPC or looted item is missing, an inline Triggers notice offers **Screenshot** or **Ignore**. Screenshot opens an explicit window/display choice and copies the selected image to your local clipboard. You decide where to paste it; nothing uploads automatically. Notices pause their dismissal timer while hovered or keyboard-focused.
 
 Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards open their exact wiki pages. Ordinary search and filtering use cached data and do not crawl wiki pages.
 
@@ -62,7 +66,7 @@ Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards op
 | Update | What it changes | Where to use it |
 | --- | --- | --- |
 | Application update | Installed EoZ code and interface | **Settings → Application updates**: check, download, then **Restart to install update** |
-| Wiki data update | Cached NPCs, items, icons, zone aliases and source records | **Sync with Wiki**, also checked at startup |
+| Wiki data update | Cached NPCs, items, icons, zone aliases and source records | **Sync with Wiki**, also checked at startup and hourly while open |
 
 Verified application downloads can wait until later. Startup downloading is optional and off by default. From 0.8.6, **Restart to install update** authorizes a silent upgrade and automatic relaunch, without the setup wizard or another app confirmation. Windows may still require a security or elevation prompt. Settings, folder/log choices and cached wiki data stay in the existing profile. Older installed builds use their existing installer flow for the first upgrade.
 
@@ -73,9 +77,9 @@ EQLWiki content → local exporter → gzip + SHA-256 manifest
                → GitHub dataset branch → verified local cache
 ```
 
-Official installers include a production snapshot, so first launch does not reconstruct the wiki corpus. Startup and **Sync with Wiki** check only the small GitHub manifest; a changed version downloads and verifies the pack before replacing the cache. Players do not poll EQLWiki for dataset updates.
+Official installers include a production snapshot, so first launch does not reconstruct the wiki corpus. Startup, hourly background checks and **Sync with Wiki** check the small GitHub manifest; a changed version downloads and verifies the pack before replacing the cache. Overlapping requests share one check, and failure keeps the last valid data. Settings separates the last check, successful check, dataset generation, download and next check times. Players do not poll EQLWiki for dataset updates.
 
-The producer reads MediaWiki's local content/database services and builds zone aliases, NPC locations/provenance, normal/raid source variants, items and embedded icons. A weekly/manual host job publishes only the filtered manifest and compressed pack to the dedicated `dataset` branch. Installing producer changes and rebuilding the dataset are separate from a desktop release; see [server operations](server/README.md).
+The producer reads production MediaWiki's local content/database services and builds zone aliases, NPC locations/provenance, normal/raid source variants, items and embedded icons. Hourly host eligibility checks rebuild after 24 hours since the last successful publication; manual refresh remains available. Only the filtered manifest and compressed pack reach the dedicated `dataset` branch. Staging's private database copies use the same 24-hour freshness guard and separate hourly eligibility checks. Installing producer changes and rebuilding the dataset are separate from a desktop release; see [server operations](server/README.md).
 
 ## Development and validation
 

@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-21
 
-Code baseline: 0.8.6
+Code baseline: 0.8.7
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
@@ -17,10 +17,10 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 | 0.9 decision intelligence beta | Planned | User stories and data rules in vision 16.4 | Begin only after the 0.8 95% corpus/collision/non-blocking exit gate |
 | 1.0 trusted release | Planned | Quality gate in vision 16.5 | Signing, upgrade path, support/compatibility docs, clean Windows matrix, no S1/S2 defects |
 | Application updater | Implemented; 0.8.6 adds silent upgrade/relaunch after the explicit restart action | GitHub beta discovery; verified bounded NSIS staging; trusted main-window IPC; launch-failure recovery; Electron IPC/UI smoke; prior official installer preserved profile and shortcut targets | Complete a later approved in-app silent upgrade; current publication leaves the owner's local installation unchanged |
-| Native modular overlays | Implemented in 0.8.3 PR; physical game/OS acceptance pending | Parse/Map/Intel/Timers are separate windows; PNUT five tabs, own Taken, one session, bounded complete aggregates, saved layouts, lock/passthrough and recovery; actual Electron smoke; [source map](PNUT_UX_PLAN.md) | Physical passthrough, focus, scaling and monitor/sleep matrix; no duplicate 3D decoder or native docking claimed |
+| Native modular overlays | Implemented in 0.8.3 PR; physical game/OS acceptance pending | Parse/Map/Intel/Triggers are separate windows; PNUT five tabs, own Taken, one session, bounded complete aggregates, saved layouts, lock/passthrough and recovery; actual Electron smoke; [source map](PNUT_UX_PLAN.md) | Physical passthrough, focus, scaling and monitor/sleep matrix; no duplicate 3D decoder or native docking claimed |
 | Native map and Intel | Implemented with synthetic IPC evidence and production dataset | Client line-map canvas, shared routes, Normal Zone/Raid Zone identity, lazy all-drop Show More, named consider/kill focus/expand/flash/blip without activation; Through era is cumulative; map modes only on main Map page | Live source/location acceptance |
 | PNUT-style timers and swing | Implemented with synthetic log evidence | Main list/editor with literal/regex PNUT captures, preview, cooldown/overlap, warning/end colors and sound/speech, notifications; persisted deadlines/replay guards and observed swing; [rules](TIMERS.md) | Live EQL grammar and timing comparison; timestamps limit precision to one second |
-| Missing wiki suggestions | Implemented; explicit clipboard capture acceptance pending | Complete-catalog membership guard, shared inline main/native Timers notices, 15 visible seconds with hover/focus pause, Screenshot source choices/clipboard and persistent Ignore; no popup/upload | Fresh complete catalog, physical capture/source selection and local clipboard check |
+| Missing wiki suggestions | Implemented; explicit clipboard capture acceptance pending | Complete-catalog membership guard, shared inline main/native Triggers notices, 15 visible seconds with hover/focus pause, Screenshot source choices/clipboard and persistent Ignore; no popup/upload | Fresh complete catalog, physical capture/source selection and local clipboard check |
 | Main window and map controls | Implemented in 0.8.4; physical monitor acceptance pending | Native main frame; saved placement/maximized state; tray/start preferences; responsive map footer; embedded minimap zoom; native Z slider with unknown-Z markers; Raid Zone first; [continuation index](WINDOW_MAP_POLISH.md) | Physical monitor removal/DPI and live game interaction |
 | Native map modes and Intel workspace | Implemented in 0.8.5; CI and physical acceptance tracked separately | Collapsing Reset/Follow/zoom/view header; exact label hit targets; lazy overlay Top/First viewer; camera-only mob preview; pinned shared tier/class controls; [source map](OVERLAY_MAP_WORKSPACE.md) | GitHub Windows gates, physical pointer-lock/focus and live archive acceptance |
 
@@ -36,9 +36,10 @@ the guarded engine policy and conservative clearance checks.
 
 Next verify known-walkable ramp/drop/door coverage and live movement/heading,
 OS-wide DPI changes, and installer behavior. The reviewed raid/catalog producer
-is deployed; dataset `20261021T101150Z-dd346c8cc55d` includes 117 raid variants
-and complete public presence indexes. The current release fetches and checks
-that production snapshot independently of application publication. Capture only
+includes raid variants and complete public presence indexes. The current
+[dataset manifest](https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json)
+is independent of application publication; 0.8.7 additionally requires the
+reviewed NPC known-loot reconciliation and reported Hate drops. Capture only
 aggregate schema-v2 diagnostics. Both established and candidate paths must
 validate before display; do not introduce a renderer-thread collision graph
 or expose an engine selector.

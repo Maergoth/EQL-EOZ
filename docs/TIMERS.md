@@ -1,12 +1,15 @@
-# Local timers and observed swing estimates
+# Local triggers, countdowns and observed swing estimates
 
 Eye of Zomm's timers use one session in the main renderer. Native overlay
 windows receive snapshots and send commands to that session; opening another
 panel must never create another parser or timer engine. Definitions, active
 absolute deadlines, paused remaining durations, zone filters, swing settings
 and replay guards are saved locally. Nothing is sent to game chat or shared.
-All creation, editing and timer controls live in the main app's **Timers** page. The floating Timers window is a compact display of
+All creation, editing and countdown controls live in the main app's **Triggers** page. The floating Triggers window is a compact display of
 countdowns and the swing bar; it contains no timer editor or management forms.
+The rename retains the existing persisted definitions, deadlines and panel IDs.
+**New session** resets combat/loot parsing without resetting trigger state,
+running countdowns, swing settings or freshness/replay protection.
 
 The interaction reference is PNUT M&M at commit
 [`28bbf8d39fdd52074c39cf2542ec65f7ccf104f0`](https://github.com/Maergoth/pnut-mnm/tree/28bbf8d39fdd52074c39cf2542ec65f7ccf104f0):

@@ -7,6 +7,12 @@ export function mapBounds(lines) {
     return Number.isFinite(minX) ? {minX,minY,maxX,maxY} : {minX:-500,minY:-500,maxX:500,maxY:500};
 }
 export const knownMapZ = value => (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') && Number.isFinite(Number(value));
+// Hate's high ceiling obscures its playable floor in an unfiltered initial
+// view. This is a presentation default, never a change to source/collision data.
+export function defaultMapSliceCenter(zone, viewerZone = '') {
+    const identity = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    return [zone, viewerZone].some(value => ['planeofhate', 'hateplane'].includes(identity(value))) ? 120 : null;
+}
 export function mapElevationBounds(lines = [],npcs = [],location = null) {
     let low=Infinity,high=-Infinity;
     const include=value=>{if(knownMapZ(value)){low=Math.min(low,Number(value));high=Math.max(high,Number(value));}};
@@ -175,11 +181,11 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     }
     async function load(nextZone){const owner=++generation;data=null;draw();try{const result=await bridge.action('session:map-data',{zone:nextZone});if(disposed||owner!==generation)return;data=result;fit();draw();}catch(error){if(disposed||owner!==generation)return;data={status:'error',message:error.message||'Unable to load this map.',lines:[],labels:[]};draw();}}
     function render(next){session=next||getSession?.()||{};const nextZone=session.map?.zone||session.zone||'',nextVersion=session.map?.dataVersion??0;
-        if(nextZone!==zone||nextVersion!==dataVersion){zone=nextZone;dataVersion=nextVersion;data=null;zoom=1;sliceCenter=null;sliceTolerance=25;targets=[];pendingFocus=null;$('[data-map-tolerance]').value='25';generation++;release3D();if(zone)void load(zone);}
+        if(nextZone!==zone||nextVersion!==dataVersion){const changedZone=nextZone!==zone;zone=nextZone;dataVersion=nextVersion;data=null;targets=[];pendingFocus=null;if(changedZone){zoom=1;sliceCenter=defaultMapSliceCenter(zone,session.map?.viewerZone);sliceTolerance=25;$('[data-map-tolerance]').value='25';}generation++;release3D();if(zone)void load(zone);}
         const focus=session.map?.focus;if(focus&&focus.zone===zone&&focus.sequence!==undefined){const key=JSON.stringify([zone,focus.sequence]);if(key!==lastFocus){lastFocus=key;pendingFocus=focus;follow=false;if(knownMapZ(focus.loc?.[2]))sliceCenter=Number(focus.loc[2]);setMode('first');}}
         draw();
     }
-    function reset(){pendingFocus=null;follow=true;sliceCenter=null;sliceTolerance=25;$('[data-map-tolerance]').value='25';fit();setMode('map');}
+    function reset(){pendingFocus=null;follow=true;sliceCenter=defaultMapSliceCenter(zone,session.map?.viewerZone);sliceTolerance=25;$('[data-map-tolerance]').value='25';fit();setMode('map');}
     listen(tools,'click',event=>{const action=event.target.closest?.('[data-map-action]')?.dataset.mapAction;if(!action)return;event.stopPropagation();
         if(action==='reset')reset();if(action==='follow'){follow=!follow;three?.setFollow?.(follow);}if(action==='zoom-in'||action==='zoom-out'){const factor=action==='zoom-in'?1.4:1/1.4;if(mode==='map')zoom=Math.max(.25,Math.min(40,zoom*factor));else three?.zoomBy?.(factor);}if(action==='mode'){pendingFocus=null;setMode(nextNativeMapMode(mode));}draw();});
     listen(root,'click',event=>{const key=event.target.closest?.('[data-map-npc]')?.dataset.mapNpc;if(key)selectNpc(targets.find(target=>mapNpcKey(target.marker)===key)?.marker);});

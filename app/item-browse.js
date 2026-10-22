@@ -43,8 +43,19 @@ export function itemHasZoneSource(item, zone, normalizeZone = defaultZoneKey) {
 }
 
 export function itemHasClassStats(item) {
-    return Object.entries(item?.stats || {}).some(([stat, value]) =>
+    if (Object.entries(item?.stats || {}).some(([stat, value]) =>
         String(stat).toUpperCase() !== 'WT' && Number.isFinite(Number(value)) && Number(value) !== 0
+    )) return true;
+    // Useful equipment can grant a click/worn effect without numeric stats
+    // (for example a charged wand). Keep these in My Class; a weight-only
+    // quest item or an effect on food/potions is not equippable gear.
+    const hasSlot = (item?.slots || []).some(slot =>
+        /^(?:EAR|HEAD|FACE|NECK|SHOULDERS|ARMS|BACK|WRIST|RANGE|HANDS|PRIMARY|SECONDARY|FINGER|CHEST|LEGS|WAIST|FEET|AMMO|CHARM|POWER SOURCE)$/i.test(String(slot).trim())
+    );
+    if (!hasSlot) return false;
+    return (item?.displayLines || []).some(line =>
+        /^\s*Focus Effect:\s*\S/i.test(line) ||
+        (/^\s*Effect:\s*\S/i.test(line) && /\b(?:Must Equip|Can Equip|Worn|Combat)\b/i.test(line))
     );
 }
 

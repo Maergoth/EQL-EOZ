@@ -27,6 +27,7 @@ const DEFAULT_PORT = 53147;
 const INITIAL_TAIL_BYTES = 512 * 1024;
 const MAX_READ_BYTES = 2 * 1024 * 1024;
 const PACK_MANIFEST_URL = 'https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json';
+const PACK_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const MAX_PACK_MANIFEST_BYTES = 64 * 1024;
 const MAX_PACK_DOWNLOAD_BYTES = 128 * 1024 * 1024;
 const MAX_PACK_JSON_BYTES = 512 * 1024 * 1024;
@@ -49,6 +50,11 @@ let desktopSettings = { minimizeToTray:false, startMinimized:false };
 let configWriteQueue = Promise.resolve();
 let quitFlush = null;
 let quitReady = false;
+let dataPackSyncPromise = null;
+let dataPackRefreshTimer = null;
+let dataPackRefreshEnabled = false;
+let dataPackCheckStartedUtc = '';
+let nextDataPackCheckUtc = '';
 
 function getAppUpdater() {
     if (!appUpdater) appUpdater = new AppUpdater({
@@ -225,6 +231,9 @@ async function useAutomaticLogSelection() {
 async function readPackState() {
     return readJson(packStatePath(), {
         lastCheckUtc: '',
+        lastSuccessUtc: '',
+        lastUpdatedUtc: '',
+        generatedAtUtc: '',
         version: '',
         lastStatus: 'never',
         lastError: ''
@@ -293,7 +302,61 @@ function validatePack(pack) {
     );
 }
 
-async function updateStaticDataPack(force = false) {
+function dataPackRefreshState(state = {}) {
+    return { ...state, lastCheckUtc:dataPackCheckStartedUtc || state.lastCheckUtc || '',
+        checking:Boolean(dataPackSyncPromise), nextCheckUtc:nextDataPackCheckUtc,
+        refreshIntervalMs:PACK_REFRESH_INTERVAL_MS };
+}
+
+function scheduleDataPackRefresh() {
+    clearTimeout(dataPackRefreshTimer);
+    dataPackRefreshTimer = null;
+    nextDataPackCheckUtc = '';
+    if (!dataPackRefreshEnabled || quitting) return;
+    nextDataPackCheckUtc = new Date(Date.now() + PACK_REFRESH_INTERVAL_MS).toISOString();
+    dataPackRefreshTimer = setTimeout(() => {
+        dataPackRefreshTimer = null;
+        nextDataPackCheckUtc = '';
+        void updateStaticDataPack(false).catch(error => console.warn('[Eye of Zomm] data sync:', error));
+    }, PACK_REFRESH_INTERVAL_MS);
+    dataPackRefreshTimer.unref?.();
+}
+
+function startDataPackRefresh() {
+    if (dataPackRefreshEnabled) return dataPackSyncPromise || Promise.resolve();
+    dataPackRefreshEnabled = true;
+    return updateStaticDataPack(false);
+}
+
+function stopDataPackRefresh() {
+    dataPackRefreshEnabled = false;
+    clearTimeout(dataPackRefreshTimer);
+    dataPackRefreshTimer = null;
+    nextDataPackCheckUtc = '';
+}
+
+function updateStaticDataPack(force = false) {
+    // Startup, hourly and manual requests share the same transfer and atomic
+    // commit. A click during a running check joins it rather than queueing a
+    // second download or overwriting its state with an older result.
+    if (dataPackSyncPromise) return dataPackSyncPromise;
+    clearTimeout(dataPackRefreshTimer);
+    dataPackRefreshTimer = null;
+    nextDataPackCheckUtc = '';
+    dataPackCheckStartedUtc = new Date().toISOString();
+    dataPackSyncPromise = performStaticDataPackUpdate(force).then(result => {
+        dataPackSyncPromise = null;
+        scheduleDataPackRefresh();
+        return { ...result, dataPack:dataPackRefreshState(result.dataPack) };
+    }, error => {
+        dataPackSyncPromise = null;
+        scheduleDataPackRefresh();
+        throw error;
+    });
+    return dataPackSyncPromise;
+}
+
+async function performStaticDataPackUpdate(force = false) {
     await ensureUserDirs();
     const state = await readPackState();
     const now = new Date();
@@ -324,8 +387,10 @@ async function updateStaticDataPack(force = false) {
                 state.version = String(manifest.version);
                 state.lastStatus = 'bundled-current';
                 state.lastError = '';
+                state.lastSuccessUtc = new Date().toISOString();
+                state.generatedAtUtc = String(bundled.meta?.generatedAt || '');
                 await savePackState(state);
-                return { ok: true, skipped: true, status: 'bundled-current', version: state.version, productionPack: false, bundledPack: true };
+                return { ok: true, skipped: true, status: 'bundled-current', version: state.version, productionPack: false, bundledPack: true, dataPack:state };
             }
         }
 
@@ -337,8 +402,10 @@ async function updateStaticDataPack(force = false) {
             if (validatePack(cached) && String(cached.meta?.manifestVersion || '') === String(manifest.version)) {
                 state.lastStatus = 'current';
                 state.lastError = '';
+                state.lastSuccessUtc = new Date().toISOString();
+                state.generatedAtUtc = String(cached.meta?.generatedAt || '');
                 await savePackState(state);
-                return { ok: true, skipped: true, status: 'current', version: state.version, productionPack: true };
+                return { ok: true, skipped: true, status: 'current', version: state.version, productionPack: true, dataPack:state };
             }
         }
 
@@ -366,9 +433,12 @@ async function updateStaticDataPack(force = false) {
         state.version = String(manifest.version);
         state.lastStatus = 'updated';
         state.lastError = '';
+        state.lastSuccessUtc = new Date().toISOString();
+        state.lastUpdatedUtc = state.lastSuccessUtc;
+        state.generatedAtUtc = String(decoded.meta?.generatedAt || '');
         await savePackState(state);
 
-        return { ok: true, skipped: false, status: 'updated', version: state.version, productionPack: true };
+        return { ok: true, skipped: false, status: 'updated', version: state.version, productionPack: true, dataPack:state };
     } catch (error) {
         state.lastStatus = 'unavailable';
         state.lastError = String(error?.message || error);
@@ -379,6 +449,7 @@ async function updateStaticDataPack(force = false) {
             status: 'unavailable',
             version: String(state.version || ''),
             productionPack: fs.existsSync(productionPackPath()),
+            dataPack:state,
             error: state.lastError
         };
     }
@@ -554,7 +625,7 @@ async function apiInfo() {
         eqRootExists: Boolean(config.eqRootPath && fs.existsSync(config.eqRootPath)),
         logSelection: config.logSelection === 'manual' ? 'manual' : 'automatic',
         safety: 'log/local-file reads only; optional static wiki data pack',
-        dataPack: state,
+        dataPack: dataPackRefreshState(state),
         productionPack: fs.existsSync(productionPackPath()),
         windowState: windowSettings(config),
         desktop: true
@@ -755,8 +826,8 @@ async function bootstrap() {
     }
 
     // Never delay first paint on remote data. The cached/bootstrap pack loads immediately;
-    // a tiny GitHub dataset-manifest check runs in parallel on every startup.
-    void updateStaticDataPack(false).catch(error => console.warn('[Eye of Zomm] data sync:', error));
+    // a tiny GitHub manifest check runs now and hourly while EoZ stays open.
+    void startDataPackRefresh().catch(error => console.warn('[Eye of Zomm] data sync:', error));
     overlayHost = new OverlayHost({
         electron,
         origin:`http://${HOST}:${port}`,
@@ -842,6 +913,7 @@ app.on('before-quit', event => {
     event.preventDefault();
     if (quitFlush) return;
     quitting = true;
+    stopDataPackRefresh();
     overlayHost?.dispose();
     discoveryHost?.dispose();
     appUpdater?.shutdown();

@@ -65,4 +65,15 @@ assert.equal(matches({ classes:['mnk'] }, ['MNK']), true, 'Explicit class lists 
 assert.equal(matches({ classes:['WAR'], displayLines:['Class: ALL except WAR'] }, ['WAR']), true, 'Explicit exported includes remain authoritative');
 assert.equal(matches({ classes:['WAR'], displayLines:['Class: ALL except WAR'] }, ['MNK']), false, 'Compatibility fallback cannot broaden an explicit class list');
 
+const chargedWand = { name:'Synthetic charged wand', classes:['WIZ'], slots:['PRIMARY','SECONDARY'], stats:{WT:1}, displayLines:['Charges: 3','Effect: Synthetic Conflagration (Any Slot/Can Equip, Casting Time: Instant) at Level 45'] };
+assert.equal(browse.itemHasClassStats(chargedWand),true,'Equippable charged effects remain useful class gear even without numeric stats');
+assert.equal(matches(chargedWand,['WIZ']),true,'Effect equipment still respects eligible classes');
+assert.equal(matches(chargedWand,['CLR']),false,'Effect equipment does not broaden class eligibility');
+assert.equal(browse.itemHasClassStats({...chargedWand,displayLines:['Effect: Synthetic regeneration (Worn)']}),true,'Passive worn equipment remains useful');
+assert.equal(browse.itemHasClassStats({...chargedWand,displayLines:['Focus Effect: Synthetic focus']}),true,'Equipped focus effects remain useful');
+assert.equal(browse.itemHasClassStats({...chargedWand,slots:[]}),false,'A potion-like effect without an equipment slot is excluded');
+assert.equal(browse.itemHasClassStats({...chargedWand,slots:['FOOD'],displayLines:['Effect: Synthetic nourishment (Can Equip)']}),false,'Food is not an equipment slot');
+assert.equal(browse.itemHasClassStats({...chargedWand,displayLines:['WT 0.1','Quest item']}),false,'Weight-only quest items are still excluded by My Class');
+assert.equal(browse.itemHasClassStats({stats:{HP:1}}),true,'Existing numeric-stat gear remains included');
+
 console.log('Wiki class filtering passed: exporter complements, legacy exclusions, mixed profiles, explicit includes, and unknown classes.');

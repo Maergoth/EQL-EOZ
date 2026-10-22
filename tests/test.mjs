@@ -325,4 +325,41 @@ duplicateLoot.parse("[Thu Aug 20 03:10:02 2026] You have looted a Rat Ear from a
 duplicateLoot.parse("[Thu Aug 20 03:10:03 2026] You have looted a Rat Ear from a sewer rat's corpse.");
 assert(duplicateLoot.snapshot().lootLog[0].estimatedRate === 100, 'observed chance never exceeds 100 percent');
 
+// A manual session boundary clears only session observations. The live log
+// follower and trigger/discovery owners are deliberately not recreated.
+const splitSession = new EQLogParser();
+splitSession.setCharacterFromFilename('C:\\Synthetic\\eqlog_Fixture_eql.txt');
+splitSession.parse('[Wed Oct 21 12:00:00 2026] [50 CLR/ENC] Fixture (Human) ZONE: Plane of Hate (hateplane)');
+splitSession.parse('[Wed Oct 21 12:00:01 2026] Your Location is 10, 20, 120');
+splitSession.parse('[Wed Oct 21 12:00:02 2026] Synthetic Keeper scowls at you. (Lvl: 50)');
+splitSession.parse('[Wed Oct 21 12:00:03 2026] You slash Synthetic Keeper for 90 points of damage.');
+splitSession.parse('[Wed Oct 21 12:00:04 2026] You healed Fixture for 40 hit points by Minor Healing.');
+splitSession.parse('[Wed Oct 21 12:00:05 2026] You gain a rune for 200 points of absorption.');
+splitSession.parse('[Wed Oct 21 12:00:06 2026] Synthetic Keeper hits YOU for 30 points of damage.');
+splitSession.parse('[Wed Oct 21 12:00:07 2026] You have slain Synthetic Keeper!');
+splitSession.parse('[Wed Oct 21 12:00:08 2026] You have looted a Synthetic Coin from Synthetic Keeper.');
+const beforeSplit = splitSession.snapshot();
+assert(beforeSplit.totalHealing === 40 && beforeSplit.totalRuneCapacity === 200, 'rune capacity is recorded separately from actual healing');
+assert(beforeSplit.totalTaken === 30, 'rune capacity is not incoming damage');
+const splitAt = Date.parse('2026-10-21T12:00:10Z');
+assert(splitSession.startNewSession(splitAt) === 2, 'manual session identity advances');
+const afterSplit = splitSession.snapshot();
+for (const key of ['totalDamage','totalHealing','totalRuneCapacity','totalTaken','totalTakenHits','totalKills','totalOwnKills','totalLoot','encounterCount','sessionDps','sessionTakenPerSecond']) {
+    assert(afterSplit[key] === 0, `${key} cleared at manual boundary`);
+}
+assert(afterSplit.sessionStartedAt === splitAt && afterSplit.sessionNumber === 2, 'new session exposes its boundary');
+assert(afterSplit.encounters.length === 0 && afterSplit.lootLog.length === 0 && afterSplit.recentEvents.length === 0, 'previous session feeds are cleared');
+assert(afterSplit.character === beforeSplit.character && afterSplit.level === beforeSplit.level && afterSplit.classes.join('/') === beforeSplit.classes.join('/'), 'profile survives manual split');
+assert(afterSplit.zone === beforeSplit.zone && afterSplit.zoneShortName === beforeSplit.zoneShortName && JSON.stringify(afterSplit.location) === JSON.stringify(beforeSplit.location), 'map context survives manual split');
+assert(afterSplit.observed.length === beforeSplit.observed.length && afterSplit.observed[0].damageDone === 0 && !afterSplit.observed[0].killed, 'observed identity/level remains without previous session activity');
+assert(splitSession.parse('[Wed Oct 21 12:00:03 2026] You slash Synthetic Keeper for 90 points of damage.', {recordSession:false}) === null, 'a replacement log tail cannot replay prior combat after manual split');
+splitSession.parse('[Wed Oct 21 12:00:08 2026] You have looted a Synthetic Coin from Synthetic Keeper.', {recordSession:false});
+assert(splitSession.snapshot().totalDamage === 0 && splitSession.snapshot().totalLoot === 0, 'backfill cannot repopulate reset totals');
+splitSession.parse('[Wed Oct 21 12:00:11 2026] You slash Synthetic Keeper for 12 points of damage.');
+splitSession.parse('[Wed Oct 21 12:00:12 2026] You have looted a New Synthetic Coin.');
+assert(splitSession.snapshot().totalDamage === 12 && splitSession.snapshot().totalLoot === 1, 'unread live events start the new session normally');
+assert(splitSession.snapshot().lootLog[0].source === 'Synthetic Keeper', 'new live combat supplies the new loot association');
+assert(splitSession.snapshot().encounters.every(encounter => !beforeSplit.encounters.some(previous => previous.id === encounter.id)), 'old selected encounter IDs cannot alias new fights');
+assert(splitSession.snapshot().recentEvents.every(event => event.type !== 'rune'), 'rune feed does not leak across session boundary');
+
 console.log('All tests passed.');

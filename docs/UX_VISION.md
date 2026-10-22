@@ -1,10 +1,15 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.8.6
+Baseline: 0.8.7
 Last updated: 2026-10-21
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
+
+The current Intel/session follow-up is indexed in
+[OVERLAY_MAP_WORKSPACE.md](OVERLAY_MAP_WORKSPACE.md). Triggers retains the
+existing countdown engine; New session splits parsing while preserving that
+engine, the live log cursor and map context.
 
 ## 1. Product promise
 
@@ -145,7 +150,7 @@ map/route tools. Exclude Elitist/Carebear and Revenge. Current parses remain
 player-only; rune grants are capacity rather than proven absorption.
 
 The 0.8.3 PR implements four independent transparent native windows: Parse,
-Map, Zone & loot and Timers. One main-renderer session owns parsing, timers,
+Map, Zone & loot and Triggers. One main-renderer session owns parsing, timers,
 pack and routes while hidden. Panels save independent bounds and use restricted
 snapshot/command IPC, tray/main recovery and a checked global shortcut. Since
 0.8.5, native Map can cycle its lightweight line map into an on-demand Top/First
@@ -435,7 +440,7 @@ User stories:
 
 Requirements:
 
-- Four actual native windows: Parse, Map, Zone & loot and Timers. Each saves bounds, opacity, text size, lock and mouse passthrough.
+- Four actual native windows: Parse, Map, Zone & loot and Triggers. Each saves bounds, opacity, text size, lock and mouse passthrough.
 - Main/tray/shortcut recovery restores input; closing main with visible recoverable panels keeps one log session alive.
 - Normal Zone and slightly red Raid Zone sections preserve variant identity through browsing, routes and lazy drop requests.
 - Three-item previews are bounded; Show More retrieves all matching drops and rejects stale zone/class/tier/era/pack responses.
@@ -687,7 +692,7 @@ A future diagnostic bundle must redact character names and filesystem paths by d
 - Pin keeps the app above the game.
 - Pin hides custom titlebar only.
 - App remains on the taskbar.
-- Native Parse/Map/Intel/Timers visibility and layouts are independent; recovery remains reachable. Map/Top/First controls belong to their map surface. Native Map loads 3D on demand; Intel's shared item-level/class controls stay anchored while mobs scroll.
+- Native Parse/Map/Intel/Triggers visibility and layouts are independent; recovery remains reachable. Map/Top/First controls belong to their map surface. Native Map loads 3D on demand; Intel's shared item-level/class controls stay anchored while mobs scroll.
 
 ## 16. Road to v1
 
@@ -937,7 +942,7 @@ This table is the compact product contract for the app's most common jobs. A jou
 | Review a fight | Outgoing hostile event | Current fight becomes the primary metric | None | Quiet-period grouping produces an encounter | Gap setting rebuilds encounter grouping without losing raw events |
 | Review a drop | Loot line | Newest row records item, source, zone, time, and evidence | Open Drops | Nearby kills update observed numerator/denominator | Unknown source stays unknown; no authoritative-rate claim is invented |
 | Search the wiki | Any screen | Search EQLWiki remains globally available | Type and press Enter | System browser opens Special:Search | Empty submission does nothing; local app state is unchanged |
-| Arrange compact surfaces | Any screen | Native Parse/Map/Intel/Timers save independent layouts | Show/hide a panel | One session keeps shared target, parse and timers current | Main/tray/shortcut recover input; main retains detailed browsing |
+| Arrange compact surfaces | Any screen | Native Parse/Map/Intel/Triggers save independent layouts | Show/hide a panel | One session keeps shared target, parse and timers current | Main/tray/shortcut recover input; main retains detailed browsing |
 
 ## 20. Prioritization and risk register
 

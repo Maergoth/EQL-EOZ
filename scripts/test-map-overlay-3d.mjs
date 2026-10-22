@@ -17,6 +17,7 @@ try{
     const profile=join(temporary,'profile'),game=join(temporary,'synthetic-game'),log=join(game,'Logs','eqlog_Fixture_Test.txt');
     await mkdir(join(profile,'data'),{recursive:true});await mkdir(join(game,'Maps'),{recursive:true});await mkdir(join(game,'Logs'),{recursive:true});
     await writeFile(join(game,'Maps','mistmoore.txt'),'L -200,-200,12,200,-200,12,180,190,210\nL 200,-200,12,200,200,12,180,190,210\nP -80,-100,12,216,183,92,2,Synthetic_Keeper\n');
+    await writeFile(join(game,'Maps','hateplane.txt'),'L -200,-200,120,200,-200,120,180,190,210\nL -200,-200,300,200,-200,300,180,190,210\n');
     // A valid PFS header with an empty directory: synthetic, no game content.
     const emptyPfs=Buffer.alloc(16);emptyPfs.writeUInt32LE(12,0);emptyPfs.write('PFS ',4,'ascii');emptyPfs.writeUInt32LE(0x20000,8);
     for(const name of ['mistmoore.s3d','mistmoore.eqg','eozsynthetic.eqg'])await writeFile(join(game,name),emptyPfs);
@@ -29,7 +30,7 @@ try{
     await writeFile(join(profile,'eye-of-zomm-config.json'),JSON.stringify({eqRootPath:game,logPath:log,logSelection:'manual'}));
     await writeFile(join(profile,'data','eye-of-zomm-pack.json'),JSON.stringify({
         meta:{schemaVersion:3,version:'synthetic-3d-smoke',sample:true,currentEra:'Classic'},
-        zones:[{name:'Mistmoore Castle',viewerName:'Mistmoore Castle',aliases:['mistmoore','The Castle of Mistmoore']}],
+        zones:[{name:'Mistmoore Castle',viewerName:'Mistmoore Castle',aliases:['mistmoore','The Castle of Mistmoore']},{name:'Plane of Hate',viewerName:'Plane of Hate',aliases:['hateplane']}],
         npcs:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false,avgLevel:26,era:'Classic',loc:[10,20,12]},
             {name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true,avgLevel:26,era:'Classic',loc:[100,80,12]},
             {name:'Unknown Elevation Watcher',zone:'Mistmoore Castle',avgLevel:26,era:'Classic',loc:[140,120]}],
@@ -169,7 +170,19 @@ try{
             await click('mode');await until(()=>Boolean(frame()),'new lazy iframe after choosing Top');
             await control('hide','map');await until(()=>mainExecute(map,()=>!document.querySelector('.native-map-3d-frame')),'hiding Map unloads iframe');
             assert.equal((await state()).snapshot.sessionId,sessionId);assert.equal(owner.isDestroyed(),false);
-            console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,realConfiguredFolder:true,realS3dEqgHydration:true,realParserWorker:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,unknownHeightGrounded:true,resetAndHideUnload:true}));
+            await click('reset');
+            await fs.appendFile(log,[`[${stamp}] [26 MNK] Fixture (Iksar) ZONE: Plane of Hate (hateplane)`,`[${stamp}] Your Location is 10, 20, 122`].join('\n')+'\n');
+            await until(async()=>{const value=await state();return value.snapshot.session.map.zone==='Plane of Hate'&&value.snapshot.session.map.location?.z===122;},'Hate zone and logged location');
+            await control('show','map');
+            await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===120&&Number(document.querySelector('[data-map-z]').max)>=300),'Hate map data loads and starts at Z120 instead of ceiling midpoint or logged Z');
+            await mainExecute(map,()=>{const slider=document.querySelector('[data-map-z]');slider.value='135';slider.dispatchEvent(new Event('input',{bubbles:true}));});
+            await fs.appendFile(log,`[${stamp}] Your Location is 11, 21, 128\n`);
+            await until(async()=>{const value=await state();return value.snapshot.session.map.location?.z===128;},'later logged Hate position');
+            assert.equal(await mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)),135,'New positions and heartbeats preserve a deliberate slice');
+            await click('reset');assert.equal(await mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)),120,'Reset restores the Hate presentation default');
+            await fs.appendFile(log,[`[${stamp}] [26 MNK] Fixture (Iksar) ZONE: The Castle of Mistmoore (mistmoore)`,`[${stamp}] Your Location is 10, 20, 12`].join('\n')+'\n');
+            await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===12),'other zones keep their normal logged elevation default');
+            console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,realConfiguredFolder:true,realS3dEqgHydration:true,realParserWorker:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,unknownHeightGrounded:true,resetAndHideUnload:true,hateDefaultAndManualSlice:true}));
             BrowserWindow.prototype.focus=originalFocus;app.exit(0);
         }
         app.on('browser-window-created',()=>{if(started)return;started=true;void inspect().catch(error=>{console.error(error.stack);app.exit(1);});});

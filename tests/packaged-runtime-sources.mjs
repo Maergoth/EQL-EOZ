@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { finished } from 'node:stream/promises';
 import asar from '@electron/asar';
 import { PACKAGED_RUNTIME_SOURCES, PACKAGED_RUNTIME_IMAGES, verifyPackagedRuntimeSources, verifyPackagedRuntimeImages } from '../scripts/packaged-runtime-sources.mjs';
 
@@ -25,6 +26,14 @@ const directory = await mkdtemp(join(tmpdir(), 'eoz-packaged-contract-'));
 try {
     const fixture = join(directory, 'source');
     const archive = join(directory, 'app.asar');
+    async function buildArchive() {
+        // Pinned @electron/asar 3.4.1 returns its WritableStream after end(),
+        // before queued bytes finish writing. Wait for finish/close before
+        // extracting or rebuilding this same archive, especially on Windows.
+        const output = await asar.createPackage(fixture, archive);
+        await finished(output, { cleanup:true });
+        asar.uncache(archive);
+    }
     const sources = new Map(PACKAGED_RUNTIME_SOURCES.map(relative => [relative, `// Synthetic packaged source: ${relative}\n`]));
     // Production-scale synthetic data would pass the older shape/count gate.
     // It must still fail if packaging retains a different dataset generation.
@@ -51,15 +60,15 @@ try {
         }
     };
     const packagedBytes=relative=>{try{return asar.extractFile(archive,relative);}catch(error){if(process.platform!=='win32')throw error;return asar.extractFile(archive,relative.replaceAll('/','\\'));}};
-    await asar.createPackage(fixture, archive);
+    await buildArchive();
     verifyPackagedRuntimeSources(packagedText, sourceText);
     verifyPackagedRuntimeImages(packagedBytes,relative=>images.get(relative));
     for(const relative of PACKAGED_RUNTIME_IMAGES){
-        await rm(join(fixture,relative));await asar.createPackage(fixture,archive);asar.uncache(archive);
+        await rm(join(fixture,relative));await buildArchive();
         assert.throws(()=>verifyPackagedRuntimeImages(packagedBytes,path=>images.get(path)),error=>error.message===`Packaged ${relative} is missing.`);
         // 0xff/0xfe both decode to a UTF-8 replacement character. A text-only
         // comparison would miss this corruption; the image gate must not.
-        await writeFile(join(fixture,relative),Buffer.from([0x89,0x50,0x4e,0x47,0xfe]));await asar.createPackage(fixture,archive);asar.uncache(archive);
+        await writeFile(join(fixture,relative),Buffer.from([0x89,0x50,0x4e,0x47,0xfe]));await buildArchive();
         assert.throws(()=>verifyPackagedRuntimeImages(packagedBytes,path=>images.get(path)),error=>error.message===`Packaged ${relative} differs from the reviewed image.`);
         await writeFile(join(fixture,relative),images.get(relative));
     }
@@ -67,15 +76,13 @@ try {
     // Verify each newly required runtime module against a real, incomplete ASAR.
     for (const relative of requiredModules) {
         await rm(join(fixture, relative));
-        await asar.createPackage(fixture, archive);
-        asar.uncache(archive);
+        await buildArchive();
         assert.throws(() => verifyPackagedRuntimeSources(packagedText, sourceText),
             error => error.message === `Packaged ${relative} is missing.`);
         await writeFile(join(fixture, relative), sources.get(relative));
     }
     await writeFile(join(fixture, 'app/route-validation.js'), '// Stale collision validation\n');
-    await asar.createPackage(fixture, archive);
-    asar.uncache(archive);
+    await buildArchive();
     assert.throws(() => verifyPackagedRuntimeSources(packagedText, sourceText),
         /Packaged app\/route-validation\.js differs from the tested source/);
     await writeFile(join(fixture, 'app/route-validation.js'), sources.get('app/route-validation.js'));
@@ -87,8 +94,7 @@ try {
         const stale = structuredClone(bootstrapFixture);
         change(stale);
         await writeFile(join(fixture, bootstrapPath), `${JSON.stringify(stale)}\n`);
-        await asar.createPackage(fixture, archive);
-        asar.uncache(archive);
+        await buildArchive();
         assert.throws(() => verifyPackagedRuntimeSources(packagedText, sourceText),
             /Packaged app\/data\/eye-of-zomm-pack\.bootstrap\.json differs from the tested source/);
     }

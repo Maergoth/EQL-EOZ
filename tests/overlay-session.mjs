@@ -6,7 +6,8 @@ import { compactParseSnapshot, createOverlaySession, fitOverlaySnapshot } from '
 const manyEvents = Array.from({ length:250 }, (_, index) => ({ type:'damage', kind:'melee', source:index < 125 ? 'slash' : 'crush', amount:2, at:index + 1000, victim:'a synthetic rat', raw:'PRIVATE RAW LINE', path:'C:\\Private\\eqlog.txt' }));
 const encounters = Array.from({ length:25 }, (_, index) => ({ id:`fight-${index}`, name:`Synthetic ${index}`, damage:500, healing:10,
     startAt:1000, lastAt:2000, duration:1, events:[...manyEvents, { type:'heal', source:'Heal', amount:10 }, { type:'rune', amount:20 }] }));
-const compact = compactParseSnapshot({ character:'Synthetic', totalDamage:12500, totalHealing:250, sessionDps:20, encounters, recentEvents:manyEvents });
+const compact = compactParseSnapshot({ character:'Synthetic', totalDamage:12500, totalHealing:250, totalRuneCapacity:500,
+    sessionNumber:2, sessionStartedAt:123000, sessionDps:20, encounters, recentEvents:manyEvents });
 assert.equal(compact.encounters.length, 20);
 assert.equal(compact.encounters[0].events.length, 120);
 assert.equal(compact.encounters[0].eventsTruncated, true);
@@ -16,6 +17,10 @@ assert.equal(compact.breakdowns.damage.reduce((sum, row) => sum + row.total, 0),
 assert.equal(compact.breakdowns.damage.reduce((sum, row) => sum + row.count, 0), 6250);
 assert.equal(compact.breakdowns.healing[0].total, 250);
 assert.equal(compact.breakdowns.runes[0].total, 500);
+assert.equal(compact.totalHealing, 250, 'rune capacity does not inflate actual healing');
+assert.equal(compact.totalRuneCapacity, 500);
+assert.equal(compact.sessionNumber, 2);
+assert.equal(compact.sessionStartedAt, 123000);
 assert.ok(!JSON.stringify(compact).includes('PRIVATE RAW LINE'));
 assert.ok(!JSON.stringify(compact).includes('eqlog.txt'));
 const varied = compactParseSnapshot({ encounters:[{ events:Array.from({ length:140 }, (_, index) => ({ type:'damage', source:`Ability ${index}`, amount:1 })) }] });
@@ -108,6 +113,10 @@ const pausedState = values.get('eql-eye-of-zomm-timers-v1');
 assert.equal(JSON.parse(pausedState).timers[0].status, 'paused');
 await actionListener({ action:'session:open', payload:{ view:'items' } });
 assert.deepEqual(forwarded.at(-1), { action:'session:open', payload:{ view:'items' } });
+const beforeManualSplit = session.engine.exportState();
+await actionListener({ action:'session:new-session', payload:{} });
+assert.deepEqual(forwarded.at(-1), { action:'session:new-session', payload:{} }, 'manual parse split goes to the main parser owner');
+assert.deepEqual(session.engine.exportState(), beforeManualSplit, 'manual parse split preserves trigger definitions, active timers, swing tracking and replay guards');
 await actionListener({ panel:'timers', action:'timer:not-supported', payload:{} });
 assert.equal(notifications.at(-1), 'Unknown timer action.');
 assert.equal(published.at(-1).session.notice.panel, 'timers', 'owner command errors are targeted to the panel that requested them');

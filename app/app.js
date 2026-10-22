@@ -50,6 +50,7 @@ let discoveryInNative = false;
 let mapDataRevision = 0;
 let activeTooltipItem = null;
 let activeTooltipTarget = null;
+let activeTooltipMode = '';
 let lastTooltipPointer = null;
 let activeRoute = null;
 let routeRefreshTimer = null;
@@ -58,6 +59,7 @@ let renderedDestinationZone = '';
 let renderedDestinationCount = 0;
 let renderedRareViewerKey = '';
 let rareCatalogCache = new Map();
+const renderedItemLists = new WeakMap();
 const ROUTE_REFRESH_DISTANCE = 8;
 
 const prefs = {
@@ -260,10 +262,29 @@ function itemIconSource(item) {
     return typeof source === 'string' && source.startsWith('data:image/') ? source : '';
 }
 
-function itemHoverAttrs(itemOrName) {
+function itemHoverAttrs(itemOrName, extraClass = '') {
     const item = typeof itemOrName === 'string' ? itemRecord(itemOrName) : itemOrName;
     const name = item?.name || itemOrName || '';
-    return `class="item-hover" data-item-title="${esc(name)}" tabindex="0" aria-describedby="item-tooltip"`;
+    return `class="item-hover${extraClass ? ` ${esc(extraClass)}` : ''}" data-item-title="${esc(name)}" tabindex="0" aria-describedby="item-tooltip"`;
+}
+function itemIconHtml(item) {
+    const icon = itemIconSource(item);
+    return `<span ${itemHoverAttrs(item,'item-card-icon')} role="img" aria-label="${esc(`Stats for ${item.name}`)}">${icon ? `<img src="${esc(icon)}" alt="">` : '◇'}</span>`;
+}
+function itemHoverIdentity(target) {
+    if (!target?.dataset?.itemTitle) return '';
+    return JSON.stringify([target.dataset.itemTitle,target.closest('[data-item-tooltip-source]')?.dataset.itemTooltipSource || '',target.classList.contains('item-card-icon') ? 'icon' : target.tagName]);
+}
+function replaceItemList(host,markup) {
+    if (renderedItemLists.get(host) === markup) return false;
+    const focused = document.activeElement?.closest?.('[data-item-title]');
+    const focusKey = focused && host.contains(focused) ? itemHoverIdentity(focused) : '';
+    host.innerHTML = markup; renderedItemLists.set(host,markup);
+    if (focusKey) {
+        const next = [...host.querySelectorAll('[data-item-title]')].find(target => itemHoverIdentity(target) === focusKey);
+        if (next) next.focus({preventScroll:true}); else hideItemTooltip();
+    }
+    return true;
 }
 
 function itemMatchesProfile(item, profile) {
@@ -357,8 +378,7 @@ async function connectBridge() {
         $('#settings-log-mode').textContent = bridgeInfo.logSelection === 'manual' ? 'Specific file' : 'Newest log automatically';
         $('#automatic-log').hidden = bridgeInfo.logSelection !== 'manual';
         $('#setup-overlay').hidden = Boolean(bridgeInfo.eqRootExists);
-        const packState = bridgeInfo.dataPack || {};
-        $('#pack-update-status').textContent = packState.lastStatus || (bridgeInfo.productionPack ? 'cached' : 'sample fallback');
+        renderPackSyncStatus(bridgeInfo.dataPack);
         applyWindowSettings(bridgeInfo.windowState || {});
         if (!logOffset) logOffset = 0;
         schedulePoll(50);
@@ -387,15 +407,32 @@ function schedulePackRefreshCheck(delay = 15000) {
     packRefreshTimer = setTimeout(checkForDesktopPackRefresh, delay);
 }
 
+function renderPackSyncStatus(sync = bridgeInfo?.dataPack || {}) {
+    const dateLabel = value => {
+        const at = Date.parse(String(value || ''));
+        return Number.isFinite(at) ? new Date(at).toLocaleString() : '—';
+    };
+    $('#pack-update-status').textContent = sync.checking ? 'checking…' : sync.lastStatus || (bridgeInfo?.productionPack ? 'cached' : 'sample fallback');
+    $('#pack-last-check').textContent = dateLabel(sync.lastCheckUtc);
+    $('#pack-last-success').textContent = dateLabel(sync.lastSuccessUtc);
+    $('#pack-data-generated').textContent = dateLabel(sync.generatedAtUtc || pack.meta?.generatedAt);
+    $('#pack-last-download').textContent = dateLabel(sync.lastUpdatedUtc);
+    $('#pack-next-check').textContent = sync.checking ? 'After this check completes' : dateLabel(sync.nextCheckUtc);
+    const error = $('#pack-sync-error');
+    error.textContent = sync.lastStatus === 'unavailable' ? String(sync.lastError || 'The last check could not complete. Using saved wiki data.') : '';
+    error.hidden = !error.textContent;
+}
+
 async function checkForDesktopPackRefresh() {
     try {
         const info = await api('/api/info');
+        bridgeInfo = { ...(bridgeInfo || {}), dataPack:info.dataPack, productionPack:info.productionPack };
         const stateVersion = String(info?.dataPack?.version || '');
         const activeManifestVersion = String(pack?.meta?.manifestVersion || '');
         if (info?.productionPack && stateVersion && stateVersion !== activeManifestVersion) {
             await loadPack();
-            $('#pack-update-status').textContent = info?.dataPack?.lastStatus || 'updated';
         }
+        renderPackSyncStatus(info.dataPack);
     } catch {}
     schedulePackRefreshCheck(30000);
 }
@@ -471,7 +508,7 @@ function consumeText(text, allowTransientUi = true) {
     let requiresFullRender = false;
     for (const line of lines) {
         const previousZone = parser.zone;
-        const event = parser.parse(line);
+        const event = parser.parse(line, { recordSession:allowTransientUi || parser.sessionNumber === 1 });
         if (event && event.type !== 'location') requiresFullRender = true;
         if (event?.type === 'zone') {
             const canonicalZone = zoneRecord(event.zoneShortName || event.zone)?.name || event.zoneShortName || event.zone;
@@ -513,6 +550,17 @@ function state() {
     return parser.snapshot();
 }
 
+function startNewSession() {
+    // Split at the current consumed cursor. Keep logOffset and partialLine so
+    // the next poll completes unread lines without replaying the previous tail.
+    parser.startNewSession();
+    selectedEncounterId = '';
+    clearTimeout(fightExpiryTimer);
+    renderAll();
+    void overlaySession.publish();
+    showNotice('New session started. Combat and loot totals have been cleared.', { tone:'success' });
+}
+
 const raidVariant = npc => npc?.raidInstance === true || npc?.instanceType === 'raid';
 const intelIdentity = npc => `${zoneKey(npc?.zone)}|${npcNameKey(npc?.name)}|${raidVariant(npc) ? 'raid' : 'normal'}`;
 function focusIntelForConsider(target) {
@@ -532,11 +580,15 @@ function overlayItemSummary(item, budget) {
     let icon = itemIconSource(item);
     if (icon.length > 12000 || icon.length > budget.remaining) icon = '';
     budget.remaining -= icon.length;
+    const boundedStats = stats => Object.fromEntries(Object.entries(stats || {}).slice(0,24)
+        .filter(([,value]) => typeof value === 'number' && Number.isFinite(value) || typeof value === 'string')
+        .map(([key,value]) => [key.slice(0,40), typeof value === 'string' ? value.slice(0,80) : value]));
     return { name:String(item.name || '').slice(0,240), icon,
         slots:(item.slots || []).slice(0,8).map(slot => String(slot).slice(0,60)),
-        stats:Object.fromEntries(Object.entries(scaledItemStats(item,settings.itemTier) || {}).slice(0,24)
-            .filter(([,value]) => typeof value === 'number' || typeof value === 'string')
-            .map(([key,value]) => [key.slice(0,40), typeof value === 'string' ? value.slice(0,80) : value])), tier:Number(settings.itemTier) || 0 };
+        classes:(Array.isArray(item.classes) ? item.classes : []).slice(0,20).map(value => String(value).slice(0,40)),
+        displayLines:(Array.isArray(item.displayLines) ? item.displayLines : []).slice(0,12).map(value => String(value).slice(0,240)),
+        notes:String(item.notes || '').slice(0,1200), baseStats:boundedStats(item.stats),
+        stats:boundedStats(scaledItemStats(item,settings.itemTier)), tier:Number(settings.itemTier) || 0 };
 }
 const mapDataLoader = createMapDataLoader({ getManifest:() => api('/api/eq-files'),
     readText:async path => { const response = await fetch(`/api/eq-file?path=${encodeURIComponent(path)}`); if (!response.ok) throw new Error('The local map could not be read.'); return response.text(); },
@@ -570,6 +622,7 @@ function overlaySessionSnapshot() {
 }
 
 async function handleOverlayCommand({ action, payload = {} }) {
+    if (action === 'session:new-session') { startNewSession(); return; }
     const requestedZone = state().zone;
     const resolveNpc = () => {
         const currentZone = state().zone;
@@ -890,7 +943,7 @@ function eventText(e) {
     if (e.type === 'damage') return `${e.source}: ${e.amount} → ${e.victim}`;
     if (e.type === 'heal') return `${e.source}: healed ${e.target}`;
     if (e.type === 'kill') return `Slain ${e.victim}`;
-    if (e.type === 'rune') return `Rune absorbed ${e.amount}`;
+    if (e.type === 'rune') return `Rune capacity granted: ${e.amount}`;
     if (e.type === 'loot') return `${Number(e.quantity) > 1 ? `${e.quantity}× ` : ''}${e.item} · from ${e.source || 'Unknown'}`;
     return e.type;
 }
@@ -907,6 +960,7 @@ function renderCombat(s) {
     $('#combat-damage').textContent = formatNum(s.totalDamage);
     $('#combat-dps').textContent = formatNum(s.sessionDps);
     $('#combat-healing').textContent = formatNum(s.totalHealing);
+    $('#combat-rune-capacity').textContent = `${formatNum(s.totalRuneCapacity)} rune capacity granted`;
     $('#combat-observed').textContent = s.observed.length.toLocaleString();
 }
 
@@ -1019,9 +1073,10 @@ function positionTooltip(event) {
 function showItemTooltip(target, event) {
     const item = itemRecord(target?.dataset?.itemTitle);
     const tooltip = $('#item-tooltip');
-    if (!item || !tooltip) return;
+    if (!item || !tooltip) { hideItemTooltip(); return; }
     activeTooltipItem = item;
     activeTooltipTarget = target;
+    activeTooltipMode = Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY) ? 'pointer' : 'focus';
     const rect = target.getBoundingClientRect();
     lastTooltipPointer = Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
         ? { clientX:event.clientX, clientY:event.clientY }
@@ -1034,6 +1089,14 @@ function showItemTooltip(target, event) {
 function refreshItemTooltip() {
     const tooltip = $('#item-tooltip');
     if (!activeTooltipItem || !tooltip || tooltip.hidden) return;
+    // A changed list may reorder rows or contain duplicate drops. Resolve the
+    // actual pointer/focus surface, never another occurrence of the old name.
+    const target = activeTooltipMode === 'pointer'
+        ? document.elementFromPoint(lastTooltipPointer?.clientX,lastTooltipPointer?.clientY)?.closest?.('[data-item-title]')
+        : document.activeElement?.closest?.('[data-item-title]');
+    if (!target?.closest('.view.is-active')) { hideItemTooltip(); return; }
+    activeTooltipItem = itemRecord(target.dataset.itemTitle); activeTooltipTarget = target;
+    if (!activeTooltipItem) { hideItemTooltip(); return; }
     tooltip.innerHTML = tooltipHtml(activeTooltipItem);
     if (lastTooltipPointer) positionTooltip(lastTooltipPointer);
 }
@@ -1043,6 +1106,7 @@ function hideItemTooltip() {
     if (tooltip) tooltip.hidden = true;
     activeTooltipItem = null;
     activeTooltipTarget = null;
+    activeTooltipMode = '';
     lastTooltipPointer = null;
 }
 
@@ -1061,7 +1125,7 @@ function renderNpcList(s, profile) {
     const total = npcs.length;
     const visible = npcs.slice(0, 300);
 
-    $('#npc-list').innerHTML = visible.map(n => {
+    let markup = visible.map(n => {
         const con = conForLevel(n.avgLevel, profile.level);
         const knownDrops = knownDropsForNpc(n).filter(item => eraAllowed(item.era));
         const drops = knownDrops.slice().sort((left, right) =>
@@ -1069,7 +1133,7 @@ function renderNpcList(s, profile) {
             itemBrowsePriority(right, s.zone) - itemBrowsePriority(left, s.zone)
         ).slice(0, 4);
         const worldLocation = wikiLocationToWorld(n.loc);
-        return `<article class="data-card npc-card npc-con-${con.key}">
+        return `<article class="data-card npc-card npc-con-${con.key}" data-item-tooltip-source="${esc(intelIdentity(n))}">
             <div class="card-top">
                 <div><h3>${waypointNameControl(n.name, worldLocation)}</h3><div class="sub">${esc(n.zone || 'Unknown zone')}</div></div>
                 <span class="pill ${conClass(con.key)}">${esc(con.label)}</span>
@@ -1079,7 +1143,7 @@ function renderNpcList(s, profile) {
                 ${n.era && n.era !== 'Observed' ? `<span class="pill">${esc(n.era)}</span>` : ''}
                 ${n.observed ? '<span class="pill">Observed locally</span>' : ''}
             </div>
-            ${drops.length ? `<div class="known-drops"><span class="filter-label">Known drops</span>${drops.map(item => `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${esc(item.name)}</a>`).join('')}</div>` : ''}
+            ${drops.length ? `<div class="known-drops"><span class="filter-label">Known drops</span>${drops.map(item => { const icon = itemIconSource(item); return `<a href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener" ${itemHoverAttrs(item)}>${icon ? `<img class="known-drop-icon" src="${esc(icon)}" alt="">` : '<span class="known-drop-icon item-icon-placeholder" aria-hidden="true">◇</span>'}<span class="known-drop-name">${esc(item.name)}</span></a>`; }).join('')}</div>` : ''}
             ${n.damageDone ? `<div class="sub" style="margin-top:9px">${formatNum(n.damageDone)} damage observed this session</div>` : ''}
             <div class="card-actions">
                 <a class="mini-button" href="${wikiUrl(n.wikiTitle || n.name)}" target="_blank" rel="noopener">Open on Wiki</a>
@@ -1087,13 +1151,14 @@ function renderNpcList(s, profile) {
             </div>
         </article>`;
     }).join('') || '<div class="empty-state">No NPCs match the current filters.</div>';
-
     if (total > visible.length) {
-        $('#npc-list').insertAdjacentHTML('beforeend', `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`);
+        markup += `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`;
     }
-
-    bindPathButtons($('#npc-list'));
-    bindWaypointButtons($('#npc-list'));
+    const host = $('#npc-list');
+    if (replaceItemList(host,markup)) {
+        bindPathButtons(host); bindWaypointButtons(host);
+    }
+    refreshItemTooltip();
 }
 
 function renderItems(s, profile) {
@@ -1121,13 +1186,12 @@ function renderItems(s, profile) {
     const slotLabel = selectedSlot ? ` · <strong>${esc(selectedSlot)}</strong>` : '';
     const rankingLabel = sortMode === 'recommended' ? ' · useful gear and named drops first' : ' · sorted by name';
     $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel} through <strong>${esc(settings.era)}</strong>${slotLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}${rankingLabel}.`;
-    $('#item-list').innerHTML = visible.map(item => {
+    let markup = visible.map(item => {
         const stats = scaledItemStats(item, tier);
         const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
-        const icon = itemIconSource(item);
-        return `<article class="data-card">
+        return `<article class="data-card" data-item-tooltip-source="${esc(`item:${item.wikiTitle || item.name}`)}">
             <div class="card-top">
-                <div class="item-card-heading">${icon ? `<img src="${esc(icon)}" alt="">` : '<span class="item-card-icon">◇</span>'}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}${tier ? ` · Tier ${tier}` : ''}</div></div></div>
+                <div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}${tier ? ` · Tier ${tier}` : ''}</div></div></div>
                 <span class="pill">${esc(item.era || '')}</span>
             </div>
             <div class="pill-row" style="margin-top:9px">${(item.classes||[]).map(c => `<span class="pill">${esc(c)}</span>`).join('')}</div>
@@ -1140,20 +1204,22 @@ function renderItems(s, profile) {
             <div class="card-actions"><a class="mini-button" href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener">Item wiki</a></div>
         </article>`;
     }).join('') || `<div class="empty-state item-empty-state">No matching items are known${currentZoneOnly ? ` in ${esc(s.zone)}` : ''}.${currentZoneOnly ? ' <button type="button" class="secondary-button" data-broaden-items>Show all zones</button>' : ''}</div>`;
-
     if (total > visible.length) {
-        $('#item-list').insertAdjacentHTML('beforeend', `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`);
+        markup += `<div class="result-limit">Showing the first ${visible.length.toLocaleString()} of ${total.toLocaleString()} matches. Narrow the search to see more.</div>`;
     }
-
-    bindPathButtons($('#item-list'));
-    $('#item-list').querySelector('[data-broaden-items]')?.addEventListener('click', () => {
-        itemZoneFilterExplicit = true;
-        settings.itemCurrentZoneOnly = false;
-        settings.itemZoneFilterExplicit = true;
-        prefs.save(settings);
-        $('#item-current-zone').checked = false;
-        renderItems(state(), effectiveProfile(state()));
-    });
+    const host = $('#item-list');
+    if (replaceItemList(host,markup)) {
+        bindPathButtons(host);
+        host.querySelector('[data-broaden-items]')?.addEventListener('click', () => {
+            itemZoneFilterExplicit = true;
+            settings.itemCurrentZoneOnly = false;
+            settings.itemZoneFilterExplicit = true;
+            prefs.save(settings);
+            $('#item-current-zone').checked = false;
+            renderItems(state(), effectiveProfile(state()));
+        });
+    }
+    refreshItemTooltip();
 }
 
 function buildClassChips() {
@@ -1976,6 +2042,7 @@ function wireUi() {
         prefs.save(settings);
         renderAll();
     });
+    $('#new-session').addEventListener('click', startNewSession);
     $('#encounter-gap').addEventListener('change', e => {
         settings.encounterGapSeconds = Math.max(3, Math.min(300, Number(e.target.value) || 15));
         parser.setEncounterGapSeconds(settings.encounterGapSeconds);
@@ -2006,6 +2073,10 @@ function wireUi() {
         $('#pack-update-status').textContent = 'checking…';
         try {
             const result = await mutate('/api/update-pack?force=1');
+            if (result.dataPack) {
+                bridgeInfo = { ...(bridgeInfo || {}), dataPack:result.dataPack, productionPack:result.productionPack };
+                renderPackSyncStatus(result.dataPack);
+            }
             $('#pack-update-status').textContent = result.status || (result.ok ? 'current' : 'unavailable');
             if (result.productionPack) await loadPack();
             if (!result.ok && result.error) {
@@ -2031,7 +2102,9 @@ function wireUi() {
         if (target) showItemTooltip(target, event);
     });
     document.addEventListener('pointermove', event => {
-        if (activeTooltipItem) lastTooltipPointer = { clientX:event.clientX, clientY:event.clientY };
+        const target = event.target.closest?.('[data-item-title]');
+        if (target && (activeTooltipTarget !== target || !activeTooltipItem)) showItemTooltip(target,event);
+        if (activeTooltipItem && activeTooltipMode === 'pointer') lastTooltipPointer = { clientX:event.clientX, clientY:event.clientY };
         positionTooltip(event);
     });
     document.addEventListener('pointerout', event => {

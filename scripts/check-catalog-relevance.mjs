@@ -21,6 +21,20 @@ for (const item of pack.items) for (const source of item.dropSources || []) {
 }
 if (malformed.length) throw new Error(`Production catalog has ${malformed.length} unresolved wiki identities; rebuild with the reviewed producer. ${malformed.slice(0,3).join('; ')}`);
 console.log(`Catalog source identities passed: ${pack.npcs.length} NPCs, ${sourceCount} drop sources, no raw wiki markup.`);
+if (pack.meta?.npcLootSourcesIncluded !== true || !Number.isSafeInteger(pack.meta?.npcLootSourceCounts?.sourcesAdded)) {
+    throw new Error('Production bootstrap requires the NPC known_loot reconciliation; rebuild and publish the reviewed exporter.');
+}
+const sourceName = value => String(value || '').normalize('NFKC').replace(/[`’]/g,"'").replace(/_/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
+const hateItems = npcName => pack.items.filter(item => (item.dropSources || []).some(source =>
+    sourceName(source.zone) === 'plane of hate' && sourceName(source.name) === sourceName(npcName)));
+const vicarItems = hateItems('Vicar M`Kari'), loathingItems = hateItems('Lord of Loathing');
+if (new Set(vicarItems.map(item => item.wikiTitle || item.name)).size < 11) {
+    throw new Error('The refreshed catalog must retain Vicar M`Kari’s 11 documented known-loot items.');
+}
+for (const name of ['Diamond Rod','Wand of Conflagration']) if (!loathingItems.some(item => sourceName(item.wikiTitle || item.name) === sourceName(name))) {
+    throw new Error(`The refreshed Lord of Loathing loot is missing ${name}.`);
+}
+console.log(`NPC loot reconciliation passed: ${vicarItems.length} Vicar items, ${loathingItems.length} Lord of Loathing items; ${pack.meta.npcLootSourceCounts.sourcesAdded} source variants added.`);
 const npcKey = npc => JSON.stringify([String(npc.zone).toLowerCase(),String(npc.name).toLowerCase()]);
 const legacyNpcs = new Map(pack.npcs.map(npc => [npcKey(npc),npc]));
 if (pack.npcs.some(npc => !npc.raidInstance && legacyNpcs.get(npcKey(npc))?.raidInstance)) {
