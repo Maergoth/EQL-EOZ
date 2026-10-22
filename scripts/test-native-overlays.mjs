@@ -527,24 +527,41 @@ try {
             // Exercise main-window markup and real pointer dispatch as well as
             // the native Intel renderer: the Item picture used to have no
             // tooltip identity at all, and live redraws detached name targets.
-            showNativeInactive.call(owner);
+            showNativeInactive.call(owner);owner.focus();
+            await until(async()=>execute(owner,()=>document.hasFocus()),'Main pointer hover checks use the active CI document');
             await execute(owner,()=>{
                 window.__mainItemPointer=[];
-                document.addEventListener('pointerover',event=>{const target=event.target.closest?.('[data-item-title]');if(target)window.__mainItemPointer.push({name:target.dataset.itemTitle,trusted:event.isTrusted});},true);
+                for(const type of ['pointerover','pointermove'])document.addEventListener(type,event=>{
+                    const target=event.target.closest?.('[data-item-title]');window.__mainItemPointer.push({type:event.type,name:target?.dataset.itemTitle||'',tag:event.target.tagName,id:event.target.id||'',trusted:event.isTrusted,x:event.clientX,y:event.clientY});
+                    if(window.__mainItemPointer.length>40)window.__mainItemPointer.shift();
+                },true);
                 const search=document.querySelector('#item-search');search.value='Synthetic Charm 1';search.dispatchEvent(new Event('input'));
             });
             const mainHover = async (selector,expectedItem='') => {
-                const target=await execute(owner,selector=>{
+                const target=await execute(owner,async selector=>{
                     const target=document.querySelector(selector);
                     if(!target)throw new Error(`Missing main item hover surface: ${selector}`);
                     document.activeElement?.blur();target.scrollIntoView({block:'center',inline:'nearest'});
+                    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
                     const rect=target.getBoundingClientRect(),identity=target.closest('[data-item-title]');window.__mainItemPointer=[];
                     return{x:Math.round(rect.left+Math.min(8,rect.width/2)),y:Math.round(rect.top+rect.height/2),name:identity.dataset.itemTitle,tag:target.tagName};
                 },selector);
                 if(expectedItem)assert.equal(target.name,expectedItem);
-                owner.webContents.sendInputEvent({type:'mouseMove',x:5,y:5});
-                owner.webContents.sendInputEvent({type:'mouseMove',x:target.x,y:target.y});
-                await until(async()=>execute(owner,name=>{const tooltip=document.querySelector('#item-tooltip');return !tooltip.hidden&&tooltip.querySelector('.itembox-title>span')?.textContent===name&&window.__mainItemPointer.some(event=>event.trusted&&event.name===name);},target.name),`Trusted main hover exposes stats from ${selector}`);
+                try{
+                    owner.webContents.sendInputEvent({type:'mouseMove',x:5,y:5});
+                    // Acknowledge departure before entering; back-to-back native
+                    // mouse moves can coalesce without a fresh pointerover.
+                    await until(async()=>execute(owner,()=>window.__mainItemPointer.some(event=>event.trusted&&Math.abs(event.x-5)<=1&&Math.abs(event.y-5)<=1)),'Native pointer departure is delivered before entering the item');
+                    owner.webContents.sendInputEvent({type:'mouseMove',x:target.x,y:target.y});
+                    await until(async()=>execute(owner,name=>{const tooltip=document.querySelector('#item-tooltip');return !tooltip.hidden&&tooltip.querySelector('.itembox-title>span')?.textContent===name&&window.__mainItemPointer.some(event=>event.type==='pointerover'&&event.trusted&&event.name===name);},target.name),`Trusted main hover exposes stats from ${selector}`);
+                }catch(error){
+                    const diagnostic=await execute(owner,(selector,point)=>{
+                        const describe=node=>node?{tag:node.tagName,id:node.id,className:node.className,name:node.closest?.('[data-item-title]')?.dataset.itemTitle||'',text:node.textContent?.slice(0,120),rect:node.getBoundingClientRect().toJSON()}:null;
+                        const tooltip=document.querySelector('#item-tooltip');
+                        return{hasFocus:document.hasFocus(),viewport:{width:innerWidth,height:innerHeight},activeView:document.querySelector('.view.is-active')?.dataset.viewPanel,activeElement:describe(document.activeElement),target:describe(document.querySelector(selector)),hit:describe(document.elementFromPoint(point.x,point.y)),events:window.__mainItemPointer,tooltip:{hidden:tooltip.hidden,display:getComputedStyle(tooltip).display,title:tooltip.querySelector('.itembox-title>span')?.textContent,text:tooltip.textContent.slice(0,350)},scroll:document.querySelector('.content').scrollTop};
+                    },selector,target);
+                    throw new Error(`${error.message}: ${JSON.stringify({selector,point:target,native:{visible:owner.isVisible(),focused:owner.isFocused(),bounds:owner.getContentBounds()},...diagnostic})}`);
+                }
                 return execute(owner,(selector,target)=>{
                     const tooltip=document.querySelector('#item-tooltip'),node=document.querySelector(selector),identity=node.closest('[data-item-title]');
                     return{...target,stats:tooltip.querySelectorAll('.tooltip-stat').length,description:identity.getAttribute('aria-describedby'),tabbable:identity.tabIndex>=0,href:identity.getAttribute('href')};
