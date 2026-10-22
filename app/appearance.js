@@ -4,15 +4,24 @@ export const FONT_PRESETS = Object.freeze(presets.fonts.map(font => Object.freez
 export const DEFAULT_APPEARANCE = Object.freeze({...presets.default});
 export const MIN_FONT_SIZE = presets.minimumSize;
 export const MAX_FONT_SIZE = presets.maximumSize;
+export function normalizeLocalFontFamily(value) {
+    if(typeof value!=='string'||value.length>120||/[\u0000-\u001f\u007f-\u009f\u2028\u2029\uD800-\uDFFF]/u.test(value))return '';
+    return value.normalize('NFC').trim().replace(/\s+/gu,' ');
+}
 export function normalizeAppearance(value) {
-    return {
+    const local=value?.fontFamily==='local'?normalizeLocalFontFamily(value.localFontFamily):'';
+    const result={
         fontFamily:FONT_PRESETS.some(font => font.id === value?.fontFamily) ? value.fontFamily : DEFAULT_APPEARANCE.fontFamily,
         fontSize:typeof value?.fontSize === 'number' && Number.isFinite(value.fontSize)
             ? Math.max(MIN_FONT_SIZE,Math.min(MAX_FONT_SIZE,Math.round(value.fontSize))) : DEFAULT_APPEARANCE.fontSize
     };
+    if(local){result.fontFamily='local';result.localFontFamily=local;}
+    return result;
 }
 export function appearanceFont(value) {
     const appearance = normalizeAppearance(value);
+    if(appearance.fontFamily==='local')return {id:'local',label:appearance.localFontFamily,
+        stack:`"${appearance.localFontFamily.replace(/\\/g,'\\\\').replace(/"/g,'\\"')}", system-ui, -apple-system, "Segoe UI", sans-serif`};
     return FONT_PRESETS.find(font => font.id === appearance.fontFamily);
 }
 export function applyAppearance(document,value,{panelScale=1}={}) {
@@ -21,6 +30,7 @@ export function applyAppearance(document,value,{panelScale=1}={}) {
     const root = document?.documentElement;
     if (root) {
         root.dataset.fontFamily = appearance.fontFamily;
+        root.dataset.localFontFamily = appearance.localFontFamily || '';
         root.dataset.fontSize = String(appearance.fontSize);
         root.dataset.fontMultiplier = String(multiplier);
         root.style.setProperty('--ui-font-family',font.stack);
@@ -37,7 +47,7 @@ export function applyAppearance(document,value,{panelScale=1}={}) {
 export function inheritViewerAppearance(parentDocument,viewerDocument) {
     if (!viewerDocument?.documentElement || !parentDocument?.documentElement) return;
     const source = parentDocument.documentElement;
-    applyAppearance(viewerDocument,{fontFamily:source.dataset.fontFamily,fontSize:Number(source.dataset.fontSize)},{panelScale:Number(source.dataset.fontMultiplier)||1});
+    applyAppearance(viewerDocument,{fontFamily:source.dataset.fontFamily,localFontFamily:source.dataset.localFontFamily,fontSize:Number(source.dataset.fontSize)},{panelScale:Number(source.dataset.fontMultiplier)||1});
     let style = viewerDocument.getElementById('eoz-viewer-appearance');
     if (!style) {
         style = viewerDocument.createElement('style'); style.id = 'eoz-viewer-appearance';

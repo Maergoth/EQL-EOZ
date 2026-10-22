@@ -41,6 +41,9 @@ jobs:
       - run: npm run test:native-overlays -- --screenshots ci-screenshots
       - run: npm run test:discovery-notices
       - run: npm run test:appearance -- --screenshots ci-screenshots/appearance
+      - run: npm run test:system-fonts -- --screenshots ci-screenshots/system-fonts
+      - run: npm run test:main-cache
+      - run: npm run test:map-loot -- --screenshots ci-screenshots/map-loot
       - name: Upload synthetic interface captures
         if: always()
         uses: actions/upload-artifact@v4

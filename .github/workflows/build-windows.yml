@@ -46,6 +46,12 @@ jobs:
         run: npm run test:discovery-notices
       - name: Test native appearance controls
         run: npm run test:appearance
+      - name: Test installed system fonts and changed-stat colors
+        run: npm run test:system-fonts
+      - name: Test interface cache upgrade and Live Map loot
+        run: |
+          npm run test:main-cache
+          npm run test:map-loot
       - name: Fetch production bootstrap data
         if: inputs.bootstrap_artifact == ''
         shell: bash
@@ -85,6 +91,8 @@ jobs:
         run: npm run dist:win
       - name: Verify packaged version and coordinate code
         run: npm run test:artifact
+      - name: Test installed fonts in the verified packaged ASAR
+        run: npm run test:system-fonts -- --packaged-root dist/win-unpacked/resources/app.asar
       - name: Verify Authenticode signature
         if: steps.signing.outputs.enabled == 'true'
         shell: pwsh

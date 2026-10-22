@@ -67,6 +67,7 @@ assert.match(renderTimerNotifications([{label:'Notice <safe>',expiresAt:1500}],1
 assert.doesNotMatch(renderSwing({enabled:true,lastAt:10000,intervalMs:2500,status:'tracking'},11000),/<button|<input|<select/);
 assert.match(renderSwing({enabled:true,lastAt:10000,intervalMs:2500,status:'tracking'},11000),/Observed 2\.5s/);
 assert.equal(renderSwing({enabled:false},11000),'');
+assert.equal(renderSwing({},11000),'','An unknown or absent snapshot does not show the optional swing estimate.');
 const injection = '<img src=x onerror=alert(1)>';
 assert.equal(escapeHtml(injection),'&lt;img src=x onerror=alert(1)&gt;');
 assert.doesNotMatch(renderParseContent(parseView({encounters:[{id:'x',name:injection,active:true,events:[event('damage',20,injection)]}]},'live')),/<img/);
@@ -78,7 +79,8 @@ const itemHover = renderItem({name:'Sword',tier:7,slots:['Primary'],stats:{HP:70
 assert.equal((itemHover.match(/data-item-hover/g)||[]).length,2,'Both item picture and name are stat-tooltip targets');
 assert.match(itemHover,/class="item-icon-button"[\s\S]*aria-label="Stats for Sword"/);
 const tooltip = renderItemTooltip({name:'Sword',tier:7,slots:['PRIMARY'],classes:['WAR'],stats:{HP:70,AC:15},baseStats:{HP:10,AC:15},notes:injection});
-assert.match(tooltip,/Tier 7/);assert.match(tooltip,/Class: WAR/);assert.match(tooltip,/<dt>HP<\/dt><dd>70 <small>\(10\)<\/small>/);
+assert.match(tooltip,/Tier 7/);assert.match(tooltip,/Class: WAR/);assert.match(tooltip,/<dt>HP<\/dt><dd class="is-scaled">70 <small>\(10\)<\/small>/);
+assert.match(tooltip,/<dt>AC<\/dt><dd>15<\/dd>/,'An unchanged stat does not acquire the green changed-value class.');
 assert.doesNotMatch(tooltip,/<img|<script/,'Stat blocks escape notes, names and stat values');
 assert.match(renderIntel({npcs:[{name:'Named',named:true,waypoint:'1,2,3',drops:[]}],canRoute:false}),/disabled title="Enable maps/);
 assert.doesNotMatch(renderIntel({npcs:[{name:'Named',waypoint:'1,2,3',drops:[]}],canRoute:true}),/disabled/);

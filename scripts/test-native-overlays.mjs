@@ -127,7 +127,8 @@ try {
                 const panel = document.querySelector('#panel-content');
                 return { scroll:panel.scrollHeight, height:panel.clientHeight };
             });
-            assert(emptyTimerLayout.scroll <= emptyTimerLayout.height + 1, 'empty slim timer panel fits one waiting swing row without clipping');
+            assert(emptyTimerLayout.scroll <= emptyTimerLayout.height + 1, 'empty slim timer panel fits its countdown empty state without clipping');
+            assert.equal((await state()).snapshot.session.timers.swing.enabled,false,'A fresh profile leaves swing estimation off.');
             for (const window of Object.values(panels())) {
                 const options = nativeOptions.get(window.id);
                 assert.equal(options.frame, false); assert.equal(options.transparent, true); assert.equal(options.alwaysOnTop, true);
@@ -518,7 +519,9 @@ try {
             await until(async () => (await state()).snapshot.session.timers.timers.find(timer => timer.id === timerId)?.status === 'paused', 'paused timer in main app');
             await execute(owner, id => document.querySelector(`#timer-settings [data-timer-action="resume"][data-timer-id="${id}"]`).click(), timerId);
             await until(async () => (await state()).snapshot.session.timers.timers.find(timer => timer.id === timerId)?.status === 'running', 'resumed timer in main app');
-            await execute(owner, () => { document.querySelector('#timer-settings [data-timer-tab="swing"]').click(); const input = document.querySelector('#timer-settings [data-swing-delay]'); input.value = '25'; input.dispatchEvent(new Event('change', {bubbles:true})); });
+            await execute(owner, () => { document.querySelector('#timer-settings [data-timer-tab="swing"]').click(); const enabled=document.querySelector('#timer-settings [data-swing-enabled]');enabled.checked=true;enabled.dispatchEvent(new Event('change',{bubbles:true})); });
+            await until(async () => (await state()).snapshot.session.timers.swing.enabled===true,'explicit swing opt-in from main app');
+            await execute(owner, () => { const input = document.querySelector('#timer-settings [data-swing-delay]'); input.value = '25'; input.dispatchEvent(new Event('change', {bubbles:true})); });
             await until(async () => (await state()).snapshot.session.timers.swing.delayTenths === 25, 'swing delay edited in main app');
             await execute(owner, () => document.querySelector('#timer-settings [data-timer-action="reset-swing"]').click());
             await append(['You slash a synthetic skeleton for 5 points of damage.']);

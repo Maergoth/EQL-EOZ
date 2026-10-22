@@ -5,6 +5,7 @@ import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {basename,dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {RELEASE_HISTORY} from '../app/release-history.js';
 
 // Native Electron only, with a disposable profile and synthetic game/log pack.
 // No installed player profile, real game files or external service is touched.
@@ -17,8 +18,11 @@ try {
     await writeFile(configFile,JSON.stringify({eqRootPath:game,logPath,logSelection:'manual',alwaysOnTop:true}));
     await writeFile(join(profile,'data','eye-of-zomm-pack.json'),JSON.stringify({meta:{schemaVersion:3,version:'window-lifecycle-fixture',currentEra:'Classic',sample:true},zones:[],npcs:[],items:[]}));
     const pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
+    const release=RELEASE_HISTORY.find(entry=>entry.version===pkg.version);
+    assert(release?.steps.length>1,'The current illustrated walkthrough must support Next and Previous');
+    const expectedTourCount=release.steps.length;
     await writeFile(join(temporary,'package.json'),JSON.stringify({name:'eoz-window-lifecycle-fixture',version:pkg.version,main:'main.cjs'}));
-    const run=async({root,profile,scenario})=>{
+    const run=async({root,profile,scenario,expectedTourCount,version})=>{
         const electron=require('electron'),{app,BrowserWindow,screen}=electron,Module=require('node:module'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
         const optionsById=new Map(),callsById=new Map();
         function RecordedWindow(options){
@@ -54,9 +58,9 @@ try {
                     next.click();const second=dialog.querySelector('[data-tour-count]').textContent;
                     dialog.querySelector('[data-tour-previous]').click();
                     dialog.dispatchEvent(new Event('cancel',{cancelable:true}));
-                    return {imageLoaded,second,closed:!dialog.open,focusRestored:document.activeElement?.id==='open-whats-new'};
+                    return {imageLoaded,second,version:dialog.querySelector('[data-tour-version]').value,closed:!dialog.open,focusRestored:document.activeElement?.id==='open-whats-new'};
                 });
-                assert.equal(walkthrough.imageLoaded,true);assert.equal(walkthrough.second,'2 of 4');assert.equal(walkthrough.closed,true);assert.equal(walkthrough.focusRestored,true);
+                assert.equal(walkthrough.imageLoaded,true);assert.equal(walkthrough.version,version);assert.equal(walkthrough.second,`2 of ${expectedTourCount}`);assert.equal(walkthrough.closed,true);assert.equal(walkthrough.focusRestored,true);
                 await execute(owner,()=>{document.querySelector('[data-view="settings"]').click();document.getElementById('settings-minimize-to-tray').click();});
                 await until(async()=> (await state()).minimizeToTray,'minimize checkbox persistence');
                 await execute(owner,()=>document.getElementById('settings-start-minimized').click());
@@ -121,7 +125,7 @@ try {
             const config=JSON.parse(await readFile(configFile,'utf8'));config.minimizeToTray=false;config.startMinimized=true;await writeFile(configFile,JSON.stringify(config));
             const placement=JSON.parse(await readFile(placementFile,'utf8'));placement.maximized=scenario==='taskbar-max';await writeFile(placementFile,JSON.stringify(placement));
         }
-        await writeFile(join(temporary,'main.cjs'),`const {app}=require('electron');app.setPath('userData',${JSON.stringify(profile)});(${run.toString()})(${JSON.stringify({root,profile,scenario})}).catch(error=>{console.error(error.stack);app.exit(1);});`);
+        await writeFile(join(temporary,'main.cjs'),`const {app}=require('electron');app.setPath('userData',${JSON.stringify(profile)});(${run.toString()})(${JSON.stringify({root,profile,scenario,expectedTourCount,version:pkg.version})}).catch(error=>{console.error(error.stack);app.exit(1);});`);
         const result=await new Promise((resolve,reject)=>{
             const child=spawn(electron,[temporary,'--disable-gpu','--mute-audio'],{windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';
             child.stdout.on('data',chunk=>{output+=chunk;});child.stderr.on('data',chunk=>{output+=chunk;});child.once('error',reject);child.once('exit',code=>resolve({code,output}));

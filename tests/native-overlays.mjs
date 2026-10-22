@@ -13,7 +13,10 @@ const test = (name, run) => tests.push({ name, run });
 const display = (x = 0, y = 0, width = 1920, height = 1040) => ({ workArea:{ x, y, width, height } });
 
 class Contents extends EventEmitter {
-    constructor() { super(); this.mainFrame = { url:'' }; this.sent = [];this.session={webRequest:{onBeforeRequest:(_filter,callback)=>{this.requestPolicy=callback;}}}; }
+    constructor() { super(); this.mainFrame = { url:'' }; this.sent = [];this.session={
+        webRequest:{onBeforeRequest:(_filter,callback)=>{this.requestPolicy=callback;}},
+        setPermissionRequestHandler:callback=>{this.permissionRequest=callback;},
+        setPermissionCheckHandler:callback=>{this.permissionCheck=callback;}}; }
     setWindowOpenHandler(handler) { this.openHandler = handler; }
     send(...args) { this.sent.push(args); }
 }

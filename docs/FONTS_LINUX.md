@@ -1,5 +1,28 @@
 # Font settings and Linux release
 
+## 0.8.9 installed system fonts
+
+Settings → Fonts retains the presets and adds **Installed font…**. Choose
+**Refresh installed fonts**, search for a family and **Apply installed font**.
+You may also enter its family name when enumeration is unavailable. The font
+must be installed on that computer; EoZ never downloads or bundles it. Missing
+families fall back to local system fonts. Reset restores the EQL theme/13 px.
+
+The optional family-name query uses Chromium's
+[Local Font Access API](https://developer.chrome.com/docs/capabilities/web-apis/local-fonts)
+inside the user's refresh click. EoZ requests only names, never font blobs.
+The desktop permission is restricted to the exact local main frame; the viewer,
+overlays and remote pages cannot enumerate fonts. Existing map pointer lock and
+fullscreen retain their narrowly scoped viewer permission.
+
+`app/system-font-settings.js` owns listing/search/fallback, `app/appearance.js`
+and `desktop/appearance.cjs` normalize one bounded family-name contract, and
+`desktop/font-permissions.cjs` defines the native boundary. Shared appearance
+still reaches all overlays and the embedded map. This follow-up permits isolated
+synthetic development checks; the earlier 0.8.8 no-local-test instruction below
+describes that release's historical scope. Never replace a player's installed
+app or profile as a test.
+
 ## 0.8.8 scope and continuation
 
 Branch `codex/fonts-linux` starts from released 0.8.7 (`d174ee3`). The owner

@@ -1,7 +1,13 @@
 # Eye of Zomm — Product and UX Vision
 
+The 0.8.9 desktop follow-up adds installed system fonts, a one-time upgrade
+cache repair, green item-level values, a complete Live Map loot pane, browsable
+release screenshots, a five-second Windows restart countdown and an opt-in swing
+estimate. See [frontend cache](design/FRONTEND_CACHE.md),
+[release history](RELEASE_HISTORY.md) and [validation](../VALIDATION.md).
+
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.8.8
+Baseline: 0.8.9
 Last updated: 2026-10-22
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)

@@ -17,6 +17,8 @@ import { createWikiDiscovery } from './wiki-discovery.js';
 import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
 import { mountWhatsNew } from './whats-new.js';
 import { FONT_PRESETS, DEFAULT_APPEARANCE, normalizeAppearance, applyAppearance, inheritViewerAppearance } from './appearance.js';
+import { mountSystemFontSettings } from './system-font-settings.js';
+import { isItemStatModified } from './item-stat-presentation.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -54,6 +56,8 @@ let activeTooltipTarget = null;
 let activeTooltipMode = '';
 let lastTooltipPointer = null;
 let activeRoute = null;
+let mapLootSelection = null;
+let mapLootTier = 0;
 let routeRefreshTimer = null;
 let routeRequestSerial = 0;
 let renderedDestinationZone = '';
@@ -100,6 +104,7 @@ let itemZoneFilterExplicit = Boolean(settings.itemZoneFilterExplicit || settings
 settings.appearance = normalizeAppearance(settings.appearance);
 applyAppearance(document,settings.appearance);
 let appearanceGeneration = 0, appearancePending = 0, appearanceDraft = false;
+let systemFontSettings = null;
 parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
 const $ = selector => document.querySelector(selector);
@@ -113,6 +118,7 @@ function renderAppearanceSettings() {
     $('#settings-font-size').value = String(settings.appearance.fontSize);
     $('#settings-font-size-value').textContent = `${settings.appearance.fontSize} px`;
     $('#settings-font-size').setAttribute('aria-valuetext',`${settings.appearance.fontSize} pixels`);
+    systemFontSettings?.render(settings.appearance);
 }
 function acceptAppearance(value) {
     const next = normalizeAppearance(value), changed = JSON.stringify(next) !== JSON.stringify(settings.appearance);
@@ -402,6 +408,7 @@ async function loadPack() {
 async function connectBridge() {
     try {
         bridgeInfo = await api('/api/info');
+        whatsNew.refresh();
         mapDataLoader.invalidate(); mapDataRevision++;
         parser.setCharacterFromFilename(bridgeInfo.logPath || '');
         $('#app-version').textContent = bridgeInfo.version || 'unknown';
@@ -786,6 +793,54 @@ function knownDropsForNpc(npc) {
     });
 }
 
+function selectMapLoot(name, raidInstance) {
+    const npc = npcRecordForName(name, state().zone, raidInstance);
+    if (!npc) return;
+    mapLootSelection = {name:npc.name,zone:state().zone,raidInstance:raidVariant(npc)};
+    viewerApi()?.setActiveRareMob?.(npc.name);
+    renderMapLootPane(state(),effectiveProfile(state()));
+}
+
+function renderMapLootPane(s,profile) {
+    const host = $('#map-loot-pane');
+    mapLootTier=Number(settings.itemTier)||0;
+    if (!host) return;
+    if (!mapLootSelection || zoneKey(mapLootSelection.zone) !== zoneKey(s.zone)) {
+        mapLootSelection = null; host.hidden = true; host.replaceChildren(); return;
+    }
+    const npc = npcRecordForName(mapLootSelection.name,s.zone,mapLootSelection.raidInstance);
+    if (!npc) { mapLootSelection = null; host.hidden = true; host.replaceChildren(); return; }
+    const drops = knownDropsForNpc(npc).slice().sort((a,b) =>
+        Number(itemMatchesProfile(b,profile))-Number(itemMatchesProfile(a,profile)) || String(a.name).localeCompare(String(b.name)));
+    const location = wikiLocationToWorld(npc.loc);
+    const markup = `<div class="map-loot-heading"><div><span class="eyebrow">${raidVariant(npc)?'RAID ZONE':'NORMAL ZONE'}</span><h2>${esc(npc.name)}</h2><p class="sub">${npc.avgLevel?`Level ${esc(npc.avgLevel)} · `:''}${drops.length} known drops</p></div><button type="button" class="text-button" data-close-map-loot aria-label="Close loot pane">✕</button></div>
+        <div class="map-loot-controls"><label>Item tier <input type="range" min="0" max="10" step="1" value="${mapLootTier}" data-map-loot-tier><output>${mapLootTier?`Tier ${mapLootTier}`:'Base'}</output></label>
+        <div class="card-actions"><button type="button" class="mini-button" data-map-loot-route>Route</button>${location?`<button type="button" class="mini-button" data-map-loot-waypoint>Copy /waypoint</button>`:''}<a class="mini-button" href="${wikiUrl(npc.wikiTitle||npc.name)}" target="_blank" rel="noopener">Monster wiki</a></div></div>
+        <div class="map-loot-items">${drops.map(item => {
+            const stats = scaledItemStats(item,mapLootTier);
+            return `<article class="data-card map-loot-item" data-item-tooltip-source="map-loot:${esc(item.wikiTitle||item.name)}"><div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ')||'Unknown slot')}</div></div></div>
+                <div class="pill-row">${(item.classes||[]).map(c=>`<span class="pill">${esc(c)}</span>`).join('')}${item.era?`<span class="pill">${esc(item.era)}</span>`:''}</div>
+                <div class="stats">${Object.entries(stats).map(([key,value])=>`<div class="stat ${isItemStatModified(item.stats?.[key],value,mapLootTier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(value)}</strong></div>`).join('')||'<span class="sub">Stats have not been recorded on the wiki.</span>'}</div>
+                ${item.notes?`<p class="sub">${esc(item.notes)}</p>`:''}<a class="mini-button" href="${wikiUrl(item.wikiTitle||item.name)}" target="_blank" rel="noopener">Item wiki</a></article>`;
+        }).join('')||'<div class="empty-state">No drops recorded in the current wiki dataset.</div>'}</div>`;
+    host.hidden = false;
+    if (replaceItemList(host,markup)) {
+        host.querySelector('[data-close-map-loot]').onclick = () => {mapLootSelection=null;renderMapLootPane(state(),effectiveProfile(state()));};
+        host.querySelector('[data-map-loot-route]').onclick = () => {void pathToNpc(npc.name,{raidInstance:raidVariant(npc)});};
+        host.querySelector('[data-map-loot-waypoint]')?.addEventListener('click',async()=>{
+            const command=waypointCommandForWorldLocation(location);
+            if (command && await writeClipboardText(command)) showNotice(`Copied ${command}`,{tone:'success'});
+        });
+        host.querySelector('[data-map-loot-tier]').oninput = event => {
+            event.target.nextElementSibling.textContent=Number(event.target.value)?`Tier ${event.target.value}`:'Base';
+        };
+        host.querySelector('[data-map-loot-tier]').onchange = event => {
+            mapLootTier=Number(event.target.value)||0;settings.itemTier=mapLootTier;prefs.save(settings);renderMapLootPane(state(),effectiveProfile(state()));
+        };
+    }
+    refreshItemTooltip();
+}
+
 function npcRecordForName(name, zone = state().zone, raidInstance) {
     const wanted = npcNameKey(name);
     if (!wanted) return null;
@@ -897,6 +952,8 @@ function syncRareMobsToViewer(force = false) {
         )
         .slice(0, 180);
     const payload = sources.map(source => ({
+        id:intelIdentity(source),
+        raidInstance:raidVariant(source),
         name:source.name,
         wikiTitle:source.npc?.wikiTitle || source.name,
         loc:source.loc,
@@ -908,12 +965,12 @@ function syncRareMobsToViewer(force = false) {
         zoneKey(s.zone),
         pack.meta?.manifestVersion || pack.meta?.version || '',
         profile.classes.slice().sort(),
-        payload.map(entry => [entry.name, entry.loc, entry.dropCount, entry.classDropCount])
+        payload.map(entry => [entry.id, entry.name, entry.loc, entry.dropCount, entry.classDropCount])
     ]);
     if (!force && key === renderedRareViewerKey) return true;
     renderedRareViewerKey = key;
     apiObj.setRareMobs(payload);
-    apiObj.setActiveRareMob?.(activeRoute?.name || '');
+    apiObj.setActiveRareMob?.(mapLootSelection?.name || activeRoute?.name || '');
     return true;
 }
 
@@ -1068,12 +1125,12 @@ function renderDropLog(s) {
     }).join('');
 }
 
-function tooltipHtml(item) {
-    const tier = Number(settings.itemTier) || 0;
+function tooltipHtml(item,target) {
+    const tier = target?.closest('#map-loot-pane') ? mapLootTier : Number(settings.itemTier) || 0;
     const stats = scaledItemStats(item, tier);
     const statHtml = Object.entries(stats).slice(0, 18).map(([key, value]) => {
         const base = Number(item?.stats?.[key]);
-        const changed = tier > 0 && Number.isFinite(base) && Number(value) !== base;
+        const changed = isItemStatModified(item?.stats?.[key],value,tier);
         return `<div class="tooltip-stat ${changed ? 'is-scaled' : ''}"><span>${esc(key.replace(/_/g, ' '))}:</span><strong>${Number(value) > 0 ? '+' : ''}${formatNum(value)}${changed ? `<small> (${base > 0 ? '+' : ''}${formatNum(base)})</small>` : ''}</strong></div>`;
     }
     ).join('');
@@ -1117,7 +1174,7 @@ function showItemTooltip(target, event) {
     lastTooltipPointer = Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
         ? { clientX:event.clientX, clientY:event.clientY }
         : { clientX:Math.min(window.innerWidth - 8, rect.right), clientY:Math.min(window.innerHeight - 8, rect.bottom) };
-    tooltip.innerHTML = tooltipHtml(item);
+    tooltip.innerHTML = tooltipHtml(item,target);
     tooltip.hidden = false;
     positionTooltip(lastTooltipPointer);
 }
@@ -1133,7 +1190,7 @@ function refreshItemTooltip() {
     if (!target?.closest('.view.is-active')) { hideItemTooltip(); return; }
     activeTooltipItem = itemRecord(target.dataset.itemTitle); activeTooltipTarget = target;
     if (!activeTooltipItem) { hideItemTooltip(); return; }
-    tooltip.innerHTML = tooltipHtml(activeTooltipItem);
+    tooltip.innerHTML = tooltipHtml(activeTooltipItem,target);
     if (lastTooltipPointer) positionTooltip(lastTooltipPointer);
 }
 
@@ -1224,7 +1281,7 @@ function renderItems(s, profile) {
     $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel} through <strong>${esc(settings.era)}</strong>${slotLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}${rankingLabel}.`;
     let markup = visible.map(item => {
         const stats = scaledItemStats(item, tier);
-        const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
+        const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat ${isItemStatModified(item?.stats?.[key],val,tier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
         return `<article class="data-card" data-item-tooltip-source="${esc(`item:${item.wikiTitle || item.name}`)}">
             <div class="card-top">
                 <div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}${tier ? ` · Tier ${tier}` : ''}</div></div></div>
@@ -1431,7 +1488,9 @@ function renderMapReadiness(s = state()) {
 }
 
 function renderViewPanel(view, s, profile) {
-    if (view === 'overview') {
+    if (view === 'map') {
+        renderMapLootPane(s,profile);
+    } else if (view === 'overview') {
         renderOverviewNpcs(s, profile);
         renderEvents(s);
     } else if (view === 'npcs') {
@@ -1959,6 +2018,7 @@ function exportDiagnostics() {
 async function applyLogSelection(info) {
     const previousRoot = String(bridgeInfo?.eqRootPath || '');
     bridgeInfo = info;
+    whatsNew.refresh();
     logOffset = 0;
     partialLine = '';
     parser.character = '';
@@ -2020,9 +2080,10 @@ async function handleMapPrimaryAction() {
 function wireUi() {
     $('#zone-viewer').addEventListener('load',syncViewerAppearance);
     syncViewerAppearance();
-    $('#settings-font-family').innerHTML = FONT_PRESETS.map(font => `<option value="${font.id}">${esc(font.label)}</option>`).join('');
+    $('#settings-font-family').innerHTML = FONT_PRESETS.map(font => `<option value="${font.id}">${esc(font.label)}</option>`).join('')+'<option value="local">Installed font…</option>';
     renderAppearanceSettings();
-    $('#settings-font-family').addEventListener('change',event => { void saveAppearance({...settings.appearance,fontFamily:event.target.value}); });
+    $('#settings-font-family').addEventListener('change',event => { if(event.target.value!=='local')void saveAppearance({...settings.appearance,fontFamily:event.target.value}); });
+    systemFontSettings = mountSystemFontSettings({document,getAppearance:()=>settings.appearance,saveAppearance});
     $('#settings-font-size').addEventListener('input',event => {
         appearanceGeneration++; appearanceDraft = true;
         settings.appearance = normalizeAppearance({...settings.appearance,fontSize:Number(event.target.value)});
@@ -2202,7 +2263,7 @@ function wireUi() {
     $('#clear-route').addEventListener('click', () => clearActiveRoute());
 
     window.addEventListener('message', event => {
-        if (event.origin !== window.location.origin) return;
+        if (event.origin !== window.location.origin || event.source !== $('#zone-viewer')?.contentWindow) return;
         if (event.data?.type === 'eoz-viewer-ready') {
             viewerReady = true;
             queueViewerSync(async () => {
@@ -2214,7 +2275,7 @@ function wireUi() {
                 return true;
             });
         } else if (event.data?.type === 'eoz-rare-mob-selected' && event.data.name) {
-            pathToNpc(event.data.name);
+            selectMapLoot(event.data.name,event.data.raidInstance);
         } else if (event.data?.type === 'eoz-route-candidate-ready' && event.data.name) {
             if (!activeRoute || npcNameKey(event.data.name) !== npcNameKey(activeRoute.name) ||
                 zoneKey(activeRoute.zone) !== zoneKey(state().zone)) return;
@@ -2264,7 +2325,7 @@ const appUpdatesUi = mountAppUpdates({
         document.getElementById('check-app-update').focus();
     }
 });
-const whatsNew = mountWhatsNew({ button:$('#open-whats-new'), navigate:view => setView(view) });
+const whatsNew = mountWhatsNew({ button:$('#open-whats-new'), navigate:view => setView(view),getVersion:()=>bridgeInfo?.version });
 window.addEventListener('pagehide', () => { whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
