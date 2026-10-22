@@ -21,7 +21,7 @@ On Linux, make the AppImage executable and launch it, or install the deb using y
 
 ## A look around
 
-These screenshots show the actual **0.8.7 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [GitHub CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39698239325). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+These screenshots show the actual **0.8.8 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 

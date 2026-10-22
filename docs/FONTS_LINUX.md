@@ -55,3 +55,17 @@ does not create a separate application data source or Linux-only feature fork.
    Windows and Linux artifacts and their verified production bootstrap.
 5. Verify tag/commit, all uploaded package sizes/digests and release notes. Do
    not describe a packaged smoke check as an installed upgrade or live-game test.
+
+## Observed evidence and ongoing maintenance
+
+[VALIDATION.md](../VALIDATION.md) links the passing Windows installer and Linux
+package/runtime jobs. Both exercise fonts and the shared session; Linux also
+launches the actual packaged executable with its original ASAR and a synthetic
+Proton directory. Native Wayland and real game compositing remain manual.
+
+Keep one version and share one Releases link. The publisher generates direct
+Windows installer, Linux AppImage and deb links from the same artifact-name
+contract used by checksums. Future releases need no separate Linux branch,
+manual package uploads, data refresh or release-note download-link editing.
+The updater selects the matching platform/package format; Linux's verified
+manual handoff remains distinct from Windows' silent restart/install action.

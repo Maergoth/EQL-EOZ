@@ -7,9 +7,39 @@ same repository, then authorized publication after completion. Source ownership
 and required platform checks are recorded in [FONTS_LINUX.md](docs/FONTS_LINUX.md).
 The candidate keeps Windows and Linux on one version and shared verified wiki
 bootstrap. Tests/builds/captures run in GitHub CI; the owner's local application
-is not run or installed for this work. Actual CI outcomes and package evidence
-will be added after execution. Native Wayland and real game/compositor behavior
-remain separate acceptance, as do complete installed upgrades.
+is not run or installed for this work.
+
+The [Windows package build](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862378605)
+and [Linux package job](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766)
+passed on candidate `74d9cbd`. Both ran the full source suite, catalog relevance,
+actual Electron native-window/session checks, map sizing, software WebGL camera
+and file-isolation checks, and appearance controls. Font checks exercised 10/20
+px with 0.75/1.75 panel multipliers, bounded menus and controls at a non-maximized
+1024px main window, Triggers auto-height, canvas labels, active timer identity/
+deadline retention, renderer reload, process restart and Reset fonts. Review
+also retained native panels' `connect-src 'none'` with deterministically generated
+font presets and matched Linux names to the pinned builder's real expansion.
+
+Linux produced AppImage/deb artifacts and launched the original packaged binary
+with its original ASAR, sandbox intact and isolated XDG/profile directories.
+The real packaged app selected a synthetic Proton path, read appended log damage,
+zone and location, exposed four native panels and opened its real tour dialog.
+The appearance harness additionally ran against exact packaged ASAR sources.
+Windows produced the NSIS installer with its existing identity and updater flow.
+Exact source/image/bootstrap byte checks passed on both platforms. Both included
+manifest `20261022T000652Z-ecd7d8648c90`, pack `wiki-20261022T000157Z`, with 124 zones,
+8,679 NPCs and 11,270 items; the production refresh policy is unchanged.
+
+The [release PR](https://github.com/Maergoth/EQL-EOZ/pull/9) records final-head
+checks after the capture/download-note follow-up. One publisher waits for both
+platforms, supplies one verified bootstrap to both, validates package checksums,
+and publishes the complete asset set together. It generates direct Windows and
+Linux download links and refuses to replace published artifacts on reruns.
+
+Ubuntu 22.04/Xvfb/Openbox establishes an X11 baseline. Native Wayland, foreground
+game/compositor behavior, OS clipboard capture and complete installed upgrades
+remain separate acceptance. The Linux binary smoke is not an AppImage mount,
+deb installation, distribution-wide certification or installed upgrade test.
 
 ## 0.8.7 Triggers, sessions and complete Intel
 

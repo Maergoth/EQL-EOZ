@@ -58,7 +58,7 @@ try {
             if(!wasVisible)window.hide();
         };
         const geometry=async(size,panelScale)=>{
-            const main=await execute(owner,()=>{document.querySelector('#appearance-settings').scrollIntoView({block:'center'});return [...document.querySelectorAll('#settings-font-family,#settings-font-size,#reset-appearance')].map(element=>{const rect=element.getBoundingClientRect();return {id:element.id,inside:rect.width>0&&rect.height>0&&rect.left>=0&&rect.top>=0&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1};});});
+            const main=await execute(owner,()=>{document.querySelector('#appearance-settings').scrollIntoView({block:'start'});const viewport=document.querySelector('.content').getBoundingClientRect();return [...document.querySelectorAll('#settings-font-family,#settings-font-size,#reset-appearance')].map(element=>{const rect=element.getBoundingClientRect();return {id:element.id,inside:rect.width>0&&rect.height>0&&rect.left>=viewport.left&&rect.top>=viewport.top&&rect.right<=viewport.right+1&&rect.bottom<=viewport.bottom+1};});});
             assert(main.every(control=>control.inside),`Main 1024px font controls fit at ${size}px: ${JSON.stringify(main)}`);
             for(const [id,window] of Object.entries(panels())){
                 await execute(owner,(id,scale)=>window.eyeOfZommOverlays.control('font-scale',id,scale),id,panelScale);
@@ -127,6 +127,7 @@ try {
                 const snapshot=(await state()).snapshot.session.map;
                 throw new Error(`${error.message}: ${JSON.stringify({diagnostic,map:snapshot})}`);
             }
+            await execute(panels().map,()=>{document.activeElement?.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));});
             await capture(owner,'main-large');await capture(panels().map,'map-large');
             await choose('georgia',20);
             await execute(owner,()=>document.querySelector('#open-whats-new').click());
