@@ -60,7 +60,13 @@ try {
                     assert(menu,`${id} final menu action remains reachable at global ${size}px × panel ${panelScale}`);
                     await execute(window,()=>document.querySelector('#panel-menu-button').click());
                 }else{
-                    await until(()=>execute(window,()=>{const content=document.querySelector('#panel-content');return content.scrollHeight<=content.clientHeight+2;}),'Trigger native height follows combined font scale');
+                    try {
+                        await until(()=>execute(window,()=>{const content=document.querySelector('#panel-content');return content.scrollHeight<=content.clientHeight+2;}),'Trigger native height follows combined font scale');
+                    } catch(error) {
+                        await capture(window,'trigger-height-failure');
+                        const dimensions=await execute(window,()=>({viewport:innerHeight,scale:getComputedStyle(document.documentElement).getPropertyValue('--font-scale'),elements:['#overlay','#panel-content','#timer-list','#swing-body','#session-restart','#overlay-status'].map(selector=>{const element=document.querySelector(selector),rect=element.getBoundingClientRect();return {selector,height:rect.height,top:rect.top,bottom:rect.bottom,scroll:element.scrollHeight,client:element.clientHeight};})}));
+                        throw new Error(`${error.message}: ${JSON.stringify(dimensions)}`);
+                    }
                 }
                 if(id==='map'){
                     const reachable=await execute(window,()=>{const last=document.querySelector('[data-map-tolerance]');last.focus();last.scrollIntoView({block:'nearest',inline:'nearest'});const rect=last.getBoundingClientRect();return rect.left>=0&&rect.right<=innerWidth+1&&rect.top>=0&&rect.bottom<=innerHeight+1;});
