@@ -245,6 +245,14 @@
             </div>
             <div class="settings-grid">
                 <div id="overlay-controller" class="panel"></div>
+                <article class="panel" id="appearance-settings">
+                    <h2>Fonts</h2>
+                    <label for="settings-font-family">Font family <select id="settings-font-family" aria-label="Font family"></select></label>
+                    <label for="settings-font-size">Text size <span class="appearance-size"><input id="settings-font-size" type="range" min="10" max="20" step="1" value="13" aria-label="Text size"><output id="settings-font-size-value" for="settings-font-size">13 px</output></span></label>
+                    <p class="settings-helper">Applies to the main window and all native overlays. Each overlay's Text size still adjusts that panel further. Fonts use installed system fallbacks; no downloads are needed.</p>
+                    <div class="settings-actions"><button id="reset-appearance" class="secondary-button" type="button">Reset fonts</button></div>
+                    <p id="settings-appearance-status" class="settings-helper" role="status" aria-live="polite"></p>
+                </article>
                 <article class="panel">
                     <h2>EverQuest folder</h2>
                     <div class="setting-line"><span>Game folder</span><code id="settings-eq-root">—</code></div>

@@ -2,6 +2,8 @@
 
 const electron = require('electron');
 const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = electron;
+const { configureLinuxRuntime } = require('./linux-runtime.cjs');
+configureLinuxRuntime(app, { platform:process.platform, env:process.env });
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -61,7 +63,9 @@ function getAppUpdater() {
         version:APP_VERSION,
         cacheDirectory:path.join(userDataDir(), 'app-updates'),
         isPackaged:app.isPackaged,
-        launchInstaller:target => launchSilentNsisInstaller(target, { installDirectory:path.dirname(process.execPath) }),
+        linuxPackage:process.env.APPIMAGE ? 'AppImage' : 'deb',
+        launchInstaller:target => process.platform === 'linux' ? shell.openPath(path.dirname(target))
+            : launchSilentNsisInstaller(target, { installDirectory:path.dirname(process.execPath) }),
         onInstallerLaunched:() => app.quit()
     });
     return appUpdater;

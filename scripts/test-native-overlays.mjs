@@ -16,11 +16,13 @@ const screenshotArgument = process.argv.indexOf('--screenshots');
 const screenshots = screenshotArgument === -1 ? join(temporary, 'screenshots') : resolve(process.argv[screenshotArgument + 1] || '');
 try {
     const profile = join(temporary, 'profile');
-    const game = join(temporary, 'synthetic-game');
-    const log = join(game, 'Logs', 'eqlog_Fixture_Test.txt');
-    await mkdir(profile); await mkdir(join(game, 'Logs'), { recursive:true }); await mkdir(join(game, 'Maps')); await mkdir(screenshots, { recursive:true });
-    await writeFile(join(game,'Maps','mistmoore.txt'),'L -100,-100,0,100,-100,0,150,160,180\nL 100,-100,0,100,100,0,150,160,180\nL 100,100,0,-100,100,0,150,160,180\nL -100,100,0,-100,-100,0,150,160,180\nP -20,-10,0,216,183,92,2,Synthetic_Keeper\n');
-    await writeFile(join(game,'Maps','mistmoore_1.txt'),'L -50,-50,50,50,50,50,200,100,110\n');
+    const linux = process.platform === 'linux';
+    const game = linux ? join(temporary,'compatdata','fixture','pfx','drive_c','EverQuest Legends') : join(temporary, 'synthetic-game');
+    const logDirectory=linux?'logs':'Logs',mapDirectory=linux?'mApS':'Maps';
+    const log = join(game, logDirectory, 'eqlog_Fixture_Test.txt');
+    await mkdir(profile); await mkdir(join(game, logDirectory), { recursive:true }); await mkdir(join(game, mapDirectory)); await mkdir(screenshots, { recursive:true });
+    await writeFile(join(game,mapDirectory,linux?'MiStMoOrE.TxT':'mistmoore.txt'),'L -100,-100,0,100,-100,0,150,160,180\nL 100,-100,0,100,100,0,150,160,180\nL 100,100,0,-100,100,0,150,160,180\nL -100,100,0,-100,-100,0,150,160,180\nP -20,-10,0,216,183,92,2,Synthetic_Keeper\n');
+    await writeFile(join(game,mapDirectory,linux?'MISTMOORE_1.TXT':'mistmoore_1.txt'),'L -50,-50,50,50,50,50,200,100,110\n');
     await mkdir(join(profile, 'data'));
     // Keep the smoke independent of the ignored production bootstrap and
     // network access. This tiny presentation pack exists only in this profile.
@@ -37,7 +39,7 @@ try {
     // A nonempty initial tail establishes the cursor before live fixture lines
     // arrive; initial/backfill reads must not trigger transient timers/considers.
     await writeFile(log, `[${new Date().toISOString()}] Synthetic overlay smoke begins.\n`);
-    await writeFile(join(profile, 'eye-of-zomm-config.json'), JSON.stringify({ eqRootPath:game, logPath:log, logSelection:'manual' }));
+    await writeFile(join(profile, 'eye-of-zomm-config.json'), JSON.stringify({ eqRootPath:game, logPath:linux?'':log, logSelection:linux?'automatic':'manual' }));
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
     await writeFile(join(temporary, 'package.json'), JSON.stringify({ name:'eoz-native-overlay-smoke', version:pkg.version, main:'main.cjs' }));
     const run = async ({ root, log, screenshots, fixtureUpdateVersion }) => {
@@ -107,6 +109,7 @@ try {
             await fs.writeFile(path.join(screenshots, `${name}.png`), image.toPNG());
         };
         const inspect = async () => {
+            if(process.platform==='linux'&&process.env.DISPLAY)assert.equal(app.commandLine.getSwitchValue('ozone-platform'),'x11','Linux overlay smoke uses the production X11/XWayland preference');
             owner = await until(() => BrowserWindow.getAllWindows().find(window => /^http:\/\/127\.0\.0\.1:\d+\/$/.test(window.webContents.getURL())), 'main app');
             await until(async () => execute(owner, () => Boolean(window.eyeOfZommOverlays && document.querySelector('#bridge-status')?.textContent === 'Live log')), 'initial log poll');
             await until(async () => (await state()).sessionAvailable, 'first shared snapshot');
@@ -140,8 +143,14 @@ try {
                 assert.deepEqual(surface, { singular:'function', main:'undefined', updater:'undefined', files:'undefined', fetchBlocked:true, mainPreference:null });
             }
             await action('parse', 'lock', true);
-            assert.equal(panels().parse.isResizable(), false); assert.equal(panels().parse.isMovable(), false); assert.equal(panels().parse.isFocusable(), true);
+            assert.equal(panels().parse.isResizable(), false);
+            assert.equal(nativeCalls.get(panels().parse.id).filter(call => call[0] === 'setMovable').at(-1)[1],false);
+            // Electron's Linux isMovable() always returns true; ordinary drag
+            // locking there is enforced by the renderer's no-drag region.
+            assert.equal(panels().parse.isMovable(),process.platform === 'linux');
+            if(process.platform !== 'linux')assert.equal(panels().parse.isFocusable(),true);
             await until(async () => execute(panels().parse, () => document.querySelector('#overlay').classList.contains('is-locked')), 'locked drag CSS');
+            assert.equal(await execute(panels().parse,()=>getComputedStyle(document.querySelector('#overlay-header')).webkitAppRegion),'no-drag');
             await execute(panels().parse, () => document.querySelector('[data-tab="healing"]').click());
             assert.equal(await execute(panels().parse, () => document.querySelector('[data-tab="healing"]').getAttribute('aria-pressed')), 'true', 'tabs remain usable in locked layouts');
             await execute(panels().parse, () => document.querySelector('#panel-menu-button').click());
@@ -152,7 +161,10 @@ try {
             assert(nativeCalls.get(panels().parse.id).some(call => call[0] === 'setIgnoreMouseEvents' && call[1] === true));
             await control('restore-mouse'); await control('unlock-all');
             assert.equal((await state()).panels.parse.passThrough, false);
-            assert.equal(panels().parse.isResizable(), true); assert.equal(panels().parse.isMovable(), true); assert.equal(panels().parse.isFocusable(), true);
+            assert.equal(panels().parse.isResizable(), true); assert.equal(panels().parse.isMovable(), true);
+            assert.equal(nativeCalls.get(panels().parse.id).filter(call => call[0] === 'setMovable').at(-1)[1],true);
+            if(process.platform !== 'linux')assert.equal(panels().parse.isFocusable(),true);
+            await until(async()=>execute(panels().parse,()=>getComputedStyle(document.querySelector('#overlay-header')).webkitAppRegion==='drag'),'unlocked native header drag region');
             assert.equal(nativeCalls.get(panels().parse.id).filter(call => call[0] === 'setIgnoreMouseEvents').at(-1)[1], false);
             const focusCalls = () => [...nativeCalls.values()].flat().filter(call => call[0] === 'focus').length;
             const beforeConsiderFocus = focusCalls();
@@ -332,7 +344,8 @@ try {
                 for(const width of [260,460])for(const locked of [false,true]){
                     await action('map','lock',false);mapWindow.setSize(width,mapBoundsBeforeHeader.height);await action('map','lock',locked);
                     await until(async () => execute(mapWindow,locked=>document.querySelector('#overlay').classList.contains('is-locked')===locked,locked),'Map layout lock reaches the native renderer');
-                    assert.equal(mapWindow.isMovable(),!locked,'The dedicated drag grip preserves unlocked native window movement');
+                    assert.equal(nativeCalls.get(mapWindow.id).filter(call=>call[0]==='setMovable').at(-1)[1],!locked,'Layout lock reaches the native host');
+                    assert.equal(mapWindow.isMovable(),process.platform==='linux'||!locked,'Electron Linux keeps its movable capability while the app locks its drag grip');
                     const outside=await execute(mapWindow,()=>{document.activeElement?.blur();const rect=document.querySelector('canvas').getBoundingClientRect();return{x:Math.round(rect.left+rect.width/2),y:Math.round(rect.bottom-30)};});
                     mapWindow.webContents.sendInputEvent({type:'mouseMove',...outside});
                     await until(async () => execute(mapWindow,()=>getComputedStyle(document.querySelector('.native-map-tools')).visibility==='hidden'),'Leaving the full header band collapses primary controls');
@@ -684,7 +697,7 @@ try {
             assert.deepEqual(split.timers.timers.map(({id,expiresAt})=>({id,expiresAt})),deadlines,'Manual session splits preserve all running trigger IDs/deadlines');
             await append(['You slash a synthetic skeleton for 9 points of damage.']);
             await until(async()=>(await state()).snapshot.session.parse.totalDamage===9,'Only newly appended log lines enter the split session');
-            return { ok:true, windows:ids.length, damage:9, timers:split.timers.timers.length, sharedSession:true, inactiveFocus, screenshots };
+            return { ok:true, platform:process.platform, windowBackend:app.commandLine.getSwitchValue('ozone-platform'), windows:ids.length, damage:9, timers:split.timers.timers.length, sharedSession:true, inactiveFocus, screenshots };
         };
         let started = false;
         app.on('browser-window-created', () => { if (!started) { started = true; void inspect().then(result => { console.log('EOZ_NATIVE_OVERLAY_SMOKE=' + JSON.stringify(result)); app.exit(0); }).catch(error => { console.error(error.stack); app.exit(1); }); } });

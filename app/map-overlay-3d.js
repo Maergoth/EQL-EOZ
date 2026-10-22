@@ -1,3 +1,4 @@
+import { inheritViewerAppearance } from './appearance.js';
 const contextKey=session=>JSON.stringify([session?.map?.zone||session?.zone||'',session?.map?.viewerZone||'',session?.map?.dataVersion??0]);
 const locationKey=location=>location?JSON.stringify([location.x,location.y,location.z,location.at]):'';
 
@@ -20,6 +21,7 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
             current.addEventListener('load',()=>{
                 const api=current.contentWindow?.eqlEyeOfZommViewer;
                 if(!api)return;
+                inheritViewerAppearance(document,current.contentDocument);
                 clearTimeout(timeout);
                 const manual=event=>{if(event.type==='keydown'&&!/^(?:Key[WASDQE]|Arrow\w+|Space)$/.test(event.code||''))return;focusNotice='';if(follow){follow=false;onFollowChange(false);}};
                 for(const type of ['keydown','pointerdown','wheel'])current.contentWindow.addEventListener(type,manual,true);
@@ -40,6 +42,7 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
         try{
             if(loaded!==key)report('Loading local 3D zone…');
             const api=await wait(ensureFrame());if(!current())return;
+            inheritViewerAppearance(document,frame?.contentDocument);
             if(loaded!==key){
                 const folder=await wait(api.useConfiguredFolder());if(!current())return;
                 if(!folder?.ok)throw Error('Choose an EverQuest folder with zone archives in the main Settings.');

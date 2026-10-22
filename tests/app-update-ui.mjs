@@ -43,7 +43,7 @@ for (const [status, error] of [['available', 'SHA-256 verification failed.'], ['
 
 const browser = fixture(undefined);
 assert(browser.elements['check-app-update'].disabled);
-assert.match(browser.elements['app-update-status'].textContent, /installed Windows x64/);
+assert.match(browser.elements['app-update-status'].textContent, /Windows and Linux x64 desktop apps/);
 assert.equal(browser.timers.size, 0);
 browser.controller.dispose();
 
@@ -131,6 +131,22 @@ installing.resolve(state('ready',{error:'Windows could not start the update inst
 assert.equal(restart.elements['install-app-update'].disabled,false);assert.equal(restart.elements['install-app-update'].textContent,'Restart to install update');
 assert.match(restart.elements['app-update-detail'].textContent,/Windows could not start/,'A failed process handoff keeps the ready package and retry visible');
 restart.controller.dispose();
+
+const linuxHandoff=deferred();let linuxOpens=0;
+const linuxState=state('ready',{platform:'linux',installMode:'manual-linux',packageFormat:'AppImage',
+    installationHint:'Quit Eye of Zomm, replace your AppImage, mark it executable, then reopen it.'});
+const linux=fixture({getStatus:async()=>linuxState,install:()=>{linuxOpens++;return linuxHandoff.promise;}});
+await flush();
+assert.equal(linux.elements['install-app-update'].textContent,'Open download folder');
+assert.match(linux.elements['app-update-status'].textContent,/Install this package manually/);
+assert.match(linux.elements['app-update-detail'].textContent,/mark it executable/);
+assert(!linux.elements['app-update-status'].textContent.includes('Restart'));
+linux.elements['install-app-update'].click();assert.equal(linuxOpens,1);
+assert.equal(linux.elements['install-app-update'].textContent,'Opening download…');
+linuxHandoff.resolve(linuxState);await flush();
+assert.equal(linux.elements['install-app-update'].textContent,'Open download folder');
+assert.equal(linux.elements['install-app-update'].hidden,false,'Manual handoff retains the downloaded package');
+linux.controller.dispose();
 
 const html = readFileSync(new URL('../app/index.html', import.meta.url), 'utf8');
 for (const id of ids) assert.equal((html.match(new RegExp(`id="${id}"`, 'g')) || []).length, 1, `Native updater control ${id} exists exactly once`);

@@ -29,13 +29,24 @@ function isEqLogName(name) {
 }
 
 async function newestEqLog(eqRootPath, fileApi = fsp) {
-    const directory = logsDirectory(eqRootPath);
+    let directory = logsDirectory(eqRootPath);
     if (!directory) return '';
     let entries;
     try {
         entries = await fileApi.readdir(directory, { withFileTypes: true });
-    } catch {
-        return '';
+    } catch (error) {
+        // Wine/Proton installations may contain "logs" on a case-sensitive host.
+        // Resolve only the selected game's immediate directory, keeping the
+        // original on-disk spelling. Ambiguous case variants stay unselected.
+        if (error?.code !== 'ENOENT') return '';
+        try {
+            const root = inferEqRootPath(eqRootPath);
+            const matches = (await fileApi.readdir(root, { withFileTypes:true }))
+                .filter(entry => entry.isDirectory() && /^logs$/i.test(entry.name));
+            if (matches.length !== 1) return '';
+            directory = pathApi(root).join(root, matches[0].name);
+            entries = await fileApi.readdir(directory, { withFileTypes:true });
+        } catch { return ''; }
     }
 
     const api = pathApi(directory);

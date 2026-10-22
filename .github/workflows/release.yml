@@ -2,103 +2,127 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [ main ]
+    tags: [ 'v*' ]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release-windows:
-    runs-on: windows-latest
-    env:
-      WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+  prepare-bootstrap:
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      publish: ${{ steps.release.outputs.publish }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify tag matches package version
-        shell: bash
-        run: |
-          expected="v$(node -p "require('./package.json').version")"
-          test "$GITHUB_REF_NAME" = "$expected" || { echo "Tag $GITHUB_REF_NAME must match package version $expected"; exit 1; }
-      - name: Determine release channel
-        id: channel
+      - name: Determine release channel and preserve existing tag provenance
+        id: release
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
-          if [[ "$version" == 0.* || "$version" == *-* ]]; then
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          tag="v$version"
+          prerelease=false
+          [[ "$version" == 0.* || "$version" == *-* ]] && prerelease=true
+          publish=true
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            test "$GITHUB_REF_NAME" = "$tag" || { echo "Tag must match package version $tag"; exit 1; }
+          elif git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            publish=false
+            echo "Preserving existing $tag; this main commit will build artifacts without replacing its release."
+          elif [[ "$version" != 0.* ]]; then
+            publish=false
           fi
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-      - name: Audit dependencies
-        run: npm run audit:deps
-      - name: Test
-        run: npm test
-      - name: Test actual desktop CSP and browser worker
-        run: npm run test:desktop-worker
-      - name: Test actual native overlay windows and shared session
-        run: npm run test:native-overlays
-      - name: Test main window placement and startup
-        run: npm run test:window-lifecycle
-      - name: Test map sizing and zoom
-        run: npm run test:map-layout
-      - name: Test native Map 3D and file isolation
-        run: npm run test:map-overlay-3d
-      - name: Test inline wiki discovery and explicit clipboard capture
-        run: npm run test:discovery-notices
-      - name: Fetch production bootstrap data
-        shell: bash
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+      - name: Fetch one verified production bootstrap for both platforms
         run: node scripts/fetch-bootstrap-pack.mjs --required
-      - name: Test production catalog relevance
-        run: npm run test:catalog
-      - name: Determine signing mode
-        id: signing
-        shell: pwsh
-        run: |
-          $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PFX_BASE64)
-          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)
-          if ($hasCertificate -xor $hasPassword) {
-            throw 'Configure both Windows signing secrets or neither of them.'
-          }
-          $enabled = $hasCertificate -and $hasPassword
-          "enabled=$($enabled.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
-          if (-not $enabled) {
-            '### Warning: unsigned Windows release' >> $env:GITHUB_STEP_SUMMARY
-            'No Authenticode certificate is configured. Windows may show an Unknown publisher or SmartScreen warning.' >> $env:GITHUB_STEP_SUMMARY
-          }
-      - name: Configure Authenticode certificate
-        if: steps.signing.outputs.enabled == 'true'
-        shell: pwsh
-        run: |
-          $certificatePath = Join-Path $env:RUNNER_TEMP 'eye-of-zomm-signing.pfx'
-          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64))
-          "CSC_LINK=$certificatePath" >> $env:GITHUB_ENV
-          "CSC_KEY_PASSWORD=$env:WINDOWS_CERTIFICATE_PASSWORD" >> $env:GITHUB_ENV
-      - name: Build NSIS installer
-        run: npm run dist:win
-      - name: Verify packaged version and coordinate code
-        run: npm run test:artifact
-      - name: Verify Authenticode signature
-        if: steps.signing.outputs.enabled == 'true'
-        shell: pwsh
-        run: |
-          $installer = Get-Item 'dist/EQLWiki-Eye-of-Zomm-Setup-*-x64.exe'
-          $application = Get-Item 'dist/win-unpacked/EQLWiki - Eye of Zomm.exe'
-          foreach ($file in @($application, $installer)) {
-            $signature = Get-AuthenticodeSignature $file.FullName
-            if ($signature.Status -ne 'Valid') { throw "$($file.Name) signature is $($signature.Status)" }
-          }
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+      - name: Share the public filtered release bootstrap
+        uses: actions/upload-artifact@v4
         with:
-          generate_release_notes: true
-          prerelease: ${{ steps.channel.outputs.prerelease }}
-          make_latest: ${{ steps.channel.outputs.prerelease == 'false' }}
-          files: |
-            dist/EQLWiki-Eye-of-Zomm-Setup-*-x64.exe
+          name: EoZ-release-bootstrap
+          path: app/data/eye-of-zomm-pack.bootstrap.json
+          if-no-files-found: error
+
+  release-windows:
+    needs: prepare-bootstrap
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      bootstrap_artifact: EoZ-release-bootstrap
+    secrets: inherit
+
+  release-linux:
+    needs: prepare-bootstrap
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      bootstrap_artifact: EoZ-release-bootstrap
+
+  publish:
+    needs: [ prepare-bootstrap, release-windows, release-linux ]
+    if: needs.prepare-bootstrap.outputs.publish == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.prepare-bootstrap.outputs.tag }}
+      RELEASE_PRERELEASE: ${{ needs.prepare-bootstrap.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download both verified platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: EQLWiki-Eye-of-Zomm-*-x64
+          merge-multiple: true
+          path: dist
+      - name: Verify complete release asset set and checksums
+        run: |
+          node scripts/release-assets.mjs win32 --verify
+          node scripts/release-assets.mjs linux --verify
+      - name: Publish one release after both platforms pass
+        shell: bash
+        run: |
+          tagged="$(git ls-remote origin "refs/tags/$RELEASE_TAG^{}" | cut -f1)"
+          if [[ -z "$tagged" ]]; then tagged="$(git ls-remote origin "refs/tags/$RELEASE_TAG" | cut -f1)"; fi
+          if [[ -n "$tagged" && "$tagged" != "$GITHUB_SHA" ]]; then
+            echo "Refusing to replace assets for $RELEASE_TAG from a different source commit."
+            exit 1
+          fi
+          assets=(dist/EQLWiki-Eye-of-Zomm-Setup-*-x64.exe dist/EQLWiki-Eye-of-Zomm-*-x64.AppImage dist/EQLWiki-Eye-of-Zomm-*-x64.deb dist/SHA256SUMS-*-x64.txt)
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)"
+            if [[ "$draft" != true ]]; then
+              mkdir published-assets
+              for asset in "${assets[@]}"; do
+                gh release download "$RELEASE_TAG" --pattern "$(basename "$asset")" --dir published-assets
+              done
+              node scripts/release-assets.mjs win32 --verify --directory published-assets
+              node scripts/release-assets.mjs linux --verify --directory published-assets
+              cmp dist/SHA256SUMS-Windows-x64.txt published-assets/SHA256SUMS-Windows-x64.txt
+              cmp dist/SHA256SUMS-Linux-x64.txt published-assets/SHA256SUMS-Linux-x64.txt
+              echo "Complete published release matches; preserving every existing asset."
+              exit 0
+            fi
+            body="$(gh release view "$RELEASE_TAG" --json body --jq .body)"
+            [[ "$body" == *"Build source: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"* ]] || { echo 'Refusing to repair a draft without matching source ownership.'; exit 1; }
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+            gh release edit "$RELEASE_TAG" --draft=false
+          else
+            channel=()
+            [[ "$RELEASE_PRERELEASE" == true ]] && channel+=(--prerelease)
+            [[ "$RELEASE_PRERELEASE" == true ]] && channel+=(--latest=false)
+            gh release create "$RELEASE_TAG" "${assets[@]}" --target "$GITHUB_SHA" --draft --title "Eye of Zomm $RELEASE_TAG" --generate-notes --notes "Build source: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" "${channel[@]}"
+            gh release edit "$RELEASE_TAG" --draft=false
+          fi

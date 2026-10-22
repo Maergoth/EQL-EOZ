@@ -9,7 +9,7 @@ EQLWiki - Eye of Zomm is intentionally designed around a narrow, auditable bound
 - local EverQuest zone/archive/map files under that selected folder;
 - Eye of Zomm's own preferences/cache files;
 - the public GitHub `dataset` branch manifest and compressed EQLWiki dataset.
-- release metadata and the exact Windows installer from the public Eye of Zomm GitHub repository, when checking/downloading an app update.
+- release metadata and the exact matching Windows/Linux package from the public Eye of Zomm GitHub repository, when checking/downloading an app update.
 - a window or display image only after the player clicks Screenshot on a wiki-discovery notice; the image goes to the local clipboard.
 
 ## It does not
@@ -63,3 +63,13 @@ closes EoZ only after Windows accepts the launch. NSIS relaunches the installed
 app afterward. Checking, downloading, closing and starting EoZ alone never
 install an update. Windows security/elevation prompts remain under OS control.
 The installer upgrades Eye of Zomm, preserving the existing profile and game files.
+
+Linux uses the same bounded metadata, package-size and checksum verification.
+Its explicit action opens only the verified package's download directory and
+explains the manual AppImage/deb installation steps. It does not execute a
+package manager, run NSIS, request root privileges or quit the app automatically.
+The user's chosen native game/client directory remains read only.
+
+Font preferences select packaged allowlisted system-font stacks and a bounded
+base size. They are local presentation settings and do not fetch web fonts or
+change game files.

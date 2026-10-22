@@ -1,4 +1,15 @@
-# Validation report — v0.8.7
+# Validation report — v0.8.8
+
+## 0.8.8 font controls and Linux
+
+The owner requested font-family/base-size options and a Linux release from the
+same repository, then authorized publication after completion. Source ownership
+and required platform checks are recorded in [FONTS_LINUX.md](docs/FONTS_LINUX.md).
+The candidate keeps Windows and Linux on one version and shared verified wiki
+bootstrap. Tests/builds/captures run in GitHub CI; the owner's local application
+is not run or installed for this work. Actual CI outcomes and package evidence
+will be added after execution. Native Wayland and real game/compositor behavior
+remain separate acceptance, as do complete installed upgrades.
 
 ## 0.8.7 Triggers, sessions and complete Intel
 

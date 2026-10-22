@@ -1,13 +1,15 @@
 # Eye of Zomm implementation status
 
-Last updated: 2026-10-21
+Last updated: 2026-10-22
 
-Code baseline: 0.8.7
+Code baseline: 0.8.8
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
 | Vision area | Status | Evidence | Next condition |
 |---|---|---|---|
+| Font preferences | 0.8.8 implementation and CI in progress | Shared main/overlay family and base size with retained panel multipliers; [continuation guide](FONTS_LINUX.md) | Verify live updates, persistence, controls and text at bounded sizes |
+| Linux desktop | 0.8.8 packaging/runtime gates in progress | Same source/version, AppImage/deb, native selected-folder paths and verified package handoff | Pass actual Linux packaged smoke and retain compositor/game acceptance limits |
 | 0.6 usable loop | Implemented | Folder/log/zone/`/loc` readiness, persistent mode/destination, relevant item defaults, live tier details, non-modal recovery; `npm test` | Retain all [Windows/manual gates](WINDOWS_MANUAL_TEST.md) |
 | 0.7 replacement map | Implemented; local rendering checked | Explicit coordinate adapters, exact/serialized loads, accurate logged HUD, hidden framing, intel-first defaults, optional map/routing, persistent cancel, WLD texture alignment; 27 view/scale captures | Complete live-client sections 1–5 and OS-wide DPI checks on a current build |
 | 0.8 live route guidance | Implemented in 0.7.1; real-client gate required | Pure projection/remaining-distance/turn/facing/off-route tests; cue HUD in First/Top/Map; route summary updates from `/loc` | Verify cue direction and readability while moving in all three modes |

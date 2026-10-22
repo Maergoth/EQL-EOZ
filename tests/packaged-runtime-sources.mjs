@@ -4,10 +4,11 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { finished } from 'node:stream/promises';
 import asar from '@electron/asar';
-import { PACKAGED_RUNTIME_SOURCES, PACKAGED_RUNTIME_IMAGES, verifyPackagedRuntimeSources, verifyPackagedRuntimeImages } from '../scripts/packaged-runtime-sources.mjs';
+import { packagedArchivePaths, PACKAGED_RUNTIME_SOURCES, PACKAGED_RUNTIME_IMAGES, verifyPackagedRuntimeSources, verifyPackagedRuntimeImages } from '../scripts/packaged-runtime-sources.mjs';
 
 const bootstrapPath = 'app/data/eye-of-zomm-pack.bootstrap.json';
 const requiredModules = [
+    'app/appearance.js', 'app/appearance-presets.json', 'desktop/appearance.cjs', 'desktop/linux-runtime.cjs', 'desktop/log-selection.cjs',
     bootstrapPath,
     'app/whats-new.js','app/whats-new.css','desktop/window-placement.cjs',
     'app/overlay-map.html','app/map-overlay-3d.js','app/zoneviewer/overlay-mode.js','desktop/overlay-map-policy.cjs',
@@ -17,6 +18,9 @@ const requiredModules = [
     'app/zone-identity.js', 'app/viewer-zone-selection.js', 'app/zone-load-guard.js',
     'app/viewport-framing.js', 'app/established-route-guard.js', 'app/drop-certification.js', 'app/navigation-policy.js', 'app/route-validation.js', 'app/zoneviewer/ZoneViewerApp.js'
 ];
+assert.deepEqual(packagedArchivePaths('linux'), ['dist/linux-unpacked/resources/app.asar'], 'Linux package verification cannot select a stale Windows archive');
+assert.deepEqual(packagedArchivePaths('win32'), ['dist/win-unpacked/resources/app.asar']);
+assert.throws(() => packagedArchivePaths('unknown'), /No packaged archive contract/);
 for (const relative of requiredModules) assert(PACKAGED_RUNTIME_SOURCES.includes(relative), `Package gate omits ${relative}`);
 const checker = await readFile(new URL('../scripts/check-packaged-artifact.mjs', import.meta.url), 'utf8');
 assert(checker.includes('verifyPackagedRuntimeSources(packagedText,'), 'Artifact verification must execute the source-byte gate');

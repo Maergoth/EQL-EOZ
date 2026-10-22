@@ -5,16 +5,17 @@ export function appUpdatePresentation(state = {}) {
     const status = state.status || 'idle';
     const version = state.availableVersion ? `v${state.availableVersion}` : '';
     const supported = state.supported === true;
+    const manualInstall = state.installMode === 'manual-linux';
     const labels = {
         idle:'Checking for application updates shortly.',
         checking:'Checking for application updates…',
         current:'Eye of Zomm is up to date.',
         available:`Eye of Zomm ${version} is available.`,
         downloading:`Downloading Eye of Zomm ${version}…`,
-        ready:`Eye of Zomm ${version} is ready to install.`,
-        installing:'Restarting to install the update…',
+        ready:manualInstall ? `Eye of Zomm ${version} is downloaded. Install this package manually.` : `Eye of Zomm ${version} is ready to install.`,
+        installing:manualInstall ? 'Opening the verified download folder…' : 'Restarting to install the update…',
         unavailable:'Application updates are unavailable. Try again later.',
-        unsupported:'Application updates are available in the installed Windows x64 app.'
+        unsupported:'Application updates are available in the Windows and Linux x64 desktop apps.'
     };
     const finiteBytes = value => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
     const total = finiteBytes(state.totalBytes);
@@ -23,7 +24,9 @@ export function appUpdatePresentation(state = {}) {
     return {
         status, supported,
         message:!supported ? labels.unsupported : (labels[status] || labels.unavailable),
-        detail:supported ? String(state.error || '') : '',
+        detail:supported ? String(state.error || (manualInstall && status === 'ready' ? state.installationHint || '' : '')) : '',
+        installLabel:manualInstall ? 'Open download folder' : 'Restart to install update',
+        installingLabel:manualInstall ? 'Opening download…' : 'Restarting to install…',
         version,
         showDownload:supported && status === 'available',
         showInstall:supported && status === 'ready',
@@ -80,7 +83,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
         elements['app-update-startup-download'].disabled = !view.supported || Boolean(action);
         elements['app-update-startup-download'].checked = Boolean(current.automaticDownload);
         text('download-app-update', `Download ${view.version}`);
-        text('install-app-update', action === 'install' ? 'Restarting to install…' : 'Restart to install update');
+        text('install-app-update', action === 'install' ? view.installingLabel : view.installLabel);
         text('app-update-progress-label', view.progress);
         if (view.percent === null) elements['app-update-progress'].removeAttribute('value');
         else elements['app-update-progress'].value = view.percent;

@@ -40,10 +40,15 @@ jobs:
       - run: npm run test:map-overlay-3d
       - run: npm run test:native-overlays -- --screenshots ci-screenshots
       - run: npm run test:discovery-notices
+      - run: npm run test:appearance -- --screenshots ci-screenshots/appearance
       - name: Upload synthetic interface captures
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: EoZ-interface-captures
-          path: ci-screenshots/*.png
+          path: ci-screenshots/**/*.png
           if-no-files-found: ignore
+
+  linux-desktop:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/build-linux.yml

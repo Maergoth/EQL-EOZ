@@ -16,6 +16,7 @@ import { createTimerAlerts } from './timer-alerts.js';
 import { createWikiDiscovery } from './wiki-discovery.js';
 import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
 import { mountWhatsNew } from './whats-new.js';
+import { FONT_PRESETS, DEFAULT_APPEARANCE, normalizeAppearance, applyAppearance, inheritViewerAppearance } from './appearance.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -96,10 +97,45 @@ if (!['first', 'top', 'map'].includes(settings.mapMode)) settings.mapMode = 'fir
 if (!['recommended', 'name'].includes(settings.itemSort)) settings.itemSort = 'recommended';
 if (!['overview', 'map', 'npcs', 'items', 'drops', 'combat', 'timers', 'settings'].includes(settings.lastView)) settings.lastView = 'overview';
 let itemZoneFilterExplicit = Boolean(settings.itemZoneFilterExplicit || settings.itemCurrentZoneOnly === false);
+settings.appearance = normalizeAppearance(settings.appearance);
+applyAppearance(document,settings.appearance);
+let appearanceGeneration = 0, appearancePending = 0, appearanceDraft = false;
 parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => Array.from(document.querySelectorAll(selector));
+function syncViewerAppearance() {
+    try { inheritViewerAppearance(document,$('#zone-viewer')?.contentDocument); } catch { /* The same-origin viewer may still be loading. */ }
+}
+
+function renderAppearanceSettings() {
+    $('#settings-font-family').value = settings.appearance.fontFamily;
+    $('#settings-font-size').value = String(settings.appearance.fontSize);
+    $('#settings-font-size-value').textContent = `${settings.appearance.fontSize} px`;
+    $('#settings-font-size').setAttribute('aria-valuetext',`${settings.appearance.fontSize} pixels`);
+}
+function acceptAppearance(value) {
+    const next = normalizeAppearance(value), changed = JSON.stringify(next) !== JSON.stringify(settings.appearance);
+    settings.appearance = next; applyAppearance(document,next); renderAppearanceSettings();
+    syncViewerAppearance();
+    if (changed) prefs.save(settings);
+    refreshItemTooltip();
+}
+async function saveAppearance(value) {
+    const generation = ++appearanceGeneration;
+    appearanceDraft = false; appearancePending = generation;
+    settings.appearance = normalizeAppearance(value); prefs.save(settings);
+    applyAppearance(document,settings.appearance); renderAppearanceSettings();
+    syncViewerAppearance();
+    try {
+        const result = await window.eyeOfZommOverlays?.control?.('appearance',null,settings.appearance);
+        if (generation !== appearanceGeneration) return;
+        if (result?.appearance) acceptAppearance(result.appearance);
+        $('#settings-appearance-status').textContent = 'Font settings saved.';
+    } catch {
+        if (generation === appearanceGeneration) $('#settings-appearance-status').textContent = 'The main window font is saved. Change a font setting again to retry applying it to native overlays.';
+    } finally { if (appearancePending === generation) appearancePending = 0; }
+}
 
 function esc(text) {
     const div = document.createElement('div');
@@ -1428,6 +1464,7 @@ function renderAll() {
         ? settings.itemCurrentZoneOnly !== false
         : !itemQueryActive;
     updateClassChipState();
+    renderAppearanceSettings();
     renderHeader(s, profile);
     renderMetrics(s, profile);
     renderViewPanel(activeView, s, profile);
@@ -1981,6 +2018,18 @@ async function handleMapPrimaryAction() {
 }
 
 function wireUi() {
+    $('#zone-viewer').addEventListener('load',syncViewerAppearance);
+    syncViewerAppearance();
+    $('#settings-font-family').innerHTML = FONT_PRESETS.map(font => `<option value="${font.id}">${esc(font.label)}</option>`).join('');
+    renderAppearanceSettings();
+    $('#settings-font-family').addEventListener('change',event => { void saveAppearance({...settings.appearance,fontFamily:event.target.value}); });
+    $('#settings-font-size').addEventListener('input',event => {
+        appearanceGeneration++; appearanceDraft = true;
+        settings.appearance = normalizeAppearance({...settings.appearance,fontSize:Number(event.target.value)});
+        applyAppearance(document,settings.appearance); renderAppearanceSettings(); syncViewerAppearance(); refreshItemTooltip();
+    });
+    $('#settings-font-size').addEventListener('change',() => { void saveAppearance(settings.appearance); });
+    $('#reset-appearance').addEventListener('click',() => { void saveAppearance(DEFAULT_APPEARANCE); });
     $$('.nav-button').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
     $$('[data-go-view]').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.goView)));
     $('#npc-search').addEventListener('input', () => { const s = state(); renderNpcList(s, effectiveProfile(s)); });
@@ -2192,10 +2241,15 @@ const wikiDiscovery = createWikiDiscovery({getPack:()=>pack,
     onWarning:message=>showNotice(message,{tone:'warning'})});
 window.eyeOfZommDiscovery?.onAction?.(({action,id})=>{if(action==='ignore')wikiDiscovery.ignore(id);else wikiDiscovery.dismiss(id);void overlaySession.publish();});
 window.eyeOfZommOverlays?.onState?.(next => {
+    if (next.appearance && !appearancePending && !appearanceDraft) acceptAppearance(next.appearance);
     nativeMapVisible = Boolean(next.panels?.map?.visible);
     const useNative = Boolean(next.panels?.timers?.visible && !next.panels.timers.passThrough);
     if (discoveryInNative !== useNative) { discoveryInNative=useNative; void overlaySession.publish(); }
 });
+const initialAppearanceGeneration = appearanceGeneration;
+Promise.resolve(window.eyeOfZommOverlays?.getState?.()).then(next => {
+    if (next?.appearance && appearanceGeneration === initialAppearanceGeneration) acceptAppearance(next.appearance);
+}).catch(() => {});
 const overlayController = mountOverlayController({ root:document.getElementById('overlay-controller'), api:window.eyeOfZommOverlays });
 const timerSettings = mountTimerSettings({ root:document.getElementById('timer-settings'), session:overlaySession });
 const discoveryNotices = mountWikiDiscoveryNotices({root:document.getElementById('wiki-discovery-notices'),action:(action,value)=>window.eyeOfZommDiscovery.action(action,value)});

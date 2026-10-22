@@ -1,17 +1,19 @@
 # EQLWiki — Eye of Zomm
 
-**Eye of Zomm** is a local-first Windows app for **EverQuest Legends**. It reads ordinary game logs, combines them with cached EQLWiki knowledge, and keeps maps, named-mob loot, combat parses and triggers in separate desktop windows.
+**Eye of Zomm** is a local-first Windows and Linux app for **EverQuest Legends**. It reads ordinary game logs, combines them with cached EQLWiki knowledge, and keeps maps, named-mob loot, combat parses and triggers in separate desktop windows.
 
 [Download latest installer](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
 ## Get started
 
-1. Install the latest `EQLWiki-Eye-of-Zomm-Setup-<version>-x64.exe` from [Releases](https://github.com/Maergoth/EQL-EOZ/releases).
+1. Download the latest Windows `Setup-<version>-x64.exe`, Linux `<version>-x64.AppImage`, or Debian/Ubuntu `<version>-x64.deb` package from [Releases](https://github.com/Maergoth/EQL-EOZ/releases). Both platforms use the same version and data source.
 2. Choose your EverQuest Legends folder on first launch. Enable logging in the game; EoZ follows the newest `eqlog_*.txt` under `Logs`, or a specific file selected in Settings.
 3. Emit `/who` to establish your character's zone, level and classes, and `/loc` to place your position on the map. Later logged locations update it automatically.
 4. Open **Overlays** to arrange Parse, Map, Zone & loot and Triggers. Configure them in **Settings → Native overlays**. Reopen **Settings → About Eye of Zomm → What's new** for the illustrated tour.
 
-The installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz://` so EQLWiki can open the app. Beta installers may be unsigned and show a Windows publisher prompt; see [signing status](SIGNING.md).
+The Windows installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz://` so EQLWiki can open the app. Beta installers may be unsigned and show a Windows publisher prompt; see [signing status](SIGNING.md). Linux package and compositor details are in the [font/Linux guide](docs/FONTS_LINUX.md).
+
+On Linux, make the AppImage executable and launch it, or install the deb using your distribution's package installer. Choose the actual client directory inside your Wine/Proton prefix or mounted installation; EoZ reads that directory's ordinary logs and map files. It runs as a separate native desktop app. X11/XWayland is preferred for independently positioned overlays; [native Wayland limits](https://www.electronjs.org/docs/latest/api/browser-window) can affect placement, focus and topmost behavior.
 
 ## A look around
 
@@ -20,6 +22,12 @@ These screenshots show the actual **0.8.7 Electron interface with synthetic log,
 ### A normal desktop workspace
 
 Move and resize the main window normally. Its size, position and maximized state are remembered, with recovery when a display is unavailable. **Minimize to tray** and **Start minimized** are optional Settings choices. When the tray is unavailable, minimizing keeps the normal taskbar recovery path. The main window has no Pin to top mode; overlays retain their own lock and mouse controls.
+
+**Settings → Fonts** selects a font family and base **Text size** from 10–20 px.
+The choice applies immediately to the main app and native overlays and survives
+restart. Each overlay retains its own text adjustment on top of that base.
+**Reset fonts** restores the theme and 13 px default; installed system fallbacks
+provide the fonts without downloading them.
 
 ![Eye of Zomm workspace and window settings, captured with synthetic fixtures](app/assets/whats-new/workspace.png)
 
@@ -65,10 +73,16 @@ Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards op
 
 | Update | What it changes | Where to use it |
 | --- | --- | --- |
-| Application update | Installed EoZ code and interface | **Settings → Application updates**: check, download, then **Restart to install update** |
+| Application update | Installed EoZ code and interface | **Settings → Application updates**: check/download, then Windows **Restart to install update** or Linux **Open download folder** |
 | Wiki data update | Cached NPCs, items, icons, zone aliases and source records | **Sync with Wiki**, also checked at startup and hourly while open |
 
 Verified application downloads can wait until later. Startup downloading is optional and off by default. From 0.8.6, **Restart to install update** authorizes a silent upgrade and automatic relaunch, without the setup wizard or another app confirmation. Windows may still require a security or elevation prompt. Settings, folder/log choices and cached wiki data stay in the existing profile. Older installed builds use their existing installer flow for the first upgrade.
+
+On Linux, **Open download folder** reveals the verified AppImage/deb with manual
+installation instructions. Close EoZ, replace the AppImage or install the deb,
+then reopen it. Linux updates do not run the Windows installer or claim an
+automatic restart; the saved profile remains in the native application-data
+location.
 
 The wiki data flow is server-side and low priority:
 
@@ -83,7 +97,10 @@ The producer reads production MediaWiki's local content/database services and bu
 
 ## Development and validation
 
-Node.js 22+ is required. Normal development works on Windows, macOS or Linux; the production installer targets Windows x64.
+Node.js 22+ is required. Normal development works on Windows, macOS or Linux;
+release packages target Windows x64 and Linux x64. See the
+[platform/release guide](docs/FONTS_LINUX.md) for CI evidence and remaining
+desktop/game acceptance.
 
 ```bash
 npm ci
@@ -100,6 +117,10 @@ npm run test:desktop-worker
 npm run dist:win
 npm run test:artifact
 ```
+
+Linux packaging uses `npm run dist:linux`; the GitHub build performs native
+Linux packaged-executable checks under Xvfb. One publisher waits for both
+platform builds and their shared verified bootstrap before creating the release.
 
 Screenshots can be reproduced from the real Electron synthetic fixture without opening an actual game installation:
 

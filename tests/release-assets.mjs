@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, dirname, resolve, basename } from 'node:path';
+import { releaseAssetNames, writeReleaseChecksums, verifyReleaseChecksums } from '../scripts/release-assets.mjs';
+
+const directory = await mkdtemp(join(tmpdir(), 'eoz-release-assets-'));
+try {
+    for (const platform of ['win32', 'linux']) {
+        const names = releaseAssetNames('0.8.8', platform);
+        assert.equal(names.length, platform === 'linux' ? 2 : 1);
+        for (const name of names) await writeFile(join(directory, name), `Synthetic ${name}`);
+        await writeReleaseChecksums(directory, '0.8.8', platform);
+        await verifyReleaseChecksums(directory, '0.8.8', platform);
+        await writeFile(join(directory, names[0]), 'Changed after verification');
+        await assert.rejects(verifyReleaseChecksums(directory, '0.8.8', platform), /do not match/);
+    }
+    assert.throws(() => releaseAssetNames('../invalid', 'linux'), /version/);
+    assert.throws(() => releaseAssetNames('0.8.8', 'darwin'), /Unsupported/);
+} finally {
+    assert.equal(dirname(resolve(directory)), resolve(tmpdir()));
+    assert(basename(directory).startsWith('eoz-release-assets-'));
+    await rm(directory, { recursive:true, force:true });
+}
+console.log('Windows/Linux release names and corrupted-asset checksum rejection passed.');
