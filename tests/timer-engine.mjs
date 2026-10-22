@@ -8,6 +8,17 @@ let clock = Date.parse('2026-10-21T12:00:00Z');
 const fresh = options => new TimerEngine({ now:() => clock, ...options });
 const melee = at => ({ type:'damage', kind:'melee', source:'slash', amount:10, victim:'a synthetic rat', at });
 const context = extra => ({ live:true, logId:'synthetic-log', zone:'Test Zone', ...extra });
+const freshSwing = options => { const engine=fresh(options);engine.command('set-swing-enabled',{enabled:true});return engine; };
+
+const defaultSwing=fresh();
+assert.equal(defaultSwing.snapshot().swing.enabled,false,'A new profile keeps the duplicate swing estimate off.');
+defaultSwing.consume(melee(clock),context());assert.equal(defaultSwing.snapshot().swing.samples,0,'Disabled swings do not accumulate a hidden estimate.');
+assert.equal(fresh({state:{}}).snapshot().swing.enabled,false,'Missing saved choice defaults off.');
+assert.equal(fresh({state:{swingEnabled:'true'}}).snapshot().swing.enabled,false,'Only an explicit saved boolean true enables swings.');
+defaultSwing.command('set-swing-enabled',{enabled:true});
+assert.equal(fresh({state:defaultSwing.exportState()}).snapshot().swing.enabled,true,'An explicitly enabled saved choice survives restart.');
+defaultSwing.command('set-swing-enabled',{enabled:false});
+assert.equal(fresh({state:defaultSwing.exportState()}).snapshot().swing.enabled,false,'An explicitly disabled choice also survives restart.');
 
 // A paused timer keeps its remaining duration; a saved running timer keeps its
 // actual deadline across an app restart rather than restarting a full duration.
@@ -117,7 +128,7 @@ assert.equal(rates.sessionDps, 2, 'exposing session duration does not change his
 assert.equal(rates.totalHealing / rates.sessionSeconds, 10);
 assert.equal(new EQLogParser().snapshot().sessionSeconds, 0);
 
-engine = fresh();
+engine = freshSwing();
 engine.consume(melee(clock - 10000), context({ live:false }));
 assert.equal(engine.snapshot().swing.status, 'idle', 'initial historical log tail cannot start a swing bar');
 for (let i = 0; i < 3; i++) {
@@ -151,7 +162,7 @@ assert.equal(engine.snapshot().swing.status, 'learning', 'a new fight starts wit
 assert.equal(engine.snapshot().swing.samples, 1);
 assert.equal(fresh({ state:engine.exportState() }).snapshot().swing.status, 'idle', 'old swing phases never resume after restart');
 
-engine = fresh();
+engine = freshSwing();
 for (let i = 0; i < 3; i++) { engine.consume(melee(clock), context()); clock += 3000; }
 clock -= 1000;
 engine.consume(melee(clock), context());
@@ -161,6 +172,7 @@ assert.equal(engine.snapshot().swing.intervalMs, 2000, 'two agreeing faster obse
 
 let rhythmClock = clock;
 const slower = new TimerEngine({ now:() => rhythmClock });
+slower.command('set-swing-enabled',{enabled:true});
 const rhythmBase = rhythmClock;
 for (const offset of [0, 3000, 6000, 10000, 14000]) {
     rhythmClock = rhythmBase + offset;
@@ -168,6 +180,7 @@ for (const offset of [0, 3000, 6000, 10000, 14000]) {
 }
 assert.equal(slower.snapshot().swing.intervalMs, 4000, 'two agreeing slower rounds switch a 3s reference to 4s');
 const ambiguous = new TimerEngine({ now:() => rhythmClock });
+ambiguous.command('set-swing-enabled',{enabled:true});
 const ambiguousBase = rhythmClock;
 for (const offset of [0, 2000, 4000, 8000, 12000]) {
     rhythmClock = ambiguousBase + offset;
@@ -201,14 +214,14 @@ clock += 1000;
 engine.consume(melee(clock), context({ logId:'another-log' }));
 assert.equal(engine.snapshot().swing.status, 'learning');
 assert.equal(engine.snapshot().swing.samples, 1);
-engine = fresh();
+engine = freshSwing();
 for (let i = 0; i < 3; i++) { engine.consume(melee(clock), { live:true, zone:'Test Zone', character:'First' }); clock += 3000; }
 assert.equal(engine.snapshot().swing.intervalMs, 3000);
 engine.consume(melee(clock), { live:true, zone:'Test Zone', character:'Second' });
 assert.equal(engine.snapshot().swing.status, 'learning', 'character fallback identity also separates swings when no log ID is supplied');
 assert.equal(engine.snapshot().swing.samples, 1);
 
-engine = fresh();
+engine = freshSwing();
 engine.command('set-swing-delay', { delayTenths:36 });
 assert.equal(engine.snapshot().swing.status, 'idle', 'weapon-delay setting alone cannot create a swing');
 engine.consume(melee(clock), context());

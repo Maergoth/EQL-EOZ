@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.9 - Installed fonts, current Settings and clearer item stats
+
+- Choose any installed system font family in Settings, with searchable OS enumeration and a manual family-name fallback; preserve shared main/overlay/viewer typography and the existing presets.
+- Clear the previous unversioned interface cache on upgrade and serve current UI files without caching, fixing missing font controls after an update/restart.
+- Color item-level-modified values green in main item cards, hover stat blocks and Intel; keep unchanged values and base comparisons distinct.
+- Open a complete right-hand loot pane when selecting a Live Map monster, preserving exact raid/normal sources, all drops, shared item tier and explicit route/waypoint/wiki actions.
+- Keep a browsable illustrated release history with individual New markers for skipped/unseen updates and immutable versioned screenshots.
+- After a newly requested Windows update finishes verification, show a cancellable five-second restart countdown, silently install and relaunch. Keep Linux's verified manual package handoff.
+- Default the optional observed swing timer off and keep existing saved choices. Place Settings checkbox labels beside their controls.
+
 ## 0.8.8 - Font controls and Linux releases
 
 - Add saved font-family and base text-size controls in Settings, shared by the main app and native overlays while retaining per-panel text adjustments.

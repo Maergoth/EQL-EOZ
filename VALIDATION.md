@@ -1,4 +1,32 @@
-# Validation report — v0.8.8
+# Validation report — v0.8.9
+
+## 0.8.9 pre-release observations
+
+The full source suite passed on Windows before the release PR. Isolated native
+fixtures verified 193 installed font families, selection of Calibri outside the
+presets, main/four-overlay/viewer propagation, full process persistence and reset.
+Unicode manual fallback and CSS quoting were checked without font downloads.
+The font policy retains main-viewer pointer lock/fullscreen while denying its
+font enumeration and unrelated device permissions.
+
+A real Chromium cache regression reproduced missing Fonts across old process
+restarts, then verified one-time eviction and current `no-store` responses. Live
+Map tests selected eight normal drops and one same-name raid drop through the
+real viewer iframe, checked matching tier tooltips and explicit actions,
+rejected a sibling iframe, and kept the eighth drop reachable at 1024 px / 20 px
+text. Main and Intel changed-value colors were inspected.
+
+Swing engine/UI/native fixtures verify off by default and explicit opt-in.
+Countdown tests cover five-second installation, cancellation, Later-to-download,
+pending IPC, restored packages, installer errors and Linux's manual handoff.
+History checks cover 28 releases and 23 version-owned screenshots, unread skipped
+versions, reviewed image hashes and exact packaged bytes. Captures use synthetic
+records without player logs, game archives or account data.
+
+Windows/Linux workflows repeat source, native and packaging gates, including
+installed-font access in the verified ASAR. Record CI outcomes and published
+asset digests in the release PR after completion. These observations are not
+foreground-game, physical-DPI, native-Wayland or installed-upgrade certification.
 
 ## 0.8.8 font controls and Linux
 

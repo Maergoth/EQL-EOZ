@@ -56,6 +56,8 @@ jobs:
         run: npm run test:capture-native
       - name: Test contribution and character workflows with a loopback wiki
         run: npm run test:capture-workspace
+      - name: Test installed system fonts and changed-stat colors
+        run: npm run test:system-fonts
       - name: Fetch production bootstrap data
         if: inputs.bootstrap_artifact == ''
         shell: bash
@@ -97,6 +99,8 @@ jobs:
         run: npm run test:artifact
       - name: Test packaged capture host and physical offline OCR resources
         run: npm run test:capture-native -- --packaged-root dist/win-unpacked/resources/app.asar
+      - name: Test installed fonts in the verified packaged ASAR
+        run: npm run test:system-fonts -- --packaged-root dist/win-unpacked/resources/app.asar
       - name: Verify Authenticode signature
         if: steps.signing.outputs.enabled == 'true'
         shell: pwsh

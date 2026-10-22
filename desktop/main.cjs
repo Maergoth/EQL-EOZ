@@ -18,6 +18,7 @@ const { DiscoveryHost } = require('./discovery-host.cjs');
 const { CaptureHost } = require('./capture-host.cjs');
 const { WikiHost } = require('./wiki-host.cjs');
 const { ShareHost } = require('./share-host.cjs');
+const { installLocalFontPermissions } = require('./font-permissions.cjs');
 const { normalizeWindowPlacement, WindowPlacement } = require('./window-placement.cjs');
 const {
     inferEqRootPath,
@@ -763,6 +764,7 @@ function createWindow(config = {}, savedPlacement = {}) {
         }
     });
     windowRef.setSkipTaskbar(false);
+    installLocalFontPermissions({session:windowRef.webContents.session,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     windowPlacement=new WindowPlacement({window:windowRef,screen:electron.screen,initial:placement,
         getMaximized:()=>pendingInitialMaximize || windowRef?.isMaximized(),
         write:value=>atomicWriteJson(windowPlacementPath(),value)});
@@ -847,8 +849,8 @@ async function bootstrap() {
         writePreferences:preferences => atomicWriteJson(overlayPreferencesPath(), preferences)
     });
     await overlayHost.initialize();
-    // Older releases cached unversioned HTML/JS for an hour. Evict that cache
-    // on upgrade so an updated executable cannot display the previous Settings.
+    // Previous releases cached unversioned HTML/JS for an hour. Discard that
+    // cache on upgrade so the new executable also displays its new interface.
     if (config.frontendCacheVersion !== APP_VERSION) {
         await electron.session.defaultSession.clearCache();
         config=await updateConfig({frontendCacheVersion:APP_VERSION});

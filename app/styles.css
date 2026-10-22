@@ -131,7 +131,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[t
 .item-empty-state{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
 .item-empty-state .secondary-button{padding:6px 9px;font-size:calc(10px * var(--ui-font-scale,1))}
 .item-tier-control strong{min-width:44px;color:#e4cf83}
-.tooltip-stat.is-scaled strong{color:#f3db80!important;font-weight:700!important}
+.tooltip-stat.is-scaled strong,.stat.is-scaled strong{color:#86dc8c!important;font-weight:700!important}
 .tooltip-stat strong small{color:#777;font-size:calc(9px * var(--ui-font-scale,1));font-weight:400}
 .tooltip-scale-label small{color:#777;text-transform:none;letter-spacing:0;font-weight:500}
 
@@ -178,3 +178,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[t
 @media(max-width:950px){.global-search{min-width:60px;margin:0 5px}.topbar{padding-left:12px;padding-right:12px}}
 @media(max-width:760px){.brand-mark{display:none}.brand-title{font-size:0;letter-spacing:0}.brand-title .titlebar-version{font-size:calc(10px * var(--ui-font-scale,1))}.window-controls{gap:5px}.topbar-control{padding:7px}}
 .settings-actions #app-update-notes{font-size:calc(11px * var(--ui-font-scale,1));align-self:center}
+
+.map-loot-pane[hidden]{display:none}
+.map-loot-pane{flex:0 1 390px;min-width:270px;min-height:0;padding:0;overflow:auto;overscroll-behavior:contain}
+.map-loot-heading{display:flex;justify-content:space-between;align-items:start;gap:10px;padding:14px 14px 8px}
+.map-loot-heading h2{font-size:calc(20px * var(--ui-font-scale,1));margin:0;overflow-wrap:anywhere}
+.map-loot-heading p{margin:5px 0}.map-loot-heading .text-button{flex-shrink:0}
+.map-loot-controls{position:sticky;top:0;z-index:3;background:#101722;padding:10px 14px;border-bottom:1px solid var(--line)}
+.map-loot-controls label{display:flex;align-items:center;gap:8px;font-size:calc(11px * var(--ui-font-scale,1))}
+.map-loot-controls input{min-width:45px;flex:1;accent-color:var(--gold)}.map-loot-controls output{min-width:3.5em}
+.map-loot-controls .card-actions{margin-top:8px}.map-loot-items{display:grid;gap:10px;padding:12px}
+.map-loot-item h3{white-space:normal;overflow-wrap:anywhere}.map-loot-item .pill-row{margin-top:9px}.map-loot-item .stats{margin-bottom:12px}
+@media(max-width:1000px){.map-workspace:has(.map-loot-pane:not([hidden])){flex-direction:column;overflow:auto}.map-workspace:has(.map-loot-pane:not([hidden])) .viewer-frame-wrap{flex:0 0 45vh;min-height:220px}.map-loot-pane{flex:0 0 auto;width:100%;min-width:0;max-height:60vh}}
+.map-workspace>.map-loot-pane{padding:0}.map-loot-pane .map-loot-item h3{white-space:normal;overflow-wrap:anywhere}

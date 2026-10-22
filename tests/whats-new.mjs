@@ -38,7 +38,7 @@ assert.equal($('[data-tour-image]').src,'./assets/whats-new/0.8.8/workspace.png'
 assert.equal(createReleaseSeenStore({storage}).isSeen('0.8.8'),true,'Only the release opened by the user becomes viewed');
 assert.equal(createReleaseSeenStore({storage}).isSeen('0.8.7'),false,'Skipped releases keep their New state');
 $('[data-tour-next]').click();assert.equal($('[data-tour-count]').textContent,'2 of 4');
-assert.equal($('[data-tour-image]').alt,WHATS_NEW_STEPS[1].alt);
+assert.equal($('[data-tour-image]').alt,whatsNewStep(1,'0.8.8').alt);
 $('[data-tour-previous]').click();assert.equal($('[data-tour-count]').textContent,'1 of 4');
 for(let i=0;i<3;i++)$('[data-tour-next]').click();
 assert.equal($('[data-tour-next]').textContent,'Done');$('[data-tour-next]').click();
@@ -61,7 +61,7 @@ assert.equal($('[data-tour-count]').textContent,'1 of 1');
 $('[data-tour-mark-all]').click();assert.equal(button.textContent,"What's new");
 assert.equal(createReleaseSeenStore({storage}).unread('0.8.8').length,0);
 tour.dispose();button.click();assert.equal(dialog.open,false);assert.equal(dialog.removed,true);
-assert.equal(whatsNewStep(-9).index,0);assert.equal(whatsNewStep(99).index,3);
+assert.equal(whatsNewStep(-9).index,0);assert.equal(whatsNewStep(99).index,WHATS_NEW_STEPS.length-1);
 for(const release of RELEASE_HISTORY)for(const step of release.steps){assert(step.alt.length>20&&step.caption.length>20);assert(PACKAGED_RUNTIME_IMAGES.includes(`app/assets/whats-new/${step.image}.png`));assert(step.image.startsWith(release.version+'/'));}
 assert.equal(compareReleaseVersions('0.8.10','0.8.9'),1);assert.equal(releaseHistoryUpTo('0.8.5')[0].version,'0.8.5');
 const upgradeValues=new Map(),upgradeStorage={getItem:key=>upgradeValues.get(key),setItem:(key,value)=>upgradeValues.set(key,value)},before=createReleaseSeenStore({storage:upgradeStorage});
@@ -70,10 +70,10 @@ const upgraded=createReleaseSeenStore({storage:upgradeStorage});assert.deepEqual
 upgraded.markSeen('0.8.8');assert.deepEqual(createReleaseSeenStore({storage:upgradeStorage}).unread('0.8.8').map(release=>release.version),['0.8.7']);
 upgradeValues.set(RELEASE_SEEN_STORAGE_KEY,'{damaged');assert(createReleaseSeenStore({storage:upgradeStorage}).unread('0.8.8').length>0);
 assert.equal(createReleaseSeenStore({storage:{getItem:()=>null,setItem:()=>{throw Error('Synthetic quota');}}}).markSeen('0.8.8'),false);
-assert.deepEqual(checkReleaseHistory(),{versions:27,screenshots:20});
+assert.deepEqual(checkReleaseHistory(),{versions:RELEASE_HISTORY.length,screenshots:RELEASE_HISTORY.reduce((sum,release)=>sum+release.steps.length,0)});
 const changelog=readFileSync(new URL('../CHANGELOG.md',import.meta.url),'utf8'),readBytes=path=>readFileSync(new URL('../'+path,import.meta.url));
-assert.throws(()=>verifyReleaseHistory({version:'0.8.9',changelog,readBytes}),/current 0\.8\.9 entry/);
+assert.throws(()=>verifyReleaseHistory({version:'0.8.10',changelog,readBytes}),/current 0\.8\.10 entry/);
 const missing=structuredClone(RELEASE_HISTORY);missing[0].steps=[];
-assert.throws(()=>verifyReleaseHistory({version:'0.8.8',history:missing,changelog,readBytes}),/own captured screenshots/);
-assert.throws(()=>verifyReleaseHistory({version:'0.8.8',changelog,readBytes:path=>{const bytes=Buffer.from(readBytes(path));bytes[bytes.length-1]^=1;return bytes;}}),/differs from its reviewed SHA-256/);
+assert.throws(()=>verifyReleaseHistory({version:RELEASE_HISTORY[0].version,history:missing,changelog,readBytes}),/own captured screenshots/);
+assert.throws(()=>verifyReleaseHistory({version:RELEASE_HISTORY[0].version,changelog,readBytes:path=>{const bytes=Buffer.from(readBytes(path));bytes[bytes.length-1]^=1;return bytes;}}),/differs from its reviewed SHA-256/);
 console.log('Release history: manual walkthrough, archived media, per-version unread/skipped upgrades, persistence, focus/keyboard actions and release/package gates passed.');

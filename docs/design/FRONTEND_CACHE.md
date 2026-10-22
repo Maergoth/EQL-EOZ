@@ -23,7 +23,7 @@ mocked source-string assertion.
 
 ```powershell
 node scripts/test-main-cache.mjs
-node scripts/test-main-cache.mjs --installed-asar "C:\Users\ryan\AppData\Local\Programs\EQLWiki - Eye of Zomm\resources\app.asar"
+node scripts/test-main-cache.mjs --installed-asar "$env:LOCALAPPDATA\Programs\EQLWiki - Eye of Zomm\resources\app.asar"
 ```
 
 The optional affected 0.8.8 ASAR is read only, using its actual packaged cache

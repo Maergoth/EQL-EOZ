@@ -1,8 +1,14 @@
 # Eye of Zomm implementation status
 
+The 0.8.9 desktop follow-up adds installed system fonts, a one-time upgrade
+cache repair, green item-level values, a complete Live Map loot pane, browsable
+release screenshots, a five-second Windows restart countdown and an opt-in swing
+estimate. See [frontend cache](design/FRONTEND_CACHE.md),
+[release history](RELEASE_HISTORY.md) and [validation](../VALIDATION.md).
+
 Last updated: 2026-10-22
 
-Code baseline: 0.8.8
+Code baseline: 0.8.9
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 

@@ -21,7 +21,7 @@ On Linux, make the AppImage executable and launch it, or install the deb using y
 
 ## A look around
 
-These screenshots show the actual **0.8.8 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+The new font, green-stat and loot-pane captures below show the actual **0.8.9 Electron interface with synthetic records**. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 
@@ -30,10 +30,19 @@ Move and resize the main window normally. Its size, position and maximized state
 **Settings → Fonts** selects a font family and base **Text size** from 10–20 px.
 The choice applies immediately to the main app and native overlays and survives
 restart. Each overlay retains its own text adjustment on top of that base.
-**Reset fonts** restores the theme and 13 px default; installed system fallbacks
-provide the fonts without downloading them.
+For a font outside the presets, choose **Installed font…**, **Refresh installed
+fonts**, search its family name and **Apply installed font**. You can also enter
+an installed family manually. Missing families use local system fallbacks.
+**Reset fonts** restores the EQL theme/13 px. Upgrades clear old cached interface
+files so newly added Settings appear immediately.
 
-![Eye of Zomm workspace and window settings, captured with synthetic fixtures](app/assets/whats-new/workspace.png)
+![Eye of Zomm 0.8.9 using installed Calibri at 17 px with synthetic settings](app/assets/whats-new/0.8.9/system-fonts.png)
+
+**What's new** now contains a browsable illustrated release history. Each unseen
+version keeps its **New** marker until viewed, including skipped updates. New
+Windows downloads start a cancellable **Restarting in 5** countdown after
+verification, followed by silent installation and relaunch. Linux keeps its
+verified package download and manual installation handoff.
 
 ### Maps that stay beside the game
 
@@ -53,13 +62,22 @@ Hover or focus an item's name or icon for its local stat block, including tier-a
 
 The main Item and NPC browsers use the same local stat data. Item names and pictures support mouse hover and keyboard focus, including when logged activity updates a card.
 
+Item-level-modified stats appear **green** in cards and hover blocks. Unchanged
+values retain their normal color, and base comparisons stay muted. Clicking a
+monster in the main **Live Map** opens its full right-hand loot pane, with every
+known drop, the shared item-tier slider and explicit Route/Waypoint/Wiki actions.
+
+![Changed stats in green beside unchanged values and muted base comparisons](app/assets/whats-new/0.8.9/green-stats.png)
+
+![Complete Live Map loot pane with synthetic NPC and item records](app/assets/whats-new/0.8.9/loot-pane.png)
+
 ![Main NPC browser item stat block with synthetic loot](docs/screenshots/main-item-hover.png)
 
 ### Triggers and combat parses
 
 Create manual countdowns or literal/regex log triggers on the main **Triggers** page. Test a match, use named captures, set cooldowns and choose local sound/speech cues. Running countdowns and the observed swing bar appear in the compact Triggers window. You supply reminder durations; EoZ does not know a mob's respawn period.
 
-The independent **Parse** window has **Overview / Damage / Healing / Taken / Session** tabs and encounter selection. Healing includes a separately labeled rune-capacity subsection; capacity is not measured absorption or healing. **New session** in Combat or the Parse Session tab clears parse/loot totals while retaining the live log position, profile, map and triggers. One shared session reads the log for every panel. The swing bar estimates your outgoing melee rounds from logged hits and misses; one-second log timestamps limit its precision. See [trigger and countdown behavior](docs/TIMERS.md).
+The independent **Parse** window has **Overview / Damage / Healing / Taken / Session** tabs and encounter selection. Healing includes a separately labeled rune-capacity subsection; capacity is not measured absorption or healing. **New session** in Combat or the Parse Session tab clears parse/loot totals while retaining the live log position, profile, map and triggers. One shared session reads the log for every panel. The optional swing bar defaults off; enable **Triggers → Swing → Show swing estimate** if desired. It estimates your outgoing melee rounds from logged hits and misses; one-second log timestamps limit its precision. See [trigger and countdown behavior](docs/TIMERS.md).
 
 ![Timer trigger editor with synthetic match preview](app/assets/whats-new/timers.png)
 
@@ -77,10 +95,10 @@ Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards op
 
 | Update | What it changes | Where to use it |
 | --- | --- | --- |
-| Application update | Installed EoZ code and interface | **Settings → Application updates**: check/download, then Windows **Restart to install update** or Linux **Open download folder** |
+| Application update | Installed EoZ code and interface | **Settings → Application updates**: check/download; Windows counts down to restart, Linux offers **Open download folder** |
 | Wiki data update | Cached NPCs, items, icons, zone aliases and source records | **Sync with Wiki**, also checked at startup and hourly while open |
 
-Verified application downloads can wait until later. Startup downloading is optional and off by default. From 0.8.6, **Restart to install update** authorizes a silent upgrade and automatic relaunch, without the setup wizard or another app confirmation. Windows may still require a security or elevation prompt. Settings, folder/log choices and cached wiki data stay in the existing profile. Older installed builds use their existing installer flow for the first upgrade.
+From 0.8.9, a new verified Windows download shows **Restarting in 5** and silently installs and relaunches automatically. Choose **Cancel restart** to keep the staged package for later, then use **Restart to install update** when ready. Merely reopening EoZ with a previously staged package does not start a countdown. Startup downloading is optional and off by default; when enabled, a newly completed startup download also starts the countdown. Windows may still require a security or elevation prompt. Settings, folder/log choices and cached wiki data stay in the existing profile. Older installed builds use their existing installer flow for the first upgrade.
 
 On Linux, **Open download folder** reveals the verified AppImage/deb with manual
 installation instructions. Close EoZ, replace the AppImage or install the deb,

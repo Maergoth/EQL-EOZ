@@ -1,8 +1,51 @@
-// Append a version entry for each release; archived captures and hashes are immutable.
-// Historical text comes from CHANGELOG.md; 0.8.4+ media/text were recovered byte-for-byte
-// from their released Git commits. See docs/RELEASE_HISTORY.md.
-const freeze = value => { if(value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
+// Version-owned captures and reviewed hashes are immutable; see docs/RELEASE_HISTORY.md.
+const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
+  {
+    "version": "0.8.9",
+    "title": "Installed fonts, current Settings and clearer item stats",
+    "changes": [
+      "Use any installed system font through a searchable family list or manual name, shared by the main app, overlays and map controls.",
+      "Clear stale interface files on upgrade so Settings reflects the installed version, and place checkbox labels beside their controls.",
+      "Show item-level-modified values in green; unchanged values keep their normal color and base comparisons stay muted.",
+      "Open a complete right-hand loot pane from a Live Map monster, with all drops, exact normal/raid identity, shared tier and explicit route/waypoint/wiki actions.",
+      "Browse illustrated release history, including skipped versions marked New until viewed.",
+      "After a newly requested Windows download is verified, restart for a silent update after a cancellable five-second countdown; Linux keeps its manual package handoff.",
+      "Default the optional observed swing timer off while keeping existing saved choices."
+    ],
+    "steps": [
+      {
+        "title": "Use any installed font",
+        "image": "0.8.9/system-fonts",
+        "view": "settings",
+        "action": "Open Settings",
+        "copy": "Settings → Fonts is first on the page. Refresh installed fonts, search for a family and Apply installed font; you can enter the family manually too. The choice and text size apply to the main app, overlays and map controls and survive restart. This release also clears the stale interface cache that could hide new Settings after an upgrade.",
+        "alt": "Eye of Zomm 0.8.9 Settings with the installed Calibri family and 17 px text applied.",
+        "caption": "Actual 0.8.9 interface, synthetic profile and log; installed family names stay on this computer.",
+        "imageSha256": "7bc54570dd07ef651650e11472cc36c35dd482901e294b143ca2c3b9d2e59cdc"
+      },
+      {
+        "title": "Read item-level changes at a glance",
+        "image": "0.8.9/green-stats",
+        "view": "items",
+        "action": "Open Items",
+        "copy": "Move the item-level slider to see changed stats in green in item cards and main/Intel hover blocks. Unchanged values keep their normal color, with muted base comparisons in tooltips. Reduced weight and improved negative penalties count as changes too. The optional observed swing timer now starts off by default; enable it in Triggers if you want it.",
+        "alt": "Synthetic item at tier 2 with green adjusted HP, Strength and Weight and unchanged Delay in normal text.",
+        "caption": "Actual item browser and hover block rendered from synthetic base statistics.",
+        "imageSha256": "91609b638fe69e2f94b241cdd100d28294adb81872d2fd06a1ecc269a70f30d3"
+      },
+      {
+        "title": "Keep loot beside the Live Map",
+        "image": "0.8.9/loot-pane",
+        "view": "map",
+        "action": "Open Live Map",
+        "copy": "Click a map monster to open its loot pane on the right. Every known drop is reachable, with icons, classes, slots, item-tier stats and hover details. Same-name normal and raid sources keep separate loot. Route, Copy /waypoint and Wiki remain explicit actions; choosing a monster leaves your current route alone. Browse older illustrated updates in this release selector, including versions you skipped.",
+        "alt": "Live Map loot pane for a synthetic monster with eight known drops, tier controls and explicit navigation and wiki actions.",
+        "caption": "An actual capture of the Live Map loot pane using synthetic NPC and item records.",
+        "imageSha256": "8499de02b999674cdaa22c1fab383f1d8a0a28ecf6273ffaa4ca4aa1c674bffc"
+      }
+    ]
+  },
   {
     "version": "0.8.8",
     "title": "Font controls and Linux releases",

@@ -18,6 +18,8 @@ import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
 import { mountWhatsNew } from './whats-new.js';
 import { FONT_PRESETS, DEFAULT_APPEARANCE, normalizeAppearance, applyAppearance, inheritViewerAppearance } from './appearance.js';
 import { mountCaptureWorkspace } from './capture-workspace.js';
+import { mountSystemFontSettings } from './system-font-settings.js';
+import { isItemStatModified } from './item-stat-presentation.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -104,6 +106,7 @@ let itemZoneFilterExplicit = Boolean(settings.itemZoneFilterExplicit || settings
 settings.appearance = normalizeAppearance(settings.appearance);
 applyAppearance(document,settings.appearance);
 let appearanceGeneration = 0, appearancePending = 0, appearanceDraft = false;
+let systemFontSettings = null;
 parser.setEncounterGapSeconds(settings.encounterGapSeconds);
 
 const $ = selector => document.querySelector(selector);
@@ -117,6 +120,7 @@ function renderAppearanceSettings() {
     $('#settings-font-size').value = String(settings.appearance.fontSize);
     $('#settings-font-size-value').textContent = `${settings.appearance.fontSize} px`;
     $('#settings-font-size').setAttribute('aria-valuetext',`${settings.appearance.fontSize} pixels`);
+    systemFontSettings?.render(settings.appearance);
 }
 function acceptAppearance(value) {
     const next = normalizeAppearance(value), changed = JSON.stringify(next) !== JSON.stringify(settings.appearance);
@@ -406,6 +410,7 @@ async function loadPack() {
 async function connectBridge() {
     try {
         bridgeInfo = await api('/api/info');
+        whatsNew.refresh();
         mapDataLoader.invalidate(); mapDataRevision++;
         parser.setCharacterFromFilename(bridgeInfo.logPath || '');
         $('#app-version').textContent = bridgeInfo.version || 'unknown';
@@ -802,6 +807,7 @@ function selectMapLoot(name, raidInstance) {
 
 function renderMapLootPane(s,profile) {
     const host = $('#map-loot-pane');
+    mapLootTier=Number(settings.itemTier)||0;
     if (!host) return;
     if (!mapLootSelection || zoneKey(mapLootSelection.zone) !== zoneKey(s.zone)) {
         mapLootSelection = null; host.hidden = true; host.replaceChildren(); return;
@@ -818,7 +824,7 @@ function renderMapLootPane(s,profile) {
             const stats = scaledItemStats(item,mapLootTier);
             return `<article class="data-card map-loot-item" data-item-tooltip-source="map-loot:${esc(item.wikiTitle||item.name)}"><div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ')||'Unknown slot')}</div></div></div>
                 <div class="pill-row">${(item.classes||[]).map(c=>`<span class="pill">${esc(c)}</span>`).join('')}${item.era?`<span class="pill">${esc(item.era)}</span>`:''}</div>
-                <div class="stats">${Object.entries(stats).map(([key,value])=>`<div class="stat"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(value)}</strong></div>`).join('')||'<span class="sub">Stats have not been recorded on the wiki.</span>'}</div>
+                <div class="stats">${Object.entries(stats).map(([key,value])=>`<div class="stat ${isItemStatModified(item.stats?.[key],value,mapLootTier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(value)}</strong></div>`).join('')||'<span class="sub">Stats have not been recorded on the wiki.</span>'}</div>
                 ${item.notes?`<p class="sub">${esc(item.notes)}</p>`:''}<a class="mini-button" href="${wikiUrl(item.wikiTitle||item.name)}" target="_blank" rel="noopener">Item wiki</a></article>`;
         }).join('')||'<div class="empty-state">No drops recorded in the current wiki dataset.</div>'}</div>`;
     host.hidden = false;
@@ -833,7 +839,7 @@ function renderMapLootPane(s,profile) {
             event.target.nextElementSibling.textContent=Number(event.target.value)?`Tier ${event.target.value}`:'Base';
         };
         host.querySelector('[data-map-loot-tier]').onchange = event => {
-            mapLootTier=Number(event.target.value)||0;renderMapLootPane(state(),effectiveProfile(state()));
+            mapLootTier=Number(event.target.value)||0;settings.itemTier=mapLootTier;prefs.save(settings);renderMapLootPane(state(),effectiveProfile(state()));
         };
     }
     refreshItemTooltip();
@@ -968,7 +974,7 @@ function syncRareMobsToViewer(force = false) {
     if (!force && key === renderedRareViewerKey) return true;
     renderedRareViewerKey = key;
     apiObj.setRareMobs(payload);
-    apiObj.setActiveRareMob?.(activeRoute?.name || '');
+    apiObj.setActiveRareMob?.(mapLootSelection?.name || activeRoute?.name || '');
     return true;
 }
 
@@ -1128,7 +1134,7 @@ function tooltipHtml(item,target) {
     const stats = scaledItemStats(item, tier);
     const statHtml = Object.entries(stats).slice(0, 18).map(([key, value]) => {
         const base = Number(item?.stats?.[key]);
-        const changed = tier > 0 && Number.isFinite(base) && Number(value) !== base;
+        const changed = isItemStatModified(item?.stats?.[key],value,tier);
         return `<div class="tooltip-stat ${changed ? 'is-scaled' : ''}"><span>${esc(key.replace(/_/g, ' '))}:</span><strong>${Number(value) > 0 ? '+' : ''}${formatNum(value)}${changed ? `<small> (${base > 0 ? '+' : ''}${formatNum(base)})</small>` : ''}</strong></div>`;
     }
     ).join('');
@@ -1279,7 +1285,7 @@ function renderItems(s, profile) {
     $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel} through <strong>${esc(settings.era)}</strong>${slotLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}${rankingLabel}.`;
     let markup = visible.map(item => {
         const stats = scaledItemStats(item, tier);
-        const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
+        const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat ${isItemStatModified(item?.stats?.[key],val,tier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
         return `<article class="data-card" data-item-tooltip-source="${esc(`item:${item.wikiTitle || item.name}`)}">
             <div class="card-top">
                 <div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}${tier ? ` · Tier ${tier}` : ''}</div></div></div>
@@ -2018,6 +2024,7 @@ function exportDiagnostics() {
 async function applyLogSelection(info) {
     const previousRoot = String(bridgeInfo?.eqRootPath || '');
     bridgeInfo = info;
+    whatsNew.refresh();
     logOffset = 0;
     partialLine = '';
     parser.character = '';
@@ -2079,9 +2086,10 @@ async function handleMapPrimaryAction() {
 function wireUi() {
     $('#zone-viewer').addEventListener('load',syncViewerAppearance);
     syncViewerAppearance();
-    $('#settings-font-family').innerHTML = FONT_PRESETS.map(font => `<option value="${font.id}">${esc(font.label)}</option>`).join('');
+    $('#settings-font-family').innerHTML = FONT_PRESETS.map(font => `<option value="${font.id}">${esc(font.label)}</option>`).join('')+'<option value="local">Installed font…</option>';
     renderAppearanceSettings();
-    $('#settings-font-family').addEventListener('change',event => { void saveAppearance({...settings.appearance,fontFamily:event.target.value}); });
+    $('#settings-font-family').addEventListener('change',event => { if(event.target.value!=='local')void saveAppearance({...settings.appearance,fontFamily:event.target.value}); });
+    systemFontSettings = mountSystemFontSettings({document,getAppearance:()=>settings.appearance,saveAppearance});
     $('#settings-font-size').addEventListener('input',event => {
         appearanceGeneration++; appearanceDraft = true;
         settings.appearance = normalizeAppearance({...settings.appearance,fontSize:Number(event.target.value)});

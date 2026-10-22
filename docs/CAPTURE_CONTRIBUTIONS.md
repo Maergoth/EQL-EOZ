@@ -17,9 +17,9 @@ The smaller **0.8.9** follow-up is isolated in `D:\EQL-EOZ-hotfix`, branch
 `codex/system-fonts-cache`, PR #10. It bundles installed system fonts, permanent
 interface cache repair, green adjusted item stats, swing timer default off,
 historical What's New, the restart countdown and the Live Map loot pane.
-Current head is `d1b4a9d`; final CI `39871328293` and Windows installer
-`39871321634` are pending. Product-equivalent `10d843d` already passed Windows
-and Linux CI and Windows packaging. Do not confuse that release PR with this feature
+Head `d1b4a9d` passed final CI `39871328293` and Windows installer
+`39871321634` and was merged in PR10 as main `6937d35`. Release workflow
+`39871980124` and main CI `39871980105` are running. Do not confuse that release PR with this feature
 branch. After publication, commit this feature work, merge main, reconcile
 overlapping UI/native/package changes and rerun checks before its separate PR.
 

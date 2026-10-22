@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { isItemStatModified } from '../app/item-stat-presentation.js';
+import { renderItem,renderItemTooltip } from '../app/overlay.js';
+import { scaledItemStats } from '../app/item-scaling.js';
+for(const [base,value,tier,expected] of [[100,170,7,true],[-8,-1,7,true],[1,.4,7,true],[10,10,7,false],[0,0,7,false],[10,17,0,false],[undefined,10,7,false],['',0,7,false],[NaN,10,7,false],['10',10,7,false]])assert.equal(isItemStatModified(base,value,tier),expected);
+const base={HP:100,DMG:10,WT:1,HASTE:0,DELAY:20},item={name:'Synthetic Blade',tier:7,baseStats:base,stats:scaledItemStats({stats:base},7)};
+const tooltip=renderItemTooltip(item),card=renderItem(item);
+assert.match(tooltip,/<dd class="is-scaled">170 <small>\(100\)<\/small><\/dd>/);
+assert.match(tooltip,/<dt>DELAY<\/dt><dd>20<\/dd>/);
+assert.match(card,/<span class="is-scaled">HP 170<\/span>/);
+assert.doesNotMatch(renderItemTooltip({...item,tier:0,stats:base}),/class="is-scaled"/);
+for(const file of ['styles.css','overlay.css'])assert.match(readFileSync(new URL(`../app/${file}`,import.meta.url),'utf8'),/is-scaled[^{}]*\{[^}]*color:#86dc8c/);
+console.log('Changed item stats: green main/overlay values, unchanged base values, negative penalties and weight passed.');

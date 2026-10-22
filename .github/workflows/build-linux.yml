@@ -45,6 +45,7 @@ jobs:
             npm run test:wiki-auth
             npm run test:capture-native
             npm run test:capture-workspace -- --screenshots ci-screenshots/linux-capture-workspace
+            npm run test:system-fonts -- --screenshots ci-screenshots/linux-system-fonts
           '
       - name: Fetch production bootstrap data
         if: inputs.bootstrap_artifact == ''
@@ -68,6 +69,7 @@ jobs:
             node scripts/test-linux-package.mjs
             npm run test:appearance -- --packaged-root dist/linux-unpacked/resources/app.asar --screenshots ci-screenshots/linux-packaged
             npm run test:capture-native -- --packaged-root dist/linux-unpacked/resources/app.asar
+            npm run test:system-fonts -- --packaged-root dist/linux-unpacked/resources/app.asar --screenshots ci-screenshots/linux-packaged-system-fonts
           '
       - name: Hash release assets
         run: node scripts/release-assets.mjs linux

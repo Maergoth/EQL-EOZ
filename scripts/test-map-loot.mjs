@@ -72,6 +72,12 @@ try {
             const tooltip=await execute(owner,()=>document.querySelector('#item-tooltip').textContent);
             if(!/Tier 7/.test(tooltip)||!/170/.test(tooltip))issues.push('Tooltip and pane must use the same selected tier: expected Tier 7 / HP170.');
             await capture('map-loot-normal-tier7');
+            await execute(owner,()=>{document.querySelector('[data-map-loot-tier]').focus();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));});
+            await until(()=>execute(owner,()=>document.querySelector('#item-tooltip').hidden),'tooltip dismissed for pane capture');
+            await wait(100);
+            const paneRect=await execute(owner,()=>{const rect=document.querySelector('#map-loot-pane').getBoundingClientRect();return{x:Math.floor(rect.x),y:Math.floor(rect.y),width:Math.floor(rect.width),height:Math.floor(rect.height)};});
+            owner.webContents.invalidate();
+            await fs.writeFile(path.join(screenshots,'map-loot-pane.png'),(await owner.capturePage(paneRect,{stayHidden:true,stayAwake:true})).toPNG());
             await execute(owner,()=>document.querySelector('[data-map-loot-waypoint]').click());await until(()=>clipboard.length===1,'explicit local waypoint copy');assert.equal(clipboard[0],'/waypoint 10 20 0','Wiki location retains its player-facing Y/X/Z command order');
             await execute(owner,()=>{const links=[...document.querySelectorAll('#map-loot-pane a')];links.find(link=>link.textContent==='Monster wiki').click();links.find(link=>link.textContent==='Item wiki').click();});
             await until(()=>external.length===2,'explicit wiki link dispatch');assert(external.every(url=>url.startsWith('https://eqlwiki.com/')));
