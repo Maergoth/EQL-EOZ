@@ -39,7 +39,7 @@ class Window extends EventEmitter {
     async loadURL(url) { this.loadedUrls ||= []; this.loadedUrls.push(url); this.webContents.mainFrame.url = url; queueMicrotask(() => this.webContents.emit('did-finish-load')); }
 }
 
-async function fixture(run, { saved = {}, shortcut = true, tray = true, trayFailure = null } = {}) {
+async function fixture(run, { saved = {}, shortcut = true, tray = true, trayFailure = null, platform } = {}) {
     const handlers = new Map(), writes = [], nativeWindows = [], nativeTrays = [], commands = [], warnings = [];
     const screen = new EventEmitter(); screen.displays = [display(), display(1920)]; screen.getAllDisplays = () => screen.displays;
     const main = new Window(); main.webContents.mainFrame.url = 'http://127.0.0.1:53147/';
@@ -57,7 +57,7 @@ async function fixture(run, { saved = {}, shortcut = true, tray = true, trayFail
     let now = 123000;
     const host = new OverlayHost({ electron, origin:'http://127.0.0.1:53147', getMainWindow:() => main,
         showMain:() => { shown += 1; }, readPreferences:async () => saved,
-        writePreferences:async value => writes.push(value), now:() => now, warn:(...args) => warnings.push(args) });
+        writePreferences:async value => writes.push(value), now:() => now, warn:(...args) => warnings.push(args), platform });
     await host.initialize();
     const mainEvent = { sender:main.webContents, senderFrame:main.webContents.mainFrame };
     const overlayEvent = id => { const win = host.windows.get(id); return { sender:win.webContents, senderFrame:win.webContents.mainFrame }; };
@@ -74,7 +74,7 @@ const publish = (host, event) => host.handleMainRequest(event, 'publish', {
 test('stored preferences are bounded and contain no session/log data', () => {
     const prefs = normalizePreferences({ panels:{ parse:{ visible:true, locked:false, passThrough:true,
         backgroundOpacity:4, fontScale:-1, bounds:{ x:999999, y:-9999, width:99999, height:Infinity }, unsafe:'ignored' } }, snapshot:{ private:'never store' } }, [display()]);
-    assert.deepEqual(Object.keys(prefs), ['schemaVersion', 'panels']);
+    assert.deepEqual(Object.keys(prefs), ['schemaVersion', 'appearance', 'panels']);
     assert.equal(prefs.panels.parse.visible, true); assert.equal(prefs.panels.parse.locked, false);
     assert.equal(prefs.panels.parse.backgroundOpacity, 1); assert.equal(prefs.panels.parse.fontScale, 0.75);
     assert.deepEqual(prefs.panels.parse.bounds, { x:720, y:0, width:1200, height:220 });
@@ -297,6 +297,27 @@ test('layout lock and click-through are independent and type checked', () => fix
     await host.control('font-scale', 'parse', 9); assert.equal(host.getState().panels.parse.fontScale, 1.75);
 }));
 
+test('Linux click-through releases existing keyboard focus without activation', () => fixture(async ({host}) => {
+    await host.control('show','intel');const win=host.windows.get('intel');let focused=true,blurred=0;
+    win.isFocused=()=>focused;win.blur=()=>{blurred++;focused=false;};
+    await host.control('pass-through','intel',true);assert.equal(blurred,1);assert.equal(focused,false);
+    await host.control('pass-through','intel',false);assert.equal(blurred,1,'Restoring input never steals focus');
+}, {platform:'linux'}));
+
+test('global fonts persist independently of panel sizing and are owner-only', () => fixture(async ({host,mainEvent,overlayEvent,writes}) => {
+    await host.control('show','intel');await host.control('font-scale','intel',1.3);
+    const before=structuredClone(host.getState().panels.intel);
+    await host.handleMainRequest(mainEvent,'control',{action:'appearance',value:{fontFamily:'georgia',fontSize:20,private:'ignored'}});
+    assert.deepEqual(host.getState().appearance,{fontFamily:'georgia',fontSize:20});
+    assert.deepEqual(host.getState('intel').appearance,host.getState().appearance);
+    assert.deepEqual(host.getState().panels.intel,before,'Font settings preserve saved panel scale, position and lock');
+    assert.deepEqual(writes.at(-1).appearance,{fontFamily:'georgia',fontSize:20});
+    assert.deepEqual(normalizePreferences(writes.at(-1),[display()]).appearance,{fontFamily:'georgia',fontSize:20},'Restart normalization restores canonical fonts');
+    await assert.rejects(host.handleOverlayRequest(overlayEvent('intel'),'appearance',{fontFamily:'arial',fontSize:10}),/Unknown overlay session action/);
+    await host.control('appearance',null,{fontFamily:'url(https://untrusted.invalid/x)',fontSize:1000});
+    assert.deepEqual(host.getState().appearance,{fontFamily:'theme',fontSize:20});
+}));
+
 test('the host accepts snapshots only from the exact main root frame', () => fixture(async ({ host, mainEvent, overlayEvent }) => {
     await host.control('show', 'intel');
     await publish(host, mainEvent);
@@ -379,7 +400,10 @@ test('close hides only its own panel and preference saves never include the sess
     assert.equal(host.getState().panels.intel.visible, true);
     assert.equal(host.hasVisiblePanels(), true);
     assert(writes.length > 0);
-    for (const saved of writes) assert.deepEqual(Object.keys(saved), ['schemaVersion', 'panels']);
+    for (const saved of writes) {
+        assert.deepEqual(Object.keys(saved), ['schemaVersion', 'appearance', 'panels'], 'Only layout and appearance preferences persist; session/private data stays excluded');
+        assert.deepEqual(saved.appearance, {fontFamily:'theme',fontSize:13}, 'Persist the complete bounded default appearance without arbitrary CSS or extra fields');
+    }
     await host.control('hide-all'); assert.equal(host.hasVisiblePanels(), false);
 }));
 

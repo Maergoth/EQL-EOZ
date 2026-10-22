@@ -1,14 +1,14 @@
 .whats-new-dialog{width:min(900px,calc(100vw - 40px));max-height:calc(100vh - 40px);padding:22px;border:1px solid #9a7a3d;border-radius:12px;background:#0c1521;color:#dce4ef;box-shadow:0 20px 90px #000b;overflow:auto;color-scheme:dark}
 .whats-new-dialog::backdrop{background:#02060dbd}
 .whats-new-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.whats-new-heading .eyebrow{color:#d8b75c;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em}
-.whats-new-dialog h2{margin:8px 0 10px;font:700 25px Georgia,serif;color:#f1dc9a}
-.whats-new-dialog p{margin:0 0 16px;max-width:78ch;font-size:13px;line-height:1.65;color:#bdc9d8}
+.whats-new-heading .eyebrow{color:#d8b75c;font-size:calc(11px * var(--ui-font-scale,1));font-weight:700;text-transform:uppercase;letter-spacing:.12em}
+.whats-new-dialog h2{margin:8px 0 10px;font:700 calc(25px * var(--ui-font-scale,1)) var(--ui-heading-family);color:#f1dc9a}
+.whats-new-dialog p{margin:0 0 16px;max-width:78ch;font-size:calc(13px * var(--ui-font-scale,1));line-height:1.65;color:#bdc9d8}
 .whats-new-figure{margin:0;min-width:0}
 .whats-new-figure img{display:block;width:100%;height:auto;max-height:49vh;object-fit:contain;border:1px solid #ffffff1c;border-radius:7px;background:#080f19}
 .whats-new-figure img[hidden]{display:none}
-.whats-new-figure figcaption{margin-top:7px;color:#8e9fb4;font-size:11px;line-height:1.5}
+.whats-new-figure figcaption{margin-top:7px;color:#8e9fb4;font-size:calc(11px * var(--ui-font-scale,1));line-height:1.5}
 .whats-new-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px}
-.whats-new-footer [data-tour-count]{color:#b9a56f;font-size:12px;white-space:nowrap}
+.whats-new-footer [data-tour-count]{color:#b9a56f;font-size:calc(12px * var(--ui-font-scale,1));white-space:nowrap}
 .whats-new-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
-@media(max-width:600px){.whats-new-dialog{padding:16px}.whats-new-dialog h2{font-size:21px}.whats-new-footer{align-items:flex-start}.whats-new-actions{max-width:80%}.whats-new-actions button{padding:8px 9px;font-size:11px}}
+@media(max-width:600px){.whats-new-dialog{padding:16px}.whats-new-dialog h2{font-size:calc(21px * var(--ui-font-scale,1))}.whats-new-footer{align-items:flex-start}.whats-new-actions{max-width:80%}.whats-new-actions button{padding:8px 9px;font-size:calc(11px * var(--ui-font-scale,1))}}

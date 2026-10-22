@@ -1,8 +1,22 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.7-x64.exe`.
+Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.8-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.7` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.8` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+
+## 0.8.8 font controls
+
+1. In Settings, change font family and base text size. Check navigation, tables,
+   item/NPC stats, trigger editor, notices and all four overlays. Changes apply
+   immediately and survive restart; Reset returns the theme defaults.
+2. Combine the smallest/largest base size with each panel's smallest/largest
+   text adjustment. Check map labels/header/footer, Intel's sticky controls,
+   hover actions and scrollable tooltips, parse tabs and trigger auto-height.
+   Required controls must remain reachable without clipping or hover reflow.
+3. Restore an existing 0.8.7 profile. Font defaults must preserve existing
+   overlay layout, panel text settings, log selection and running triggers.
+4. Confirm Windows keeps the verified silent Restart to install update flow.
+   Linux has a separate package handoff and [acceptance guide](FONTS_LINUX.md).
 
 ## 0.8.7 Intel, session and trigger acceptance
 

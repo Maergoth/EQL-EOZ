@@ -1,18 +1,16 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import asar from '@electron/asar';
-import { verifyPackagedRuntimeSources, verifyPackagedRuntimeImages } from './packaged-runtime-sources.mjs';
+import { packagedArchivePaths, verifyPackagedRuntimeSources, verifyPackagedRuntimeImages } from './packaged-runtime-sources.mjs';
 
 const packageRoot = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-const archivePath = [
-    '../dist/win-unpacked/resources/app.asar',
-    '../dist/linux-unpacked/resources/app.asar',
-    '../dist/mac/EQLWiki - Eye of Zomm.app/Contents/Resources/app.asar',
-    '../dist/mac-arm64/EQLWiki - Eye of Zomm.app/Contents/Resources/app.asar'
-].map(relative => fileURLToPath(new URL(relative, import.meta.url))).find(existsSync);
+const platformIndex = process.argv.indexOf('--platform');
+const platform = platformIndex < 0 ? process.platform : process.argv[platformIndex + 1];
+const archivePath = packagedArchivePaths(platform)
+    .map(relative => fileURLToPath(new URL(`../${relative}`, import.meta.url))).find(existsSync);
 
 if (!archivePath) {
-    throw new Error('Packaged app.asar was not found. Build an unpacked desktop app before this check.');
+    throw new Error(`Packaged ${platform} app.asar was not found. Build that platform before this check.`);
 }
 
 function packagedBytes(relativePath) {

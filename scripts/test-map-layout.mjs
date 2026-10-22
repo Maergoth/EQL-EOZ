@@ -22,6 +22,10 @@ try{
     await writeFile(join(temporary,'package.json'),JSON.stringify({name:'eoz-map-layout',version:pkg.version,main:'main.cjs'}));
     const run=async({root,screenshots,recordOnly})=>{
         const {app,BrowserWindow}=require('electron'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
+        app.on('web-contents-created',(_event,contents)=>{
+            contents.on('console-message',(_event,details)=>{if(details.level==='error'||details.level===3)console.error('[map renderer]',details.message);});
+            contents.on('render-process-gone',(_event,details)=>console.error('[map renderer exited]',JSON.stringify(details)));
+        });
         BrowserWindow.prototype.show=()=>{};global.fetch=async()=>{throw Error('External network disabled for synthetic map layout');};
         const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
         const until=async(fn,label)=>{const end=Date.now()+10000;while(Date.now()<end){const value=await fn();if(value)return value;await wait(60);}throw Error(`Timed out: ${label}`);};
@@ -69,6 +73,8 @@ try{
         setTimeout(()=>app.exit(2),30000).unref();require(path.join(root,'desktop/main.cjs'));
     };
     await writeFile(join(temporary,'main.cjs'),`const {app}=require('electron');app.setPath('userData',${JSON.stringify(profile)});(${run.toString()})(${JSON.stringify({root,screenshots,recordOnly})});`);
-    const result=await new Promise((resolve,reject)=>{const child=spawn(electron,[temporary,'--disable-gpu','--mute-audio'],{windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);child.once('error',reject);child.once('exit',code=>resolve({code,output}));});
+    // Explicit software WebGL is required on headless Linux, matching the
+    // existing 3D smoke. These switches belong only to this synthetic CI run.
+    const result=await new Promise((resolve,reject)=>{const child=spawn(electron,[temporary,'--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--mute-audio'],{windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);child.once('error',reject);child.once('exit',code=>resolve({code,output}));});
     assert.equal(result.code,0,result.output);assert.match(result.output,/EOZ_MAP_LAYOUT=.*"ok":true/);console.log(result.output.match(/EOZ_MAP_LAYOUT=.*/)[0]);
 }finally{if(dirname(temporary)!==resolve(tmpdir())||!basename(temporary).startsWith('eoz-map-layout-'))throw Error('Unexpected layout-test cleanup path');await rm(temporary,{recursive:true,force:true});}

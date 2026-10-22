@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const {allowMapRequest}=require('./overlay-map-policy.cjs');
+const {normalizeAppearance}=require('./appearance.cjs');
 
 const PANEL_IDS = Object.freeze(['parse', 'map', 'intel', 'timers']);
 const PANEL_NAMES = Object.freeze({ parse:'Combat parse', map:'Map & intel', intel:'Zone intel', timers:'Triggers' });
@@ -76,7 +77,7 @@ function normalizePreferences(raw, displays) {
             bounds:clampBounds(saved.bounds, displays, fallback, id === 'timers' ? 36 : 160)
         };
     });
-    return { schemaVersion:1, panels };
+    return { schemaVersion:1, appearance:normalizeAppearance(raw?.appearance), panels };
 }
 
 function jsonObject(value, maxBytes) {
@@ -106,8 +107,9 @@ function sessionCommand(action, payload) {
 }
 
 class OverlayHost {
-    constructor({ electron, origin, getMainWindow, showMain, readPreferences, writePreferences, trayIcon, now = Date.now, warn = console.warn }) {
+    constructor({ electron, origin, getMainWindow, showMain, readPreferences, writePreferences, trayIcon, now = Date.now, warn = console.warn, platform = process.platform }) {
         this.electron = electron;
+        this.platform = platform;
         this.origin = origin.replace(/\/$/, '');
         this.getMainWindow = getMainWindow;
         this.showMain = showMain;
@@ -174,7 +176,7 @@ class OverlayHost {
     }
     panelUrl(id) { return `${this.origin}/${id==='map'?'overlay-map.html':'overlay.html'}?panel=${id}`; }
     getState(id = null) {
-        const common = { snapshot:this.snapshot, sessionAvailable:this.sessionAvailable,
+        const common = { appearance:this.preferences.appearance, snapshot:this.snapshot, sessionAvailable:this.sessionAvailable,
             lastSnapshotAt:this.snapshotAt, sessionRestartCount:this.sessionRestartCount, recoveryShortcut:RECOVERY_SHORTCUT,
             recoveryShortcutRegistered:this.recoveryShortcutRegistered };
         return clone(id ? { panel:id, preferences:this.preferences.panels[id], ...common } : { panels:this.preferences.panels, ...common });
@@ -304,7 +306,11 @@ class OverlayHost {
         if (this.disposed) throw new Error('Overlays have closed.');
         const all = ['show-all', 'hide-all', 'unlock-all', 'restore-mouse', 'reset-layout'];
         if (action === 'show-main') { this.showMain(); return this.getState(); }
-        if (all.includes(action)) {
+        if (action === 'appearance') {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid appearance settings.');
+            this.preferences.appearance = normalizeAppearance(value);
+            this.timerContentHeight = null; this.fitTimerWindow();
+        } else if (all.includes(action)) {
             const defaults = normalizePreferences({}, this.displays());
             for (const id of PANEL_IDS) {
                 const prefs = this.preferences.panels[id];
@@ -349,6 +355,7 @@ class OverlayHost {
         win.setResizable(!prefs.locked);
         win.setMovable(!prefs.locked);
         win.setFocusable(!prefs.passThrough);
+        if (this.platform === 'linux' && prefs.passThrough && win.isFocused?.()) win.blur?.();
         win.setIgnoreMouseEvents(prefs.passThrough, { forward:true });
         const current = win.getBounds();
         if (Object.keys(prefs.bounds).some(key => current[key] !== prefs.bounds[key])) win.setBounds(prefs.bounds);
@@ -364,7 +371,8 @@ class OverlayHost {
         const swingHeight = timers.swing?.enabled === false ? 0 : 22;
         const notificationsHeight = Math.min(4,timers.notifications?.length || 0) * 24 + (timers.matchingStatus ? 22 : 0);
         const discoveryHeight = Math.min(4,this.snapshot?.session?.discovery?.length || 0) * 90;
-        const height = this.timerContentHeight || Math.max(36, Math.ceil(10 + count * (30 * prefs.fontScale + 3) + (swingHeight + notificationsHeight + discoveryHeight) * prefs.fontScale));
+        const scale = prefs.fontScale * this.preferences.appearance.fontSize / 13;
+        const height = this.timerContentHeight || Math.max(36, Math.ceil(10 + count * (30 * scale + 3) + (swingHeight + notificationsHeight + discoveryHeight) * scale));
         prefs.bounds = clampBounds({ ...prefs.bounds, height }, this.displays(), prefs.bounds, 36);
         this.apply('timers');
     }

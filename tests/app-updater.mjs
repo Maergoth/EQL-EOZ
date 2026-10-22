@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 
 const require = createRequire(import.meta.url);
 const { AppUpdater, RELEASES_URL, MAX_METADATA_BYTES, MAX_INSTALLER_BYTES, compareVersions, selectRelease,
-    isReleaseNotesUrl, trustedDownloadRedirect, launchSilentNsisInstaller, resolveInstalledNsisScope, readNsisInstallLocation, NSIS_INSTALL_KEY, NSIS_REGISTRY_READ_SCRIPT } = require('../desktop/app-updater.cjs');
+    isReleaseNotesUrl, trustedDownloadRedirect, updateArtifact, launchSilentNsisInstaller, resolveInstalledNsisScope, readNsisInstallLocation, NSIS_INSTALL_KEY, NSIS_REGISTRY_READ_SCRIPT } = require('../desktop/app-updater.cjs');
 const installer = Buffer.from('MZ synthetic installer fixture; never executed.');
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const jsonResponse = value => new Response(JSON.stringify(value));
@@ -22,6 +22,12 @@ const release = (version = '0.8.2', overrides = {}) => {
         name, size:installer.length, digest:`sha256:${sha256(installer)}`,
         browser_download_url:`https://github.com/Maergoth/EQL-EOZ/releases/download/${tag}/${name}`
     }], ...overrides };
+};
+const linuxRelease = (format = 'AppImage', version = '0.8.2') => {
+    const value = release(version);
+    const name = `EQLWiki-Eye-of-Zomm-${version}-x64.${format}`;
+    return { ...value, assets:[{ ...value.assets[0], name,
+        browser_download_url:`https://github.com/Maergoth/EQL-EOZ/releases/download/v${version}/${name}` }] };
 };
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
@@ -92,7 +98,8 @@ test('release notes and redirects stay within the exact project and GitHub asset
 });
 
 test('development and unsupported platforms never access the update network or cache', async () => {
-    for (const options of [{ isPackaged:false }, { platform:'linux' }, { arch:'arm64' }]) {
+    for (const options of [{ isPackaged:false }, { platform:'darwin' }, { arch:'arm64' },
+        { platform:'linux', arch:'arm64' }, { platform:'linux', linuxPackage:'exe' }]) {
         await withUpdater(async ({ updater, calls, directory }) => {
             assert.equal((await updater.startup()).status, 'unsupported');
             await updater.check(); await updater.download(); await updater.install();
@@ -100,6 +107,83 @@ test('development and unsupported platforms never access the update network or c
             assert.deepEqual(await readdir(directory), []);
         }, options);
     }
+});
+
+test('one release selects the exact Windows, Linux AppImage or deb package without architecture fallback', () => {
+    const mixed = release();
+    mixed.assets.push(...linuxRelease().assets, ...linuxRelease('deb').assets);
+    assert.equal(selectRelease([mixed], '0.8.1').name, release().assets[0].name);
+    for (const linuxPackage of ['AppImage', 'deb']) {
+        const options = { platform:'linux', arch:'x64', linuxPackage };
+        assert.equal(selectRelease([mixed], '0.8.1', options).name, linuxRelease(linuxPackage).assets[0].name);
+        assert.throws(() => selectRelease([release()], '0.8.1', options), /Linux x64/);
+        const duplicate = { ...mixed, assets:[...mixed.assets, ...linuxRelease(linuxPackage).assets] };
+        assert.throws(() => selectRelease([duplicate], '0.8.1', options), /one Linux/);
+        const wrongDigest = linuxRelease(linuxPackage); delete wrongDigest.assets[0].digest;
+        assert.throws(() => selectRelease([wrongDigest], '0.8.1', options), /SHA-256/);
+    }
+    assert.equal(updateArtifact({platform:'linux',arch:'arm64'}),null);
+    assert.throws(() => selectRelease([mixed], '0.8.1', {platform:'linux',arch:'arm64'}), /platform/);
+    assert.throws(() => selectRelease([release('0.8.3'), mixed], '0.8.1', {platform:'linux'}), /newest release/,
+        'An incomplete newest Linux release cannot silently choose an older package or Windows installer');
+});
+
+test('Linux packages verify, restore and open only on explicit request without quitting or running an installer', async () => {
+    for (const linuxPackage of ['AppImage', 'deb']) {
+        const requests = [], selected = linuxRelease(linuxPackage);
+        const options = { platform:'linux', linuxPackage, fetchImpl:async url => {
+            requests.push(url); return url === RELEASES_URL ? jsonResponse([selected]) : new Response(installer);
+        } };
+        await withUpdater(async ({updater,directory,defaults,launches,quits}) => {
+            const available = await updater.startup();
+            assert.equal(available.status,'available'); assert.equal(available.installMode,'manual-linux');
+            assert.equal(available.packageFormat,linuxPackage); assert.equal(requests.length,1);
+            assert.equal(launches.length,0); assert.equal(quits(),0);
+            const ready = await updater.download(); assert.equal(ready.status,'ready');
+            assert.match(ready.installationHint,linuxPackage==='deb'?/system package installer/:/mark it executable/);
+            assert.deepEqual(await readFile(path.join(directory,selected.assets[0].name)),installer);
+            const restored = new AppUpdater({...defaults,...options});
+            try {
+                assert.equal((await restored.getStatus()).status,'ready');
+                assert.equal(launches.length,0,'Restoring a package never opens it');
+                assert.equal((await restored.install()).status,'ready');
+                assert.deepEqual(launches,[path.join(await realpath(directory),selected.assets[0].name)]);
+                assert.equal(quits(),0,'Manual Linux package handoff leaves the app open');
+            } finally { restored.shutdown(); }
+            assert(requests.slice(1).every(url=>url===selected.assets[0].browser_download_url));
+        },options);
+    }
+});
+
+test('Linux retains a verified download after file-manager failure and rejects tampering before reveal', async () => {
+    const options = { platform:'linux', fetchImpl:async url => url===RELEASES_URL?jsonResponse([linuxRelease()]):new Response(installer),
+        launchInstaller:async()=> 'private native error' };
+    await withUpdater(async ({updater,quits}) => {
+        await updater.check(); await updater.download();
+        const failed = await updater.install(); assert.equal(failed.status,'ready');
+        assert.match(failed.error,/download folder/); assert(!failed.error.includes('private')); assert.equal(quits(),0);
+    },options);
+    await withUpdater(async ({updater,directory,launches,quits}) => {
+        await updater.check(); await updater.download();
+        await writeFile(path.join(directory,linuxRelease().assets[0].name),Buffer.alloc(installer.length));
+        const failed = await updater.install(); assert.equal(failed.status,'available');
+        assert.match(failed.error,/SHA-256/); assert.equal(launches.length,0); assert.equal(quits(),0);
+    },{...options,launchInstaller:undefined});
+});
+
+test('Linux saved packages cannot be restored from another platform or package format', async () => {
+    await withUpdater(async ({updater,defaults}) => {
+        await updater.check(); await updater.download();
+        const linux = new AppUpdater({...defaults,platform:'linux',linuxPackage:'AppImage'});
+        try { const state=await linux.getStatus(); assert.equal(state.status,'idle'); assert.match(state.error,/Linux x64 AppImage/); }
+        finally {linux.shutdown();}
+    });
+    await withUpdater(async ({updater,defaults}) => {
+        await updater.check(); await updater.download();
+        const otherFormat = new AppUpdater({...defaults,platform:'linux',linuxPackage:'deb'});
+        try { const state=await otherFormat.getStatus(); assert.equal(state.status,'idle'); assert.match(state.error,/Linux x64 deb/); }
+        finally {otherFormat.shutdown();}
+    },{platform:'linux',fetchImpl:async url=>url===RELEASES_URL?jsonResponse([linuxRelease()]):new Response(installer)});
 });
 
 test('quiet startup only checks metadata by default, then manual download verifies bytes', async () => {
@@ -542,7 +626,7 @@ test('preload exposes only the fixed updater actions and main rejects iframe or 
                 AppUpdater:class { constructor(options){updaterOptions.push(options);} getStatus() { return { status:'mocked' }; } install(){return {status:'installing'};} }, isReleaseNotesUrl,
                 launchSilentNsisInstaller:async(target,options)=>{silentLaunches.push({target,...options});return '';}
             } : nativeRequire(name),
-        __dirname:path.dirname(mainPath.pathname.replace(/^\/(\w:)/, '$1')), process, console, Buffer, URL, testWindow
+        __dirname:path.dirname(mainPath.pathname.replace(/^\/(\w:)/, '$1')), process:{...process,platform:'win32'}, console, Buffer, URL, testWindow
     });
     vm.runInContext(await readFile(mainPath, 'utf8'), context);
     vm.runInContext('windowRef = testWindow', context);
@@ -558,6 +642,32 @@ test('preload exposes only the fixed updater actions and main rejects iframe or 
     await assert.rejects(handler({ sender:contents, senderFrame:{ url:mainFrame.url } }, 'install'), /unavailable/);
     await assert.rejects(handler(trusted, 'arbitrary-action'), /Unknown/);
     await assert.rejects(handler(trusted, 'startup-download', 'true'), /Unknown/);
+});
+
+test('Linux main process reveals the verified package directory and never calls the Windows installer launcher', async () => {
+    const mainPath = new URL('../desktop/main.cjs', import.meta.url), nativeRequire = createRequire(mainPath);
+    for (const linuxPackage of ['AppImage','deb']) {
+        const handlers={},options=[],opened=[]; let silentLaunches=0;
+        const mainFrame={url:'http://127.0.0.1:53147/'},contents={mainFrame};
+        const context=vm.createContext({
+            require:name=>name==='electron'?{
+                app:{getVersion:()=> '0.8.1',getPath:()=>tmpdir(),requestSingleInstanceLock:()=>false,quit(){},on(){}},
+                shell:{openPath:async target=>{opened.push(target);return '';}},ipcMain:{handle:(name,handler)=>{handlers[name]=handler;}}
+            }:name==='./app-updater.cjs'?{
+                AppUpdater:class{constructor(value){options.push(value);}getStatus(){return {status:'mocked'};}},isReleaseNotesUrl,
+                launchSilentNsisInstaller:async()=>{silentLaunches++;return '';}
+            }:nativeRequire(name),
+            __dirname:path.dirname(mainPath.pathname.replace(/^\/(\w:)/,'$1')),
+            process:{...process,platform:'linux',env:{...process.env,APPIMAGE:linuxPackage==='AppImage'?'/fixture/Eye of Zomm.AppImage':''}},
+            console,Buffer,URL,testWindow:{isDestroyed:()=>false,webContents:contents}
+        });
+        vm.runInContext(await readFile(mainPath,'utf8'),context);vm.runInContext('windowRef = testWindow',context);
+        await handlers['eye-of-zomm:app-update']({sender:contents,senderFrame:mainFrame},'get-status');
+        assert.equal(options[0].linuxPackage,linuxPackage);
+        const target=path.join(tmpdir(),'verified-update',`EQLWiki-Eye-of-Zomm-0.8.2-x64.${linuxPackage}`);
+        assert.equal(await options[0].launchInstaller(target),'');
+        assert.deepEqual(opened,[path.dirname(target)]);assert.equal(silentLaunches,0);
+    }
 });
 
 let failures = 0;

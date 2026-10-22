@@ -1,0 +1,83 @@
+name: Linux packages
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      bootstrap_artifact:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install native runtime and packaging prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb openbox dbus-x11 libgtk-3-0 libnss3 libasound2 libgbm1 libfuse2 rpm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Audit dependencies
+        run: npm run audit:deps
+      - name: Test full source suite
+        run: npm test
+      - name: Test actual Linux native windows and shared application session
+        run: |
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' bash -euc '
+            openbox >/tmp/eoz-openbox.log 2>&1 &
+            npm run test:desktop-worker
+            npm run test:window-lifecycle
+            npm run test:map-layout
+            npm run test:map-overlay-3d
+            npm run test:native-overlays -- --screenshots ci-screenshots/linux
+            npm run test:discovery-notices
+            npm run test:appearance -- --screenshots ci-screenshots/linux-appearance
+          '
+      - name: Fetch production bootstrap data
+        if: inputs.bootstrap_artifact == ''
+        run: node scripts/fetch-bootstrap-pack.mjs --required
+      - name: Download shared verified release bootstrap
+        if: inputs.bootstrap_artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.bootstrap_artifact }}
+          path: app/data
+      - name: Test production catalog relevance
+        run: npm run test:catalog
+      - name: Build Linux x64 AppImage and Debian package
+        run: npm run dist:linux
+      - name: Verify exact Linux ASAR sources and shared bootstrap bytes
+        run: npm run test:artifact -- --platform linux
+      - name: Test actual packaged renderer appearance and shared session
+        run: |
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' bash -euc '
+            openbox >/tmp/eoz-packaged-openbox.log 2>&1 &
+            node scripts/test-linux-package.mjs
+            npm run test:appearance -- --packaged-root dist/linux-unpacked/resources/app.asar --screenshots ci-screenshots/linux-packaged
+          '
+      - name: Hash release assets
+        run: node scripts/release-assets.mjs linux
+      - name: Upload Linux release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: EQLWiki-Eye-of-Zomm-Linux-x64
+          path: |
+            dist/EQLWiki-Eye-of-Zomm-*-x64.AppImage
+            dist/EQLWiki-Eye-of-Zomm-*-x64.deb
+            dist/SHA256SUMS-Linux-x64.txt
+          if-no-files-found: error
+      - name: Upload Linux synthetic interface captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EoZ-Linux-interface-captures
+          path: ci-screenshots/**/*.png
+          if-no-files-found: ignore

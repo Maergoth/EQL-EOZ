@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, utimes, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, utimes, rm, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -38,6 +38,15 @@ try {
     assert(await newestEqLog(root) === newLog, 'automatic mode chooses most recently modified eqlog');
     assert(await resolveConfiguredLog({ eqRootPath:root, logSelection:'automatic' }) === newLog, 'automatic configuration follows newest log');
     assert(await resolveConfiguredLog({ eqRootPath:root, logPath:oldLog, logSelection:'manual' }) === oldLog, 'manual configuration keeps chosen log');
+    if(process.platform === 'linux') {
+        const lowerLogs=join(root,'logs');await rename(logs,lowerLogs);
+        const nativeNewLog=join(lowerLogs,'eqlog_Second_server.txt');
+        assert(await newestEqLog(root)===nativeNewLog,'Case-sensitive host resolves lowercase Proton/Wine logs with exact on-disk spelling');
+        assert(await resolveConfiguredLog({eqRootPath:root,logSelection:'automatic'})===nativeNewLog,'Automatic selection uses the resolved native directory');
+        assert(inferEqRootPath(nativeNewLog)===root,'Native Proton/Wine log path infers its game root');
+        await mkdir(join(root,'LOGS'));
+        assert(await newestEqLog(root)==='','Ambiguous case variants do not silently select a different game log directory');
+    }
 } finally {
     await rm(root, { recursive:true, force:true });
 }

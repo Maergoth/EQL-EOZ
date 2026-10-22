@@ -1,6 +1,7 @@
 // A lightweight native-window renderer. Session ownership and all log reads stay
 // in the main app; opening or reloading a panel cannot create another parser.
 import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
+import { applyAppearance } from './appearance.js';
 const PANELS = Object.freeze({ parse:'Parse', intel:'Zone & loot', timers:'Triggers', map:'Map' });
 // PNUT M&M 28bbf8d _TabStrip/_HeaderBar and compact MeterTable, translated
 // to native Electron panels with EQL colors and this app's supported metrics.
@@ -182,7 +183,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     const listen = (target,name,callback) => { target?.addEventListener(name,callback); listeners.push(() => target?.removeEventListener(name,callback)); };
     const session = () => state.snapshot?.session || {};
     const replace = (element, html) => { if (element && element.innerHTML !== html) element.innerHTML = html; };
-    const report = message => { status = message; $('#overlay-status').textContent = message; };
+    const report = message => { status = message; $('#overlay-status').textContent = message; measureTimers(); };
     const overlayItemForTarget = target => {
         const context = target?.dataset?.itemContext;
         const npc = context?.startsWith('intel:') ? session().intel?.npcs?.[Number(context.slice(6))] : null;
@@ -231,7 +232,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     }
     function measureTimers() {
         if (disposed || panel !== 'timers') return;
-        const height = Math.max(36,Math.ceil(10 + ['#timer-list','#swing-body','#wiki-discovery-notices'].reduce((sum,selector) => sum + ($('#panel-content').querySelector(selector)?.getBoundingClientRect().height || 0),0)));
+        const height = Math.max(36,Math.ceil(10 + ['#timer-list','#swing-body','#wiki-discovery-notices','#session-restart','#overlay-status'].reduce((sum,selector) => sum + ($(selector)?.getBoundingClientRect().height || 0),0)));
         if (height !== measuredTimerHeight) {measuredTimerHeight = height; void Promise.resolve(bridge?.action?.('content-height',height)).catch(() => {});}
     }
     if (panel === 'timers') {
@@ -282,7 +283,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         if (disposed) return;
         const prefs = state.preferences || {};
         document.documentElement.style.setProperty('--panel-opacity', String(Math.min(1, Math.max(.15, number(prefs.backgroundOpacity) || .85))));
-        document.documentElement.style.setProperty('--font-scale', String(Math.min(1.75, Math.max(.75, number(prefs.fontScale) || 1))));
+        applyAppearance(document,state.appearance,{panelScale:Number(prefs.fontScale) || 1});
         $('#overlay').classList.toggle('is-locked', Boolean(prefs.locked));
         if (panel !== 'timers') {
             $('#layout-lock').checked = Boolean(prefs.locked); $('#ignore-mouse').checked = Boolean(prefs.passThrough);
@@ -343,6 +344,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             else if (element.dataset.sessionDisabled) { element.disabled = false; delete element.dataset.sessionDisabled; }
         });
         $('#overlay-status').textContent = state.sessionAvailable !== true ? 'Session paused · open main app.' : status;
+        measureTimers();
     }
     listen($('#panel-menu-button'),'click',event => { const menu = event.currentTarget.closest('.hover-menu'); menu.classList.remove('is-dismissed'); const open = menu.classList.toggle('is-open'); event.currentTarget.setAttribute('aria-expanded',String(open)); });
     listen($('.hover-menu'),'mouseleave',event => event.currentTarget.classList.remove('is-dismissed'));

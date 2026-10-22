@@ -1,7 +1,8 @@
 'use strict';
 
 // Application releases are independent of the wiki dataset. Only an explicit
-// install request may hand a verified NSIS package to Windows; startup never does.
+// install request may hand a verified NSIS package to Windows. Linux downloads
+// are revealed for manual installation; neither platform installs at startup.
 const crypto = require('node:crypto');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
@@ -137,7 +138,16 @@ function isReleaseNotesUrl(value) {
     } catch { return false; }
 }
 
-function validateRelease(payload, currentVersion) {
+function updateArtifact({ platform = 'win32', arch = 'x64', linuxPackage = 'AppImage' } = {}) {
+    if (arch !== 'x64') return null;
+    if (platform === 'win32') return { platform, arch, format:'exe', prefix:'EQLWiki-Eye-of-Zomm-Setup-', suffix:'-x64.exe' };
+    if (platform === 'linux' && ['AppImage', 'deb'].includes(linuxPackage)) return {
+        platform, arch, format:linuxPackage, prefix:'EQLWiki-Eye-of-Zomm-', suffix:`-x64.${linuxPackage}`
+    };
+    return null;
+}
+
+function validateRelease(payload, currentVersion, options = {}) {
     const tag = payload.tag_name;
     if (typeof tag !== 'string' || !tag.startsWith('v')) throw new UpdateError('The release tag is unsupported.');
     const parsed = parseVersion(tag);
@@ -145,9 +155,11 @@ function validateRelease(payload, currentVersion) {
     const isPrerelease = Boolean(payload.prerelease || parsed.prerelease.length);
     if (isPrerelease && (!(current.numbers[0] === 0 || current.prerelease.length) || parsed.numbers[0] !== current.numbers[0])) return null;
     if (compareVersions(parsed, current) <= 0) return null;
-    const name = `EQLWiki-Eye-of-Zomm-Setup-${parsed.version}-x64.exe`;
+    const artifact = updateArtifact(options);
+    if (!artifact) throw new UpdateError('Application updates are unavailable for this platform.');
+    const name = `${artifact.prefix}${parsed.version}${artifact.suffix}`;
     const matches = Array.isArray(payload.assets) ? payload.assets.filter(asset => asset?.name === name) : [];
-    if (matches.length !== 1) throw new UpdateError('The newest release does not have one Windows x64 installer. Try again later.');
+    if (matches.length !== 1) throw new UpdateError(`The newest release does not have one ${artifact.platform === 'win32' ? 'Windows x64 installer' : `Linux x64 ${artifact.format} package`}. Try again later.`);
     const asset = matches[0];
     const url = `https://github.com/${REPOSITORY}/releases/download/${tag}/${name}`;
     if (asset.browser_download_url !== url) throw new UpdateError('The release installer address is unexpected.');
@@ -156,7 +168,7 @@ function validateRelease(payload, currentVersion) {
     return Object.freeze({ version:parsed.version, tag, name, url, size:asset.size, sha256:asset.digest.slice(7).toLowerCase(), releaseUrl:releaseNotesUrl(tag) });
 }
 
-function selectRelease(payload, currentVersion) {
+function selectRelease(payload, currentVersion, options = {}) {
     if (!Array.isArray(payload)) throw new UpdateError('GitHub returned invalid application release information.');
     const current = parseVersion(currentVersion);
     const candidates = payload.filter(release => {
@@ -168,7 +180,7 @@ function selectRelease(payload, currentVersion) {
             return true;
         } catch { return false; }
     }).sort((a, b) => compareVersions(b.tag_name, a.tag_name));
-    return candidates.length ? validateRelease(candidates[0], currentVersion) : null;
+    return candidates.length ? validateRelease(candidates[0], currentVersion, options) : null;
 }
 
 function trustedDownloadRedirect(value, originalUrl) {
@@ -256,13 +268,16 @@ async function assertNormalDirectoryAncestors(directory) {
 }
 
 class AppUpdater {
-    constructor({ version, cacheDirectory, isPackaged = false, platform = process.platform, arch = process.arch, fetchImpl = globalThis.fetch,
+    constructor({ version, cacheDirectory, isPackaged = false, platform = process.platform, arch = process.arch, linuxPackage = 'AppImage', fetchImpl = globalThis.fetch,
         launchInstaller = async () => 'No installer launcher configured.', onInstallerLaunched = () => {},
         now = () => new Date(), metadataTimeoutMs = METADATA_TIMEOUT_MS, downloadTimeoutMs = DOWNLOAD_TIMEOUT_MS }) {
         parseVersion(version);
         this.version = version;
         this.directory = path.resolve(cacheDirectory);
-        this.supported = Boolean(isPackaged && platform === 'win32' && arch === 'x64');
+        this.artifact = updateArtifact({ platform, arch, linuxPackage });
+        this.target = { platform, arch, linuxPackage };
+        this.supported = Boolean(isPackaged && this.artifact);
+        this.manualInstall = platform === 'linux';
         this.fetch = fetchImpl;
         this.launchInstaller = launchInstaller;
         this.onInstallerLaunched = onInstallerLaunched;
@@ -274,6 +289,10 @@ class AppUpdater {
         this.active = null;
         this.initialization = null;
         this.state = { supported:this.supported, platform, isPackaged:Boolean(isPackaged), automaticDownload:false,
+            installMode:this.manualInstall ? 'manual-linux' : 'silent-nsis', packageFormat:this.artifact?.format || '',
+            installationHint:this.manualInstall ? (linuxPackage === 'AppImage'
+                ? 'Quit Eye of Zomm, replace your existing AppImage with this download at the same path and filename, mark it executable, then reopen it. Your existing profile is retained.'
+                : 'Quit Eye of Zomm, install the downloaded .deb with your system package installer, then reopen Eye of Zomm. Your existing profile is retained.') : '',
             status:this.supported ? 'idle' : 'unsupported', currentVersion:version, availableVersion:'', downloadedBytes:0,
             totalBytes:0, lastCheckUtc:'', releaseUrl:'', error:'' };
     }
@@ -343,7 +362,7 @@ class AppUpdater {
                 if (record?.schema !== 1 || !record.release) return;
                 const saved = record.release;
                 const release = validateRelease({ tag_name:saved.tag, prerelease:parseVersion(saved.tag).prerelease.length > 0,
-                    assets:[{ name:saved.name, browser_download_url:saved.url, size:saved.size, digest:`sha256:${saved.sha256}` }] }, this.version);
+                    assets:[{ name:saved.name, browser_download_url:saved.url, size:saved.size, digest:`sha256:${saved.sha256}` }] }, this.version, this.target);
                 if (!release || release.version !== saved.version) return;
                 await this.verifyInstaller(release);
                 this.pending = release;
@@ -398,7 +417,7 @@ class AppUpdater {
             let payload;
             try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
             catch { throw new UpdateError('GitHub returned invalid application release information.'); }
-            const release = selectRelease(payload, this.version);
+            const release = selectRelease(payload, this.version, this.target);
             this.release = release || this.pending;
             Object.assign(this.state, { lastCheckUtc:this.now().toISOString(), error:'',
                 status:this.release ? (this.pending?.version === this.release.version ? 'ready' : 'available') : 'current',
@@ -447,9 +466,8 @@ class AppUpdater {
         const entries = await fsp.readdir(this.directory, { withFileTypes:true }).catch(() => []);
         for (const entry of entries) {
             if (entry.name === keep || !entry.isFile()) continue;
-            const match = /^EQLWiki-Eye-of-Zomm-Setup-(.+)-x64\.exe$/.exec(entry.name);
-            if (!match) continue;
-            try { parseVersion(match[1]); } catch { continue; }
+            if (!entry.name.startsWith(this.artifact.prefix) || !entry.name.endsWith(this.artifact.suffix)) continue;
+            try { parseVersion(entry.name.slice(this.artifact.prefix.length, -this.artifact.suffix.length)); } catch { continue; }
             await fsp.unlink(path.join(this.directory, entry.name)).catch(() => {});
         }
     }
@@ -484,8 +502,9 @@ class AppUpdater {
             }
             operation.controller.signal.throwIfAborted();
             const error = await this.launchInstaller(target);
-            if (error) throw new UpdateError('Windows could not start the update installer. Try again.');
-            await this.onInstallerLaunched();
+            if (error) throw new UpdateError(this.manualInstall ? 'The download folder could not be opened. Try again.' : 'Windows could not start the update installer. Try again.');
+            if (this.manualInstall) this.state.status = 'ready';
+            else await this.onInstallerLaunched();
         } catch (error) { this.failure(error, operation); }
         finally { this.finish(operation); }
         return this.snapshot();
@@ -502,4 +521,4 @@ class AppUpdater {
 }
 
 module.exports = { AppUpdater, UpdateError, launchSilentNsisInstaller, resolveInstalledNsisScope, readNsisInstallLocation, NSIS_INSTALL_KEY, NSIS_REGISTRY_READ_SCRIPT, RELEASES_URL, MAX_METADATA_BYTES, MAX_INSTALLER_BYTES, parseVersion, compareVersions,
-    selectRelease, isReleaseNotesUrl, trustedDownloadRedirect, consumeResponse };
+    selectRelease, updateArtifact, isReleaseNotesUrl, trustedDownloadRedirect, consumeResponse };

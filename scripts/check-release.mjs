@@ -49,7 +49,7 @@ for (const required of ['outdoor-open', 'indoor-corridor', 'stacked-floor-stairs
     if (!routeCorpus.includes(required)) throw new Error(`Route corpus is missing: ${required}`);
 }
 
-for (const relative of ['../.github/workflows/build-windows.yml', '../.github/workflows/release.yml']) {
+for (const relative of ['../.github/workflows/build-windows.yml']) {
     const workflow = readFileSync(new URL(relative, import.meta.url), 'utf8');
     for (const required of ['npm ci', 'npm run audit:deps', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog', 'npm run test:artifact', 'Determine signing mode', 'Get-AuthenticodeSignature', "steps.signing.outputs.enabled == 'true'", 'unsigned Windows']) {
         if (!workflow.includes(required)) throw new Error(`${relative} is missing release gate: ${required}`);
@@ -58,14 +58,31 @@ for (const relative of ['../.github/workflows/build-windows.yml', '../.github/wo
 }
 
 const windowsWorkflow = readFileSync(new URL('../.github/workflows/build-windows.yml', import.meta.url), 'utf8');
-for (const required of ['contents: write', 'cancel-in-progress: true', 'Determine beta release', '$global:LASTEXITCODE = 0', "steps.beta.outputs.publish == 'true'", 'Publish beta GitHub release', 'prerelease: true', 'make_latest: false']) {
-    if (!windowsWorkflow.includes(required)) throw new Error(`Windows workflow is missing beta release behavior: ${required}`);
+for (const required of ['workflow_call:', 'bootstrap_artifact:', 'Download shared verified release bootstrap', "inputs.bootstrap_artifact == ''", "inputs.bootstrap_artifact != ''", 'SHA256SUMS-Windows-x64.txt', 'npm run test:appearance']) {
+    if (!windowsWorkflow.includes(required)) throw new Error(`Windows workflow is missing shared release behavior: ${required}`);
 }
+if (windowsWorkflow.includes('action-gh-release') || windowsWorkflow.includes('gh release create')) throw new Error('The Windows build must not independently publish a release.');
 
 const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
-for (const required of ['Determine release channel', 'steps.channel.outputs.prerelease', "steps.channel.outputs.prerelease == 'false'"]) {
-    if (!releaseWorkflow.includes(required)) throw new Error(`Release workflow is missing prerelease classification: ${required}`);
+for (const required of ['branches: [ main ]', 'prepare-bootstrap:', 'fetch-bootstrap-pack.mjs --required', 'app/data/eye-of-zomm-pack.bootstrap.json', 'bootstrap_artifact: EoZ-release-bootstrap', 'needs: prepare-bootstrap', 'needs: [ prepare-bootstrap, release-windows, release-linux ]', 'Determine release channel', 'Preserving existing', 'Tag must match package version', 'different source commit', 'release-assets.mjs win32 --verify', 'release-assets.mjs linux --verify', '--draft', '--draft=false', '--latest=false']) {
+    if (!releaseWorkflow.includes(required)) throw new Error(`Release workflow is missing unified publication gate: ${required}`);
 }
+if ((releaseWorkflow.match(/gh release create/g) || []).length !== 1) throw new Error('Exactly one job must create the shared Windows/Linux release.');
+if ((releaseWorkflow.match(/bootstrap_artifact: EoZ-release-bootstrap/g) || []).length !== 2) throw new Error('Both release builds must consume the same verified bootstrap generation.');
+for (const required of ['Complete published release matches; preserving every existing asset.', '--directory published-assets', 'cmp dist/SHA256SUMS-Windows-x64.txt', 'cmp dist/SHA256SUMS-Linux-x64.txt', 'Refusing to repair a draft without matching source ownership.']) {
+    if (!releaseWorkflow.includes(required)) throw new Error(`Published-release immutability gate is missing: ${required}`);
+}
+for (const required of ['release-assets.mjs --notes --source-commit', '--notes-file dist/RELEASE_NOTES.md']) {
+    if (!releaseWorkflow.includes(required)) throw new Error(`Automatic platform download links are missing: ${required}`);
+}
+
+const linuxWorkflow = readFileSync(new URL('../.github/workflows/build-linux.yml', import.meta.url), 'utf8');
+for (const required of ['ubuntu-22.04', 'npm ci', 'npm run audit:deps', 'npm test', 'xvfb-run', 'openbox', 'npm run test:native-overlays', 'npm run test:map-overlay-3d', 'npm run test:appearance', 'node scripts/test-linux-package.mjs', '--packaged-root dist/linux-unpacked/resources/app.asar', 'fetch-bootstrap-pack.mjs --required', 'Download shared verified release bootstrap', "inputs.bootstrap_artifact == ''", "inputs.bootstrap_artifact != ''", 'npm run test:catalog', 'npm run dist:linux', 'npm run test:artifact -- --platform linux', 'SHA256SUMS-Linux-x64.txt']) {
+    if (!linuxWorkflow.includes(required)) throw new Error(`Linux workflow is missing native/package release gate: ${required}`);
+}
+if (linuxWorkflow.includes('action-gh-release') || linuxWorkflow.includes('gh release create')) throw new Error('The Linux build must not independently publish a release.');
+if (pkg.desktopName !== 'com.eqlwiki.eyeofzomm.desktop' || pkg.build?.linux?.syncDesktopName !== true || pkg.build?.linux?.executableName !== 'eqlwiki-eye-of-zomm') throw new Error('Linux desktop identity must match the runtime and packaged executable.');
+if (!['AppImage','deb'].every(target => pkg.build?.linux?.target?.some(entry => entry.target === target && entry.arch.includes('x64')))) throw new Error('The shared release must include Linux x64 AppImage and Debian targets.');
 
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 for (const required of ['npm run audit:deps', 'npm test', 'fetch-bootstrap-pack.mjs --required', 'npm run test:catalog']) {

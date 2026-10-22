@@ -1,10 +1,14 @@
 # Eye of Zomm — Product and UX Vision
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.8.7
-Last updated: 2026-10-21
+Baseline: 0.8.8
+Last updated: 2026-10-22
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
+
+The 0.8.8 [font/Linux follow-up](FONTS_LINUX.md) adds shared typography settings
+and Linux packages to the same codebase. Keep the log-only data boundary and
+distinguish X11 CI behavior from native Wayland and foreground-game acceptance.
 
 The current Intel/session follow-up is indexed in
 [OVERLAY_MAP_WORKSPACE.md](OVERLAY_MAP_WORKSPACE.md). Triggers retains the

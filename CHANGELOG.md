@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.8 - Font controls and Linux releases
+
+- Add saved font-family and base text-size controls in Settings, shared by the main app and native overlays while retaining per-panel text adjustments.
+- Ship Linux x64 AppImage and deb packages alongside the Windows installer in one versioned release.
+- Use native Linux file paths and preserve log-directory filename case, including selected Wine/Proton installations.
+- Prefer X11/XWayland for positioned Linux overlays when available; keep explicit backend choices and document native Wayland limits.
+- Offer verified Linux update downloads with a clear manual package handoff, while preserving the Windows silent restart/install flow.
+- Gate publication on both platform builds and a shared verified wiki bootstrap generation.
+
 ## 0.8.7 - Triggers, session controls and complete Intel loot
 
 - Rename the Timers workspace and overlay to Triggers; keep existing saved definitions, countdowns and layouts.
