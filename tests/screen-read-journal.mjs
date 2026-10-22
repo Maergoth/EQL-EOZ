@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readdir,appendFile,writeFile,readFile,utimes} from 'node:fs/promises';
 import {tmpdir} from 'node:os';import {join} from 'node:path';import {createRequire} from 'node:module';
+import vm from 'node:vm';
 const {ScreenReadJournal}=createRequire(import.meta.url)('../desktop/screen-read-journal.cjs');
 const root=await mkdtemp(join(tmpdir(),'eoz-journal-test-'));
 const observation=id=>({id,kind:'ocr',subject:{kind:'item',name:'Synthetic Blade'},fields:[{key:'ac',raw:'AC 12',value:12}],evidence:{text:'Synthetic text',imageId:null}});
@@ -32,8 +33,23 @@ try{
     const fresh=new ScreenReadJournal({root:join(root,'retention'),retentionMs:1000});await fresh.initialize();
     assert.equal((await fresh.read()).records.length,0,'expired raw history is pruned after its cursor is recovered');
     assert.equal((await fresh.append(observation('new'))).sequence,2);await fresh.close();
+    let clock=Date.now();const idleRoot=join(root,'long-idle'),idle=new ScreenReadJournal({root:idleRoot,now:()=>clock});
+    await idle.append(observation('idle-current'));assert.ok(idle.segment);clock+=8*86400000;
+    const expired=await idle.read({afterSequence:0});assert.equal(expired.records.length,0,'read prunes the expired current segment without an append or restart');assert.equal(expired.lastSequence,1);assert.equal(expired.historyGap,true);assert.equal(idle.segment,null);
+    await idle.close();const idleRestart=new ScreenReadJournal({root:idleRoot,now:()=>clock});
+    const absent=await idleRestart.read({afterSequence:0});assert.equal(absent.lastSequence,1);assert.equal(absent.historyGap,true,'a durable cursor with no retained records still reports the pruned gap after restart');
+    clock=Date.now();assert.equal((await idleRestart.append(observation('after-idle'))).sequence,2);const resumed=await idleRestart.read({afterSequence:0});assert.deepEqual(resumed.records.map(record=>record.sequence),[2]);assert.equal(resumed.historyGap,true);
+    await Promise.all([idleRestart.clear(),idleRestart.append(observation('after-concurrent-clear'))]);assert.deepEqual((await idleRestart.read({afterSequence:2})).records.map(record=>record.sequence),[3],'cleanup and append serialize without deleting the new observation');await idleRestart.close();
+    const timers=[],require=createRequire(import.meta.url),sandbox={module:{exports:{}},require,Buffer,
+        setInterval:(callback,interval)=>{const timer={callback,interval,unref(){this.unreferenced=true;}};timers.push(timer);return timer;},clearInterval:timer=>{if(timer)timer.cleared=true;}};
+    vm.runInNewContext(await readFile(new URL('../desktop/screen-read-journal.cjs',import.meta.url),'utf8'),sandbox,{filename:'screen-read-journal.cjs'});
+    clock=Date.now();const maintainedRoot=join(root,'idle-maintenance'),maintained=new sandbox.module.exports.ScreenReadJournal({root:maintainedRoot,now:()=>clock});
+    await maintained.append(observation('expired-without-read'));assert.equal(timers[0].interval,3600000);assert.equal(timers[0].unreferenced,true);
+    clock+=8*86400000;await timers[0].callback();assert.equal((await readdir(maintainedRoot)).filter(name=>name.endsWith('.ndjson')).length,0,'hourly idle maintenance removes the expired current segment without any read or append');assert.equal(maintained.segment,null);assert.equal(maintained.sequence,1);
+    clock=Date.now();await Promise.all([maintained.maintain(),maintained.append(observation('after-maintenance'))]);assert.equal(maintained.sequence,2);assert.equal((await maintained.read({afterSequence:1})).records[0].id,'after-maintenance');
+    await maintained.close();assert.equal(timers[0].cleared,true,'shutdown clears idle cleanup scheduling');
     const invalid=new ScreenReadJournal({root:join(root,'unsafe')});await invalid.initialize();
     await writeFile(join(root,'unsafe','screen-read-20261022-0000000000000000.ndjson'),'x'.repeat(5*1024*1024));
     await assert.rejects(invalid.read(),/size/);await invalid.close();
 }finally{await rm(root,{recursive:true,force:true});}
-console.log('Private screen-read journal: serialization, replay, crash tails, corruption, retention, bounded queues and durable cursors passed.');
+console.log('Private screen-read journal: serialized replay/cleanup, crash tails, corruption, long-idle active-segment expiry, hourly maintenance, bounded queues and durable cursor gaps passed.');

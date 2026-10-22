@@ -7,6 +7,12 @@ const path = require('node:path');
 const PRODUCTION_ORIGIN = 'https://eqlwiki.com';
 const MAX_JSON = 2 * 1024 * 1024, MAX_PAGE = 512 * 1024, MAX_PNG = 12 * 1024 * 1024;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
+function normalizeWikiSubmissionText(text) {
+    // Match MediaWiki TextContent::normalizeLineEndings plus Parser's NUL
+    // removal/rtrim. PHP's default rtrim is ASCII-only: preserve NBSP, form
+    // feed, internal whitespace and all other semantic source differences.
+    return text.replace(/\0/g,'').replace(/[ \t\n\r\v]+$/,'').replace(/\r\n?/g,'\n');
+}
 const models = () => import('../app/contribution-model.js');
 const copy = value => JSON.parse(JSON.stringify(value));
 const safeMessage = value => String(value || 'The wiki request could not complete.').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,500);
@@ -148,7 +154,7 @@ class WikiClient {
             if(draft.kind==='item'&&!/<onlyinclude>[\s\S]*<\/onlyinclude>/i.test(editedText))throw new WikiError('draft','Keep the item template inside onlyinclude for existing wiki hover contracts.');
             afterText=editedText;plan.warnings.push('The primary wikicode was manually edited; review the complete text.');
         }
-        const addPage=(state,after,role)=>{const page={id:this.id(),title:state.title,pageId:state.pageId,operation:state.missing?'create':'replace-reviewed',beforeText:state.content,afterText:after,baseRevision:state.revision,baseTimestamp:state.timestamp,startTimestamp:state.startTimestamp,beforeHash:hash(state.content),afterHash:hash(after),role,status:'pending',result:null};plan.pages.push(page);};
+        const addPage=(state,after,role)=>{const afterText=normalizeWikiSubmissionText(after);const page={id:this.id(),title:state.title,pageId:state.pageId,operation:state.missing?'create':'replace-reviewed',beforeText:state.content,afterText,baseRevision:state.revision,baseTimestamp:state.timestamp,startTimestamp:state.startTimestamp,beforeHash:hash(state.content),afterHash:hash(afterText),role,status:'pending',result:null};plan.pages.push(page);};
         addPage(primary,afterText,'primary');
         for(const related of (Array.isArray(relatedPages)?relatedPages:[]).slice(0,10)){
             const title=contributionTitle(related.title);if(plan.pages.some(page=>page.title===title))throw new WikiError('plan','Each page can appear only once in a contribution.');
@@ -178,12 +184,15 @@ class WikiClient {
                 if(page.status==='applied')continue;
                 await this.expectedUser(plan.expectedUser);
                 const state=await this.page(page.title);
-                if(hash(state.content)===page.afterHash&&!state.missing){page.status='applied';page.result={revision:state.revision,reconciled:true};await this.persist();continue;}
+                // Also handle plans saved before submission normalization was
+                // added, without changing their approved review digest.
+                const afterText=normalizeWikiSubmissionText(page.afterText);
+                if(hash(state.content)===hash(afterText)&&!state.missing){page.status='applied';page.result={revision:state.revision,reconciled:true};await this.persist();continue;}
                 if(state.missing!==(page.operation==='create')||state.revision!==page.baseRevision||hash(state.content)!==page.beforeHash){page.status='failed';page.result={code:'editconflict',message:'The page changed after review. Prepare a new review for the unfinished work.'};await this.persist();break;}
                 const token=await this.csrf(plan.expectedUser);
                 page.status='unknown';page.result={code:'pending-write',message:'Waiting for the wiki to confirm this page.'};await this.persist();
                 try{
-                    const params={action:'edit',title:page.title,text:page.afterText,summary:'Player-reviewed Eye of Zomm contribution',assert:'user',assertuser:plan.expectedUser.name,token,starttimestamp:page.startTimestamp,watchlist:'preferences',...(page.operation==='create'?{createonly:'1'}:{nocreate:'1',baserevid:String(page.baseRevision)})};
+                    const params={action:'edit',title:page.title,text:afterText,summary:'Player-reviewed Eye of Zomm contribution',assert:'user',assertuser:plan.expectedUser.name,token,starttimestamp:page.startTimestamp,watchlist:'preferences',...(page.operation==='create'?{createonly:'1'}:{nocreate:'1',baserevid:String(page.baseRevision)})};
                     const result=await this.request(params,{post:true});
                     if(result.edit?.result!=='Success')throw new WikiError(result.edit?.code||'edit-result',result.edit?.info||'The wiki did not confirm this edit. Open the wiki editor to resolve any challenge.');
                     page.status='applied';page.result={revision:result.edit.newrevid||result.edit.oldrevid,pageId:result.edit.pageid,nochange:Boolean(result.edit.nochange)};await this.persist();
@@ -230,4 +239,4 @@ class WikiClient {
     }
     clearAccountState(){this.blueprintCache=null;for(const plan of this.plans.values())if(plan.status!=='submitted'){plan.blockers=[...new Set([...plan.blockers,'The account session changed. Prepare and review again.'])];plan.reviewDigest=this.digest(plan);}return this.persist();}
 }
-module.exports={WikiClient,WikiError,wikiOrigin,validatePNG,PRODUCTION_ORIGIN};
+module.exports={WikiClient,WikiError,wikiOrigin,validatePNG,normalizeWikiSubmissionText,PRODUCTION_ORIGIN};

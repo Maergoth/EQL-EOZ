@@ -24,8 +24,13 @@ Head `d1b4a9d` passed final CI `39871328293` and Windows installer
 checksums, packaged runtime/images and byte-identical Windows/AppImage/deb
 bootstraps are verified in private `eoz-0.8.9-release-verified.json`. Do not confuse that release PR with this feature
 branch. Feature commit `f116ef6` and merges `dedcca4`/`4cb8e2e` preserve both
-implementations; combined source and native font/cache/map checks pass. Create a
-separate draft PR, retain manual acceptance items and do not auto-promote it.
+implementations; combined source and native font/cache/map checks pass. The
+separate [draft PR #11](https://github.com/Maergoth/EQL-EOZ/pull/11) retains
+manual acceptance items; do not auto-promote it. Baseline feature CI
+`39873212882` and Windows installer `39873211969` passed before cross-review.
+Final capture/retention/wiki-retry fixes pass the complete local source suite,
+deterministic race/retention/retry fixtures and native capture/workspace checks;
+exact-head remote revalidation is pending.
 
 The new request authorizes local development and testing. Use isolated app
 profiles and synthetic/private fixtures. Do not replace the installed EoZ or
@@ -140,7 +145,7 @@ owner's sections or files; communicate interface changes first.
 | Wiki standard/auth/edit plan | wiki_contribution_089 | implemented, isolated validation | docs/design/WIKI_CONTRIBUTIONS.md; blueprint parser, hardened native auth, guarded multi-page plans, persisted partial retry and actual main/preload UI checks. Ownership returned to root. |
 | Capture/OCR journal | capture_pipeline_089 | implemented, private/synthetic validation | docs/design/CAPTURE_PIPELINE.md; coordinator, local OCR worker/runtime assets, private bounded journal and native/offline tests; handoff complete |
 | Character data/share model | character_model_089 | implemented, synthetic validation | slots, observed base/total stats, item card provenance, deterministic share renderer and tests |
-| App UI / integration / PR | root | implemented, local checks passed; draft PR preparation | Settings, tabs, offline Character import, guarded review/retry, current source/native checks and screenshots; Linux/packaged feature CI pending |
+| App UI / integration / PR | root | implemented; draft PR11 created | Settings, tabs, offline Character import, guarded review/retry, source/native checks and screenshots; baseline Windows/Linux packaged CI passed, final cross-review fixes pass locally with remote revalidation pending |
 | Versioned What's New | character_model_089 | 0.8.9 released; 0.9.0 candidate prepared | current feature captures plus historical screenshots, unseen labels and release gate; 29 versions/28 images |
 | Live Map loot pane / update UX | root | 0.8.9 released and merged into feature | right-hand full loot table, cache eviction on upgrade, checkbox layout, five-second Windows restart countdown |
 

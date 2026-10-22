@@ -15,6 +15,7 @@ class ScreenReadJournal {
         this.sequence = 0; this.segment = null; this.segmentSize = 0; this.day = '';
         this.queuedBytes = 0; this.queue = Promise.resolve(); this.closed = false;
         this.initialized = null; this.historyGap = false; this.warnings = [];
+        this.maintenanceTimer = null; this.maintenanceWarning = false;
     }
     async initialize() {
         if (!this.initialized) this.initialized = this._initialize();
@@ -36,6 +37,10 @@ class ScreenReadJournal {
             for (const record of records) this.sequence = Math.max(this.sequence, record.sequence);
         }
         await this._prune();
+        if(!this.closed&&!this.maintenanceTimer){
+            this.maintenanceTimer=setInterval(()=>this.maintain().catch(()=>{this.maintenanceWarning=true;}),3600000);
+            this.maintenanceTimer.unref?.();
+        }
     }
     async _files() {
         const entries = await fs.readdir(this.root, { withFileTypes:true });
@@ -75,10 +80,18 @@ class ScreenReadJournal {
     async _prune() {
         const files = await this._files(); let total = files.reduce((sum, file) => sum + file.size, 0);
         for (const file of files) {
-            if (file.name === this.segment) continue;
             if (this.now() - file.mtime <= this.retentionMs && total <= this.maxBytes) continue;
             await fs.unlink(path.join(this.root, file.name)); total -= file.size; this.historyGap = true;
+            if(file.name===this.segment){this.segment=null;this.segmentSize=0;this.day='';}
         }
+    }
+    maintain() {
+        if(this.closed)return Promise.resolve();
+        const operation=this.queue.then(async()=>{
+            if(this.closed)return;
+            await this.initialize();await this._prune();this.maintenanceWarning=false;
+        });
+        this.queue=operation.catch(()=>{});return operation;
     }
     append(observation) {
         if (this.closed) return Promise.reject(new Error('The capture journal has closed.'));
@@ -117,22 +130,29 @@ class ScreenReadJournal {
         return operation.finally(() => { this.queuedBytes -= estimated; });
     }
     async read({ afterSequence = 0, limit = 100 } = {}) {
-        await this.initialize(); await this.queue;
         if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) throw new Error('Invalid capture history cursor.');
         limit = Math.max(1, Math.min(500, Number(limit) || 100));
-        const records = [];
-        for (const entry of await this._files()) {
-            for (const record of (await this._readFile(entry.name)).records) if (record.sequence > afterSequence) records.push(record);
-        }
-        records.sort((a,b) => a.sequence - b.sequence);
-        return { records:records.slice(0,limit), lastSequence:this.sequence, historyGap:this.historyGap || Boolean(records.length && records[0].sequence>afterSequence+1),
-            warnings:this.warnings.length ? ['Some capture history was corrupt and could not be read.'] : [] };
+        const operation=this.queue.then(async()=>{
+            await this.initialize();await this._prune();
+            const records = [];
+            for (const entry of await this._files()) {
+                for (const record of (await this._readFile(entry.name)).records) if (record.sequence > afterSequence) records.push(record);
+            }
+            records.sort((a,b) => a.sequence - b.sequence);
+            const cursorGap=afterSequence>this.sequence||afterSequence<this.sequence&&(!records.length||records[0].sequence!==afterSequence+1||records.at(-1).sequence!==this.sequence||records.some((record,index)=>index&&record.sequence!==records[index-1].sequence+1));
+            return {records:records.slice(0,limit),lastSequence:this.sequence,historyGap:this.historyGap||cursorGap,
+                warnings:[...(this.warnings.length?['Some capture history was corrupt and could not be read.']:[]),...(this.maintenanceWarning?['Capture history cleanup could not complete. It will be retried.']:[])]};
+        });
+        this.queue=operation.catch(()=>{});return operation;
     }
     async clear() {
-        await this.initialize(); await this.queue;
-        for (const entry of await this._files()) await fs.unlink(path.join(this.root, entry.name));
-        this.segment = null; this.segmentSize = 0; this.historyGap = true; this.warnings = [];
+        const operation=this.queue.then(async()=>{
+            await this.initialize();
+            for (const entry of await this._files()) await fs.unlink(path.join(this.root, entry.name));
+            this.segment = null; this.segmentSize = 0; this.historyGap = true; this.warnings = [];this.maintenanceWarning=false;
+        });
+        this.queue=operation.catch(()=>{});return operation;
     }
-    async close() { this.closed = true; await this.queue; }
+    async close() { this.closed = true;clearInterval(this.maintenanceTimer);this.maintenanceTimer=null;await this.queue; }
 }
 module.exports = { ScreenReadJournal, MAX_RECORD };

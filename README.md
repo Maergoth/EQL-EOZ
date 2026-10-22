@@ -5,8 +5,9 @@
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
 **0.9.0 is an unreleased review candidate on this branch.** The new capture,
-contribution and Character workspaces below are being prepared for a separate
-draft PR. The download link opens published releases; it does not publish this
+contribution and Character workspaces below are available in
+[draft PR #11](https://github.com/Maergoth/EQL-EOZ/pull/11).
+The download link opens published releases; it does not publish this
 candidate. See the [feature status and acceptance plan](docs/CAPTURE_CONTRIBUTIONS.md).
 
 ## Get started

@@ -85,4 +85,29 @@ try{
     assert.equal(imported.host.phase,'running');assert.equal(imported.host.hold,false,'a manual review releases its exclusive worker hold');
     assert.equal(imported.observations.length,2,'cancelled live OCR cannot leak into the manual character review');
 }finally{await imported.host.dispose();await rm(temporary,{recursive:true,force:true});}
+{
+    const delayed=fixture();let release,started=0;
+    delayed.host.journal.initialize=()=>new Promise(resolve=>{release=resolve;});
+    delayed.host.startSource=async()=>{started++;};
+    try{
+        await delayed.host.listSources();const starting=delayed.host.start({mode:'character',sourceId:'window:game'});
+        while(!release)await new Promise(resolve=>setImmediate(resolve));
+        await delayed.host.stop();release();await starting;
+        assert.equal(started,0,'Stop during journal initialization prevents a late capture source from being created');
+        assert.equal(delayed.host.phase,'disabled');assert.equal(delayed.host.enabled,false);
+    }finally{await delayed.host.dispose();}
+}
+{
+    const delayed=fixture();let rejectOld;
+    delayed.host.startSource=async()=>new Promise((resolve,reject)=>{rejectOld=reject;});
+    try{
+        await delayed.host.listSources();const starting=delayed.host.start({mode:'contribution',sourceId:'window:game'});
+        while(!rejectOld)await new Promise(resolve=>setImmediate(resolve));
+        delayed.host.startSource=async()=>{delayed.host.phase='running';};
+        await delayed.host.start({mode:'character',sourceId:'window:game',sessionId:'replacement-character'});
+        rejectOld(Error('The retired source load was cancelled.'));await starting;
+        assert.equal(delayed.host.phase,'running','an old source startup rejection cannot overwrite the replacement state');
+        assert.equal(delayed.host.sessionId,'replacement-character');assert.equal(delayed.host.error,null);
+    }finally{await delayed.host.dispose();}
+}
 console.log('Capture host: exact IPC, character/contribution/screenshot arbitration, cancelled results, bounded latest-frame queue and log provenance passed.');

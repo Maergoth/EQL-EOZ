@@ -93,8 +93,14 @@ class CaptureHost {
         if (mode==='character' && previous) this.contributionResume = previous;
         this.enabled = true; this.owner = mode; this.sessionId = sessionId || crypto.randomUUID();
         this.source = source; this.phase = 'selecting'; this.error = null; this.ownerStartedAt = this.now(); this.seen.clear(); this.emitStatus();
-        await this.journal.initialize();
-        try { await this.startSource(); } catch (error) { this.phase='error';this.error=clean(error.message,500);this.emitStatus();throw error; }
+        try {
+            await this.journal.initialize();
+            if(revision!==this.revision||this.disposed)return this.getStatus();
+            await this.startSource();
+        } catch (error) {
+            if(revision!==this.revision||this.disposed)return this.getStatus();
+            this.phase='error';this.error=clean(error.message,500);this.emitStatus();throw error;
+        }
         return this.getStatus();
     }
     async startSource() {

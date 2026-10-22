@@ -38,11 +38,37 @@ worker, cancel any stale live job, and release the hold afterward while retainin
 the existing capture owner/source. A failed or cancelled import cannot leak an
 old result into the new review session.
 
+Source startup rechecks its operation revision after journal initialization and
+ignores errors from a superseded source load. Every OCR startup, message, exit,
+error and timeout callback is bound to its exact worker; recognition also checks
+that its awaited initialization still belongs to the active worker. A retired
+worker or completed job cannot cancel a replacement job while termination drains.
+
+Journal append, read, clear and maintenance share one serialized queue. Expired
+segments include the current idle segment, which can be retired because no write
+handle remains open between operations. Cleanup runs during initialization,
+append and read, and on an unreferenced hourly timer while initialized. Shutdown
+clears the timer. The seven-day expiry is measured from each segment's last
+write; daily/4 MiB rotation means older observations in that segment can include
+the remainder of its recording day. Cleanup can lag expiry by up to the hourly
+cadence and a busy queue; sleep or a closed app defers physical cleanup until the
+next running maintenance/access. It is not instantaneous per-record deletion.
+Pruning preserves the durable sequence, and reads report gaps even when every
+retained segment has expired and the app has restarted.
+
 Local observations:
 
 - `npm run test:capture` passed parser, journal, ownership/backpressure/cancellation,
   additive loot provenance and actual offline OCR suites. PNG IHDR/pixel dimensions
   are checked before native decoding, including forged-size regression coverage.
+- Focused review regressions passed Stop during delayed journal initialization,
+  superseded source-load rejection, retired worker startup/message/error/exit and
+  timeout delivery, and a stopped initialization continuing on a newer worker.
+  Long-idle tests expired the current segment by read and by hourly maintenance
+  without append/restart, verified serialized cleanup/writes and durable gap
+  reporting, and confirmed the maintenance timer is cleared at shutdown. The
+  actual Windows native capture and isolated full-workspace/import checks also
+  passed after these fixes. No production or installed-player state was used.
 - Actual OCR passed with network APIs blocked for both source dependencies and
   the assembled external runtime. Synthetic item name/tier/AC/HP/level/delay and
   character resource current/max/STR values matched. The worker was reused.

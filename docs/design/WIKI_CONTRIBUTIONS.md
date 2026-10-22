@@ -238,7 +238,20 @@ Honor server backoff; bounded transient read retry must not blindly retry writes
 
 A timeout or lost connection after POST is an unknown result, not a failed edit.
 Refetch source/history to reconcile the exact after content and known result
-before retrying. A resumed plan skips applied pages; each remaining page gets a
+before retrying. Reviewed/submitted expected content applies the installed
+MediaWiki `TextContent::normalizeLineEndings` and Parser NUL/rtrim rules:
+remove NUL, convert CRLF/CR to LF, and trim only PHP's trailing ASCII space,
+tab, LF, CR and vertical tab. Preserve internal whitespace, form feed and
+Unicode whitespace. Compare the returned source exactly against that expected
+content; do not normalize away concurrent semantic edits. This also supports
+older saved drafts while retaining their approved review digest. A successful
+but unconfirmed primary creation can therefore reconcile after restart and
+continue its unfinished reciprocal pages without a second creation. Other PST
+changes such as signatures, substitution or extension hooks are not guessed;
+if the returned source differs, keep the conflict and require manual review.
+The loopback fixture applies these same server normalization rules and covers
+lost-response multi-page recovery, saved drafts and substitution conflicts.
+A resumed plan skips applied pages; each remaining page gets a
 fresh base/review if needed. If item creation succeeds and reciprocal edits fail,
 show that partial outcome with links and retain unfinished work. Never undo a
 successful public page automatically as rollback for an unrelated failure.
