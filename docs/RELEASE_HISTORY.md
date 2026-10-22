@@ -5,8 +5,8 @@ notes, a walkthrough and the screenshots actually captured for that version.
 Opening EoZ does not open the viewer automatically. The selector keeps old
 versions available; each unviewed release has its own **New** label.
 
-`app/release-history.js` is the durable, append-only release content. All 27
-existing changelog versions are represented. Twenty original synthetic captures
+`app/release-history.js` is the durable, append-only release content. All 28
+changelog versions through 0.8.9 are represented. Twenty original synthetic captures
 and their original tour text were recovered from released commits:
 
 | Release | Screenshot source commit |
@@ -16,6 +16,9 @@ and their original tour text were recovered from released commits:
 | 0.8.6 | `1790c93cdabddd5f6d20168c73cfd1cfac66e22d` |
 | 0.8.7 | `d174ee3319b502024edebe47490442bf6397fc22` |
 | 0.8.8 | `1d241637acb340c490071caa52efd6ff0352dc27` |
+
+Version 0.8.9 adds three new captures of installed fonts, adjusted item stats
+and the Live Map loot pane, bringing the archive to 23 images.
 
 Each PNG is stored under `app/assets/whats-new/<version>/` and has a reviewed
 SHA-256 in its step. Files were extracted as binary Git objects, without image
@@ -90,14 +93,19 @@ the same four images.
 
 `node tests/whats-new.mjs`, `node scripts/check-release-history.mjs` and
 `node scripts/check-release.mjs` passed after recovery. Tests cover manual-only
-opening, the current four-step tour, historical selection, honest missing-media
+opening, the historical 0.8.8 four-step tour, historical selection, honest missing-media
 fallback, Escape/focus restoration, explicit marking, persisted skipped-release
 unread state and missing-current/missing-media/corrupted-image counterexamples.
 A separate hidden Electron module fixture used a disposable profile and blocked
-external networking to load the real archived media. The current version at
+external networking to load the real archived media. Version 0.8.8 at
 1100 × 850 / 10px, 0.8.4 at 700 × 900 / 20px and older 0.8.3 notes at 700 × 900 /
 20px all loaded, exposed all 27 choices and had no dialog horizontal overflow.
 The PNGs were inspected under private validation output. Large-font content
 scrolls vertically; the narrow selector then received its own full-width row.
 Full-app native UI screenshots and keyboard/viewport acceptance are recorded by
 the integration owner; the module fixture does not establish all desktop flows.
+
+The 0.8.9 native lifecycle check additionally opens the current three-step tour,
+verifies its selected release and loaded screenshot, navigates Next/Previous,
+and verifies Escape and restored focus. Its expected count comes from the
+current release entry rather than assuming every future tour has four pages.

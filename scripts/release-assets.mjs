@@ -27,7 +27,7 @@ export function releaseDownloadNotes(version, commit) {
         `- **Linux x64:** [Download AppImage](${download}/${appImage}) · [Debian/Ubuntu package](${download}/${deb})`, '',
         'All packages use the same app version and verified wiki dataset. Share this release page with users on either platform.', '',
         'For Linux, make the AppImage executable and launch it, or install the deb with your system package installer. Choose your actual EverQuest Legends folder inside Wine/Proton or a mounted installation. X11/XWayland is the baseline for positioned overlays; native Wayland has desktop-dependent limits.', '',
-        'Windows updates retain the explicit silent restart/install action. Linux downloads verified matching packages and opens their folder with manual installation steps.', '',
+        'After a new verified Windows download, a cancellable five-second countdown silently installs the update and restarts the app. Linux downloads verified matching packages and opens their folder with manual installation steps.', '',
         `[Changes and setup](${repository}/blob/v${version}/README.md) · [Changelog](${repository}/blob/v${version}/CHANGELOG.md)`, '',
         `Build source: ${repository}/commit/${commit}`, ''
     ].join('\n');
