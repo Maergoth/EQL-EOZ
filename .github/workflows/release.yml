@@ -91,6 +91,7 @@ jobs:
         run: |
           node scripts/release-assets.mjs win32 --verify
           node scripts/release-assets.mjs linux --verify
+          node scripts/release-assets.mjs --notes --source-commit "$GITHUB_SHA"
       - name: Publish one release after both platforms pass
         shell: bash
         run: |
@@ -123,6 +124,6 @@ jobs:
             channel=()
             [[ "$RELEASE_PRERELEASE" == true ]] && channel+=(--prerelease)
             [[ "$RELEASE_PRERELEASE" == true ]] && channel+=(--latest=false)
-            gh release create "$RELEASE_TAG" "${assets[@]}" --target "$GITHUB_SHA" --draft --title "Eye of Zomm $RELEASE_TAG" --generate-notes --notes "Build source: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" "${channel[@]}"
+            gh release create "$RELEASE_TAG" "${assets[@]}" --target "$GITHUB_SHA" --draft --title "Eye of Zomm $RELEASE_TAG" --generate-notes --notes-file dist/RELEASE_NOTES.md "${channel[@]}"
             gh release edit "$RELEASE_TAG" --draft=false
           fi

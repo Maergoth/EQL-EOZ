@@ -72,6 +72,9 @@ if ((releaseWorkflow.match(/bootstrap_artifact: EoZ-release-bootstrap/g) || []).
 for (const required of ['Complete published release matches; preserving every existing asset.', '--directory published-assets', 'cmp dist/SHA256SUMS-Windows-x64.txt', 'cmp dist/SHA256SUMS-Linux-x64.txt', 'Refusing to repair a draft without matching source ownership.']) {
     if (!releaseWorkflow.includes(required)) throw new Error(`Published-release immutability gate is missing: ${required}`);
 }
+for (const required of ['release-assets.mjs --notes --source-commit', '--notes-file dist/RELEASE_NOTES.md']) {
+    if (!releaseWorkflow.includes(required)) throw new Error(`Automatic platform download links are missing: ${required}`);
+}
 
 const linuxWorkflow = readFileSync(new URL('../.github/workflows/build-linux.yml', import.meta.url), 'utf8');
 for (const required of ['ubuntu-22.04', 'npm ci', 'npm run audit:deps', 'npm test', 'xvfb-run', 'openbox', 'npm run test:native-overlays', 'npm run test:map-overlay-3d', 'npm run test:appearance', 'node scripts/test-linux-package.mjs', '--packaged-root dist/linux-unpacked/resources/app.asar', 'fetch-bootstrap-pack.mjs --required', 'Download shared verified release bootstrap', "inputs.bootstrap_artifact == ''", "inputs.bootstrap_artifact != ''", 'npm run test:catalog', 'npm run dist:linux', 'npm run test:artifact -- --platform linux', 'SHA256SUMS-Linux-x64.txt']) {

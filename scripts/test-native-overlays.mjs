@@ -289,8 +289,11 @@ try {
                 const overflow=getComputedStyle(tooltip).overflowY,scrollable=tooltip.scrollHeight>tooltip.clientHeight;
                 tooltip.scrollTop=tooltip.scrollHeight;const scrolled=tooltip.scrollTop>0,note=tooltip.querySelector('.intel-tooltip-note').getBoundingClientRect(),box=tooltip.getBoundingClientRect(),endVisible=note.bottom<=box.bottom+1;
                 tooltip.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:list}));await new Promise(resolve=>setTimeout(resolve,220));const leftHidden=tooltip.hidden;
-                name.focus();const keyboard=!tooltip.hidden&&document.activeElement===name;tooltip.scrollTop=0;name.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,key:'PageDown',cancelable:true}));const keyboardScrolled=tooltip.scrollTop>0;
-                name.blur();await new Promise(resolve=>setTimeout(resolve,220));return{icon,text,crossedGap,overflow,scrollable,scrolled,endVisible,leftHidden,keyboard,keyboardScrolled,blurHidden:tooltip.hidden};
+                // Live snapshots can replace the row during the two dismissal
+                // waits. Exercise keyboard input on the current rendered item.
+                const keyboardName=list.querySelector('.item-name');
+                keyboardName.focus();const keyboard=!tooltip.hidden&&document.activeElement===keyboardName;tooltip.scrollTop=0;keyboardName.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,key:'PageDown',cancelable:true}));const keyboardScrolled=tooltip.scrollTop>0;
+                keyboardName.blur();await new Promise(resolve=>setTimeout(resolve,220));return{icon,text,crossedGap,overflow,scrollable,scrolled,endVisible,leftHidden,keyboard,keyboardScrolled,blurHidden:tooltip.hidden};
             });
             assert(tooltipHover.icon.visible&&tooltipHover.text.visible&&tooltipHover.icon.fits&&tooltipHover.text.fits&&tooltipHover.keyboard&&tooltipHover.leftHidden&&tooltipHover.blurHidden,`Both item pictures/names reveal bounded stat blocks and dismiss on exit: ${JSON.stringify(tooltipHover)}`);
             assert(tooltipHover.crossedGap&&tooltipHover.overflow==='auto'&&tooltipHover.scrollable&&tooltipHover.scrolled&&tooltipHover.endVisible&&tooltipHover.keyboardScrolled,`Tall real stat-block markup remains fully readable by mouse and keyboard inside the native viewport: ${JSON.stringify(tooltipHover)}`);

@@ -15,6 +15,24 @@ export function checksumFileName(platform) {
     return `SHA256SUMS-${platform === 'win32' ? 'Windows' : 'Linux'}-x64.txt`;
 }
 
+export function releaseDownloadNotes(version, commit) {
+    if (!/^[a-f0-9]{40}$/i.test(commit || '')) throw new Error('Release notes need the exact source commit.');
+    const [windows] = releaseAssetNames(version, 'win32');
+    const [appImage, deb] = releaseAssetNames(version, 'linux');
+    const repository = 'https://github.com/Maergoth/EQL-EOZ';
+    const download = `${repository}/releases/download/v${version}`;
+    return [
+        '## Downloads', '',
+        `- **Windows x64:** [Download installer](${download}/${windows})`,
+        `- **Linux x64:** [Download AppImage](${download}/${appImage}) · [Debian/Ubuntu package](${download}/${deb})`, '',
+        'All packages use the same app version and verified wiki dataset. Share this release page with users on either platform.', '',
+        'For Linux, make the AppImage executable and launch it, or install the deb with your system package installer. Choose your actual EverQuest Legends folder inside Wine/Proton or a mounted installation. X11/XWayland is the baseline for positioned overlays; native Wayland has desktop-dependent limits.', '',
+        'Windows updates retain the explicit silent restart/install action. Linux downloads verified matching packages and opens their folder with manual installation steps.', '',
+        `[Changes and setup](${repository}/blob/v${version}/README.md) · [Changelog](${repository}/blob/v${version}/CHANGELOG.md)`, '',
+        `Build source: ${repository}/commit/${commit}`, ''
+    ].join('\n');
+}
+
 async function checksumText(directory, version, platform) {
     const lines = [];
     for (const name of releaseAssetNames(version, platform)) {
@@ -42,6 +60,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const operation = process.argv.includes('--verify') ? verifyReleaseChecksums : writeReleaseChecksums;
     const directoryIndex = process.argv.indexOf('--directory');
     const directory = directoryIndex < 0 ? join(root, 'dist') : resolve(process.argv[directoryIndex + 1]);
-    await operation(directory, pkg.version, platform);
-    console.log(`${platform} release assets ${process.argv.includes('--verify') ? 'verified' : 'hashed'} for v${pkg.version}.`);
+    if (process.argv.includes('--notes')) {
+        const commitIndex = process.argv.indexOf('--source-commit');
+        await writeFile(join(directory, 'RELEASE_NOTES.md'), releaseDownloadNotes(pkg.version, commitIndex < 0 ? '' : process.argv[commitIndex + 1]));
+    } else {
+        await operation(directory, pkg.version, platform);
+        console.log(`${platform} release assets ${process.argv.includes('--verify') ? 'verified' : 'hashed'} for v${pkg.version}.`);
+    }
 }

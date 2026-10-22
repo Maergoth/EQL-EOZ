@@ -33,6 +33,7 @@ try {
     await writeFile(join(temporary,'package.json'),JSON.stringify({name:'eoz-appearance-smoke',version:pkg.version,main:'main.cjs'}));
     const run=async({root,log,screenshots,phase})=>{
         const {app,BrowserWindow}=require('electron'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
+        const nativeShowInactive=BrowserWindow.prototype.showInactive;
         BrowserWindow.prototype.show=()=>{};BrowserWindow.prototype.showInactive=()=>{};
         global.fetch=async()=>{throw new Error('External network disabled for appearance smoke');};
         const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -48,7 +49,14 @@ try {
             await until(async()=>{const current=await state();return current.appearance.fontFamily===family&&current.appearance.fontSize===size;},'saved appearance');
             for(const window of [owner,...Object.values(panels())])await until(async()=>{const current=await appearance(window);return current.family===family&&Math.abs(current.scale-size/13)<.001;},'shared rendered font');
         };
-        const capture=async(window,name)=>{window.webContents.invalidate();await wait(100);const image=await window.capturePage(undefined,{stayHidden:true,stayAwake:true});assert(!image.isEmpty());await fs.writeFile(path.join(screenshots,`${phase}-${name}.png`),image.toPNG());};
+        const capture=async(window,name)=>{
+            const wasVisible=window.isVisible();nativeShowInactive.call(window);
+            await execute(window,()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+            window.webContents.invalidate();await wait(100);
+            const image=await window.capturePage();assert(!image.isEmpty());
+            await fs.writeFile(path.join(screenshots,`${phase}-${name}.png`),image.toPNG());
+            if(!wasVisible)window.hide();
+        };
         const geometry=async(size,panelScale)=>{
             const main=await execute(owner,()=>{document.querySelector('#appearance-settings').scrollIntoView({block:'center'});return [...document.querySelectorAll('#settings-font-family,#settings-font-size,#reset-appearance')].map(element=>{const rect=element.getBoundingClientRect();return {id:element.id,inside:rect.width>0&&rect.height>0&&rect.left>=0&&rect.top>=0&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1};});});
             assert(main.every(control=>control.inside),`Main 1024px font controls fit at ${size}px: ${JSON.stringify(main)}`);
