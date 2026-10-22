@@ -4,7 +4,8 @@
 
 The owner requested two new app tabs, optional screen reading, a local working
 implementation and a reviewable PR. This feature branch is
-`codex/capture-contributions`, based on released 0.8.8/main `1d24163`. Keep one
+`codex/capture-contributions`, originally based on 0.8.8/main `1d24163` and now
+merged with released 0.8.9/main `6937d35`. The feature version is 0.9.0 candidate. Keep one
 Windows/Linux codebase. Do not merge/publish this larger feature automatically
 under the earlier authorization to release font/Linux fixes.
 
@@ -19,9 +20,12 @@ interface cache repair, green adjusted item stats, swing timer default off,
 historical What's New, the restart countdown and the Live Map loot pane.
 Head `d1b4a9d` passed final CI `39871328293` and Windows installer
 `39871321634` and was merged in PR10 as main `6937d35`. Release workflow
-`39871980124` and main CI `39871980105` are running. Do not confuse that release PR with this feature
-branch. After publication, commit this feature work, merge main, reconcile
-overlapping UI/native/package changes and rerun checks before its separate PR.
+`39871980124` and main CI `39871980105` passed. Public 0.8.9 downloads, tag,
+checksums, packaged runtime/images and byte-identical Windows/AppImage/deb
+bootstraps are verified in private `eoz-0.8.9-release-verified.json`. Do not confuse that release PR with this feature
+branch. Feature commit `f116ef6` and merges `dedcca4`/`4cb8e2e` preserve both
+implementations; combined source and native font/cache/map checks pass. Create a
+separate draft PR, retain manual acceptance items and do not auto-promote it.
 
 The new request authorizes local development and testing. Use isolated app
 profiles and synthetic/private fixtures. Do not replace the installed EoZ or
@@ -136,9 +140,9 @@ owner's sections or files; communicate interface changes first.
 | Wiki standard/auth/edit plan | wiki_contribution_089 | implemented, isolated validation | docs/design/WIKI_CONTRIBUTIONS.md; blueprint parser, hardened native auth, guarded multi-page plans, persisted partial retry and actual main/preload UI checks. Ownership returned to root. |
 | Capture/OCR journal | capture_pipeline_089 | implemented, private/synthetic validation | docs/design/CAPTURE_PIPELINE.md; coordinator, local OCR worker/runtime assets, private bounded journal and native/offline tests; handoff complete |
 | Character data/share model | character_model_089 | implemented, synthetic validation | slots, observed base/total stats, item card provenance, deterministic share renderer and tests |
-| App UI / integration / PR | root | implementation | Settings, tabs, integration, local isolated demo, docs, CI, PR |
-| Versioned What's New | character_model_089 | in separate 0.8.9 PR10 | historical screenshots, unseen release labels and release gate; merge released main into this branch before feature PR |
-| Live Map loot pane / update UX | root | in separate 0.8.9 PR10 | right-hand full loot table, cache eviction on upgrade, checkbox layout, five-second Windows restart countdown; retain feature integration during merge |
+| App UI / integration / PR | root | implemented, local checks passed; draft PR preparation | Settings, tabs, offline Character import, guarded review/retry, current source/native checks and screenshots; Linux/packaged feature CI pending |
+| Versioned What's New | character_model_089 | 0.8.9 released; 0.9.0 candidate prepared | current feature captures plus historical screenshots, unseen labels and release gate; 29 versions/28 images |
+| Live Map loot pane / update UX | root | 0.8.9 released and merged into feature | right-hand full loot table, cache eviction on upgrade, checkbox layout, five-second Windows restart countdown |
 
 ### Required acceptance before PR is ready
 

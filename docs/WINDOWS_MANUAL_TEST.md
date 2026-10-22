@@ -1,8 +1,25 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.9-x64.exe`.
+Current review candidate: `EQLWiki-Eye-of-Zomm-Setup-0.9.0-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.9` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.0` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+
+## 0.9.0 optional capture and contribution acceptance
+
+Use an isolated profile initially. Screen reading must remain off until enabled.
+Select the game window explicitly, Start contribution capture, then start/stop a
+Character session and verify contribution capture pauses/restores correctly.
+Stop and source loss must release capture without affecting log-based overlays.
+Import an examine PNG from Character without starting live capture; correct OCR
+names/stats before assigning slots. Capture No Equipment and equipped values
+separately and inspect the complete PNG before copying/saving.
+
+Prepare a contribution with current wiki matches and blueprints. Review every
+page and uncertainty; do not publish test data to the public wiki. Production
+login/2FA/CAPTCHA, normal/raid template ambiguity and own-talk upload require
+explicit real-user acceptance. Fixture auth/upload tests do not establish those
+live behaviors. Record skin/resolution/OCR omissions and Linux portal/compositor
+limitations in the [feature plan](CAPTURE_CONTRIBUTIONS.md).
 
 ## 0.8.9 installed fonts and UI refresh
 

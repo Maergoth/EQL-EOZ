@@ -2,6 +2,72 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
   {
+    "version": "0.9.0",
+    "title": "Reviewed wiki contributions and character snapshots (unreleased candidate)",
+    "status": "candidate",
+    "changes": [
+      "Add Contribute to Wiki and Character workspaces, sharing the existing main/overlay font settings and log session.",
+      "Make local screen reading opt-in, with explicit source selection, visible capture ownership and bounded offline OCR/journal retention. Character capture pauses contribution capture; imported screenshots do not enable continuous reading.",
+      "Keep editable item/NPC/zone candidates and evidence locally. Review extracted fields, uncertain values and fresh potential wiki matches before preparing a page plan from the current wiki blueprints.",
+      "Use the wiki's normal login in a dedicated isolated window. Require explicit review and publish acknowledgement for every planned page; retain conflict guards, per-page results and retry of unfinished changes.",
+      "Build character equipment from separate physical item cards, nullable tiers, augment evidence and 23 named slots with keyboard/select alternatives. Preserve observed No Equipment and equipped statistics separately from calculated gear sums.",
+      "Preview, copy or save a bounded character PNG. Optional uploads target the authenticated user's own talk page after explicit review; partial upload/talk failures remain recoverable.",
+      "Keep game-log evidence authoritative for supported events and treat OCR output as proposals. This candidate has synthetic/offline and loopback-wiki validation; live game OCR, production login/write and native-Wayland acceptance remain unverified."
+    ],
+    "steps": [
+      {
+        "title": "Choose what screen reading can observe",
+        "image": "0.9.0/screen-reading",
+        "view": "settings",
+        "action": "Open Settings",
+        "copy": "This is the unreleased 0.9.0 review candidate. Logs supply supported events; optional local screen reading adds visible examine windows and character stats. In Settings, enable Screen reading, choose a window or display and press Start. Pause or Stop at any time. Read a screenshot imports one image without enabling continuous capture.",
+        "alt": "Eye of Zomm 0.9.0 candidate Screen reading settings with explicit source, Start, Pause, Stop and screenshot-import controls.",
+        "caption": "Actual candidate UI with synthetic folder/log labels. Opt-in controls are shown after a fixture import; continuous capture remains disabled.",
+        "imageSha256": "7ab5c47da2ce5ed9b92950ed14102c00655820f4ae5c36a34f91a0a8c4c7df53"
+      },
+      {
+        "title": "Review every wiki contribution",
+        "image": "0.9.0/contributions",
+        "view": "contribute",
+        "action": "Open Contribute to Wiki",
+        "copy": "Keep proposed items, monsters and zones in a local review queue. Edit the extracted fields, verify uncertainty and potential existing pages, then preview every planned wiki change. Log in through the wiki’s normal window and explicitly approve publication. Page conflicts and unfinished related edits remain visible for review and retry.",
+        "alt": "Contribute to Wiki candidate workspace showing synthetic NPC proposals, editable fields and individual Verified controls.",
+        "caption": "Actual candidate interface using synthetic records and a loopback-only wiki account. This is not a production wiki login or edit.",
+        "imageSha256": "12f8beff7fa0a0173380aa19afe46999a718536f8a213d0a1d4f5884f34e0148"
+      },
+      {
+        "title": "Build a character from reviewed item cards",
+        "image": "0.9.0/character",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Start a named Character capture session, import an examine screenshot or add a card manually. Character capture pauses contribution capture. Review each item and place it in one of 23 named slots using drag-and-drop or the slot menus. Identical copies remain separate cards, and unknown values stay unknown.",
+        "alt": "Character equipment rows with a reviewed synthetic shield assigned to Secondary and its separate captured inventory card at 10 px.",
+        "caption": "Actual Character inventory and named slot menus at 10 px. The synthetic shield is assigned to Secondary; empty slots remain explicitly unknown.",
+        "imageSha256": "f1d5d9294f2d6ddd3b0c11ac59ae486456b90a1564ecb32fb4387baa4baca765"
+      },
+      {
+        "title": "Keep tiers and augment evidence separate",
+        "image": "0.9.0/augments",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Edit tier, wiki match, catalog base stats, observed examine values and augment details before sharing. State whether the examine values already include the augments; included values are not added again. Capture No Equipment and equipped totals separately. Calculated item sums remain a separate comparison because buffs, caps and effects are not assumed.",
+        "alt": "Expanded Character card editor with a synthetic augment name, separately observed augment statistics and completeness checkbox.",
+        "caption": "Actual editable augment section from the isolated candidate fixture. Synthetic values demonstrate review rather than game-derived accuracy.",
+        "imageSha256": "6c2bd6862712ee4c50a267db5b72b1fe27d3087a4d30341791004342d74672b8"
+      },
+      {
+        "title": "Preview a shareable character image",
+        "image": "0.9.0/share-preview",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Preview the complete character PNG, then copy or save it locally. The image keeps observed base/equipped stats, calculated gear sums, assigned equipment and uncertainty distinct. Optional wiki upload requires another explicit review and targets your own authenticated user talk page. Raw OCR evidence and unassigned inventory stay out of the share image.",
+        "alt": "Character PNG preview with separately observed No Equipment and equipped values, calculated gear sums and named equipment slots.",
+        "caption": "Actual candidate PNG preview generated from synthetic statistics. Clipboard/save were exercised with disposable fixtures; production upload was not tested.",
+        "imageSha256": "7e10e0585117048d9948c732eb7ad924bcf47d10da02d7ec6f057b5c38f3024c"
+      }
+    ]
+  },
+  {
     "version": "0.8.9",
     "title": "Installed fonts, current Settings and clearer item stats",
     "changes": [

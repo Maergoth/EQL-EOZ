@@ -4,6 +4,11 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
+**0.9.0 is an unreleased review candidate on this branch.** The new capture,
+contribution and Character workspaces below are being prepared for a separate
+draft PR. The download link opens published releases; it does not publish this
+candidate. See the [feature status and acceptance plan](docs/CAPTURE_CONTRIBUTIONS.md).
+
 ## Get started
 
 1. Download the latest Windows `Setup-<version>-x64.exe`, Linux `<version>-x64.AppImage`, or Debian/Ubuntu `<version>-x64.deb` package from [Releases](https://github.com/Maergoth/EQL-EOZ/releases). Both platforms use the same version and data source.
@@ -21,7 +26,7 @@ On Linux, make the AppImage executable and launch it, or install the deb using y
 
 ## A look around
 
-The new font, green-stat and loot-pane captures below show the actual **0.8.9 Electron interface with synthetic records**. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+The capture, contribution and Character images below show the actual **0.9.0 candidate Electron interface with synthetic records and a loopback-only wiki**. Font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 
@@ -75,7 +80,7 @@ known drop, the shared item-tier slider and explicit Route/Waypoint/Wiki actions
 
 ### Triggers and combat parses
 
-Create manual countdowns or literal/regex log triggers on the main **Triggers** page. Test a match, use named captures, set cooldowns and choose local sound/speech cues. Running countdowns and the observed swing bar appear in the compact Triggers window. You supply reminder durations; EoZ does not know a mob's respawn period.
+Create manual countdowns or literal/regex log triggers on the main **Triggers** page. Test a match, use named captures, set cooldowns and choose local sound/speech cues. Running countdowns and an optionally enabled observed swing bar appear in the compact Triggers window. You supply reminder durations; EoZ does not know a mob's respawn period.
 
 The independent **Parse** window has **Overview / Damage / Healing / Taken / Session** tabs and encounter selection. Healing includes a separately labeled rune-capacity subsection; capacity is not measured absorption or healing. **New session** in Combat or the Parse Session tab clears parse/loot totals while retaining the live log position, profile, map and triggers. One shared session reads the log for every panel. The optional swing bar defaults off; enable **Triggers → Swing → Show swing estimate** if desired. It estimates your outgoing melee rounds from logged hits and misses; one-second log timestamps limit its precision. See [trigger and countdown behavior](docs/TIMERS.md).
 
@@ -83,9 +88,82 @@ The independent **Parse** window has **Overview / Damage / Healing / Taken / Ses
 
 Unlock an overlay to move/resize it. Locking leaves its tabs and menus interactive; **Ignore mouse** passes clicks through. Recover from Settings, the tray, or **Ctrl+Shift+O** when registered. Layout, opacity and font scale are saved separately for each panel. Closing the main window while overlays are visible keeps their shared session running; use **Quit Eye of Zomm** in the tray to exit.
 
+### Optional screen reading in the 0.9.0 candidate
+
+Logs remain the source for supported kills, loot, zone and character events.
+**Settings → Screen reading** adds optional local OCR for visible examine
+windows and character statistics. Enable the controls, choose a window or
+display, then press **Start contribution capture**. Pause or Stop releases
+capture work; status shows which workspace owns it. **Read a screenshot** imports
+one image without starting continuous capture. Screen reading starts disabled.
+The main app and both new tabs retain the selected fonts and text size.
+
+Observed text and evidence remain in a bounded local journal. OCR values are
+editable proposals and may be wrong or incomplete; they do not establish unseen
+spawns, drop sources, caps or buffs. Starting a Character session pauses
+contribution capture so the two modes cannot read the source concurrently.
+
+![0.9.0 candidate screen-reading controls after a synthetic import, with continuous capture disabled](app/assets/whats-new/0.9.0/screen-reading.png)
+
+### Contribute to Wiki through an explicit review
+
+Open **Contribute to Wiki** to review proposed items, monsters and zones from
+supported live log events, screenshot reads or manual entry. Correct the fields,
+verify what you observed and check potential existing pages. An incomplete or
+unavailable catalog does not prove a page is missing. Keep descriptions in your
+own words and confirm proposed loot/location relationships separately.
+
+Log in through the wiki's normal dedicated window when you are ready to submit.
+The app loads the current wiki blueprints, prepares a page plan and shows every
+planned change. Review each page and fresh duplicate check before the final
+publish action. Existing permissions and edit-conflict checks apply; a partial
+result identifies unfinished pages so a retry does not repeat completed edits.
+Nothing publishes merely because a candidate was captured or previewed.
+
+![0.9.0 contribution review queue and editable synthetic NPC fields using an isolated loopback wiki account](app/assets/whats-new/0.9.0/contributions.png)
+
+### Build and share a character snapshot
+
+In **Character**, start a named capture session and examine equipment manually,
+import an examine screenshot, or add cards yourself. Review item names, wiki
+matches, tiers, base/observed values and augments. Place each physical copy in a
+named slot with drag-and-drop or the slot menu; confirm replacements and slot
+warnings. Identical copies remain distinct. Removing a mistaken card is retained
+through journal replay.
+
+![0.9.0 Character named equipment slots and reviewed synthetic shield inventory card, with the shield assigned to Secondary](app/assets/whats-new/0.9.0/character.png)
+
+Augments retain their own names and observed statistics. State whether the
+examine block already includes them so their values are not added twice.
+Capture **No Equipment** and **Equipped** statistics separately. These observed
+blocks remain distinct from calculated item sums; unknowns stay unknown, and
+buffs, caps or worn effects are not inferred from base-plus-gear arithmetic.
+
+![Editable synthetic augment evidence and completeness controls](app/assets/whats-new/0.9.0/augments.png)
+
+Use **Preview share image**, review the entire PNG, then copy or save it locally.
+The image contains assigned gear, observed values, calculated sums and
+uncertainty; raw OCR evidence and unassigned inventory are excluded. Optional
+authenticated upload requires an additional confirmation and targets only your
+own user talk page. Upload and talk-page results are reported separately.
+
+![Actual 0.9.0 candidate character PNG preview with independent observed and calculated stat columns](app/assets/whats-new/0.9.0/share-preview.png)
+
+These captures and local checks use synthetic records. The combined UI fixture
+exercises real local OCR import, disposable PNG save/clipboard handling and
+guarded writes to a loopback wiki. It does not establish live-game OCR accuracy,
+production login/edit/upload acceptance, foreground game composition or native
+Wayland behavior. Review the [candidate acceptance plan](docs/CAPTURE_CONTRIBUTIONS.md)
+before treating the new workspaces as release-ready.
+
 ## Your files stay local
 
-EoZ reads logs and supported map/archive files under the folder you choose. It never reads game-process memory, injects code, patches game files, sends game commands or synthesizes gameplay input. See [SAFETY.md](SAFETY.md).
+EoZ reads logs and supported map/archive files under the folder you choose.
+Optional screen reading in the 0.9.0 candidate reads only the source you select;
+it does not record audio or continuous video. EoZ never reads game-process memory,
+injects code, patches game files, sends game commands or synthesizes gameplay
+input. Wiki edits/uploads require the review actions described above. See
+[SAFETY.md](SAFETY.md).
 
 When a complete wiki catalog confirms that an encountered NPC or looted item is missing, an inline Triggers notice offers **Screenshot** or **Ignore**. Screenshot opens an explicit window/display choice and copies the selected image to your local clipboard. You decide where to paste it; nothing uploads automatically. Notices pause their dismissal timer while hovered or keyboard-focused.
 
@@ -148,6 +226,7 @@ Screenshots can be reproduced from the real Electron synthetic fixture without o
 
 ```bash
 node scripts/test-native-overlays.mjs --screenshots <output-directory>
+node scripts/test-capture-workspace.mjs --screenshots <output-directory>
 ```
 
 Tests with synthetic content do not establish live route quality, physical overlay focus/passthrough, monitor/DPI transitions or installer acceptance. Keep client archives, player logs, database snapshots, settings, generated packs and private diagnostic exports out of Git.
@@ -157,6 +236,8 @@ Tests with synthetic content do not establish live route quality, physical overl
 | [Contributor handoff](docs/HANDOFF.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md) | Architecture, source ownership and exact next work |
 | [Product vision](docs/UX_VISION.md) and [PNUT interaction plan](docs/PNUT_UX_PLAN.md) | UX contracts and feature scope |
 | [Window/map follow-up](docs/WINDOW_MAP_POLISH.md) | Current window, map and tour changes |
+| [0.9.0 capture/contribution status](docs/CAPTURE_CONTRIBUTIONS.md) | Unreleased candidate scope, ownership, acceptance and publication boundary |
+| [Capture pipeline](docs/design/CAPTURE_PIPELINE.md), [wiki contribution contract](docs/design/WIKI_CONTRIBUTIONS.md) and [character/share contract](docs/design/CHARACTER_CAPTURE.md) | Local observation, reviewed write and independent stat/equipment semantics |
 | [Map validation](docs/MAP_VALIDATION.md) and [destination-only audit](docs/ROUTE_REJECTION_AUDIT.md) | Real local-archive observations and limits |
 | [Navigation architecture](docs/NAVMESH_EVALUATION.md) | Guarded worker routing and independent collision validation |
 | [Validation report](VALIDATION.md) and [Windows checklist](docs/WINDOWS_MANUAL_TEST.md) | Automated gates and remaining manual acceptance |

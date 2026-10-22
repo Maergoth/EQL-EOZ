@@ -7,14 +7,16 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 [release history](RELEASE_HISTORY.md) and [validation](../VALIDATION.md).
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.8.9
+Baseline: 0.9.0 review candidate, extending released 0.8.9
 Last updated: 2026-10-22
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
 
 The 0.8.8 [font/Linux follow-up](FONTS_LINUX.md) adds shared typography settings
-and Linux packages to the same codebase. Keep the log-only data boundary and
-distinguish X11 CI behavior from native Wayland and foreground-game acceptance.
+and Linux packages to the same codebase. Combat, map and trigger data remain
+log-driven; optional 0.9.0 screen reading supplements reviewed contributions
+and Character capture. Distinguish X11 CI behavior from native Wayland and
+foreground-game acceptance. See [the feature execution plan](CAPTURE_CONTRIBUTIONS.md).
 
 The current Intel/session follow-up is indexed in
 [OVERLAY_MAP_WORKSPACE.md](OVERLAY_MAP_WORKSPACE.md). Triggers retains the

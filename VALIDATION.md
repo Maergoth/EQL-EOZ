@@ -1,4 +1,22 @@
-# Validation report — v0.8.9
+# Validation report — v0.9.0 review candidate
+
+## 0.9.0 local feature observations
+
+The combined source suite passed after merging 0.8.9 into the feature branch.
+Native font/cache/map-loot regressions also passed against the combined app.
+The [shared plan](docs/CAPTURE_CONTRIBUTIONS.md) links the implementation ledgers
+for capture, wiki contribution and Character components. Actual isolated native
+fixtures exercised local OCR and capture ownership, offline PNG import, current
+blueprint review, hardened login cookies, guarded multi-page partial retry across
+renderer restart, editable gear/augments, separate base/equipped values and PNG
+clipboard/save. Loopback wiki writes used only synthetic state.
+
+The supplied small private examine image yields an editable item proposal with
+an OCR misspelling, AC14 and tier10. HP, weight and complete character totals
+were unreliable and remain omitted for review. This does not certify arbitrary
+game skins/resolutions. Production login/2FA/CAPTCHA, live wiki contributions,
+Linux portal/Wayland capture and installed upgrades remain manual acceptance.
+The feature PR is not authorization to publish 0.9.0 automatically.
 
 ## 0.8.9 pre-release observations
 
