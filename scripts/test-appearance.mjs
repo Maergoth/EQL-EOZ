@@ -109,7 +109,14 @@ try {
             // The native map canvas must use the same chosen text family/size.
             await execute(panels().map,()=>{window.eozFontDraws=[];const native=CanvasRenderingContext2D.prototype.fillText;CanvasRenderingContext2D.prototype.fillText=function(...args){window.eozFontDraws.push({font:this.font,text:String(args[0])});return native.apply(this,args);};});
             await execute(panels().map,()=>document.querySelector('[data-map-action="zoom-in"]').click());
-            await until(async()=>execute(panels().map,()=>window.eozFontDraws.some(draw=>/Verdana/.test(draw.font)&&parseFloat(draw.font)>15&&/Synthetic/.test(draw.text))),'selected map label family and size');
+            try {
+                await until(async()=>execute(panels().map,()=>window.eozFontDraws.some(draw=>/Verdana/.test(draw.font)&&parseFloat(draw.font)>15&&/Synthetic/.test(draw.text))),'selected map label family and size');
+            } catch(error) {
+                await capture(panels().map,'map-label-failure');
+                const diagnostic=await execute(panels().map,()=>({draws:window.eozFontDraws.slice(-12),font:getComputedStyle(document.querySelector('canvas')).fontFamily,canvas:{width:document.querySelector('canvas').clientWidth,height:document.querySelector('canvas').clientHeight},message:document.querySelector('.native-map-message')?.textContent,markers:[...document.querySelectorAll('[data-map-npc]')].map(element=>element.textContent)}));
+                const snapshot=(await state()).snapshot.session.map;
+                throw new Error(`${error.message}: ${JSON.stringify({diagnostic,map:snapshot})}`);
+            }
             await capture(owner,'main-large');await capture(panels().map,'map-large');
             await choose('georgia',20);
             await execute(owner,()=>document.querySelector('#open-whats-new').click());
