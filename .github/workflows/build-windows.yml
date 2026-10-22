@@ -40,12 +40,22 @@ jobs:
         run: npm run test:window-lifecycle
       - name: Test map sizing and zoom
         run: npm run test:map-layout
+      - name: Test map marker loot pane and instance identity
+        run: npm run test:map-loot
+      - name: Test cached frontend upgrade recovery
+        run: npm run test:main-cache
       - name: Test native Map 3D and file isolation
         run: npm run test:map-overlay-3d
       - name: Test inline wiki discovery and explicit clipboard capture
         run: npm run test:discovery-notices
       - name: Test native appearance controls
         run: npm run test:appearance
+      - name: Test hardened wiki login and guarded writes with a loopback fixture
+        run: npm run test:wiki-auth
+      - name: Test persistent source capture and local OCR
+        run: npm run test:capture-native
+      - name: Test contribution and character workflows with a loopback wiki
+        run: npm run test:capture-workspace
       - name: Fetch production bootstrap data
         if: inputs.bootstrap_artifact == ''
         shell: bash
@@ -85,6 +95,8 @@ jobs:
         run: npm run dist:win
       - name: Verify packaged version and coordinate code
         run: npm run test:artifact
+      - name: Test packaged capture host and physical offline OCR resources
+        run: npm run test:capture-native -- --packaged-root dist/win-unpacked/resources/app.asar
       - name: Verify Authenticode signature
         if: steps.signing.outputs.enabled == 'true'
         shell: pwsh

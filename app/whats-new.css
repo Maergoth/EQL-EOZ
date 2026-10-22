@@ -2,6 +2,8 @@
 .whats-new-dialog::backdrop{background:#02060dbd}
 .whats-new-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .whats-new-heading .eyebrow{color:#d8b75c;font-size:calc(11px * var(--ui-font-scale,1));font-weight:700;text-transform:uppercase;letter-spacing:.12em}
+.whats-new-release-picker{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:14px 0 8px;font-size:calc(12px * var(--ui-font-scale,1))}.whats-new-release-picker label{color:#bdc9d8}.whats-new-release-picker select{flex:1;min-width:140px;max-width:100%;border:1px solid #66582d;border-radius:6px;padding:8px;background:#090f17;color:#e9edf3;font:inherit}.whats-new-release-picker [data-tour-new-count]{color:#f0d77f;white-space:nowrap}.whats-new-release-picker button{font-size:inherit}
+.whats-new-dialog .whats-new-release-title{margin:10px 0;color:#d8b75c;font-weight:700;font-size:calc(13px * var(--ui-font-scale,1))}.whats-new-changes{margin:8px 0 18px;color:#bdc9d8;font-size:calc(12px * var(--ui-font-scale,1));line-height:1.55}.whats-new-changes summary{cursor:pointer;color:#f0d77f}.whats-new-changes ul{margin:9px 0;padding-left:22px}.whats-new-changes li+li{margin-top:6px}
 .whats-new-dialog h2{margin:8px 0 10px;font:700 calc(25px * var(--ui-font-scale,1)) var(--ui-heading-family);color:#f1dc9a}
 .whats-new-dialog p{margin:0 0 16px;max-width:78ch;font-size:calc(13px * var(--ui-font-scale,1));line-height:1.65;color:#bdc9d8}
 .whats-new-figure{margin:0;min-width:0}
@@ -12,3 +14,4 @@
 .whats-new-footer [data-tour-count]{color:#b9a56f;font-size:calc(12px * var(--ui-font-scale,1));white-space:nowrap}
 .whats-new-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
 @media(max-width:600px){.whats-new-dialog{padding:16px}.whats-new-dialog h2{font-size:calc(21px * var(--ui-font-scale,1))}.whats-new-footer{align-items:flex-start}.whats-new-actions{max-width:80%}.whats-new-actions button{padding:8px 9px;font-size:calc(11px * var(--ui-font-scale,1))}}
+@media(max-width:760px){.whats-new-release-picker{display:grid;grid-template-columns:1fr auto}.whats-new-release-picker label,.whats-new-release-picker select{grid-column:1/-1}.whats-new-release-picker select{width:100%;min-width:0}}

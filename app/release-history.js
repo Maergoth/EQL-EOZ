@@ -1,0 +1,633 @@
+// Append a version entry for each release; archived captures and hashes are immutable.
+// Historical text comes from CHANGELOG.md; 0.8.4+ media/text were recovered byte-for-byte
+// from their released Git commits. See docs/RELEASE_HISTORY.md.
+const freeze = value => { if(value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
+export const RELEASE_HISTORY = freeze([
+  {
+    "version": "0.8.8",
+    "title": "Font controls and Linux releases",
+    "changes": [
+      "Add saved font-family and base text-size controls in Settings, shared by the main app and native overlays while retaining per-panel text adjustments.",
+      "Ship Linux x64 AppImage and deb packages alongside the Windows installer in one versioned release.",
+      "Use native Linux file paths and preserve log-directory filename case, including selected Wine/Proton installations.",
+      "Prefer X11/XWayland for positioned Linux overlays when available; keep explicit backend choices and document native Wayland limits.",
+      "Offer verified Linux update downloads with a clear manual package handoff, while preserving the Windows silent restart/install flow.",
+      "Gate publication on both platform builds and a shared verified wiki bootstrap generation."
+    ],
+    "sourceCommit": "1d241637acb340c490071caa52efd6ff0352dc27",
+    "steps": [
+      {
+        "title": "A normal desktop workspace",
+        "image": "0.8.8/workspace",
+        "view": "settings",
+        "action": "Open Settings",
+        "copy": "Choose Font family and Text size in Settings; the same base applies to your overlays alongside their individual text adjustments. Window, tray and startup preferences stay saved. The green Update available action offers verified packages: Windows can restart for a silent upgrade, while Linux opens the download folder with manual installation steps. Settings also links to GitHub.",
+        "alt": "Eye of Zomm main workspace showing the current desktop layout and settings.",
+        "caption": "Current app capture with a disposable demonstration profile.",
+        "imageSha256": "5048ed4879c5e7a0d672910c6089ff1227ea89b29ed747f76efe9c8e945332d3"
+      },
+      {
+        "title": "Keep the map in view",
+        "image": "0.8.8/map",
+        "view": "map",
+        "action": "Open Map",
+        "copy": "Hover the zone-title row for Reset, Follow, zoom and the Map, Top and navigable First person cycle. Use the separate grip to move an unlocked window. Z and tolerance choose nearby floors; Plane of Hate starts at Z 120 and remains adjustable. Unknown-height markers stay visible.",
+        "alt": "Eye of Zomm native Map with its horizontal Z slice slider and nearby-floor controls.",
+        "caption": "The current native Map and its controls, using demonstration data.",
+        "imageSha256": "72044cc953a85a2b3ee3bbedec7e638cf6d4eba7db5ccd88755eb1c461a89a70"
+      },
+      {
+        "title": "Follow named mobs and their loot",
+        "image": "0.8.8/intel",
+        "view": "npcs",
+        "action": "Open NPCs",
+        "copy": "Item Level Slider and My Class stay above the scrolling list. Click Raid Zone to collapse it. Hover a mob name for actions in that same row, or an item name/icon for its tier-adjusted stat block. Show More expands every matching drop; Map previews the exact source in first person.",
+        "alt": "Eye of Zomm zone intel showing named mobs, distinct raid sources and matching loot.",
+        "caption": "Synthetic NPC and loot records demonstrate the current intel view.",
+        "imageSha256": "b4544e9193c0bce326c7bc74e4f33efe6e4c2ba8463e52009883f6cf9b6ae719"
+      },
+      {
+        "title": "Bring only the overlays you need",
+        "image": "0.8.8/timers",
+        "view": "timers",
+        "action": "Open Triggers",
+        "copy": "Configure countdowns and log matches in Triggers; its compact overlay also shows swing estimates. Parse keeps Overview, Damage, Healing, Taken and Session. Healing includes labeled rune capacity. New session clears parse/loot totals while keeping your log position, map and running triggers.",
+        "alt": "Eye of Zomm main Triggers page with a log-trigger editor, match preview and named captures.",
+        "caption": "The current trigger editor with a synthetic log line and named-capture preview.",
+        "imageSha256": "339270ee02f1214370d328c649c2c6205ef4fcf84d4c3da153d477bcd0e78c7e"
+      }
+    ]
+  },
+  {
+    "version": "0.8.7",
+    "title": "Triggers, session controls and complete Intel loot",
+    "changes": [
+      "Rename the Timers workspace and overlay to Triggers; keep existing saved definitions, countdowns and layouts.",
+      "Put clearly labeled rune capacity granted under Healing, separate from measured healing and HPS.",
+      "Add New session in Combat and the Parse Session tab, preserving the live log cursor, character/map context and running triggers.",
+      "Reconcile NPC-page known loot with item-page drop sources, including Vicar M`Kari and the missing Lord of Loathing items; retain source-instance provenance.",
+      "Overlay mob actions on the name row without shifting the list, and show tier-adjusted item stats from both item names and icons.",
+      "Repair main-app item/NPC loot hover targets and preserve their tooltips through unchanged live redraws.",
+      "Align host data refreshes around a 24-hour freshness guard, check the published manifest hourly while EoZ is open, coalesce overlapping checks and show distinct sync timestamps in Settings.",
+      "Make Raid Zone visibly collapsible and keep its state through updates; named focus can reopen its matching section.",
+      "Start Plane of Hate's native map at Z 120, retain manual slicing, and use the selected floor for unknown-height inspection cameras."
+    ],
+    "sourceCommit": "d174ee3319b502024edebe47490442bf6397fc22",
+    "steps": [
+      {
+        "title": "A normal desktop workspace",
+        "image": "0.8.7/workspace",
+        "view": "settings",
+        "action": "Open Settings",
+        "copy": "The main app remembers its size, position and maximized state in a standard Windows frame. Choose Minimize to tray and Start minimized in Settings. A green Update available button appears for newer releases. Download, then choose Restart to install update for a silent upgrade and automatic relaunch. Settings also links to GitHub.",
+        "alt": "Eye of Zomm main workspace showing the current desktop layout and settings.",
+        "caption": "Current app capture with a disposable demonstration profile.",
+        "imageSha256": "d9b8318d19a4583b669651745900aeee14db2669645f81b481f6dc7c1cab22fe"
+      },
+      {
+        "title": "Keep the map in view",
+        "image": "0.8.7/map",
+        "view": "map",
+        "action": "Open Map",
+        "copy": "Hover the zone-title row for Reset, Follow, zoom and the Map, Top and navigable First person cycle. Use the separate grip to move an unlocked window. Z and tolerance choose nearby floors; Plane of Hate starts at Z 120 and remains adjustable. Unknown-height markers stay visible.",
+        "alt": "Eye of Zomm native Map with its horizontal Z slice slider and nearby-floor controls.",
+        "caption": "The current native Map and its controls, using demonstration data.",
+        "imageSha256": "028c1006116fc1353254b745ce4381a372cfe4c5b7bc2f254bb0beb96bed8f5c"
+      },
+      {
+        "title": "Follow named mobs and their loot",
+        "image": "0.8.7/intel",
+        "view": "npcs",
+        "action": "Open NPCs",
+        "copy": "Item Level Slider and My Class stay above the scrolling list. Click Raid Zone to collapse it. Hover a mob name for actions in that same row, or an item name/icon for its tier-adjusted stat block. Show More expands every matching drop; Map previews the exact source in first person.",
+        "alt": "Eye of Zomm zone intel showing named mobs, distinct raid sources and matching loot.",
+        "caption": "Synthetic NPC and loot records demonstrate the current intel view.",
+        "imageSha256": "c6d6e726e0236e87a27c2c098b9042bb3bd03bf9b8855b3b7da8391b19db64fd"
+      },
+      {
+        "title": "Bring only the overlays you need",
+        "image": "0.8.7/timers",
+        "view": "timers",
+        "action": "Open Triggers",
+        "copy": "Configure countdowns and log matches in Triggers; its compact overlay also shows swing estimates. Parse keeps Overview, Damage, Healing, Taken and Session. Healing includes labeled rune capacity. New session clears parse/loot totals while keeping your log position, map and running triggers.",
+        "alt": "Eye of Zomm main Triggers page with a log-trigger editor, match preview and named captures.",
+        "caption": "The current trigger editor with a synthetic log line and named-capture preview.",
+        "imageSha256": "da121962fe774065430706ecdd92758d9d9e3347e19a0bf4cd8a9fd5a17bcfbf"
+      }
+    ]
+  },
+  {
+    "version": "0.8.6",
+    "title": "Reliable maps, clean Intel names and simpler updates",
+    "changes": [
+      "Put the zone title and primary Map controls on one row, with a full-width hover target and a separate unlocked drag grip.",
+      "Keep controls reachable while moving from the title to buttons; retain keyboard access and collapse them after leaving the header.",
+      "Repair the overlay file-policy mismatch that rejected required archive support files when switching to Top or First Person.",
+      "Exercise the real configured-folder and archive-file hydration path in Windows CI, alongside native pointer input over the title.",
+      "Parse styled wiki drop-source links and structured item-table rows as exact source names; exclude location annotations and reward-item transclusions while preserving zone/normal/raid associations.",
+      "Make **Restart to install update** silently upgrade and relaunch EoZ after verifying the staged installer, without a second app confirmation or setup wizard."
+    ],
+    "sourceCommit": "1790c93cdabddd5f6d20168c73cfd1cfac66e22d",
+    "steps": [
+      {
+        "title": "A normal desktop workspace",
+        "image": "0.8.6/workspace",
+        "view": "settings",
+        "action": "Open Settings",
+        "copy": "The main app remembers its size, position and maximized state in a standard Windows frame. Choose Minimize to tray and Start minimized in Settings. A green Update available button appears for newer releases. Download, then choose Restart to install update for a silent upgrade and automatic relaunch. Settings also links to GitHub.",
+        "alt": "Eye of Zomm main workspace showing the current desktop layout and settings.",
+        "caption": "Current app capture with a disposable demonstration profile.",
+        "imageSha256": "6db98199a377f0484934fbaca54cc0f5f59338117f26256d4a2fe149eca9a107"
+      },
+      {
+        "title": "Keep the map in view",
+        "image": "0.8.6/map",
+        "view": "map",
+        "action": "Open Map",
+        "copy": "Hover the zone-title row to reveal Reset, Follow, zoom and the Map, Top and navigable First person cycle beside its name. Use the separate grip to move an unlocked window. Z and tolerance choose nearby floors; unknown-height markers stay visible. Monster names are interactive.",
+        "alt": "Eye of Zomm native Map with its horizontal Z slice slider and nearby-floor controls.",
+        "caption": "The current native Map and its controls, using demonstration data.",
+        "imageSha256": "1df969ec93b080ad15c08ca1e2df2ddac36bae5c93822dea3bd47408ab003d6b"
+      },
+      {
+        "title": "Follow named mobs and their loot",
+        "image": "0.8.6/intel",
+        "view": "npcs",
+        "action": "Open NPCs",
+        "copy": "Item Level Slider and My Class stay above the scrolling list. Raid Zone comes first, with separate drops. Hover or focus a mob name for actions; its Map button previews that source in first person. Show More expands every matching drop.",
+        "alt": "Eye of Zomm zone intel showing named mobs, distinct raid sources and matching loot.",
+        "caption": "Synthetic NPC and loot records demonstrate the current intel view.",
+        "imageSha256": "421cd98abb6fb9f05673345ac53d2a1b0524cfc6ade4b692a0c21099dad8c4d7"
+      },
+      {
+        "title": "Bring only the overlays you need",
+        "image": "0.8.6/timers",
+        "view": "timers",
+        "action": "Open Timers",
+        "copy": "Parse, Map, Zone & loot and Timers are separate desktop windows. Unlock panels to move them and resize supported panels; Timers fits its rows automatically. Set countdowns and log triggers on the main Timers page; the swing bar learns your own attacks.",
+        "alt": "Eye of Zomm main Timers page with a log-trigger editor, match preview and named captures.",
+        "caption": "The current timer editor with a synthetic log line and named-capture preview.",
+        "imageSha256": "c17698da08d8aeabc8ac3aacec13fd396ca76a1d988a0bab1ec6bf68f8262739"
+      }
+    ]
+  },
+  {
+    "version": "0.8.5",
+    "title": "Map modes and compact overlay controls",
+    "changes": [
+      "Collapse native Map controls when its header is idle; replace Fit with Reset and remove Reload.",
+      "Cycle Map, top-down 3D and navigable first person inside the native Map window, loading 3D only when used.",
+      "Make monster names and markers share accurate pointer/click targets and keyboard selection.",
+      "Pin Item Level Slider and My Class above the scrolling Intel list, sharing the main app's saved tier.",
+      "Reveal mob actions on hover or keyboard focus. Each mob's Map action opens a first-person camera preview at that source; remove the global Intel Map button."
+    ],
+    "sourceCommit": "47878900f7fe27470a5c762d0f55d771a2f305af",
+    "steps": [
+      {
+        "title": "A normal desktop workspace",
+        "image": "0.8.5/workspace",
+        "view": "settings",
+        "action": "Open Settings",
+        "copy": "The main app remembers its size, position and maximized state in a standard Windows frame. Choose Minimize to tray and Start minimized in Settings. A green Update available button appears in the header when a newer release is offered; Settings also links to the project on GitHub.",
+        "alt": "Eye of Zomm main workspace showing the current desktop layout and settings.",
+        "caption": "Current app capture with a disposable demonstration profile.",
+        "imageSha256": "95389d2563fbf9b917c6509901dcc0622b73eee5dc56229ff9879d3c0224699c"
+      },
+      {
+        "title": "Keep the map in view",
+        "image": "0.8.5/map",
+        "view": "map",
+        "action": "Open Map",
+        "copy": "Reveal the native Map header to Reset, Follow, zoom or cycle Map, Top and navigable First person in this window. Use the Z slider and tolerance to choose nearby floors; unknown-height markers stay visible. Monster names are interactive.",
+        "alt": "Eye of Zomm native Map with its horizontal Z slice slider and nearby-floor controls.",
+        "caption": "The current native Map and its controls, using demonstration data.",
+        "imageSha256": "fdb7f240f738eb00fc00509fd49445fe4f29233d937dcebbc3c43fce397296d0"
+      },
+      {
+        "title": "Follow named mobs and their loot",
+        "image": "0.8.5/intel",
+        "view": "npcs",
+        "action": "Open NPCs",
+        "copy": "Item Level Slider and My Class stay above the scrolling list. Raid Zone comes first, with separate drops. Hover or focus a mob name for actions; its Map button previews that source in first person. Show More expands every matching drop.",
+        "alt": "Eye of Zomm zone intel showing named mobs, distinct raid sources and matching loot.",
+        "caption": "Synthetic NPC and loot records demonstrate the current intel view.",
+        "imageSha256": "421cd98abb6fb9f05673345ac53d2a1b0524cfc6ade4b692a0c21099dad8c4d7"
+      },
+      {
+        "title": "Bring only the overlays you need",
+        "image": "0.8.5/timers",
+        "view": "timers",
+        "action": "Open Timers",
+        "copy": "Parse, Map, Zone & loot and Timers are separate desktop windows. Unlock panels to move them and resize supported panels; Timers fits its rows automatically. Set countdowns and log triggers on the main Timers page; the swing bar learns your own attacks.",
+        "alt": "Eye of Zomm main Timers page with a log-trigger editor, match preview and named captures.",
+        "caption": "The current timer editor with a synthetic log line and named-capture preview.",
+        "imageSha256": "45ef833fb9389e30b3e29be97575cb3e879131f74f8555b4e195f81a7023c2f9"
+      }
+    ]
+  },
+  {
+    "version": "0.8.4",
+    "title": "Window recovery and Local Map controls",
+    "changes": [
+      "Remember the main window's size, monitor position and maximized state; recover saved windows when a display is removed.",
+      "Add Minimize to tray and Start minimized preferences with taskbar recovery when the tray is unavailable.",
+      "Remove Pin to top and restore normal Windows title-bar controls. Independent overlays keep their own lock and mouse settings.",
+      "Keep the main map and its footer visible in shorter windows; add zoom controls and mouse-wheel zoom to the embedded Local Map.",
+      "Replace the native Map floor selector with a Z slider and adjustable tolerance; NPCs with unknown Z remain visible on every floor.",
+      "Prioritize Raid Zone above Normal Zone in the Intel list.",
+      "Add the GitHub project link and a screenshot tour in Settings; refresh README screenshots from the current interface.",
+      "Show a green glowing Update Available header button while an app update is available, including after choosing Later."
+    ],
+    "sourceCommit": "58c760f9f7c76cea8b979b91eb45660a28c35f32",
+    "steps": [
+      {
+        "title": "A normal desktop workspace",
+        "image": "0.8.4/workspace",
+        "view": "settings",
+        "action": "Open Settings",
+        "copy": "The main app remembers its size, position and maximized state in a standard Windows frame. Choose Minimize to tray and Start minimized in Settings. A green Update available button appears in the header when a newer release is offered; Settings also links to the project on GitHub.",
+        "alt": "Eye of Zomm main workspace showing the current desktop layout and settings.",
+        "caption": "Current app capture with a disposable demonstration profile.",
+        "imageSha256": "579169097e8b260cdd6bfd787f4f7a2f605cd7dbfa4e4b313b44437108435cbf"
+      },
+      {
+        "title": "Keep the map in view",
+        "image": "0.8.4/map",
+        "view": "map",
+        "action": "Open Map",
+        "copy": "The separate native Map follows your logged location. Use its horizontal Z slice slider and floor tolerance to choose nearby levels; markers without a known height stay visible. The main Map Explorer has separate First, Top and Map views and local-map zoom controls.",
+        "alt": "Eye of Zomm native Map with its horizontal Z slice slider and nearby-floor controls.",
+        "caption": "The current native Map and its controls, using demonstration data.",
+        "imageSha256": "e37e8cb9311fdcd4ddc592e99b24685b632101c02a7dd7bb5a22e06ce7c77f46"
+      },
+      {
+        "title": "Follow named mobs and their loot",
+        "image": "0.8.4/intel",
+        "view": "npcs",
+        "action": "Open NPCs",
+        "copy": "Zone intel puts Raid Zone first and keeps its sources distinct from Normal Zone. Search named mobs, filter for your class and use Show More for every matching drop. Named considers and kills focus the matching row.",
+        "alt": "Eye of Zomm zone intel showing named mobs, distinct raid sources and matching loot.",
+        "caption": "Synthetic NPC and loot records demonstrate the current intel view.",
+        "imageSha256": "31357f31fc5ce75d11fcda5a061f56ca5696e49b808ab3954aa2759560c221dd"
+      },
+      {
+        "title": "Bring only the overlays you need",
+        "image": "0.8.4/timers",
+        "view": "timers",
+        "action": "Open Timers",
+        "copy": "Parse, Map, Zone & loot and Timers are separate desktop windows. Unlock panels to move them and resize supported panels; Timers fits its rows automatically. Set countdowns and log triggers on the main Timers page; the swing bar learns your own attacks.",
+        "alt": "Eye of Zomm main Timers page with a log-trigger editor, match preview and named captures.",
+        "caption": "The current timer editor with a synthetic log line and named-capture preview.",
+        "imageSha256": "484a9e1e0d9ee6c712f9071bb65847996918657a311702cff4ea5a760eae0356"
+      }
+    ]
+  },
+  {
+    "version": "0.8.3",
+    "title": "Map overlay, raid intel and PNUT triggers",
+    "changes": [
+      "Add an independent lightweight client-map overlay with logged position, named destinations, floor filtering and validated route guidance; remove Minimal view and the Consider window.",
+      "Considering or killing a listed named NPC selects, expands and briefly highlights its intel row with a soft blip, without activating a window.",
+      "Detect Raid Instance headings dynamically in wiki content, preserve normal/raid variants and provenance, and present Normal Zone/Raid Zone groups with complete expandable drops.",
+      "Replace the timer editor with PNUT-style trigger lists and When/Then/Timer editing, isolated regex matching, match previews, captures, cooldowns and local sound/speech actions.",
+      "Check unknown live NPC/item events against a complete bundled wiki presence index. Show Screenshot/Ignore notices inside Timers/Triggers for 15 seconds, paused on hover; explicit screenshots copy locally and never upload.",
+      "Make cumulative item-era filtering explicit, offer eras present in the dataset, and keep First/Top/Map controls on the map page.",
+      "Refresh the release bootstrap from the reviewed production exporter and retain existing log, folder and overlay preferences during upgrade.",
+      "Accept normal Windows short-path cache aliases while retaining updater link protections; run the complete source suite on Windows before publication.",
+      "Preserve normal coordinates for older clients by emitting shared raid NPC variants before their normal counterparts."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.8.2",
+    "title": "Native modular overlays, timers and application updates",
+    "changes": [
+      "Add a separate Application updates card and header badge, with compatible beta-release discovery, verified downloads, cancellation, Later, and explicit installer approval.",
+      "Keep verified downloads across relaunches, make startup downloading opt-in, and preserve the normal NSIS app identity and user-data profile.",
+      "Reject mismatched installer names, sizes, hashes, redirects and downgrades; permit a replacement download when staged files change and retain the app if Windows handoff fails.",
+      "Translate PNUT’s compact encounter header, exact Overview/Damage/Healing/Taken/Session tabs and flat metric tables into the EQL-themed overlays.",
+      "Replace the large floating timer editor with display-only radial countdown rows and a thin swing bar; all configuration and countdown actions live on the main Timers page.",
+      "Parse own incoming melee, spell, DoT and unknown-caster damage for Taken, with attacker/ability counts and rates while preserving outgoing totals.",
+      "Add four actual transparent native overlay windows for Parse, Zone & loot, Consider and Timers, with saved independent positions/sizes, layout locks, background opacity, font scale and mouse passthrough.",
+      "Keep one shared log/parser/timer session alive when the main window hides; retain player parse tabs, complete ability totals, encounter selection, class-aware scaled loot, waypoint/wiki actions and opt-in routes into the existing Map Explorer.",
+      "Add tray/main/checked-shortcut recovery, monitor clamping, crash recovery and stale-session feedback; sandbox each lightweight renderer with restricted IPC.",
+      "Implement manual/repeating countdowns, saved literal log triggers, zone-filtered kill reminders and one-time spawn reminders from a chosen duration. Persist deadlines and reject historical/stale/replayed timer starts.",
+      "Add an observed melee swing bar using own hits/misses, same-second round deduplication, rolling timing changes, cast hold, optional weapon-delay seed and idle reset. EQL timestamps limit it to an estimate, without hand or weapon inference.",
+      "Add synthetic regression coverage, a real Electron four-window/shared-session smoke and packaged-source parity gates for the new runtime."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.8.1",
+    "title": "Wiki and map integration corrections",
+    "changes": [
+      "Recover complete ramp candidates with validated exact-endpoint connectors, preserve legal supported stairs, and permit one independently certified local-drop retry when ordinary routing fails. Real Mistmoore/Kurn descents recover while blocked and reverse probes remain rejected.",
+      "Fix exact zone selection, queued archive loads, stale readiness and route ownership, exact logged-elevation HUD, and framing after a hidden map loads.",
+      "Preserve pass-through collision faces and validate both route engines against ground support, full body clearance, legal climbs, and exposed drops before displaying a path. Match Recast agent dimensions and bound rasterization work.",
+      "Permit the routing worker's WebAssembly under the desktop content policy; verify it in actual Electron CI, retain redacted rejection reasons, and check packaged runtime source parity.",
+      "Record 36 rendered local-zone route probes and 27 view/scale captures, while retaining conservative destination markers and the guarded engine policy.",
+      "Convert wiki NPC destinations to the client-map coordinate basis used by named routing, recompute routes after the player moves, and keep cancelled work from restarting a destination through fallback.",
+      "Apply the wiki's +10 Range per tier to every item with a listed Range, including bows and throwing weapons.",
+      "Honor `Class: ALL except ...` in existing packs and export the actual allowed classes in future packs, keeping unusable loot out of class-filtered recommendations.",
+      "Extend the exporter's exact zone aliases so current wiki zone names retain their NPCs. Installing the reviewed server catalog and rebuilding the dataset is a separate operator step.",
+      "Preserve every recognized explicit NPC template zone before category/title fallbacks, so stale categories cannot move a spawn or discard its second zone.",
+      "Repair a corrupted local dataset on Sync, require SHA-256 verification, and enforce timeouts and size limits through dataset reads.",
+      "Require the installer to embed the exact verified dataset fetched for its build, with bundled dataset versions and record counts in the build log.",
+      "Update Electron within major version 43 and compatible transitive dependencies so the high-severity dependency audit passes.",
+      "Record fresh dataset provenance, private local-archive parse observations, regressions, and outstanding real-client validation in the integration audit."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.8.0",
+    "title": "Guarded real-zone spatial candidate",
+    "changes": [
+      "Exported the viewer's already-decoded collision meshes as finite `Float32Array`/`Uint32Array` data in its existing right-handed Y-up basis, skipping props and pass-through geometry without introducing another EQ coordinate transform.",
+      "Added cooperative, cancellable zone export plus a bounded route-corridor crop so zone rendering and the established worker-first route remain available while the Recast/Detour candidate prepares.",
+      "Wired the pinned Recast worker into named-mob routing. It receives transferable route-local geometry, rejects partial or unvalidated results, and atomically replaces only the rendered golden ribbon while preserving destination, view mode, camera, Z slice, cue HUD, and automatic fallback.",
+      "Made zone, destination, and request changes terminate stale candidate workers. Timeouts, engine faults, missing geometry, oversized crops, and validation failures leave the existing route or destination marker intact.",
+      "Matched Recast and the independent post-query guard to the shared +6 upward-climb rule, generated only downward off-mesh drop links, and indexed corridor triangles in worker-local X/Z cells so dense validation does not scan the full crop for every sample.",
+      "Added diagnostics schema v2 with allow-listed collision counts, timings, engine outcome, validation count, and fallback reason; character/target identity, player and route coordinates, worker error detail, and filesystem paths are excluded while location readiness remains boolean.",
+      "Added viewer-export/crop/winding/cancellation/drop tests, an export-to-Recast integration test, latest-request worker replacement tests, and Windows ASAR checks for the collision module, client, integration markers, and bundled worker.",
+      "Carried forward the 0.7.9 intel-first Minimal defaults and WLD skipped-material cursor repair. EQEmu's WLD polygon/material loop independently confirms that material groups consume polygon ranges sequentially; proprietary Mistmoore/outdoor visual confirmation remains a release gate."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.7.9",
+    "title": "Intel-first minimal view and WLD material repair",
+    "changes": [
+      "Made Minimal view default to the named-and-rare-mob intel panel, with the 3D map hidden unless explicitly enabled in Settings.",
+      "Added independent **Show map** and **Show path controls** preferences. Waypoint copying, consider detection, and loot remain available when both are off.",
+      "Removed the minimal-header destination search; routing, when enabled, starts from the mob list rather than duplicating a search surface.",
+      "Changed **My Class** loot in both Minimal view and the consider tray to exclude statless and weight-only items.",
+      "Replaced eager desktop archive reads with metadata indexing and current-zone hydration, and corrected the false permission status.",
+      "Fixed WLD material-group cursor drift so skipped groups consume their polygon counts instead of shifting every later texture onto the wrong faces.",
+      "Added release checks for lazy reads, material-group alignment, minimal defaults, and class-loot eligibility."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.7.8",
+    "title": "Compact fly-first map controls",
+    "changes": [
+      "Collapsed the embedded map viewer to one control bar: zone load, Succor reset, a compact pop-out Z-depth slicer, and view controls now share the same row; the Grounded and Floors controls are no longer exposed.",
+      "Made First Person initialize in Fly mode and removed the center-screen click-to-enter prompt. Clicking the map still captures mouselook without covering the scene.",
+      "Changed Reset to target an explicit `Succor`/`Safe Point` map label, with the conventional zone origin as fallback, while preserving First, Top, or Map presentation.",
+      "Moved route graph generation to the existing Web Worker before any collision projection. The renderer no longer performs the old 24k/50k/full collision-graph passes, while projected candidate segments still enforce the six-Z upward bound.",
+      "Made Cancel Path clear the destination owner state as well as the in-flight calculation, preventing movement-driven automatic rerouting from restarting a cancelled route.",
+      "Expanded S3D texture aliases, forced repeating WLD texture sampling instead of clamp-to-edge stretching, and invalidated v16 parsed-zone caches.",
+      "Added a focused regression gate covering fly-only UI, one-row chrome, Succor reset, worker-first routing, persistent cancellation, and texture sampling."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.7.7",
+    "title": "Verifiable map-coordinate release",
+    "changes": [
+      "Added the reported side-by-side Mistmoore capture as an exact regression: game Map `X -222.75, Y 125.50, Z -154.10`, canonical world, client `.txt` map, and viewer placement must all converge without an axis swap.",
+      "Changed the viewer HUD and sync footer to use the in-game Map window's explicit `X / Y / Z` labels instead of exposing canonical world-axis names or relying on an unlabeled `/loc` tuple.",
+      "Added the running app version to the always-visible desktop title bar and browser/taskbar title so a surviving or duplicate older installation is immediately identifiable.",
+      "Added a post-build ASAR integrity gate to both Windows workflows. The uploaded installer must contain the current package version, title-bar version binding, coordinate formatter, viewer transform, and Map HUD before it can be published.",
+      "Added Legends `/who` zone detection from the current character's row, including instance-number removal and stable short-name matching, so the map can recover without waiting for a separate zoning line.",
+      "Added automatic versioned GitHub prereleases for the first verified `main` build of each `0.x` version; repeat builds preserve the existing tag, and explicit `0.x` tags are also marked prerelease."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.7.6",
+    "title": "Player-facing coordinate clarity",
+    "changes": [
+      "Corrected the player anchor itself: client `.txt` maps negate canonical world X/Y but do not swap them. Restored the viewer's matching map basis so Mistmoore game `/loc -330, 120, -178.13` lands at the real local-map Succor anchor `-120, 330, -180` instead of the rotated `330, -120` point.",
+      "Made every visible viewer coordinate use EverQuest's exact `/loc Y, X, Z` order; canonical world and client-map axes remain internal implementation details.",
+      "Removed the Map-only reverse conversion that made the same synced position appear numerically different when changing First, Top, and Map presentations.",
+      "Added real Mistmoore and Befallen Succor map anchors as end-to-end transform regressions alongside the stacked-floor fixture.",
+      "Made the root `maps` family win over silently selected larger custom map packs, matching the in-game `default` dropdown unless the player deliberately chooses another set in a future preference; sync status now names the map set in use.",
+      "Updated the Windows acceptance script to compare the app's displayed `/loc` directly with game chat in multiple zones."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.7.5",
+    "title": "Coordinate truth and compact navigation",
+    "changes": [
+      "Separated logged/wiki, canonical world, client `.txt` map, and Three.js viewer coordinates instead of sending all four through one ambiguous transform. This release still swapped the two client-map axes; 0.7.6 corrects that remaining defect with real zone anchors.",
+      "Normalized EQLWiki NPC locations into world X/Y before distance, labels, and routing, while converting back to EverQuest Y/X/Z when copying a game command.",
+      "Restored paste-ready `/waypoint` copying from NPC names in the minimal rail and NPC browser, with keyboard access, non-modal confirmation, a guarded Electron clipboard bridge, and fallback behavior.",
+      "Moved minimal-mode destination search, Path, and Clear into the persistent 48-pixel header and removed the redundant route band so the map receives the recovered vertical space.",
+      "Kept Map Overlay intentionally readable as client `.txt` line art, while adding safe available/material/resolved texture counts to diagnostics for First/Top S3D troubleshooting.",
+      "Added coordinate-boundary, waypoint-order, compact-header, clipboard-bridge, texture-instrumentation, and packaged-viewer regression gates."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.7.4",
+    "title": "Presentation-safe route selection",
+    "changes": [
+      "Stopped wiki-coordinate route starts from forcing First Person or closing Map Overlay.",
+      "Wrapped local map-label route starts so their legacy internal setup cannot commandeer the player's Top Down or Map Overlay choice while background routing runs.",
+      "Restored the original route-progress message after presentation restoration and added a release regression that forbids the known forced-First-Person path."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.7.3",
+    "title": "Isolated navmesh worker proof",
+    "changes": [
+      "Added a pinned, deterministic 747 KiB `recast-navigation` 0.43.1 module-worker bundle with transferable geometry buffers and build/package checks.",
+      "Ran both the reference topology router and candidate Recast/Detour engine against the same eight redistributable fixtures; all expected path/no-path outcomes pass.",
+      "Rejected Detour partial paths, projected sparse funnel results back onto collision surfaces, and added independent post-query guards for walkable support and downward-only drop links.",
+      "Added a latest-request-wins worker client with calm Finding/Updating/fallback states, stale-result suppression, timeouts, worker restart, and an explicit contract that callers retain the last valid route.",
+      "Retained the current viewer pathfinder as production authority; the candidate worker is bundled but dormant until real zone geometry and Windows/game-client gates pass.",
+      "Added exact MIT/Zlib notices, pinned lockfile integrity, dependency-tree validation, and high-severity audit gates to CI and Windows release workflows."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.7.2",
+    "title": "Geometry-backed spatial contract",
+    "changes": [
+      "Extended every asset-free route fixture into shared typed triangle geometry with one right-handed Y-up coordinate contract, upward winding, start/goal anchors, and agent constraints.",
+      "Represented exposed drops as downward-only off-mesh connections, kept closed doors physically disconnected, and retained the +6 ascent contract for candidate engines.",
+      "Selected pinned `recast-navigation` 0.43.1 for an isolated worker prototype after documenting licensing, package footprint, packaging, supply-chain, fallback, and API risks; the production pathfinder is unchanged.",
+      "Defined calm route-engine UX states: keep the last valid path visible, never block map input or change views, swap validated routes atomically, hide implementation jargon, and preserve explicit recovery.",
+      "Quantized player-facing distance labels while keeping exact internal values, reducing distracting single-unit churn during movement-bound `/loc` streams."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.7.1",
+    "title": "Live route confidence and handoff",
+    "changes": [
+      "Added live remaining distance plus turn, facing, off-route, and arrival cues derived from the collision-valid golden path in First Person, Top Down, and Map Overlay.",
+      "Kept the full and minimal route status synchronized with new `/loc` samples so a moving player sees the next action without reopening route controls.",
+      "Added a Settings export for redacted support diagnostics using an explicit allow-list that excludes character names, log contents, log filenames, and filesystem paths.",
+      "Added a deterministic, asset-free route corpus with eight outdoor, indoor, stacked-floor, ramp, closed-door, exposed-drop, and illegal-ascent expectations plus pass-rate and segment-policy reporting.",
+      "Added a repository-native contributor handoff and implementation-status index, cross-linked from the README and vision with the exact next road-to-v1 task.",
+      "Marked shared geometry-backed corpus adapters as the next 0.8 evidence gate before adopting a reviewed worker-based Recast/Detour pathfinder."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.7.0",
+    "title": "Replacement-map navigation loop",
+    "changes": [
+      "Added dataset-backed named and rare-mob labels directly to First Person, Top Down, and Map Overlay views, prioritized by known current-class loot and routable with one click.",
+      "Rebuilt the minimal-mode mob rail around useful current-zone targets, relevant-first ordering, mob/loot search, route state, distance, and expandable Itembox-enabled loot instead of a long undifferentiated list.",
+      "Added stable heading interpolation across recent `/loc` samples, retaining facing through duplicate/jitter lines and refusing to invent a heading after a zone-scale position jump.",
+      "Made location sync preserve the selected map presentation internally instead of switching through First Person on every update.",
+      "Increased live log responsiveness while a map or route is active and coalesced bursts to the newest `/loc`, preventing movement-key bindings from creating a renderer backlog.",
+      "Kept persistent routes updating during continuous movement without an endlessly-reset debounce, while retaining collision validation and the eight-unit re-route threshold.",
+      "Documented `/loc` movement-key setup in the compact navigation surface and expanded the v1 roadmap around a replacement-map product contract."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.6.0",
+    "title": "Usable exploration loop",
+    "changes": [
+      "Replaced ambiguous map Sync failures with a visible Folder → Log → Zone → `/loc` readiness sequence and state-specific recovery actions.",
+      "Added one persistent current-zone destination field with named suggestions, explicit route/marker/error status, shortest routed distance, Clear, and automatic re-routing after meaningful `/loc` movement.",
+      "Kept First Person, Top Down, and Map Overlay controls available across full/minimal transitions, remembered the last full view, and preserved explicit same-zone floor filters during re-centering and route updates.",
+      "Added a remembered minimal-mode intel collapse control while retaining current-fight DPS, named mobs, class drops, route controls, pinning, and Full view.",
+      "Expanded current-zone/class item discovery with embedded icons, slot and sort overrides, one-click Reset, useful-gear-first ranking, and honest scope/empty states.",
+      "Made Itembox details keyboard reachable and made tier-adjusted values update immediately, visibly highlight changes, and retain base values for comparison.",
+      "Repaired S3D WLD material resolution by using bitmap fragments' actual `fileName`, normalizing BMP/DDS names, supporting animated frame filenames, and invalidating stale v15 parsed-zone caches.",
+      "Replaced routine focus-stealing browser alerts with dismissible in-app notices, and added Ctrl/Cmd+K plus `/` shortcuts for the reliable wiki-only Search EQLWiki field.",
+      "Improved NPC relevance ordering while retaining modern con text and tile tinting, and kept all existing consider tray, encounter, loot evidence, pin/taskbar, coordinate, and directed movement contracts.",
+      "Expanded the product vision into a release-gated road to v1 with journey contracts, user stories, click budgets, risk ownership, uncoached usability tasks, and a Windows/game-client acceptance script."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.5.4",
+    "title": "Release pipeline reliability",
+    "changes": [
+      "Separated clean-checkout tests from the production catalog relevance gate so CI no longer expects the intentionally git-ignored bootstrap pack before it has been downloaded.",
+      "Added a verified production-data fetch followed by the relevance gate to CI, Windows installer, and tagged-release workflows."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.5.3",
+    "title": "Live map and movement routing",
+    "changes": [
+      "Removed the erroneous planar sign inversion from logged `/loc` coordinates while retaining EverQuest's Y/X-to-X/Y ordering, so negative in-game map positions remain negative in the viewer.",
+      "Stopped trusted `/loc` and NPC-label elevations from snapping to an upper floor in stacked dungeons; grounding now honors the reported Z with only the six-unit movement tolerance.",
+      "Added the Legends rare-creature consider wording (`- a rare creature - scowls at you`) to the parser so a fresh consider opens the bottom-docked loot tray with the clean NPC name.",
+      "Reworked geometry-derived routing as a directed movement graph: upward travel is capped at exactly 6 Z, downward travel is unlimited, and a drop cannot be reversed as an invalid climb.",
+      "Prevented routes from falling through overlapping floors, tightened indoor-zone sampling for narrow corridors and stairs, and retained wall/collision validation for every route edge.",
+      "Matched first-person step and jump configuration to the same six-unit routing constraint and invalidated old parsed-zone cache data.",
+      "Kept First Person, Top Down, and Map Overlay controls available in minimal mode, persisted the chosen mode, and recentered that mode instead of forcing First Person after every `/loc` update.",
+      "Added explicit game-folder/map-file readiness states and automatic viewer reconnection so Sync distinguishes a missing folder from a configured folder that is only waiting for `/loc`.",
+      "Changed the Items default from an alphabetical global catalog to current-zone, current-class results ranked toward equipment and meaningful stats; deliberate search broadens the scope.",
+      "Made detected classes visible through an Auto filter state and added a clear Current zone scope control.",
+      "Made the Item Level Slider update already-open Itembox tooltips and display a clearly labeled tier-adjusted stat block alongside wiki base lines.",
+      "Kept repeated `/loc` events out of Overview activity and renamed manual map recovery actions around their actual result: reload the zone or center on the last `/loc`.",
+      "Added a comprehensive product and UX vision with click budgets, end-to-end flows, user stories, recovery language, acceptance scenarios, and a phased roadmap."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.5.2",
+    "title": "Consider loot tray",
+    "changes": [
+      "Restored consider-driven loot intelligence as a temporary bottom-docked tray without bringing back the unreliable permanent Current Target card.",
+      "Added class filtering, item icons and Itembox hovers, wiki links, and direct pathing for the considered NPC.",
+      "Kept the tray open while hovered or keyboard-focused, then resumed its dismissal timer after inspection.",
+      "Normalized apostrophe and backtick variants when matching considered NPC names to EQLWiki drop sources."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.5.1",
+    "title": "Map alignment and navigation",
+    "changes": [
+      "Normalized logged `/loc` output into the coordinate basis used by EverQuest map files and EQLWiki locations, fixing the swapped and inverted player marker in Befallen and other zones.",
+      "Made the first-person minimap player-centered and heading-up from consecutive `/loc` samples, with nearby named mobs and the active route labeled directly on the map.",
+      "Switched route calculation to a height-aware walkable-surface graph derived from the rendered zone collision mesh, preserving floors, ramps, walls, jump limits, and drops while reporting shortest-route distance.",
+      "Repaired S3D material-to-bitmap resolution so original zone textures load instead of placeholder gray/white materials.",
+      "Bumped the parsed-zone cache version so existing installations rebuild previously cached zones with corrected texture data."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.5.0",
+    "title": "Release UX and map overhaul",
+    "changes": [
+      "Added first-run EverQuest folder setup and automatic selection of the most recently modified `eqlog_*.txt` under `Logs`, with folder and log overrides in Settings.",
+      "Removed the unreliable current-target surface, last-location metric, and remaining player-card redundancy; the header now shows character, classes, level, and zone.",
+      "Added explicit First Person 3D, Top Down 3D, and Map Overlay modes, with all floors shown by default.",
+      "Corrected the EQ-to-viewer coordinate flow and made consecutive `/location` updates face the player's movement trajectory.",
+      "Kept route-to-NPC support map-label-first with schema-v3 EQLWiki coordinates as the fallback.",
+      "Changed pinned mode to hide the draggable title bar while keeping Eye of Zomm visible in the Windows taskbar.",
+      "Added the modern light-blue consider band and verified yellow at +1 through +3 and red at +4 or higher.",
+      "Reduced helper copy and removed every retired product-name reference from the app and repository.",
+      "Upgraded the exported dataset to schema v3 so two-coordinate locations and pages with multiple location tuples are handled safely.",
+      "Added loopback request/file bounds, state-changing POST guards, first-run/log-selection tests, exporter fixtures, UI checks, and release checks.",
+      "Added optional trusted Authenticode signing and verification while allowing clearly identified unsigned builds until a certificate is configured."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.4.0",
+    "title": "Map and target focus",
+    "changes": [
+      "Corrected consider colors so +1 through +3 are yellow and +4 or higher is red.",
+      "Made Current Target a permanent, prominent Overview panel with class-filtered loot.",
+      "Expanded minimal mode with current-fight DPS, a pathable mob list, and a temporary hoverable target-loot panel.",
+      "Persisted the user-approved EverQuest folder handle and inferred the installation root from the selected log path.",
+      "Added automatic first-person location focus and NPC route fallback to exported EQLWiki coordinates.",
+      "Changed pinned mode to hide the application from the Windows taskbar.",
+      "Restyled item hovers after EQLWiki's Itembox and extended the cPanel exporter with Itembox lines and embedded icons.",
+      "Removed redundant helper copy and the duplicate Player card.",
+      "Added optional Authenticode signing and signature verification to Windows build/release workflows."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  },
+  {
+    "version": "0.3.0",
+    "title": "EQLWiki - Eye of Zomm",
+    "changes": [
+      "Rebranded the project as **EQLWiki - Eye of Zomm**.",
+      "Changed the Windows application identity, installer name, shortcuts, and custom protocol to `eqleoz://`.",
+      "Moved player-facing dataset checks away from EQLWiki and onto the GitHub `dataset` branch.",
+      "Dataset synchronization now checks GitHub on every application startup and on **Sync with Wiki** button press.",
+      "Added low-priority MediaWiki server exporter + one-commit GitHub dataset branch publishing workflow.",
+      "Added repository-scoped deploy-key support for weekly/manual cPanel synchronization without a personal token.",
+      "Kept the embedded Zone Viewer navigation-focused and removed additional nonessential viewer controls from the app UI.",
+      "Expanded exported NPC metadata with race, class, and description where present.",
+      "Retained local wiki search and explicit Open on Wiki behavior.",
+      "Added persistent **Pin to top** and a compact map + named-drop minimal view.",
+      "Added local item hover tooltips, observed loot history, and logged drop-rate estimates.",
+      "Added configurable combat encounters named for the first attacked NPC and their start time.",
+      "Repaired embedded Zone Viewer startup and current-zone/location synchronization.",
+      "Simplified the header search to a reliable, wiki-only **Search EQLWiki** field.",
+      "Added con-color tinting to NPC cards and current-zone NPC rows.",
+      "Screen reading remains intentionally unimplemented."
+    ],
+    "sourceCommit": null,
+    "steps": []
+  }
+]);

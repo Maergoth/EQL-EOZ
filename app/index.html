@@ -6,6 +6,7 @@
 <title>EQLWiki - Eye of Zomm</title>
 <link rel="stylesheet" href="./styles.css">
 <link rel="stylesheet" href="./whats-new.css">
+<link rel="stylesheet" href="./capture-workspace.css">
 </head>
 <body>
 <div class="app-shell">
@@ -45,6 +46,8 @@
         <button class="nav-button" data-view="drops"><span>▣</span>Drops</button>
         <button class="nav-button" data-view="combat"><span>⚔</span>Combat</button>
         <button class="nav-button" data-view="timers"><span>◷</span>Triggers</button>
+        <button class="nav-button" data-view="contribute"><span>✎</span>Contribute to Wiki</button>
+        <button class="nav-button" data-view="character"><span>♙</span>Character</button>
         <button class="nav-button" data-view="settings"><span>⚙</span>Settings</button>
     </aside>
 
@@ -129,6 +132,7 @@
                 <div class="viewer-frame-wrap">
                     <iframe id="zone-viewer" class="viewer-frame" src="./zoneviewer/viewer.html" title="EQL Zone Viewer"></iframe>
                 </div>
+                <aside id="map-loot-pane" class="map-loot-pane panel" aria-label="Selected monster loot" hidden></aside>
             </div>
         </section>
 
@@ -236,6 +240,8 @@
             <div id="wiki-discovery-notices" aria-label="Wiki discoveries"></div>
         </section>
 
+        <section class="view" data-view-panel="contribute"><div id="contribution-workspace"></div></section>
+        <section class="view" data-view-panel="character"><div id="character-workspace"></div></section>
         <section class="view" data-view-panel="settings">
             <div class="section-heading">
                 <div>
@@ -245,6 +251,7 @@
             </div>
             <div class="settings-grid">
                 <div id="overlay-controller" class="panel"></div>
+                <article id="capture-settings" class="panel"></article>
                 <article class="panel" id="appearance-settings">
                     <h2>Fonts</h2>
                     <label for="settings-font-family">Font family <select id="settings-font-family" aria-label="Font family"></select></label>

@@ -36,10 +36,15 @@ jobs:
             npm run test:desktop-worker
             npm run test:window-lifecycle
             npm run test:map-layout
+            npm run test:map-loot -- --screenshots ci-screenshots/linux-map-loot
+            npm run test:main-cache
             npm run test:map-overlay-3d
             npm run test:native-overlays -- --screenshots ci-screenshots/linux
             npm run test:discovery-notices
             npm run test:appearance -- --screenshots ci-screenshots/linux-appearance
+            npm run test:wiki-auth
+            npm run test:capture-native
+            npm run test:capture-workspace -- --screenshots ci-screenshots/linux-capture-workspace
           '
       - name: Fetch production bootstrap data
         if: inputs.bootstrap_artifact == ''
@@ -62,6 +67,7 @@ jobs:
             openbox >/tmp/eoz-packaged-openbox.log 2>&1 &
             node scripts/test-linux-package.mjs
             npm run test:appearance -- --packaged-root dist/linux-unpacked/resources/app.asar --screenshots ci-screenshots/linux-packaged
+            npm run test:capture-native -- --packaged-root dist/linux-unpacked/resources/app.asar
           '
       - name: Hash release assets
         run: node scripts/release-assets.mjs linux

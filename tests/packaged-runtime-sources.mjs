@@ -10,7 +10,7 @@ const bootstrapPath = 'app/data/eye-of-zomm-pack.bootstrap.json';
 const requiredModules = [
     'app/appearance.js', 'app/appearance-presets.json', 'app/appearance-presets.generated.js', 'desktop/appearance.cjs', 'desktop/linux-runtime.cjs', 'desktop/log-selection.cjs',
     bootstrapPath,
-    'app/whats-new.js','app/whats-new.css','desktop/window-placement.cjs',
+    'app/whats-new.js','app/whats-new.css','app/release-history.js','app/release-history-state.js','desktop/window-placement.cjs',
     'app/overlay-map.html','app/map-overlay-3d.js','app/zoneviewer/overlay-mode.js','desktop/overlay-map-policy.cjs',
     'app/map-overlay.js', 'app/map-overlay-data.js', 'app/wiki-discovery.js', 'app/wiki-discovery-ui.js',
     'app/trigger-match-core.js', 'app/trigger-matcher.js', 'app/workers/trigger-match.worker.js',

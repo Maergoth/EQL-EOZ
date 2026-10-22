@@ -37,10 +37,15 @@ jobs:
       - run: npm run test:desktop-worker
       - run: npm run test:window-lifecycle
       - run: npm run test:map-layout
+      - run: npm run test:map-loot -- --screenshots ci-screenshots/map-loot
+      - run: npm run test:main-cache
       - run: npm run test:map-overlay-3d
       - run: npm run test:native-overlays -- --screenshots ci-screenshots
       - run: npm run test:discovery-notices
       - run: npm run test:appearance -- --screenshots ci-screenshots/appearance
+      - run: npm run test:wiki-auth
+      - run: npm run test:capture-native
+      - run: npm run test:capture-workspace -- --screenshots ci-screenshots/capture-workspace
       - name: Upload synthetic interface captures
         if: always()
         uses: actions/upload-artifact@v4

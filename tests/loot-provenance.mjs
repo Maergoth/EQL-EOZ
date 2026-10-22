@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { EQLogParser } from '../app/parser.js';
+const parser=new EQLogParser();parser.character='Synthetic';
+parser.parse('[Thu Oct 22 17:00:00 2026] You have entered Synthetic Zone.');
+parser.parse('[Thu Oct 22 17:00:01 2026] You have slain a synthetic rat!');
+const explicit=parser.parse('[Thu Oct 22 17:00:02 2026] You have looted a Synthetic Blade from the corpse of a synthetic bat.');
+assert.equal(explicit.source,'a synthetic bat');assert.equal(explicit.sourceEvidence.kind,'explicit-corpse');assert.equal(explicit.sourceConfidence,1);
+const inferred=parser.parse('[Thu Oct 22 17:00:03 2026] You have looted a Synthetic Ring.');
+assert.equal(inferred.source,'a synthetic rat');assert.equal(inferred.sourceEvidence.kind,'recent-kill');assert.equal(inferred.sourceEvidence.timeGapMs,2000);assert.equal(inferred.sourceConfidence,.25);
+parser.startNewSession();
+const unknown=parser.parse('[Thu Oct 22 17:10:00 2026] You have looted a Synthetic Cloth.');
+assert.equal(unknown.source,'Unknown');assert.equal(unknown.sourceEvidence.kind,'unknown');assert.equal(unknown.sourceConfidence,0);
+assert.equal(parser.totalLoot,1,'provenance does not change existing manual-session totals');
+console.log('Loot provenance: explicit corpse versus inferred recent kill and unknown, with existing totals preserved.');

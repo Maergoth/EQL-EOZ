@@ -14,11 +14,12 @@ const state = (status, extra = {}) => ({ supported:true, status, currentVersion:
     releaseUrl:'https://github.com/Maergoth/EQL-EOZ/releases/tag/v0.8.3', ...extra });
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
-function fixture(bridge) {
+function fixture(bridge, clock = Date.now) {
     const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
     const document = Object.assign(new EventTarget(), { hidden:false, getElementById:id => elements[id] });
     const timers = new Map(); let timerId = 0; let openedSettings = 0;
     const controller = mountAppUpdates({ document, bridge,
+        now:clock,
         openSettings:() => { openedSettings++; },
         setTimeout:callback => { const id = ++timerId; timers.set(id, callback); return id; },
         clearTimeout:id => timers.delete(id)
@@ -147,6 +148,42 @@ linuxHandoff.resolve(linuxState);await flush();
 assert.equal(linux.elements['install-app-update'].textContent,'Open download folder');
 assert.equal(linux.elements['install-app-update'].hidden,false,'Manual handoff retains the downloaded package');
 linux.controller.dispose();
+
+let countdownNow=10000,automaticInstalls=0;
+let countdownState=state('available');
+const countdown=fixture({getStatus:async()=>countdownState,
+    download:async()=>countdownState=state('ready'),
+    install:async()=>{automaticInstalls++;return countdownState=state('installing');}
+},()=>countdownNow);
+await flush();countdown.elements['download-app-update'].click();await flush();
+assert.match(countdown.elements['app-update-status'].textContent,/Restarting in 5/);
+assert.match(countdown.elements['app-update-badge'].textContent,/Restarting in 5/);
+assert.equal(automaticInstalls,0);
+assert.equal(countdown.elements['later-app-update'].textContent,'Cancel restart');
+for(let second=1;second<=5;second++){
+    countdownNow+=1000;
+    // Advance all currently pending callbacks once. Polling and countdown have
+    // independent timers; newly scheduled callbacks belong to the next tick.
+    const pending=[...countdown.timers];countdown.timers.clear();
+    for(const [,callback] of pending)await callback();
+    await flush();
+    if(second<5)assert.match(countdown.elements['app-update-status'].textContent,new RegExp(`Restarting in ${5-second}`));
+}
+assert.equal(automaticInstalls,1,'A requested verified Windows download installs once after five seconds without another click');
+countdown.controller.dispose();
+
+countdownState=state('available');automaticInstalls=0;
+const canceledRestart=fixture({getStatus:async()=>countdownState,download:async()=>countdownState=state('ready'),install:async()=>{automaticInstalls++;return state('installing');}},()=>countdownNow);
+await flush();canceledRestart.elements['download-app-update'].click();await flush();
+canceledRestart.elements['later-app-update'].click();countdownNow+=10000;
+await canceledRestart.controller.refresh();assert.equal(automaticInstalls,0,'Cancel restart leaves the verified package ready for a later explicit install');
+assert.equal(canceledRestart.elements['install-app-update'].disabled,false);
+canceledRestart.controller.dispose();
+
+const linuxDownload=fixture({getStatus:async()=>state('available',{installMode:'manual-linux'}),download:async()=>linuxState,install:async()=>{throw Error('Linux must not auto-install');}});
+await flush();linuxDownload.elements['download-app-update'].click();await flush();
+assert(!linuxDownload.elements['app-update-status'].textContent.includes('Restarting'));
+linuxDownload.controller.dispose();
 
 const html = readFileSync(new URL('../app/index.html', import.meta.url), 'utf8');
 for (const id of ids) assert.equal((html.match(new RegExp(`id="${id}"`, 'g')) || []).length, 1, `Native updater control ${id} exists exactly once`);

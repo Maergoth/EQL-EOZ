@@ -58,6 +58,7 @@ function harness() {
         partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,
         overlaySession:{ inputs:[], consume(event, context) { this.inputs.push({ event, context }); }, flush() {} },
         wikiDiscovery:{consume() {}},
+        observedLogCursor:0,captureWorkspace:{consumeLog() {}},
         $:node, state:() => parser.snapshot(), viewerApi:() => viewer,
         waitForViewerApi:async () => viewer, ensureViewerFolderConnected:async () => true,
         queueViewerSync:operation => { const pending = operation(); operations.push(pending); return pending; },

@@ -2,6 +2,7 @@
 // from those sources. A current HTML wrapper is insufficient if one of its
 // imported modules is missing or stale in the installer. The generated
 // bootstrap must also match the verified pack fetched for this build.
+import { RELEASE_HISTORY } from '../app/release-history.js';
 export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/appearance.js',
     'app/appearance-presets.json',
@@ -13,8 +14,30 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/index.html',
     'app/styles.css',
     'app/app.js',
+    'app/capture-workspace.js',
+    'app/capture-workspace.css',
+    'app/contribution-queue.js',
+    'app/contribution-model.js',
+    'app/character-model.js',
+    'app/character-share.js',
+    'app/capture-source.html',
+    'app/capture-source.js',
+    'app/screen-read-parser.js',
+    'desktop/capture-host.cjs',
+    'desktop/screen-read-journal.cjs',
+    'desktop/capture-image.cjs',
+    'desktop/ocr-service.cjs',
+    'desktop/ocr-worker.cjs',
+    'desktop/capture-source-preload.cjs',
+    'desktop/wiki-client.cjs',
+    'desktop/wiki-host.cjs',
+    'desktop/share-host.cjs',
+    'THIRD_PARTY/OCR/README.md',
+    'THIRD_PARTY/OCR/APACHE-2.0.txt',
     'app/whats-new.js',
     'app/whats-new.css',
+    'app/release-history.js',
+    'app/release-history-state.js',
     'app/map-overlay.js',
     'app/map-overlay-3d.js',
     'app/map-overlay-data.js',
@@ -78,7 +101,10 @@ export function packagedArchivePaths(platform = process.platform) {
     throw new Error(`No packaged archive contract for ${platform}.`);
 }
 
-export const PACKAGED_RUNTIME_IMAGES=Object.freeze(['workspace','map','intel','timers'].map(name=>`app/assets/whats-new/${name}.png`));
+export const PACKAGED_RUNTIME_IMAGES=Object.freeze([...new Set([
+    ...['workspace','map','intel','timers'].map(name=>`app/assets/whats-new/${name}.png`),
+    ...RELEASE_HISTORY.flatMap(release=>release.steps.map(step=>`app/assets/whats-new/${step.image}.png`))
+])]);
 
 export function verifyPackagedRuntimeImages(packagedBytes,sourceBytes){
     for(const relative of PACKAGED_RUNTIME_IMAGES){

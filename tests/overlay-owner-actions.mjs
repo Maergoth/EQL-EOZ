@@ -53,13 +53,15 @@ parser.parse('[Wed Oct 21 12:00:01 2026] You slash Synthetic Keeper for 50 point
 const resetFrom=source.indexOf('function startNewSession('),resetTo=source.indexOf('const raidVariant',resetFrom);
 const consumeFrom=source.indexOf('function consumeText('),consumeTo=source.indexOf('function state()',consumeFrom);
 assert(resetFrom>=0&&resetTo>resetFrom&&consumeFrom>=0&&consumeTo>consumeFrom);
-const triggerCalls=[], discoveryCalls=[], notices=[], publications=[];
+const triggerCalls=[], discoveryCalls=[], contributionCalls=[], notices=[], publications=[];
 const overlayOwner={consume:(...args)=>triggerCalls.push(args),flush(){},publish:async()=>publications.push(parser.snapshot())};
 const discoveryOwner={consume:(...args)=>discoveryCalls.push(args)};
 const splitContext=vm.createContext({parser,partialLine:'[Wed Oct 21 12:00:02 2026] You slash Synthetic Keeper for ',logOffset:12345,
     selectedEncounterId:'old-fight',fightExpiryTimer:77,clearTimeout:id=>calls.push(['clear-timer',id]),
     renderAll:()=>calls.push(['render-split']),showNotice:message=>notices.push(message),overlaySession:overlayOwner,wikiDiscovery:discoveryOwner,
     bridgeInfo:{logPath:'synthetic-log'},state:()=>parser.snapshot()});
+splitContext.observedLogCursor=0;
+splitContext.captureWorkspace={consumeLog:(...args)=>contributionCalls.push(args)};
 vm.runInContext(`${source.slice(resetFrom,resetTo)};${source.slice(consumeFrom,consumeTo)};${source.slice(from,to)};this.handle=handleOverlayCommand;this.consume=consumeText;`,splitContext);
 await splitContext.handle({action:'session:new-session',payload:{}});
 assert.equal(parser.snapshot().totalDamage,0);
@@ -77,6 +79,8 @@ assert.equal(parser.snapshot().totalDamage,7,'an initial/replacement tail cannot
 assert.equal(triggerCalls.at(-1)[0],null);
 assert.equal(triggerCalls.at(-1)[1].live,false,'reset-tail freshness protection remains active for triggers');
 assert.equal(discoveryCalls.at(-1)[1].live,false,'reset-tail freshness protection remains active for wiki discoveries');
+assert.equal(contributionCalls.at(-1)[1].live,false,'reset tails cannot enter the durable contribution journal as fresh discoveries');
+assert.equal(contributionCalls.at(-1)[1].cursor,2,'each consumed line has a distinct contribution cursor');
 
 // Native item hover gets the stat block from bounded local data, including base
 // comparisons at the shared tier, without granting another file/network API.
