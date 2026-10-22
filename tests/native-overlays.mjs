@@ -400,7 +400,10 @@ test('close hides only its own panel and preference saves never include the sess
     assert.equal(host.getState().panels.intel.visible, true);
     assert.equal(host.hasVisiblePanels(), true);
     assert(writes.length > 0);
-    for (const saved of writes) assert.deepEqual(Object.keys(saved), ['schemaVersion', 'panels']);
+    for (const saved of writes) {
+        assert.deepEqual(Object.keys(saved), ['schemaVersion', 'appearance', 'panels'], 'Only layout and appearance preferences persist; session/private data stays excluded');
+        assert.deepEqual(saved.appearance, {fontFamily:'theme',fontSize:13}, 'Persist the complete bounded default appearance without arbitrary CSS or extra fields');
+    }
     await host.control('hide-all'); assert.equal(host.hasVisiblePanels(), false);
 }));
 

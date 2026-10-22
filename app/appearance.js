@@ -41,7 +41,11 @@ export function inheritViewerAppearance(parentDocument,viewerDocument) {
     let style = viewerDocument.getElementById('eoz-viewer-appearance');
     if (!style) {
         style = viewerDocument.createElement('style'); style.id = 'eoz-viewer-appearance';
-        style.textContent = 'html{font-size:calc(16px * var(--font-scale,1))}:where(.eqlzv-app,.eqlzv-app *){font-family:var(--ui-font-family)!important}';
+        style.textContent = `html{font-size:calc(16px * var(--font-scale,1))}:where(.eqlzv-app,.eqlzv-app *){font-family:var(--ui-font-family)!important}
+            .eoz-minimap-controls button{height:max(20px,1.25rem);font-size:.6875rem!important}
+            .eoz-rare-marker{font-size:.6875rem!important}.eoz-rare-marker small{font-size:.5rem!important}
+            .eoz-route-guidance strong{font-size:.875rem!important}.eoz-route-guidance small{font-size:.625rem!important}
+            @media(max-height:400px){.eqlzv-toolbar .eqlzv-button,.eqlzv-toolbar .eqlzv-select{font-size:.75rem!important}}`;
         viewerDocument.head.append(style);
     }
 }
