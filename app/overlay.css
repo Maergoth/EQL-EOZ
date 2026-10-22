@@ -58,5 +58,5 @@ body[data-panel=intel] #panel-content{display:flex;flex-direction:column;overflo
 .parse-tabs button{overflow:hidden;text-overflow:ellipsis}
 .encounter-stats{min-width:0;overflow:hidden}
 .chrome-button{width:max(18px,calc(18px * var(--font-scale)));height:max(20px,calc(20px * var(--font-scale)))}
-.swing-idle,body[data-panel=timers] .empty{height:calc(22px * var(--font-scale))}
+.swing-idle,body[data-panel=timers] .empty{height:auto;min-height:calc(22px * var(--font-scale))}
 .intel-filter-row{grid-template-columns:auto minmax(16px,1fr) auto}
