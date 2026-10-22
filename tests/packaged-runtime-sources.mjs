@@ -8,7 +8,7 @@ import { packagedArchivePaths, PACKAGED_RUNTIME_SOURCES, PACKAGED_RUNTIME_IMAGES
 
 const bootstrapPath = 'app/data/eye-of-zomm-pack.bootstrap.json';
 const requiredModules = [
-    'app/appearance.js', 'app/appearance-presets.json', 'desktop/appearance.cjs', 'desktop/linux-runtime.cjs', 'desktop/log-selection.cjs',
+    'app/appearance.js', 'app/appearance-presets.json', 'app/appearance-presets.generated.js', 'desktop/appearance.cjs', 'desktop/linux-runtime.cjs', 'desktop/log-selection.cjs',
     bootstrapPath,
     'app/whats-new.js','app/whats-new.css','desktop/window-placement.cjs',
     'app/overlay-map.html','app/map-overlay-3d.js','app/zoneviewer/overlay-mode.js','desktop/overlay-map-policy.cjs',

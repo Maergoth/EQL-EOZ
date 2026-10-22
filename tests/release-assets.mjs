@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve, basename } from 'node:path';
 import { releaseAssetNames, writeReleaseChecksums, verifyReleaseChecksums } from '../scripts/release-assets.mjs';
+import { Arch, getArtifactArchName } from 'builder-util/out/arch.js';
+import { expandMacro } from 'app-builder-lib/out/util/macroExpander.js';
+
+const pkg=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
+// Exercise the pinned builder's real macro expansion: Linux ${arch} means
+// x86_64 for AppImage and amd64 for deb, while our updater contract uses x64.
+const builtNames=['AppImage','deb'].map(ext=>expandMacro(pkg.build.linux.artifactName,getArtifactArchName(Arch.x64,ext),pkg,{ext}));
+assert.deepEqual(builtNames,releaseAssetNames(pkg.version,'linux'),'Actual electron-builder names must match checksum, workflow and updater names');
+assert(pkg.build.linux.target.every(target=>target.arch.every(arch=>arch==='x64')),'The fixed x64 filename contract requires x64-only Linux targets');
 
 const directory = await mkdtemp(join(tmpdir(), 'eoz-release-assets-'));
 try {

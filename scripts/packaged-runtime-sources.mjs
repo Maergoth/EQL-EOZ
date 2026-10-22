@@ -5,6 +5,7 @@
 export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/appearance.js',
     'app/appearance-presets.json',
+    'app/appearance-presets.generated.js',
     'desktop/appearance.cjs',
     'desktop/linux-runtime.cjs',
     'desktop/log-selection.cjs',

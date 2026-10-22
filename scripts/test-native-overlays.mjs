@@ -648,7 +648,7 @@ try {
                     releaseUrl:`https://github.com/Maergoth/EQL-EOZ/releases/tag/v${fixtureUpdateVersion}`
                 }) } });
                 await window.__tourUpdatePresenter.refresh();
-                [...document.querySelectorAll('.settings-grid h2')].find(heading => heading.textContent === 'Window')
+                [...document.querySelectorAll('.settings-grid h2')].find(heading => heading.textContent === 'Fonts')
                     .closest('article').scrollIntoView({ block:'start' });
             },fixtureUpdateVersion);
             await screenshot(owner, 'workspace');

@@ -1,4 +1,4 @@
-import presets from './appearance-presets.json' with {type:'json'};
+import presets from './appearance-presets.generated.js';
 
 export const FONT_PRESETS = Object.freeze(presets.fonts.map(font => Object.freeze({...font})));
 export const DEFAULT_APPEARANCE = Object.freeze({...presets.default});

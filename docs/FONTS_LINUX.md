@@ -22,6 +22,12 @@ The published dataset remains an independent, verified bootstrap input.
 | Packaging | `package.json`, exact ASAR/image/bootstrap checks and GitHub workflows; build Windows x64 plus Linux x64 AppImage/deb, run platform gates, and publish through one release owner only after both builds pass. Preserve existing tag provenance. |
 | Evidence | Source tests, Windows native interaction/font checks, Linux Xvfb runtime and packaged executable checks. Keep synthetic captures separate from real game/compositor acceptance. |
 
+Font presets have one canonical JSON source. `scripts/build-appearance.mjs`
+generates the browser script during the existing prestart/pretest/package build
+step; desktop code reads that same JSON. Parity and exact ASAR checks prevent a
+stale module. Native panels retain `connect-src 'none'`: font choices require
+neither a network allowance nor downloaded fonts.
+
 ## Linux compatibility boundary
 
 EoZ runs separately from the game and reads the ordinary client files the user

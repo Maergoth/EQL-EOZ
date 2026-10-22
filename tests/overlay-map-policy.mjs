@@ -9,8 +9,8 @@ const request=(path,method='GET',resourceType='xhr')=>allowMapRequest({url:origi
 assert(request('/overlay-map.html?panel=map','GET','mainFrame'));
 assert(request('/zoneviewer/viewer.html?overlay=1','GET','subFrame'));
 for(const path of ['/map-overlay-3d.js','/zoneviewer/overlay-mode.js','/zoneviewer/zone-parser.worker.js','/zoneviewer/ext.eqlZoneViewer.css'])assert(request(path));
-assert(request('/appearance.js','GET','script'));assert(request('/appearance-presets.json','GET','script'));
-for(const path of ['/appearance-presets.json?source=private','/settings.json','/appearance-private.json'])assert.equal(request(path),false,'Only packaged public font presets may be read');
+assert(request('/appearance.js','GET','script'));assert(request('/appearance-presets.generated.js','GET','script'));
+for(const path of ['/appearance-presets.json','/appearance-presets.json?source=private','/settings.json','/appearance-private.json'])assert.equal(request(path),false,'Static font scripts require no JSON/network allowance');
 assert(request('/api/eq-files'));
 for(const path of ['mistmoore.s3d','resources/synthetic.eqg','Maps/mistmoore.txt','Maps/Brewall/mistmoore_1.txt','mp3index.txt','MP3INDEX.TXT','mistmoore_assets.txt','synthetic-zone_2_assets.txt'])assert(request('/api/eq-file?path='+encodeURIComponent(path)+'&surface=overlay-map'),path);
 for(const path of ['Logs/eqlog_Fixture_Test.txt','Logs/mistmoore_assets.txt','Maps/../Logs/eqlog_Fixture_Test.txt','Maps/.. /Logs./eqlog_Fixture_Test.txt','Maps/../Logs./fixture.txt','Maps/a:stream.txt','Maps/a\x00.txt','Maps//a.txt','C:/Maps/a.txt','/Maps/a.txt','settings.txt','mistmoore_private.txt','mistmoore_chr.txt','resources/mistmoore_assets.txt','mp3index.txt/private.txt','mp3index.txt.','mistmoore_assets.txt ','Maps/file.txt.','Maps/file.txt ']){

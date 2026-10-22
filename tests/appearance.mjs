@@ -3,7 +3,16 @@ import {createRequire} from 'node:module';
 import {readFileSync} from 'node:fs';
 import {FONT_PRESETS,DEFAULT_APPEARANCE,MIN_FONT_SIZE,MAX_FONT_SIZE,normalizeAppearance,applyAppearance,inheritViewerAppearance} from '../app/appearance.js';
 import {layoutMapLabels,mapNpcHitTargets,hitMapNpc} from '../app/map-overlay.js';
+import browserPresets from '../app/appearance-presets.generated.js';
+import {appearanceModuleSource} from '../scripts/build-appearance.mjs';
 const require=createRequire(import.meta.url),desktop=require('../desktop/appearance.cjs');
+
+const canonicalPresets=readFileSync(new URL('../app/appearance-presets.json',import.meta.url),'utf8');
+assert.deepEqual(browserPresets,JSON.parse(canonicalPresets),'Browser script and native JSON share the exact preset data');
+assert.equal(readFileSync(new URL('../app/appearance-presets.generated.js',import.meta.url),'utf8').replace(/\r\n?/g,'\n'),appearanceModuleSource(canonicalPresets),'The shipped font module is generated deterministically from the canonical JSON');
+for (const filename of ['overlay.html','overlay-map.html']) {
+    assert.match(readFileSync(new URL('../app/'+filename,import.meta.url),'utf8'),/connect-src 'none'/,'Font settings retain native overlays\' network isolation');
+}
 
 const cases=[undefined,null,{},[],{fontFamily:'georgia',fontSize:20},{fontFamily:'system',fontSize:10},
     {fontFamily:'arial',fontSize:14.6},{fontFamily:'tahoma',fontSize:-100},
