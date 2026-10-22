@@ -18,12 +18,23 @@ Raid Zone collapsible; and default Plane of Hate's native map slice to Z 120.
 | Missing loot | `server/BuildEyeOfZommPack.php` mirrors Wiki `maintenance/BuildEyeOfZommPack.php`. Vicar's 11 NPC-page loot entries have no reverse item sources; Lord of Loathing lacks Diamond Rod/Wand of Conflagration. Reconcile supported NPC loot with canonical exported items and normal/raid scope, with no per-mob lists. |
 | Map default | `app/map-overlay.js` owns initial/reset slice; `app/map-overlay-3d.js` forwards it to `zoneviewer/overlay-mode.js` global clipping. Apply Z 120 only to exact Hate identities, keep manual overrides and unknown-Z markers. |
 | Operational source | Existing clean Wiki worktree `eoz-export-contract`, feature branch `codex/eoz-npc-loot-joins` from `staging`; review PHP fixtures, promote only that feature to production, verify installed producer hash, then rebuild/audit/publish through the existing host wrapper. |
+| Unified refresh | `desktop/main.cjs` owns startup/hourly/manual manifest single-flight and timestamps; the renderer polls only local state. Wiki `ops/host-bin/eoz-pack-refresh.sh` and `refresh-staging.yml` use hourly eligibility plus 24-hour successful-completion freshness. Host scripts require explicit installation, cron changes preserve other jobs, and GitHub schedules require isolated promotion to default `main`. |
 
 Execute application checks/build/captures in GitHub CI; do not run or install
 the app locally. Record dataset/release evidence privately under the task's
 existing `.local/validation` directory. The prior dataset is
 `20261021T225644Z-29f86651a9b9`, with 124 zones, 8,679 NPCs and 11,270 items.
 Owner authorization to publish completed fixes continues to apply.
+
+The 0.8.7 dataset was audited and published as
+`20261022T000652Z-ecd7d8648c90` (3,792,469-byte gzip,
+SHA-256 `ab756d21c86dac9373ee1b098f767d9a3762818bb8fd2a8efa4c07aa38695061`).
+Its NPC/item metadata and old source identities are preserved, with 23,151
+known-loot source variants added. Nine existing case-variant article/stat
+differences were reviewed against eight exact public revisions. The private
+release ledger records that review, the validator memory failure/fix and host
+installation evidence. Current release still requires final desktop CI/media,
+the unified scheduler installation, exact-head merge and installer verification.
 
 ## Approved follow-up
 

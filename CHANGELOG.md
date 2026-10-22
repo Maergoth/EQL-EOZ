@@ -8,6 +8,7 @@
 - Reconcile NPC-page known loot with item-page drop sources, including Vicar M`Kari and the missing Lord of Loathing items; retain source-instance provenance.
 - Overlay mob actions on the name row without shifting the list, and show tier-adjusted item stats from both item names and icons.
 - Repair main-app item/NPC loot hover targets and preserve their tooltips through unchanged live redraws.
+- Align host data refreshes around a 24-hour freshness guard, check the published manifest hourly while EoZ is open, coalesce overlapping checks and show distinct sync timestamps in Settings.
 - Make Raid Zone visibly collapsible and keep its state through updates; named focus can reopen its matching section.
 - Start Plane of Hate's native map at Z 120, retain manual slicing, and use the selected floor for unknown-height inspection cameras.
 

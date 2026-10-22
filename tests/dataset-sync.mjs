@@ -20,27 +20,46 @@ const compressedPack = version => gzipSync(JSON.stringify(pack(version)));
 const manifestFor = (version, compressed = compressedPack(version)) => ({ version, pack:'synthetic.json.gz', sha256:createHash('sha256').update(compressed).digest('hex') });
 const jsonResponse = value => new Response(JSON.stringify(value), { headers:{ 'content-type':'application/json' } });
 
+function fakeClock(start = '2026-10-21T12:00:00Z') {
+    let at = Date.parse(start), nextId = 0;
+    const timers = new Map();
+    class ClockDate extends Date {
+        constructor(...args) { super(...(args.length ? args : [at])); }
+        static now() { return at; }
+    }
+    return { Date:ClockDate, now:() => at, timers,
+        setTimeout(callback, delay) { const timer = { id:++nextId, at:at + delay, delay, callback, unref() {} }; timers.set(timer.id, timer); return timer; },
+        clearTimeout(timer) { timers.delete(timer?.id); },
+        advance(milliseconds) {
+            at += milliseconds;
+            for (const timer of [...timers.values()].sort((a,b) => a.at - b.at)) if (timers.has(timer.id) && timer.at <= at) {
+                timers.delete(timer.id); timer.callback();
+            }
+        }
+    };
+}
+
 async function runtime(fetchImpl, options = {}) {
     const userData = await mkdtemp(path.join(tmpdir(), 'eoz-dataset-sync-'));
     const calls = [];
     const app = { getVersion:() => 'test', getPath:() => userData, on() {}, quit() {}, requestSingleInstanceLock:() => false };
     const context = vm.createContext({
         require:name => name === 'electron' ? { app, ipcMain:{ handle() {} } } : nativeRequire(name),
-        __dirname:path.dirname(mainPath), process, console, Buffer, URL, AbortController,
-        setTimeout:(callback, ms) => setTimeout(callback, options.timeoutCap ? Math.min(ms, options.timeoutCap) : ms),
-        clearTimeout,
+        __dirname:path.dirname(mainPath), process, console, Buffer, URL, AbortController, Date:options.clock?.Date || Date,
+        setTimeout:options.clock?.setTimeout || ((callback, ms) => setTimeout(callback, options.timeoutCap ? Math.min(ms, options.timeoutCap) : ms)),
+        clearTimeout:options.clock?.clearTimeout || clearTimeout,
         fetch:async (url, request) => { calls.push(url); return fetchImpl(url, request); }
     });
     vm.runInContext(source, context, { filename:mainPath });
-    const api = vm.runInContext('({ updateStaticDataPack, readResponseBytes, productionPackPath, packStatePath, sendBuffer })', context);
+    const api = vm.runInContext('({ updateStaticDataPack, startDataPackRefresh, stopDataPackRefresh, dataPackRefreshState, readPackState, readResponseBytes, productionPackPath, packStatePath, sendBuffer })', context);
     await mkdir(path.dirname(api.productionPackPath()), { recursive:true });
     return {
         ...api, calls,
-        async cache(value, version) {
+        async cache(value, version, state = {}) {
             await writeFile(api.productionPackPath(), typeof value === 'string' ? value : JSON.stringify(value));
-            await writeFile(api.packStatePath(), JSON.stringify({ version }));
+            await writeFile(api.packStatePath(), JSON.stringify({ version, ...state }));
         },
-        cleanup:() => rm(userData, { recursive:true, force:true })
+        cleanup:() => { api.stopDataPackRefresh(); return rm(userData, { recursive:true, force:true }); }
     };
 }
 
@@ -82,6 +101,137 @@ async function runBootstrap(manifest, compressed) {
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
+
+test('startup, manual and hourly checks share one transfer and schedule from completion', async () => {
+    const clock = fakeClock(), hour = 60 * 60 * 1000;
+    let releaseManifest, reportStarted;
+    const gate = new Promise(resolve => { releaseManifest = resolve; });
+    const started = new Promise(resolve => { reportStarted = resolve; });
+    let manifests = 0;
+    await withRuntime(() => {
+        manifests++;
+        if (manifests === 1) { reportStarted(); return gate; }
+        return jsonResponse(manifestFor('same'));
+    }, async api => {
+        await api.cache(pack('same'), 'same');
+        const startup = api.startDataPackRefresh();
+        await started;
+        assert.equal(api.startDataPackRefresh(), startup, 'Starting the owner twice cannot start another schedule or request');
+        assert.equal(api.updateStaticDataPack(true), startup, 'A manual click joins the exact startup promise');
+        assert.equal(api.updateStaticDataPack(false), startup);
+        assert.equal(api.dataPackRefreshState().checking, true);
+        assert.equal(api.dataPackRefreshState().nextCheckUtc, '', 'No hourly timer competes with a running transfer');
+        clock.advance(1234);
+        releaseManifest(jsonResponse(manifestFor('same')));
+        const first = await startup;
+        assert.equal(api.calls.length, 1, 'An unchanged dataset uses only the small manifest');
+        assert.equal(first.status, 'current');
+        assert.equal(first.dataPack.checking, false);
+        assert.equal(first.dataPack.lastSuccessUtc, new clock.Date().toISOString());
+        assert.equal(first.dataPack.generatedAtUtc, '2026-10-21T00:00:00Z', 'Dataset generation is distinct from the time this PC checked it');
+        assert.equal(first.dataPack.nextCheckUtc, new clock.Date(clock.now() + hour).toISOString());
+        assert.equal([...clock.timers.values()].filter(timer => timer.delay === hour).length, 1);
+        clock.advance(hour - 1);
+        assert.equal(api.calls.length, 1, 'No remote polling before the full completion-relative hour');
+        clock.advance(1);
+        const next = await api.updateStaticDataPack(true);
+        assert.equal(api.calls.length, 2, 'A manual click during the hourly check joins it');
+        assert.equal(next.dataPack.lastSuccessUtc, new clock.Date().toISOString());
+        api.stopDataPackRefresh();
+        clock.advance(2 * hour);
+        assert.equal(api.calls.length, 2, 'Shutdown cancels future refreshes');
+        assert.equal(api.dataPackRefreshState().nextCheckUtc, '');
+    }, { clock });
+});
+
+test('manual sync moves the hourly deadline and a failed check preserves last-good data and success time', async () => {
+    const clock = fakeClock(), hour = 60 * 60 * 1000;
+    let unavailable = false;
+    await withRuntime(() => {
+        if (unavailable) throw Error('Synthetic offline manifest');
+        return jsonResponse(manifestFor('same'));
+    }, async api => {
+        const downloadedAt = '2026-10-20T18:00:00Z';
+        await api.cache(pack('same'), 'same', { lastUpdatedUtc:downloadedAt });
+        await api.startDataPackRefresh();
+        clock.advance(hour / 2);
+        const manual = await api.updateStaticDataPack(true);
+        const lastSuccess = manual.dataPack.lastSuccessUtc;
+        assert.equal(manual.dataPack.lastUpdatedUtc, downloadedAt, 'A successful same-version check is not reported as a fresh download');
+        assert.equal(manual.dataPack.nextCheckUtc, new clock.Date(clock.now() + hour).toISOString());
+        clock.advance(hour / 2);
+        assert.equal(api.calls.length, 2, 'The superseded startup deadline cannot fire after a manual check');
+        unavailable = true;
+        const before = await readFile(api.productionPackPath(), 'utf8');
+        clock.advance(hour / 2);
+        const failed = await api.updateStaticDataPack(true);
+        assert.equal(api.calls.length, 3);
+        assert.equal(failed.ok, false);
+        assert.equal(failed.dataPack.lastStatus, 'unavailable');
+        assert.match(failed.dataPack.lastError, /Synthetic offline/);
+        assert.equal(failed.dataPack.lastSuccessUtc, lastSuccess);
+        assert.equal(failed.dataPack.lastUpdatedUtc, downloadedAt);
+        assert.equal(failed.dataPack.generatedAtUtc, '2026-10-21T00:00:00Z');
+        assert.equal(failed.dataPack.version, 'same');
+        assert.equal(await readFile(api.productionPackPath(), 'utf8'), before);
+        assert.equal(failed.dataPack.nextCheckUtc, new clock.Date(clock.now() + hour).toISOString(), 'Offline checks retry hourly without a fast retry loop');
+        assert.equal([...clock.timers.values()].filter(timer => timer.delay === hour).length, 1);
+    }, { clock });
+});
+
+test('overlapping checks cannot download or atomically replace the pack twice', async () => {
+    const clock = fakeClock(), compressed = compressedPack('new');
+    let releaseDownload, reportStarted;
+    const gate = new Promise(resolve => { releaseDownload = resolve; });
+    const started = new Promise(resolve => { reportStarted = resolve; });
+    await withRuntime(url => {
+        if (url.endsWith('manifest.json')) return jsonResponse(manifestFor('new', compressed));
+        reportStarted(); return gate;
+    }, async api => {
+        await api.cache(pack('old'), 'old');
+        const first = api.startDataPackRefresh();
+        await started;
+        assert.equal(api.updateStaticDataPack(true), first);
+        assert.equal(api.updateStaticDataPack(false), first);
+        assert.equal(api.calls.length, 2, 'One manifest and one gzip serve every concurrent caller');
+        assert.equal(JSON.parse(await readFile(api.productionPackPath(), 'utf8')).meta.version, 'old', 'The old pack stays usable until the complete download is verified');
+        clock.advance(1000);
+        releaseDownload(new Response(compressed));
+        const result = await first;
+        assert.equal(result.status, 'updated');
+        assert.equal(result.dataPack.lastUpdatedUtc, new clock.Date().toISOString());
+        assert.equal(result.dataPack.lastSuccessUtc, result.dataPack.lastUpdatedUtc);
+        assert.equal(result.dataPack.generatedAtUtc, '2026-10-21T00:00:00Z');
+        assert.equal(JSON.parse(await readFile(api.productionPackPath(), 'utf8')).meta.manifestVersion, 'new');
+        assert.equal(api.calls.length, 2);
+    }, { clock });
+});
+
+test('Wiki data Settings distinguish successful checks, generation, downloads and offline errors', () => {
+    const from = rendererSource.indexOf('function renderPackSyncStatus(');
+    const to = rendererSource.indexOf('async function checkForDesktopPackRefresh()', from);
+    assert(from >= 0 && to > from);
+    const elements = new Map();
+    const context = vm.createContext({ Date,
+        pack:{ meta:{ generatedAt:'2026-10-19T00:00:00Z' } }, bridgeInfo:{ productionPack:true },
+        $:selector => { if (!elements.has(selector)) elements.set(selector, { textContent:'', hidden:false }); return elements.get(selector); }
+    });
+    vm.runInContext(`${rendererSource.slice(from,to)};this.render=renderPackSyncStatus;`, context);
+    context.render({ checking:false, lastStatus:'current', lastCheckUtc:'2026-10-21T12:00:00Z', lastSuccessUtc:'2026-10-21T12:00:00Z',
+        generatedAtUtc:'2026-10-20T00:00:00Z',lastUpdatedUtc:'2026-10-20T06:00:00Z',nextCheckUtc:'2026-10-21T13:00:00Z' });
+    assert.equal(elements.get('#pack-update-status').textContent,'current');
+    assert.equal(elements.get('#pack-last-success').textContent,new Date('2026-10-21T12:00:00Z').toLocaleString());
+    assert.equal(elements.get('#pack-data-generated').textContent,new Date('2026-10-20T00:00:00Z').toLocaleString());
+    assert.equal(elements.get('#pack-last-download').textContent,new Date('2026-10-20T06:00:00Z').toLocaleString());
+    assert.equal(elements.get('#pack-sync-error').hidden,true);
+    context.render({ checking:true });
+    assert.match(elements.get('#pack-update-status').textContent,/checking/);
+    assert.match(elements.get('#pack-next-check').textContent,/completes/);
+    context.render({ checking:false,lastStatus:'unavailable',lastError:'Synthetic offline check',lastSuccessUtc:'2026-10-21T12:00:00Z' });
+    assert.equal(elements.get('#pack-sync-error').hidden,false);
+    assert.equal(elements.get('#pack-sync-error').textContent,'Synthetic offline check');
+    assert.equal(elements.get('#pack-last-success').textContent,new Date('2026-10-21T12:00:00Z').toLocaleString());
+});
 
 test('desktop response policy permits the local WASM worker without JavaScript eval', async () => {
     await withRuntime(() => { throw new Error('No network request expected'); }, async api => {

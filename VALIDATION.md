@@ -47,6 +47,40 @@ rebind an active item, and real pointer motion can recover a dismissed target.
 Native CI exercises trusted main-window name/icon hover, keyboard focus,
 preserved Wiki links and active tooltip/DOM retention through a logged rune.
 
+The refreshed public dataset is `20261022T000652Z-ecd7d8648c90`, with 124 zones,
+8,679 NPC records and 11,270 item pages. All NPC identities/locations and
+source-independent item metadata remain unchanged, and all 21,440 prior source
+identities remain. Reconciliation adds 23,151 source variants to 1,997 items;
+the actual differences match producer counters. Vicar has 11 normal-source
+items; Lord of Loathing has five items in each normal/raid source variant.
+There are no raw markup names, exact duplicates or unjoined known-loot sources.
+The raw audit flagged nine evidence/stat-article differences. All eight exact
+public revisions were independently reviewed: four existing internal-case NPC
+article pairs explain those nine entries. Loot provenance identifies the actual
+article, independently of the case-folded stat winner. The private review keeps
+these exact exceptions; unrelated revision/title mismatches are not waived.
+
+Wiki producer PRs #47/#48 passed their source checks and separate deployments;
+the installed producer SHA-256 matched `1f74b8209cde131049d756c177845e062f6a43be7925d5be8832be43c0cc7cf3`.
+The first export exposed a separate 128 MB CLI validator limit. Wiki PR #49
+passed [CI 39696823387](https://github.com/Maergoth/EQLWiki/actions/runs/39696823387),
+including 71 producer, 111 raid/presence and synthetic actual-wrapper checks.
+Its reviewed 768 MB/stdin validator was explicitly installed with a private backup
+and exact hash verification. The second complete candidate passed that actual
+validator and the reviewed audit before publication through the existing syncer.
+GitHub API/raw manifest delivery agreed; the public 3,792,469-byte gzip matched
+SHA-256 `ab756d21c86dac9373ee1b098f767d9a3762818bb8fd2a8efa4c07aa38695061`.
+
+The unified refresh follow-up uses hourly host eligibility checks with a 24-hour
+successful-completion guard for expensive exports/staging database copies.
+The app checks the published manifest at startup, hourly while open and on
+manual sync. One in-flight operation owns those requests; completion schedules
+the next attempt even after failure. Settings distinguishes successful checks,
+dataset generation and downloads. Authored CI regressions cover overlap, offline
+last-good retention, completion-relative scheduling, shutdown and status display.
+Private staging database replacement retains its separate recovery/access rules;
+it is not a public dataset or a database backup published to clients.
+
 ## 0.8.6 map interaction and Intel source repair
 
 The live 0.8.5 report exposed gaps in the earlier synthetic acceptance checks:

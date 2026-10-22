@@ -62,7 +62,7 @@ Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards op
 | Update | What it changes | Where to use it |
 | --- | --- | --- |
 | Application update | Installed EoZ code and interface | **Settings → Application updates**: check, download, then **Restart to install update** |
-| Wiki data update | Cached NPCs, items, icons, zone aliases and source records | **Sync with Wiki**, also checked at startup |
+| Wiki data update | Cached NPCs, items, icons, zone aliases and source records | **Sync with Wiki**, also checked at startup and hourly while open |
 
 Verified application downloads can wait until later. Startup downloading is optional and off by default. From 0.8.6, **Restart to install update** authorizes a silent upgrade and automatic relaunch, without the setup wizard or another app confirmation. Windows may still require a security or elevation prompt. Settings, folder/log choices and cached wiki data stay in the existing profile. Older installed builds use their existing installer flow for the first upgrade.
 
@@ -73,9 +73,9 @@ EQLWiki content → local exporter → gzip + SHA-256 manifest
                → GitHub dataset branch → verified local cache
 ```
 
-Official installers include a production snapshot, so first launch does not reconstruct the wiki corpus. Startup and **Sync with Wiki** check only the small GitHub manifest; a changed version downloads and verifies the pack before replacing the cache. Players do not poll EQLWiki for dataset updates.
+Official installers include a production snapshot, so first launch does not reconstruct the wiki corpus. Startup, hourly background checks and **Sync with Wiki** check the small GitHub manifest; a changed version downloads and verifies the pack before replacing the cache. Overlapping requests share one check, and failure keeps the last valid data. Settings separates the last check, successful check, dataset generation, download and next check times. Players do not poll EQLWiki for dataset updates.
 
-The producer reads MediaWiki's local content/database services and builds zone aliases, NPC locations/provenance, normal/raid source variants, items and embedded icons. A weekly/manual host job publishes only the filtered manifest and compressed pack to the dedicated `dataset` branch. Installing producer changes and rebuilding the dataset are separate from a desktop release; see [server operations](server/README.md).
+The producer reads production MediaWiki's local content/database services and builds zone aliases, NPC locations/provenance, normal/raid source variants, items and embedded icons. Hourly host eligibility checks rebuild after 24 hours since the last successful publication; manual refresh remains available. Only the filtered manifest and compressed pack reach the dedicated `dataset` branch. Staging's private database copies use the same 24-hour freshness guard and separate hourly eligibility checks. Installing producer changes and rebuilding the dataset are separate from a desktop release; see [server operations](server/README.md).
 
 ## Development and validation
 

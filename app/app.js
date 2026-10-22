@@ -378,8 +378,7 @@ async function connectBridge() {
         $('#settings-log-mode').textContent = bridgeInfo.logSelection === 'manual' ? 'Specific file' : 'Newest log automatically';
         $('#automatic-log').hidden = bridgeInfo.logSelection !== 'manual';
         $('#setup-overlay').hidden = Boolean(bridgeInfo.eqRootExists);
-        const packState = bridgeInfo.dataPack || {};
-        $('#pack-update-status').textContent = packState.lastStatus || (bridgeInfo.productionPack ? 'cached' : 'sample fallback');
+        renderPackSyncStatus(bridgeInfo.dataPack);
         applyWindowSettings(bridgeInfo.windowState || {});
         if (!logOffset) logOffset = 0;
         schedulePoll(50);
@@ -408,15 +407,32 @@ function schedulePackRefreshCheck(delay = 15000) {
     packRefreshTimer = setTimeout(checkForDesktopPackRefresh, delay);
 }
 
+function renderPackSyncStatus(sync = bridgeInfo?.dataPack || {}) {
+    const dateLabel = value => {
+        const at = Date.parse(String(value || ''));
+        return Number.isFinite(at) ? new Date(at).toLocaleString() : '—';
+    };
+    $('#pack-update-status').textContent = sync.checking ? 'checking…' : sync.lastStatus || (bridgeInfo?.productionPack ? 'cached' : 'sample fallback');
+    $('#pack-last-check').textContent = dateLabel(sync.lastCheckUtc);
+    $('#pack-last-success').textContent = dateLabel(sync.lastSuccessUtc);
+    $('#pack-data-generated').textContent = dateLabel(sync.generatedAtUtc || pack.meta?.generatedAt);
+    $('#pack-last-download').textContent = dateLabel(sync.lastUpdatedUtc);
+    $('#pack-next-check').textContent = sync.checking ? 'After this check completes' : dateLabel(sync.nextCheckUtc);
+    const error = $('#pack-sync-error');
+    error.textContent = sync.lastStatus === 'unavailable' ? String(sync.lastError || 'The last check could not complete. Using saved wiki data.') : '';
+    error.hidden = !error.textContent;
+}
+
 async function checkForDesktopPackRefresh() {
     try {
         const info = await api('/api/info');
+        bridgeInfo = { ...(bridgeInfo || {}), dataPack:info.dataPack, productionPack:info.productionPack };
         const stateVersion = String(info?.dataPack?.version || '');
         const activeManifestVersion = String(pack?.meta?.manifestVersion || '');
         if (info?.productionPack && stateVersion && stateVersion !== activeManifestVersion) {
             await loadPack();
-            $('#pack-update-status').textContent = info?.dataPack?.lastStatus || 'updated';
         }
+        renderPackSyncStatus(info.dataPack);
     } catch {}
     schedulePackRefreshCheck(30000);
 }
@@ -2057,6 +2073,10 @@ function wireUi() {
         $('#pack-update-status').textContent = 'checking…';
         try {
             const result = await mutate('/api/update-pack?force=1');
+            if (result.dataPack) {
+                bridgeInfo = { ...(bridgeInfo || {}), dataPack:result.dataPack, productionPack:result.productionPack };
+                renderPackSyncStatus(result.dataPack);
+            }
             $('#pack-update-status').textContent = result.status || (result.ok ? 'current' : 'unavailable');
             if (result.productionPack) await loadPack();
             if (!result.ok && result.error) {
