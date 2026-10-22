@@ -15,7 +15,7 @@ The installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz:
 
 ## A look around
 
-These screenshots show the actual **0.8.6 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [GitHub CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39687241470). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+These screenshots show the actual **0.8.7 Electron interface with synthetic log, wiki, map and update-state fixtures**, captured by [GitHub CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39698239325). They contain no player records, proprietary zone geometry or live game capture. Native game compositing and OS-wide DPI behavior require separate [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 
@@ -37,7 +37,11 @@ Routing is an opt-in. A line appears only after collision checks approve it; a g
 
 Hover or focus an item's name or icon for its local stat block, including tier-adjusted values and base comparisons. **Through era** includes items through the chosen era. Activating a located NPC name copies a paste-ready `/waypoint Y X [Z]`; row-level Route actions start navigation when routing is enabled. Plane of Hate starts at Z 120; its slice remains adjustable.
 
-![Raid and normal named-mob loot from a synthetic wiki pack](app/assets/whats-new/intel.png)
+![Raid loot and same-row mob actions from a synthetic wiki pack](app/assets/whats-new/intel.png)
+
+The main Item and NPC browsers use the same local stat data. Item names and pictures support mouse hover and keyboard focus, including when logged activity updates a card.
+
+![Main NPC browser item stat block with synthetic loot](docs/screenshots/main-item-hover.png)
 
 ### Triggers and combat parses
 

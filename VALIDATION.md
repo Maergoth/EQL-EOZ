@@ -81,6 +81,33 @@ last-good retention, completion-relative scheduling, shutdown and status display
 Private staging database replacement retains its separate recovery/access rules;
 it is not a public dataset or a database backup published to clients.
 
+[GitHub CI 39698239325](https://github.com/Maergoth/EQL-EOZ/actions/runs/39698239325)
+passed full Linux/Windows source, production catalog and native Electron gates
+on `1b937de`. The Intel geometry check uses a focused native document and trusted
+Tab/Shift+Tab, retaining strict same-row/no-reflow/full-button bounds. An inactive
+window probe confirms that changing `activeElement` alone emitted no focus events.
+Main hover checks use trusted pointer delivery with frame/departure settlement,
+then actual logged considers change the NPC card from level 30 to 35/36. Duplicate
+drop removal hides the old hover; keyboard focus restores the exact source row.
+Shared parse splits preserve trigger deadlines, and Hate slicing/unknown-height
+camera plumbing pass the existing native gates. Updated bundled/README captures
+come from this run and were visually reviewed; all data and geometry are synthetic.
+
+Unified refresh Wiki PRs #50/#51 passed
+[staging CI 39697959120](https://github.com/Maergoth/EQLWiki/actions/runs/39697959120)
+and [isolated production CI 39698086772](https://github.com/Maergoth/EQLWiki/actions/runs/39698086772).
+Their separate staging and
+[production deployment 39698214062](https://github.com/Maergoth/EQLWiki/actions/runs/39698214062)
+passed. The installed producer remained byte-identical. The private refresh wrapper
+was explicitly backed up and installed, with SHA-256
+`8afc2c480d9b95982bbf4b6658cd6da9d69760707a1930f0d9f2bcaca4a4d171`.
+Its completion marker was seeded from the verified dataset publication, and an
+actual `--if-stale` invocation skipped without rebuilding. Only the existing EoZ
+cron entry changed; all other cron entries matched their prior bytes. The default
+branch staging workflow is active with its hourly schedule; its first scheduled
+execution has not been observed as part of these checks. Explicit manual staging
+refresh still means a full replacement and retains its existing recovery rules.
+
 ## 0.8.6 map interaction and Intel source repair
 
 The live 0.8.5 report exposed gaps in the earlier synthetic acceptance checks:
