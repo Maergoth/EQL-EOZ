@@ -24,7 +24,9 @@ try {
     await writeFile(join(profile,'data','eye-of-zomm-pack.json'),JSON.stringify({
         meta:{schemaVersion:3,version:'appearance-synthetic',sample:true,currentEra:'Classic'},
         zones:[{name:'Mistmoore Castle',viewerName:'Mistmoore Castle',aliases:['mistmoore','The Castle of Mistmoore']}],
-        npcs:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',wikiTitle:'Synthetic Keeper',avgLevel:26,levelMin:26,levelMax:26,era:'Classic',loc:[10,20,0]}],
+        // Keep the label clear of the player marker: decluttering deliberately
+        // hides colliding names, which is independent of typography support.
+        npcs:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',wikiTitle:'Synthetic Keeper',avgLevel:26,levelMin:26,levelMax:26,era:'Classic',loc:[70,60,0]}],
         items:[{name:'Synthetic Charm',wikiTitle:'Synthetic Charm',classes:['MNK'],slots:['NECK'],stats:{HP:1},era:'Classic',dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle'}]}],icons:{}
     }));
     const pkg=JSON.parse(await readFile(join(projectRoot,'package.json'),'utf8'));
