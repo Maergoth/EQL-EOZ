@@ -79,7 +79,7 @@ export class TimerEngine {
         this.lastTokens = new Set();
         this.matcher = matcher || new TriggerMatcher(); this.notifications = []; this.cues = []; this.lastFired = new Map();
         this.regexQueue = []; this.regexScheduled = false; this.regexBusy = false; this.regexSequence = 0; this.matchingStatus = ''; this.closed = false;
-        this.swingEnabled = true;
+        this.swingEnabled = false;
         this.swingDelayTenths = 0;
         this.resetSwing();
         const saved = state && typeof state === 'object' ? state : {};
@@ -94,7 +94,7 @@ export class TimerEngine {
             } catch { /* A malformed local entry must not prevent startup. */ }
         }
         this.zone = normalize(saved.zone).slice(0, 120);
-        this.swingEnabled = saved.swingEnabled !== false;
+        this.swingEnabled = saved.swingEnabled === true;
         if (Number.isInteger(saved.swingDelayTenths) && saved.swingDelayTenths >= 0 && saved.swingDelayTenths <= 200) this.swingDelayTenths = saved.swingDelayTenths;
         if (Array.isArray(saved.tokens)) this.lastTokens = new Set(saved.tokens.slice(-512).filter(item => typeof item === 'string' && item.length < 300));
         if (saved.lastKill && normalize(saved.lastKill.name) && finite(saved.lastKill.at)) {

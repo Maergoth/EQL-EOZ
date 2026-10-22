@@ -1,8 +1,26 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.8-x64.exe`.
+Current candidate: `EQLWiki-Eye-of-Zomm-Setup-0.8.9-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.8` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.8.9` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+
+## 0.8.9 installed fonts and UI refresh
+
+1. Upgrade a profile that has cached an older Settings page. Fonts must appear on
+   the first launch, with the new UI version; saved log/overlay preferences remain.
+2. In Settings → Fonts, refresh installed fonts and choose a family absent from
+   the presets. Apply it, resize text, restart, then reset; inspect every overlay
+   and the embedded map. If enumeration is unavailable, enter a family manually.
+3. Move the item tier slider. Only changed numeric values are green in cards and
+   main/Intel hover blocks. Inspect reduced weight and negative penalties too.
+4. Click a Live Map mob: all its known loot is reachable in the right pane, with
+   matching tier tooltips. Normal and Raid variants remain separate; Route is
+   explicit. Resize/scroll at 1024px and the largest text setting.
+5. Browse older What's New releases; only viewed releases lose their New label.
+   A new Windows download shows Restarting in 5; Cancel restart retains the staged
+   package. Verify an approved silent installer/relaunch with real packages.
+6. A fresh profile has the observed swing timer off. Explicitly enable it in
+   Triggers → Swing to use it. Existing saved choices remain intact.
 
 ## 0.8.8 font controls
 

@@ -114,6 +114,12 @@ rows are skipped individually without breaking startup.
 
 ## Swing behavior and its limits
 
+The EoZ swing estimate is **off by default** because the game already provides
+a swing timer. Enable **Triggers → Swing → Show swing estimate** to use it.
+An explicitly saved enabled or disabled choice survives upgrades and restarts;
+a missing choice stays off. While disabled, EoZ does not collect swing samples
+or show a waiting swing row in the overlay.
+
 The single **Observed melee** bar estimates the player's attack round. Eligible
 own hit/miss verbs are `hit`, `slash`, `crush`, `pierce`, `punch`, `claw`, `bite`
 and `maul`. Specials such as kick, bash, backstab, strike and taunt keep their

@@ -40,6 +40,9 @@ jobs:
             npm run test:native-overlays -- --screenshots ci-screenshots/linux
             npm run test:discovery-notices
             npm run test:appearance -- --screenshots ci-screenshots/linux-appearance
+            npm run test:system-fonts -- --screenshots ci-screenshots/linux-system-fonts
+            npm run test:main-cache
+            npm run test:map-loot -- --screenshots ci-screenshots/linux-map-loot
           '
       - name: Fetch production bootstrap data
         if: inputs.bootstrap_artifact == ''
@@ -62,6 +65,7 @@ jobs:
             openbox >/tmp/eoz-packaged-openbox.log 2>&1 &
             node scripts/test-linux-package.mjs
             npm run test:appearance -- --packaged-root dist/linux-unpacked/resources/app.asar --screenshots ci-screenshots/linux-packaged
+            npm run test:system-fonts -- --packaged-root dist/linux-unpacked/resources/app.asar --screenshots ci-screenshots/linux-packaged-system-fonts
           '
       - name: Hash release assets
         run: node scripts/release-assets.mjs linux

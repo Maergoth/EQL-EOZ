@@ -129,6 +129,7 @@
                 <div class="viewer-frame-wrap">
                     <iframe id="zone-viewer" class="viewer-frame" src="./zoneviewer/viewer.html" title="EQL Zone Viewer"></iframe>
                 </div>
+                <aside id="map-loot-pane" class="map-loot-pane panel" aria-label="Selected monster loot" hidden></aside>
             </div>
         </section>
 
@@ -244,15 +245,19 @@
                 </div>
             </div>
             <div class="settings-grid">
-                <div id="overlay-controller" class="panel"></div>
                 <article class="panel" id="appearance-settings">
                     <h2>Fonts</h2>
                     <label for="settings-font-family">Font family <select id="settings-font-family" aria-label="Font family"></select></label>
+                    <label for="settings-local-font">Installed font family <input id="settings-local-font" list="installed-font-families" autocomplete="off" maxlength="120" placeholder="Search or enter a font family"></label>
+                    <datalist id="installed-font-families"></datalist>
+                    <div class="settings-actions"><button id="refresh-system-fonts" class="secondary-button" type="button">Refresh installed fonts</button><button id="apply-system-font" class="secondary-button" type="button">Apply installed font</button></div>
+                    <p id="settings-system-font-status" class="settings-helper" role="status" aria-live="polite">Refresh to list fonts installed on this computer, or enter a family name directly.</p>
                     <label for="settings-font-size">Text size <span class="appearance-size"><input id="settings-font-size" type="range" min="10" max="20" step="1" value="13" aria-label="Text size"><output id="settings-font-size-value" for="settings-font-size">13 px</output></span></label>
-                    <p class="settings-helper">Applies to the main window and all native overlays. Each overlay's Text size still adjusts that panel further. Fonts use installed system fallbacks; no downloads are needed.</p>
+                    <p class="settings-helper">Applies to the main window and all native overlays. Each overlay's Text size still adjusts that panel further. Installed fonts stay local; no font files are read or downloaded.</p>
                     <div class="settings-actions"><button id="reset-appearance" class="secondary-button" type="button">Reset fonts</button></div>
                     <p id="settings-appearance-status" class="settings-helper" role="status" aria-live="polite"></p>
                 </article>
+                <div id="overlay-controller" class="panel"></div>
                 <article class="panel">
                     <h2>EverQuest folder</h2>
                     <div class="setting-line"><span>Game folder</span><code id="settings-eq-root">—</code></div>
@@ -301,7 +306,7 @@
                         <a id="app-update-notes" class="text-button" target="_blank" rel="noopener noreferrer" hidden>Release notes</a>
                     </div>
                     <label class="check-control app-update-preference"><input id="app-update-startup-download" type="checkbox"> Download app updates automatically on startup</label>
-                    <p class="settings-helper">Installation always waits for your approval. Your settings and wiki data stay on this PC.</p>
+                    <p class="settings-helper">Windows restarts to install 5 seconds after a new update finishes downloading; choose Later to postpone. Linux opens the verified download folder for installation. Your settings and wiki data stay on this PC.</p>
                 </article>
                 <article class="panel">
                     <h2>Wiki data</h2>

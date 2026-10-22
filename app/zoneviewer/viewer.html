@@ -923,7 +923,7 @@ window.eqlEyeOfZommViewer = {
             const name = String(record?.name || '').trim();
             const location = Array.isArray(record?.loc) ? record.loc.map(Number) : [];
             if (!name || location.length < 2 || !location.slice(0, 2).every(Number.isFinite)) continue;
-            const key = overlayMode ? String(record.id||`${name}|${record.raidInstance?'raid':'normal'}`) : normalizedNpcName(name);
+            const key = String(record.id||`${normalizedNpcName(name)}|${record.raidInstance?'raid':'normal'}`);
             if (seen.has(key)) continue;
             seen.add(key);
             const hasZ = (typeof record.loc?.[2]==='number'||typeof record.loc?.[2]==='string'&&record.loc[2].trim()!=='')&&Number.isFinite(location[2]);
@@ -935,7 +935,7 @@ window.eqlEyeOfZommViewer = {
             button.type = 'button';
             button.className = 'eoz-rare-marker';
             if(overlayMode&&record.raidInstance)button.classList.add('is-raid');
-            button.title = `${overlayMode?'Select':'Navigate to'} ${name}${overlayMode?` · ${record.raidInstance?'Raid':'Normal'} Zone${hasZ?'':' · height unknown'}`:''}${record.dropCount ? ` · ${record.dropCount} known drops` : ''}`;
+            button.title = `Select ${name} · ${record.raidInstance?'Raid':'Normal'} Zone${hasZ?'':' · height unknown'}${record.dropCount ? ` · ${record.dropCount} known drops` : ''}`;
             button.dataset.npc = name;
             button.append(document.createTextNode(name));
             if (record.classDropCount || record.dropCount) {
@@ -945,7 +945,7 @@ window.eqlEyeOfZommViewer = {
             }
             button.addEventListener('click', event => {
                 event.stopPropagation();
-                window.parent?.postMessage({ type:'eoz-rare-mob-selected', name,...(overlayMode?{id:record.id,raidInstance:!!record.raidInstance}:{}) }, window.location.origin);
+                window.parent?.postMessage({ type:'eoz-rare-mob-selected', name,id:record.id,raidInstance:!!record.raidInstance }, window.location.origin);
             });
             rareLayer.append(button);
             const marker = {

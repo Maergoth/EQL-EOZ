@@ -41,10 +41,11 @@ export function appUpdatePresentation(state = {}) {
     };
 }
 
-// This renderer only presents native updater state. Download verification and
-// the explicit restart/install handoff stay in the isolated desktop process.
+// Verification and the silent installer remain in the native updater. A new
+// requested Windows download starts a cancellable five-second restart countdown.
 export function mountAppUpdates({ document = globalThis.document, bridge = globalThis.eyeOfZommUpdates,
-    openSettings = () => {}, setTimeout = globalThis.setTimeout, clearTimeout = globalThis.clearTimeout } = {}) {
+    openSettings = () => {}, setTimeout = globalThis.setTimeout, clearTimeout = globalThis.clearTimeout,
+    now = Date.now } = {}) {
     const ids = ['app-update-status', 'app-update-detail', 'app-update-progress', 'app-update-progress-label',
         'check-app-update', 'download-app-update', 'install-app-update', 'cancel-app-update',
         'later-app-update', 'app-update-startup-download', 'app-update-notes', 'app-update-badge'];
@@ -57,6 +58,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
     let generation = 0;
     let refreshSequence = 0;
     let deferredVersion = null;
+    let restartTimer = null, restartDeadline = 0, requestedDownload = false;
     const listeners = [];
     const listen = (element, name, callback) => {
         element.addEventListener(name, callback);
@@ -67,7 +69,8 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
     };
     function render() {
         const view = appUpdatePresentation(current);
-        text('app-update-status', view.message + (deferredVersion === current.availableVersion && view.showLater ? ' You can return using Update Available in the header.' : ''));
+        const countdown=restartDeadline?`Restarting in ${Math.max(1,Math.ceil((restartDeadline-now())/1000))}`:'';
+        text('app-update-status', countdown?`${countdown} to install Eye of Zomm ${view.version}.`:view.message + (deferredVersion === current.availableVersion && view.showLater ? ' You can return using Update Available in the header.' : ''));
         text('app-update-detail', view.detail);
         elements['app-update-detail'].hidden = !view.detail;
         for (const [id, shown] of [
@@ -75,7 +78,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
             ['cancel-app-update', view.showCancel], ['later-app-update', view.showLater],
             ['app-update-progress', view.showProgress], ['app-update-progress-label', view.showProgress]
         ]) elements[id].hidden = !shown;
-        if (deferredVersion === current.availableVersion) elements['later-app-update'].hidden = true;
+        if (!restartDeadline && deferredVersion === current.availableVersion) elements['later-app-update'].hidden = true;
         elements['check-app-update'].disabled = view.checkDisabled || Boolean(action);
         elements['download-app-update'].disabled = Boolean(action);
         elements['install-app-update'].disabled = Boolean(action);
@@ -83,7 +86,9 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
         elements['app-update-startup-download'].disabled = !view.supported || Boolean(action);
         elements['app-update-startup-download'].checked = Boolean(current.automaticDownload);
         text('download-app-update', `Download ${view.version}`);
-        text('install-app-update', action === 'install' ? view.installingLabel : view.installLabel);
+        text('install-app-update', countdown|| (action === 'install' ? view.installingLabel : view.installLabel));
+        elements['install-app-update'].disabled=Boolean(action)||Boolean(countdown);
+        text('later-app-update',countdown?'Cancel restart':'Later');
         text('app-update-progress-label', view.progress);
         if (view.percent === null) elements['app-update-progress'].removeAttribute('value');
         else elements['app-update-progress'].value = view.percent;
@@ -93,8 +98,27 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
         if (notes) elements['app-update-notes'].href = current.releaseUrl;
         else elements['app-update-notes'].removeAttribute('href');
         elements['app-update-badge'].hidden = !view.showBadge;
-        text('app-update-badge', view.badge);
+        text('app-update-badge', countdown||view.badge);
         elements['app-update-badge'].title = `${view.message} Open Application updates in Settings.`;
+    }
+    function cancelRestart(){clearTimeout(restartTimer);restartTimer=null;restartDeadline=0;requestedDownload=false;}
+    function maybeRestart(previous) {
+        if (disposed || current.status!=='ready' || current.error || current.installMode==='manual-linux') {
+            const keepRequested=current.status==='downloading'&&requestedDownload;
+            cancelRestart();requestedDownload=keepRequested;
+            return;
+        }
+        if (restartDeadline || !(requestedDownload || previous?.status==='downloading' && current.automaticDownload)) return;
+        requestedDownload=false;restartDeadline=now()+5000;
+        const tick=()=>{
+            if(disposed||current.status!=='ready'||current.error){cancelRestart();render();return;}
+            if(now()>=restartDeadline){
+                if(action){restartTimer=setTimeout(tick,200);return;}
+                cancelRestart();void invoke('install');return;
+            }
+            render();restartTimer=setTimeout(tick,Math.min(1000,restartDeadline-now()));
+        };
+        tick();
     }
     function schedule() {
         clearTimeout(timer);
@@ -107,7 +131,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
         const owner = generation;
         try {
             const next = await bridge.getStatus();
-            if (!disposed && owner === generation && request === refreshSequence) { current = next; render(); }
+            if (!disposed && owner === generation && request === refreshSequence) { const previous=current;current=next;maybeRestart(previous);render(); }
         } catch {
             // A temporary IPC failure must not discard a ready download or interrupt play.
         } finally { schedule(); }
@@ -116,6 +140,8 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
         if (disposed || !bridge?.[name] || (action && name !== 'cancel')) return;
         const owner = ++generation;
         action = name;
+        if (name==='download') {requestedDownload=true;deferredVersion=null;}
+        if (['cancel','check','install'].includes(name)) cancelRestart();
         if (name === 'check') {
             deferredVersion = null;
             current = { ...current, status:'checking', error:'' };
@@ -124,9 +150,9 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
         schedule();
         try {
             const next = await bridge[name](value);
-            if (!disposed && owner === generation) current = next;
+            if (!disposed && owner === generation) {const previous=current;current=next;if(name==='download')maybeRestart(previous);}
         } catch {
-            if (!disposed && owner === generation) current = { ...current, status:'unavailable', error:'Please retry from Application updates.' };
+            if (!disposed && owner === generation) {cancelRestart();current = { ...current, status:'unavailable', error:'Please retry from Application updates.' };}
         } finally {
             if (!disposed && owner === generation) { action = ''; render(); schedule(); }
         }
@@ -137,6 +163,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
     }
     listen(elements['app-update-startup-download'], 'change', event => { void invoke('setStartupDownload', event.currentTarget.checked); });
     listen(elements['later-app-update'], 'click', () => {
+        cancelRestart();
         deferredVersion = current.availableVersion;
         render();
     });
@@ -146,6 +173,7 @@ export function mountAppUpdates({ document = globalThis.document, bridge = globa
         disposed = true;
         ++generation;
         clearTimeout(timer);
+        cancelRestart();
         listeners.forEach(remove => remove());
     }
     render();

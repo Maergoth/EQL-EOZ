@@ -10,7 +10,7 @@ const require=createRequire(import.meta.url);
 const {normalizeWindowPlacement,WindowPlacement}=require('../desktop/window-placement.cjs');
 const display=(x=0,y=0,width=1920,height=1040)=>({workArea:{x,y,width,height}});
 class Window extends EventEmitter {
-    constructor(options={}) {super();this.options=options;this.bounds={x:options.x??10,y:options.y??10,width:options.width??1200,height:options.height??800};this.normal={...this.bounds};this.maximized=false;this.minimized=false;this.visible=false;this.showCalls=0;this.hideCalls=0;this.boundsCalls=0;this.focusCalls=0;this.webContents=new EventEmitter();this.webContents.mainFrame={url:''};this.webContents.setWindowOpenHandler=handler=>{this.webContents.openHandler=handler;};}
+    constructor(options={}) {super();this.options=options;this.bounds={x:options.x??10,y:options.y??10,width:options.width??1200,height:options.height??800};this.normal={...this.bounds};this.maximized=false;this.minimized=false;this.visible=false;this.showCalls=0;this.hideCalls=0;this.boundsCalls=0;this.focusCalls=0;this.webContents=new EventEmitter();this.webContents.session={setPermissionRequestHandler(handler){this.requestPermission=handler;},setPermissionCheckHandler(handler){this.checkPermission=handler;}};this.webContents.mainFrame={url:''};this.webContents.setWindowOpenHandler=handler=>{this.webContents.openHandler=handler;};}
     isDestroyed(){return false;} isMinimized(){return this.minimized;} isMaximized(){return this.maximized;} isFullScreen(){return false;}
     getBounds(){return {...this.bounds};} getNormalBounds(){return {...this.normal};}
     setBounds(bounds){this.boundsCalls++;this.bounds={...bounds};this.normal={...bounds};this.emit('resize');}

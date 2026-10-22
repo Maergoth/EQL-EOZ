@@ -63,6 +63,13 @@ assert.match(renderActiveTimerSettings([{ id:'1', label:'Other', remainingMs:300
 
 const app = fixture();
 await flush();
+assert.equal(app.elements['[data-swing-enabled]'].checked,false,'Swing UI is initially unchecked.');
+app.controller.render({definitions:[],timers:[],swing:{}});
+assert.equal(app.elements['[data-swing-enabled]'].checked,false,'An unknown swing state cannot check the opt-in.');
+app.elements['[data-swing-enabled]'].checked=true;
+await app.root.fire('change',app.elements['[data-swing-enabled]']);await flush();
+assert.equal(app.engine.snapshot().swing.enabled,true,'Explicit checkbox opt-in enables the estimate.');
+assert.equal(new TimerEngine({state:app.engine.exportState()}).snapshot().swing.enabled,true,'The UI choice persists through the engine state.');
 assert.equal(app.elements['[data-start-spawn]'].disabled, true);
 assert.equal(app.editor.fields.type.value, 'text');
 app.editor.fields.type.value = 'manual';

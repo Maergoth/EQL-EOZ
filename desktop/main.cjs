@@ -15,6 +15,7 @@ const { AppUpdater, isReleaseNotesUrl, launchSilentNsisInstaller } = require('./
 const { OverlayHost } = require('./overlay-host.cjs');
 const { safeMapFile } = require('./overlay-map-policy.cjs');
 const { DiscoveryHost } = require('./discovery-host.cjs');
+const { installLocalFontPermissions } = require('./font-permissions.cjs');
 const { normalizeWindowPlacement, WindowPlacement } = require('./window-placement.cjs');
 const {
     inferEqRootPath,
@@ -706,7 +707,7 @@ async function requestHandler(req, res) {
         try { stat = await fsp.stat(target); } catch { return sendJson(res, 404, { error: 'Not found' }); }
         if (!stat.isFile()) return sendJson(res, 404, { error: 'Not found' });
         const body = await fsp.readFile(target);
-        return sendBuffer(req, res, 200, mimeType(target), body, app.isPackaged ? 'public, max-age=3600' : 'no-store');
+        return sendBuffer(req, res, 200, mimeType(target), body, 'no-store');
     } catch (error) {
         console.error('[Eye of Zomm] request error', error);
         return sendJson(res, 500, { error: 'Internal error' });
@@ -757,6 +758,7 @@ function createWindow(config = {}, savedPlacement = {}) {
         }
     });
     windowRef.setSkipTaskbar(false);
+    installLocalFontPermissions({session:windowRef.webContents.session,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     windowPlacement=new WindowPlacement({window:windowRef,screen:electron.screen,initial:placement,
         getMaximized:()=>pendingInitialMaximize || windowRef?.isMaximized(),
         write:value=>atomicWriteJson(windowPlacementPath(),value)});
@@ -841,6 +843,12 @@ async function bootstrap() {
         writePreferences:preferences => atomicWriteJson(overlayPreferencesPath(), preferences)
     });
     await overlayHost.initialize();
+    // Previous releases cached unversioned HTML/JS for an hour. Discard that
+    // cache on upgrade so the new executable also displays its new interface.
+    if (config.frontendCacheVersion !== APP_VERSION) {
+        await electron.session.defaultSession.clearCache();
+        config=await updateConfig({frontendCacheVersion:APP_VERSION});
+    }
     discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
         isTimerPanel:event=>overlayHost.overlaySender(event)==='timers'});
     createWindow(config,await readJson(windowPlacementPath(),{}));
