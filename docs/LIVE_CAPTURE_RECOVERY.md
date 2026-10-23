@@ -271,6 +271,38 @@ mapping and evidence isolation; it does not claim native 4K recognition.
   with B/C captures 39/189 ms into fixed two-second exposures and zero drops.
   These prove the coherent-frame change; the separate Windows CI C symptom
   remains subject to the new bounded failing-pixel diagnostics if it recurs.
+- Both Windows jobs on `5bb40e9` pass the previously failing native C transition
+  and all native-priority item checks. Linux passes its complete native and
+  packaging job. The remaining Windows failure is the true 4K canvas-stream
+  priority fixture: first A PNG encoding takes 4.63/6.72 seconds under that
+  runner, versus 46/47 ms of source preparation. Fixed B/C snapshots do not all
+  reach admission within the unchanged post-hide deadline.
+- Two fixture confounds are under causal measurement. Its 4K producer performs
+  eight backing-store width/height resets, approximately 125 million logical
+  fill pixels and 216 text draws per second in the capture renderer itself.
+  This differs from a separate native game producer. Also, slow first encoding
+  lets the five-second A heartbeat become PNG call 2, so the test's artificial
+  delay hits A rather than B. Target the actual immutable B marker instead of
+  the encode ordinal. Keep fixed exposures, queue/memory/provenance constraints
+  and deadlines while measuring partial background updates and serialization.
+- A private same-two-CPU comparison measures the fixture's extra work: keeping
+  8 Hz background changes but repainting the tooltip only on stage changes and
+  avoiding unchanged backing-store resets reduces first A HTML PNG time from
+  929 to 306 ms and C from 644 to 302 ms. Fixed exposures/deadlines pass in both
+  comparisons. Apply that measured fixture correction and target the delay to
+  actual B-marker pixels; no new production encoder is justified by this probe.
+  Pinned Chromium 150 source also has 1,000 ms idle-start and later 5,700 ms
+  completion fallbacks for main-thread PNG encoding. Runner times are consistent
+  with those paths, not proof of their cause. Main-thread OffscreenCanvas shares
+  that policy; its test-only disable-idle flag is not a production workaround.
+- Final fixture presentation uses one reused stage buffer and one persistent
+  live canvas. A complete tooltip and marker are composed offscreen, then
+  presented in one blit; unchanged 8 Hz ticks only repaint scenery. Backing
+  dimensions change only when geometry changes. Independent review/probes
+  confirm those properties and the one-shot delay selected from actual frozen
+  B pixels. Native and 4K Windows gates pass all three exact items, zero drops
+  and unchanged exposure/deadline/queue assertions. The same native/4K gates
+  also pass on private WSL Linux, including exact B-target timing and zero drops.
 - The final coherent-source normal `npm test` and full native capture gate also
   pass, including exact admitted images, fresh baseline and Stop.
   Pending: exact-head CI/platform/package
