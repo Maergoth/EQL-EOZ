@@ -41,4 +41,14 @@ const anchored=parseScreenRead({text:'Mangled examine tab heading',words:anchore
 assert.equal(anchored.subject.name,'Synthetic Winding Trail +4','aligned class/race plus repeated observed title can recover a missing Description anchor');
 assert.equal(anchored.fields.find(field=>field.key==='ac').value,12);
 assert.equal(parseScreenRead({text:'Unrelated class/race chat',words:anchoredWords.filter(word=>word.bbox.y0>=80)}).length,0,'class and race alone do not identify an item name');
+const refinedInput={text:'Recognized pane text',words:geometricWords.map(word=>word.text==='Trail'?{...word,text:'Traill',confidence:40}:word),confidence:54,
+    refinements:[{role:'item-name',confidence:85,text:'Synthetic Winding Trail +4',words:[word('Trail',360,145,40,25,95)]},
+        {role:'item-stats',confidence:80,text:'Size: SMALL AC 14\nWeight 02 HP. 15',words:[word('Size:',180,220,20,58,99)]}]};
+const refined=parseScreenRead(refinedInput)[0];
+assert.equal(refined.subject.name,'Synthetic Winding Trail +4');assert.match(refined.evidence.text,/Initial item name OCR: Synthetic Winding Traill/);
+assert.match(refined.evidence.text,/Weight 02 HP\. 15/);assert.equal(refined.fields.find(field=>field.key==='size').value,'SMALL','a second column cannot enter the size value');
+assert.equal(refined.fields.find(field=>field.key==='hp').value,15);assert.equal(refined.fields.some(field=>field.key==='weight'),false,'region OCR cannot supply a missing decimal');
+const misplaced=parseScreenRead({...refinedInput,refinements:[{role:'item-name',text:'Other',confidence:95,words:[word('Wrong',900,145,40,25,99)]}]})[0];
+assert.equal(misplaced.subject.name,'Synthetic Winding Traill +4','unrelated row coordinates cannot rewrite an observed name');
+const percent=parseScreenRead({text:'Item: Synthetic Ambiguous Digit\nHP 1%\nAttack Speed 10%'})[0];assert.equal(percent.fields.some(field=>field.key==='hp'),false);assert.equal(percent.fields.find(field=>field.key==='attackSpeed').value,10);
 console.log('Screen-read parser: observed item/tier/augment/stat provenance, unknowns and character separation passed.');

@@ -54,6 +54,8 @@ jobs:
         run: npm run test:wiki-auth
       - name: Test persistent source capture and local OCR
         run: npm run test:capture-native
+      - name: Test OCR area calibration controls and saved source regions
+        run: npm run test:capture-calibration
       - name: Test contribution and character workflows with a loopback wiki
         run: npm run test:capture-workspace
       - name: Test installed system fonts and changed-stat colors

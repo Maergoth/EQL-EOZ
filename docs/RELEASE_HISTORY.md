@@ -20,6 +20,11 @@ and their original tour text were recovered from released commits:
 Version 0.8.9 adds three new captures of installed fonts, adjusted item stats
 and the Live Map loot pane, bringing the archive to 23 images.
 
+Version 0.9.0 adds six captures of Screen reading, OCR area calibration, reviewed
+contributions, Character slots, editable augments and the character share preview,
+bringing the archive to 29 images across 29 browsable versions. Its publication gate
+also checks the final calibrated capture UI and preserves every older version.
+
 Each PNG is stored under `app/assets/whats-new/<version>/` and has a reviewed
 SHA-256 in its step. Files were extracted as binary Git objects, without image
 regeneration or re-encoding. Original top-level images remain available to the

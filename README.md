@@ -4,11 +4,18 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.0 is an unreleased review candidate on this branch.** The new capture,
-contribution and Character workspaces below are available in
-[draft PR #11](https://github.com/Maergoth/EQL-EOZ/pull/11).
-The download link opens published releases; it does not publish this
-candidate. See the [feature status and acceptance plan](docs/CAPTURE_CONTRIBUTIONS.md).
+**0.9.0 adds optional screen reading, reviewed wiki contributions and Character
+snapshots.** See [PR #11](https://github.com/Maergoth/EQL-EOZ/pull/11), the
+[feature guide](docs/CAPTURE_CONTRIBUTIONS.md) and the
+[release verification plan](docs/RELEASE_090.md) for implementation and check scope.
+
+In **Settings → Screen reading**, start an explicitly selected source, then use
+**Calibrate OCR area** to draw around a complete examine or Inventory/stat pane.
+Keyboard percentage fields and **Full frame** are available too. Areas are saved
+per source and capture mode and reset if the frame size changes. OCR proposes
+editable fields; unresolved values remain unknown.
+
+![OCR area calibration with a synthetic preview](app/assets/whats-new/0.9.0/ocr-calibration.png)
 
 ## Get started
 
@@ -27,7 +34,7 @@ On Linux, make the AppImage executable and launch it, or install the deb using y
 
 ## A look around
 
-The capture, contribution and Character images below show the actual **0.9.0 candidate Electron interface with synthetic records and a loopback-only wiki**. Font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+The capture, contribution and Character images below show the actual **0.9.0 Electron interface with synthetic records and a loopback-only wiki**. Font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 
@@ -89,7 +96,7 @@ The independent **Parse** window has **Overview / Damage / Healing / Taken / Ses
 
 Unlock an overlay to move/resize it. Locking leaves its tabs and menus interactive; **Ignore mouse** passes clicks through. Recover from Settings, the tray, or **Ctrl+Shift+O** when registered. Layout, opacity and font scale are saved separately for each panel. Closing the main window while overlays are visible keeps their shared session running; use **Quit Eye of Zomm** in the tray to exit.
 
-### Optional screen reading in the 0.9.0 candidate
+### Optional screen reading
 
 Logs remain the source for supported kills, loot, zone and character events.
 **Settings → Screen reading** adds optional local OCR for visible examine
@@ -104,7 +111,7 @@ editable proposals and may be wrong or incomplete; they do not establish unseen
 spawns, drop sources, caps or buffs. Starting a Character session pauses
 contribution capture so the two modes cannot read the source concurrently.
 
-![0.9.0 candidate screen-reading controls after a synthetic import, with continuous capture disabled](app/assets/whats-new/0.9.0/screen-reading.png)
+![0.9.0 screen-reading controls after a synthetic import, with continuous capture disabled](app/assets/whats-new/0.9.0/screen-reading.png)
 
 ### Contribute to Wiki through an explicit review
 
@@ -148,19 +155,19 @@ uncertainty; raw OCR evidence and unassigned inventory are excluded. Optional
 authenticated upload requires an additional confirmation and targets only your
 own user talk page. Upload and talk-page results are reported separately.
 
-![Actual 0.9.0 candidate character PNG preview with independent observed and calculated stat columns](app/assets/whats-new/0.9.0/share-preview.png)
+![Actual 0.9.0 character PNG preview with independent observed and calculated stat columns](app/assets/whats-new/0.9.0/share-preview.png)
 
 These captures and local checks use synthetic records. The combined UI fixture
 exercises real local OCR import, disposable PNG save/clipboard handling and
 guarded writes to a loopback wiki. It does not establish live-game OCR accuracy,
 production login/edit/upload acceptance, foreground game composition or native
-Wayland behavior. Review the [candidate acceptance plan](docs/CAPTURE_CONTRIBUTIONS.md)
-before treating the new workspaces as release-ready.
+Wayland behavior. The [release verification plan](docs/RELEASE_090.md) records
+the checked platforms and remaining manual acceptance limits.
 
 ## Your files stay local
 
 EoZ reads logs and supported map/archive files under the folder you choose.
-Optional screen reading in the 0.9.0 candidate reads only the source you select;
+Optional screen reading reads only the source you select;
 it does not record audio or continuous video. EoZ never reads game-process memory,
 injects code, patches game files, sends game commands or synthesizes gameplay
 input. Wiki edits/uploads require the review actions described above. See
@@ -237,7 +244,8 @@ Tests with synthetic content do not establish live route quality, physical overl
 | [Contributor handoff](docs/HANDOFF.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md) | Architecture, source ownership and exact next work |
 | [Product vision](docs/UX_VISION.md) and [PNUT interaction plan](docs/PNUT_UX_PLAN.md) | UX contracts and feature scope |
 | [Window/map follow-up](docs/WINDOW_MAP_POLISH.md) | Current window, map and tour changes |
-| [0.9.0 capture/contribution status](docs/CAPTURE_CONTRIBUTIONS.md) | Unreleased candidate scope, ownership, acceptance and publication boundary |
+| [0.9.0 capture/contribution status](docs/CAPTURE_CONTRIBUTIONS.md) | Feature scope, ownership and acceptance contracts |
+| [0.9.0 release verification](docs/RELEASE_090.md) | Authorized release checks, platform evidence and publication ledger |
 | [Capture pipeline](docs/design/CAPTURE_PIPELINE.md), [wiki contribution contract](docs/design/WIKI_CONTRIBUTIONS.md) and [character/share contract](docs/design/CHARACTER_CAPTURE.md) | Local observation, reviewed write and independent stat/equipment semantics |
 | [Map validation](docs/MAP_VALIDATION.md) and [destination-only audit](docs/ROUTE_REJECTION_AUDIT.md) | Real local-archive observations and limits |
 | [Navigation architecture](docs/NAVMESH_EVALUATION.md) | Guarded worker routing and independent collision validation |

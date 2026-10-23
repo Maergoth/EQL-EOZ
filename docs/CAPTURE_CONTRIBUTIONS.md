@@ -5,9 +5,10 @@
 The owner requested two new app tabs, optional screen reading, a local working
 implementation and a reviewable PR. This feature branch is
 `codex/capture-contributions`, originally based on 0.8.8/main `1d24163` and now
-merged with released 0.8.9/main `6937d35`. The feature version is 0.9.0 candidate. Keep one
-Windows/Linux codebase. Do not merge/publish this larger feature automatically
-under the earlier authorization to release font/Linux fixes.
+merged with released 0.8.9/main `6937d35`. The feature version is 0.9.0. Keep one
+Windows/Linux codebase. The owner's latest request explicitly authorizes OCR
+calibration, final PR11 acceptance checks and publication of 0.9.0 once they pass.
+The shared [release plan](RELEASE_090.md) records the remaining work and evidence.
 
 The 0.8.8 release is now published and verified: three public package downloads,
 GitHub digests/checksum files, tag/commit, shared dataset and download links.
@@ -25,14 +26,14 @@ checksums, packaged runtime/images and byte-identical Windows/AppImage/deb
 bootstraps are verified in private `eoz-0.8.9-release-verified.json`. Do not confuse that release PR with this feature
 branch. Feature commit `f116ef6` and merges `dedcca4`/`4cb8e2e` preserve both
 implementations; combined source and native font/cache/map checks pass. The
-separate [draft PR #11](https://github.com/Maergoth/EQL-EOZ/pull/11) retains
-manual acceptance items; do not auto-promote it. Baseline feature CI
+separate [PR #11](https://github.com/Maergoth/EQL-EOZ/pull/11) retains
+the feature scope and acceptance evidence. Baseline feature CI
 `39873212882` and Windows installer `39873211969` passed before cross-review.
 Final capture/retention/wiki-retry fixes pass the complete local source suite,
 deterministic race/retention/retry fixtures and native capture/workspace checks;
 exact-head remote revalidation is pending.
 
-The new request authorizes local development and testing. Use isolated app
+The current request authorizes testing and release. Use isolated app
 profiles and synthetic/private fixtures. Do not replace the installed EoZ or
 publish test edits/uploads to the live wiki. Preserve unrelated dirty files in
 `D:\EQLWiki`: `docs/EQL_DEVELOPMENT.md`, `ops/itembox.wiki` and
@@ -145,8 +146,8 @@ owner's sections or files; communicate interface changes first.
 | Wiki standard/auth/edit plan | wiki_contribution_089 | implemented, isolated validation | docs/design/WIKI_CONTRIBUTIONS.md; blueprint parser, hardened native auth, guarded multi-page plans, persisted partial retry and actual main/preload UI checks. Ownership returned to root. |
 | Capture/OCR journal | capture_pipeline_089 | implemented, private/synthetic validation | docs/design/CAPTURE_PIPELINE.md; coordinator, local OCR worker/runtime assets, private bounded journal and native/offline tests; handoff complete |
 | Character data/share model | character_model_089 | implemented, synthetic validation | slots, observed base/total stats, item card provenance, deterministic share renderer and tests |
-| App UI / integration / PR | root | implemented; draft PR11 created | Settings, tabs, offline Character import, guarded review/retry, source/native checks and screenshots; baseline Windows/Linux packaged CI passed, final cross-review fixes pass locally with remote revalidation pending |
-| Versioned What's New | character_model_089 | 0.8.9 released; 0.9.0 candidate prepared | current feature captures plus historical screenshots, unseen labels and release gate; 29 versions/28 images |
+| App UI / integration / PR | root | implemented; PR11 final acceptance | Settings, tabs, offline Character import, guarded review/retry, optional OCR region calibration, source/native checks and screenshots; final changed-head CI/package verification pending |
+| Versioned What's New | character_model_089/root | 0.8.9 released; 0.9.0 prepared | current feature/calibration captures plus historical screenshots, unseen labels and release gate; 29 versions/29 images |
 | Live Map loot pane / update UX | root | 0.8.9 released and merged into feature | right-hand full loot table, cache eviction on upgrade, checkbox layout, five-second Windows restart countdown |
 
 ### Required acceptance before PR is ready
@@ -162,7 +163,8 @@ owner's sections or files; communicate interface changes first.
 - Test capture, export/save/clipboard and own-talk upload using isolated/synthetic
   data; do not claim fixture tests are live game or live wiki submissions.
 - Inspect both tabs at small/large fonts and narrow windows; capture reviewable
-  screenshots, update docs, create/attach the feature PR. Do not auto-merge it.
+  screenshots, update docs and complete the attached feature PR. Merge the exact
+  passing head under the owner's latest publication authorization.
 
 ### Findings / decisions
 
@@ -175,8 +177,10 @@ owner's sections or files; communicate interface changes first.
   Character header supports offline PNG import while capture stays disabled;
   Settings imports explicitly target contributions. No installed app or public
   wiki edits/uploads were used for validation.
-- The supplied tiny composite screenshot yields an editable upgraded item
-  proposal, preserving OCR's `Leng` misspelling for correction, AC14 and tier10.
-  HP, weight and full character totals are not reliable at that size and are
-  omitted. Reviewable manual corrections remain essential; do not claim live
-  skin/resolution or production login/CAPTCHA/Wayland acceptance from fixtures.
+- Final calibration adds bounded, anchored item-name and stat-row reads and an
+  optional visual OCR area selector. The supplied tiny composite now yields
+  observed `Boots of the Long Road +10`, AC14, HP15 and tier10; the name is read
+  from pixels rather than corrected from the catalog. Weight's missing decimal
+  and full character totals remain unresolved and omitted. Review remains
+  essential; no claim of arbitrary game skin/resolution, production account
+  challenge or native-Wayland acceptance follows from these checks.

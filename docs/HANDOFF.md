@@ -1,10 +1,12 @@
 # Eye of Zomm contributor handoff
 
-The **0.9.0 review candidate** adds optional local screen reading, a reviewed
+The **0.9.0 release** adds optional local screen reading, a reviewed
 Contribute to Wiki queue and Character equipment/stat snapshots. See the shared
 [execution plan](CAPTURE_CONTRIBUTIONS.md) and its component design documents for
 exact ownership, native APIs, tests and outstanding live-game/platform checks.
-The feature PR is separate from the 0.8.9 release and must not auto-promote.
+The owner has authorized completing PR11 and publishing 0.9.0. Final changed-head
+CI, packaging and publication verification are tracked in
+[the release plan](RELEASE_090.md); earlier passing checks do not certify later changes.
 
 The 0.8.9 desktop follow-up adds installed system fonts, a one-time upgrade
 cache repair, green item-level values, a complete Live Map loot pane, browsable
@@ -25,7 +27,7 @@ local log parser and versioned release; application validation runs in GitHub CI
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.9.0 candidate**, based on released 0.8.9. Four independent native windows provide Parse, Map, Zone & loot and Triggers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
+Current code baseline: **0.9.0**, based on released 0.8.9. Four independent native windows provide Parse, Map, Zone & loot and Triggers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
 
 [Overlay workspace follow-up](OVERLAY_MAP_WORKSPACE.md) is the 0.8.5 continuation
 index. Native Map has a collapsing control header and Map/Top/First cycle;

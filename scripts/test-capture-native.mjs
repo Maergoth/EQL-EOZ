@@ -20,7 +20,7 @@ async function run({root,temporary,packagedRoot}){
     game.showInactive();
     let resolveObservation;const observation=new Promise(done=>{resolveObservation=done;});
     const ocr=packagedRoot?new (require(path.join(sourceRoot,'desktop','ocr-service.cjs')).OcrService)({packaged:true,resourcesPath:path.dirname(packagedRoot)}):undefined;
-    const host=new CaptureHost({electron,ocr,origin,getMainWindow:()=>main,onObservation:resolveObservation});
+    const host=new CaptureHost({electron,ocr,origin,getMainWindow:()=>main,onObservation:value=>resolveObservation(value)});
     const previousClipboard={text:electron.clipboard.readText(),html:electron.clipboard.readHTML(),rtf:electron.clipboard.readRTF()};
     const previousImage=electron.clipboard.readImage();if(!previousImage.isEmpty())previousClipboard.image=previousImage;
     const watchdog=setTimeout(()=>{console.error('Native capture watchdog:',JSON.stringify(host.getStatus()));app.exit(1);},35000);
@@ -31,12 +31,19 @@ async function run({root,temporary,packagedRoot}){
         await host.start({mode:'character',sourceId:source.id,sessionId:'native-synthetic'});
         const record=await Promise.race([observation,new Promise((_,reject)=>setTimeout(()=>reject(new Error(`Native capture timed out: ${JSON.stringify(host.getStatus())}`)),25000))]);
         if(record.subject.name!=='Synthetic Test Blade +3'||record.owner!=='character')throw new Error('Unexpected native OCR observation.');
+        const preview=host.preview();
+        if(!preview.dataUrl.startsWith('data:image/png;base64,')||preview.sourceSize.width<100||!host.getStatus().hasPreview)throw new Error('Current-frame calibration preview is unavailable.');
+        const nextObservation=new Promise(done=>{resolveObservation=done;});
+        await host.setRegion({region:{x:.01,y:.01,width:.98,height:.98},referenceSize:preview.sourceSize,sourceId:preview.sourceId,sessionId:preview.sessionId});
+        const cropped=await Promise.race([nextObservation,new Promise((_,reject)=>setTimeout(()=>reject(Error('Calibrated native OCR timed out.')),15000))]);
+        if(cropped.subject.name!=='Synthetic Test Blade +3'||cropped.input.region.x<1||cropped.input.region.width>=cropped.input.sourceSize.width)throw new Error('Calibrated native capture did not preserve crop provenance.');
+        await host.setRegion({region:null,sourceId:preview.sourceId,sessionId:preview.sessionId});
         await host.captureScreenshot({sourceId:source.id});
         if(electron.clipboard.readImage().isEmpty())throw new Error('The synthetic screenshot was not copied.');
         await host.stop({mode:'character'});
         if(host.captureWindow||host.ocr.worker||host.owner)throw new Error('Capture Stop retained a source or OCR worker.');
         const history=await host.journal.read();if(history.records.length<1)throw new Error('Native observation was not journaled.');
-        console.log(`Native ${packagedRoot?'packaged ASAR':'source'} persistent capture -> local OCR -> character observation -> private journal -> clipboard -> Stop passed.`);
+        console.log(`Native ${packagedRoot?'packaged ASAR':'source'} persistent capture -> local OCR -> calibration preview/region -> character observation -> private journal -> clipboard -> Stop passed.`);
     }finally{clearTimeout(watchdog);await host.dispose();electron.clipboard.write(previousClipboard);game.destroy();main.destroy();await new Promise(done=>server.close(done));}
     app.exit(0);
 }

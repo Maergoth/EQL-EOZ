@@ -172,3 +172,61 @@ renders produced identical PNG bytes within that runtime. These are synthetic
 canvas checks, not live game OCR, installed-app upgrades, clipboard/save-host
 acceptance or live wiki uploads. UI/host tests remain the integration owner's
 responsibility.
+
+### 0.9.0 platform and Character acceptance audit
+
+On 2026-10-22, the workflow jobs, their actual logs and uploaded artifact metadata
+were independently inspected for feature head `5b967c564bc39197fc68b27b1c992e06dabb292d`.
+[CI run 39874322031](https://github.com/Maergoth/EQL-EOZ/actions/runs/39874322031)
+tested PR merge `61fbaa815ee669a002f006b6dbf3a1d5e246f414` against main `6937d35`.
+The source, Windows native and Linux desktop/package jobs all passed.
+[Windows installer run 39874315883](https://github.com/Maergoth/EQL-EOZ/actions/runs/39874315883)
+also passed for the feature head. These runs predate the timestamp correction
+below; the release owner must revalidate the final changed head.
+
+The Linux job used Ubuntu 22.04, Xvfb at 1920 × 1080 and Openbox. Its actual
+workspace result included reviewed slot placement, editable augments, separate
+observed base/equipped values, recoverable stat errors, PNG clipboard/save,
+renderer restart and offline Character PNG import. The saved PNG was 429,702
+bytes. A separate native-source fixture exercised window selection, persistent
+capture, local OCR, Character-owned observations, the private journal and Stop.
+The same capture fixture passed with the packaged ASAR and physical offline OCR
+resources. The uploaded Linux interface artifact's Character editor and share
+preview were downloaded and visually inspected; readable fields, distinct
+observed/calculated columns and the scrollable image preview were present.
+
+The exact-ASAR gate compares current runtime sources, historical screenshots and
+the fetched production bootstrap with packaged bytes. The Linux packaged smoke
+then launches the shipped executable with its original ASAR and sandbox intact,
+using a disposable profile and synthetic Proton client directory. Its recorded
+result explicitly states `installed:false` and `waylandTested:false`. The Windows
+installer job also passed source workspace, exact-ASAR, packaged capture/OCR and
+packaged font checks. Uploaded package artifacts were present and unexpired:
+Linux artifact `12467592119` (213,956,081-byte ZIP), Windows artifact
+`12467891026` (110,738,560-byte ZIP). Their GitHub ZIP digests are, respectively,
+`56c503b8c444e092b02b82dad81e3eb2dfb211cf07f4b21fbc8b194f9614fca8`
+and `11e7cd8d59e3d5835681e36948e08bf4dc026cece86a62ac657986f5526709d1`.
+These ZIP digests are CI artifact provenance, not public installer checksums.
+
+The audit reproduced and corrected one model defect: timestamps had reused the
+1e9 stat-value bound, rejecting real epoch milliseconds. This erased capture and
+stat times and dropped stable-instance removal cutoffs after reload. Timestamps
+now accept safe integer milliseconds in the JavaScript Date range independently
+of stat bounds. A real 2026 ISO observation regression verifies retained dates,
+removal beyond the six-record evidence window across reload, and a fresh examine
+after removal. Invalid dates remain unknown.
+
+After that correction, focused local model/share-host tests, the real main/preload
+workspace fixture and both deterministic canvas exports passed. The latter remain
+1800 × 4032 / 366,581 bytes and 1800 × 4224 / 578,154 bytes and were visually
+inspected again. Evidence is private under
+`D:\EQLWiki\.local\validation\eoz-character-090-acceptance`.
+
+No remaining Character/share blocker was found in these checks. Linux acceptance
+establishes the documented X11 baseline; native Wayland placement, capture portals
+and real foreground-game composition remain manual limits. These fixtures do not
+establish production wiki authentication/upload, actual game OCR accuracy or an
+installed-player upgrade. Offline screenshot import and explicit manual card/stat
+review remain available when live capture is unavailable. Final release ownership,
+both-platform publication checks and OCR calibration are tracked in
+[the 0.9.0 release plan](../RELEASE_090.md).

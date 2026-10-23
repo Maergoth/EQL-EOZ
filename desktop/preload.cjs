@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('eyeOfZommCapture', {
     read:value=>ipcRenderer.invoke('eye-of-zomm:capture','read',value),
     observeLog:value=>ipcRenderer.invoke('eye-of-zomm:capture','observe-log',value),
     importImage:value=>ipcRenderer.invoke('eye-of-zomm:capture','import-image',value),
+    preview:()=>ipcRenderer.invoke('eye-of-zomm:capture','preview'),
+    setRegion:value=>ipcRenderer.invoke('eye-of-zomm:capture','set-region',value),
     onStatus:callback=>subscribe('eye-of-zomm:capture-status',callback),
     onObservation:callback=>subscribe('eye-of-zomm:capture-observation',callback)
 });

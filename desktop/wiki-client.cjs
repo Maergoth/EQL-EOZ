@@ -156,7 +156,20 @@ class WikiClient {
         }
         const addPage=(state,after,role)=>{const afterText=normalizeWikiSubmissionText(after);const page={id:this.id(),title:state.title,pageId:state.pageId,operation:state.missing?'create':'replace-reviewed',beforeText:state.content,afterText,baseRevision:state.revision,baseTimestamp:state.timestamp,startTimestamp:state.startTimestamp,beforeHash:hash(state.content),afterHash:hash(afterText),role,status:'pending',result:null};plan.pages.push(page);};
         addPage(primary,afterText,'primary');
-        for(const related of (Array.isArray(relatedPages)?relatedPages:[]).slice(0,10)){
+        const relationships=[...(Array.isArray(relatedPages)?relatedPages:[])];
+        if(normalizedCandidate.kind==='npc'){
+            const loot=normalizedCandidate.field('knownLoot');
+            if(Array.isArray(loot)&&loot.length){
+                if(!normalizedCandidate.zone||normalizedCandidate.instance==='unknown')plan.warnings.push('Confirm the NPC zone and normal/raid instance before preparing reciprocal item-source edits.');
+                else{
+                    const zone=await this.page(contributionTitle(normalizedCandidate.zone));
+                    if(zone.missing||zone.redirect)plan.warnings.push(`${normalizedCandidate.zone}: resolve the zone identity on the wiki before preparing reciprocal item-source edits.`);
+                    else for(const itemTitle of new Set(loot.map(contributionTitle)))relationships.push({title:itemTitle,role:'item-source',npcTitle:draft.title,zoneTitle:zone.title,confirmed:true});
+                }
+            }
+        }
+        if(relationships.length>10)plan.warnings.push('Only ten related pages can be included in one review. Remaining drop-source edits require another review or the wiki source editor.');
+        for(const related of relationships.slice(0,10)){
             const title=contributionTitle(related.title);if(plan.pages.some(page=>page.title===title))throw new WikiError('plan','Each page can appear only once in a contribution.');
             const relationshipConfirmed=related.confirmed===true || normalizedCandidate.sources.some(source=>source.confirmed&&source.npc===(related.npcTitle||title)&&source.zone===related.zoneTitle);
             if(!relationshipConfirmed){plan.warnings.push(`${title}: an unconfirmed reciprocal drop-source edit was excluded.`);continue;}

@@ -4,7 +4,8 @@ Owner: `wiki_contribution_089`. Status: implemented; local synthetic and native
 integration checks passed, 2026-10-22. Feature PR review is still required.
 Parent plan: [CAPTURE_CONTRIBUTIONS.md](../CAPTURE_CONTRIBUTIONS.md).
 This document records source contracts, implementation boundaries and actual
-observations. Production login, edits and uploads were not exercised.
+observations. The production login page was rendered without credentials;
+authenticated production login, edits and uploads were not exercised.
 
 ## Verified source map
 
@@ -343,3 +344,56 @@ forms and the long image. These observations do not establish OCR accuracy on
 every UI skin/resolution, native Wayland behavior, real account 2FA/Turnstile
 acceptance or a successful production wiki contribution. Real normal/raid source
 ambiguity deliberately falls back to the wiki source editor instead of guessing.
+
+## 0.9.0 live wiki acceptance
+
+Rechecked on 2026-10-22 EDT (2026-10-23 00:04 UTC). Public Help revision198282,
+Itempage176024, Namedmobpage149842 and BlueprintLoader168748 were unchanged.
+All five complete blueprint blocks still extracted at their recorded lengths.
+Read-only `action=parse` GET previews of synthetic item, normal NPC, raid NPC
+and zone drafts rendered with the current live templates and expected Items,
+NPCs/Named Mobs, Raid Encounters and Zones categories. The item preview used
+the full article branch, preserving the onlyinclude/tooltip contract. No parse
+request created an article, changed a revision or uploaded a file.
+
+Local in-memory source patches used live Lodizal126496, A dracoliche177949,
+Fine Steel Rapier175197 and Boots of the Long Road198233. Reapplying each patch
+was a no-op; unrelated template fields, common loot, authored notes, images and
+source annotations were preserved. Missing-field insertion was corrected to
+preserve the existing final parameter byte-for-byte. Unknown or unverified zone
+`/who` names now stay Unknown instead of borrowing the human article title;
+Plane of Hate174286 demonstrates why those names differ (`hateplane/hateplaneb`).
+
+Preparing a new NPC with verified knownLoot, a reviewed zone and explicit
+normal/raid selection now includes reciprocal source changes for existing item
+pages. The canonical new NPC title and canonical existing zone title are used.
+Unknown instance, missing/redirected zone, missing item or ambiguous normal/raid
+item structure produces a warning and a manual fallback. Multiple source blocks
+for the same zone also require manual selection. At most ten related pages fit
+one review; remaining work is explicitly reported. Every included existing-item
+change has its own full before/after acknowledgment and base revision guard.
+Synthetic HTTP tests passed NPC creation followed by an item-source failure,
+client restart and retry without recreating the NPC. The actual native workspace
+showed both reviewed NPC and item diffs before any publish action.
+
+The real production login page rendered successfully inside the app's dedicated
+WikiHost window with an isolated temporary profile. Username/password controls
+were present and empty; all form actions stayed on eqlwiki.com. The page had no
+Node/process access, app wiki bridge or preload; sandbox and context isolation
+were enabled. The account remained anonymous. No credentials were entered and
+no login form, edit or upload was submitted. Current public authmanagerinfo
+advertised username/password plus optional Remember Me; siteinfo listed
+OATHAuth, ConfirmEdit and Turnstile. No challenge widget was shown before login
+submission, so this does not establish that a real CAPTCHA or second factor
+has passed. Completing account login, any account-specific second factor/email
+verification, and a first real contribution remain user actions under the wiki's
+normal permissions. They are not bypassed or simulated as production acceptance.
+
+Private evidence is in `D:/EQLWiki/.local/validation/`:
+`eoz-capture-wiki-acceptance-{current,raid-resolved,report}.json`,
+`eoz-capture-live-login-acceptance.json` and `eoz-capture-live-login.png`.
+These contain no submitted account credentials and remain outside Git. The
+focused model/client suites, native loopback auth/upload fixture and full native
+workspace/import fixture passed after the fixes. No remaining app blocker was
+found in these current source/rendering contracts; production account mutations
+and native Wayland remain unverified platform/account acceptance limits.

@@ -1,8 +1,8 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current review candidate: `EQLWiki-Eye-of-Zomm-Setup-0.9.0-x64.exe`.
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.0-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.0` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both candidate strings in this introduction, while retaining every applicable earlier section.
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.0` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the release plan](RELEASE_090.md).
 
 ## 0.9.0 optional capture and contribution acceptance
 

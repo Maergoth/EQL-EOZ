@@ -18,7 +18,8 @@ const clean = (value, limit=240) => String(value ?? '').replace(/[\u0000-\u001f\
 const clone = value => JSON.parse(JSON.stringify(value));
 const finite = value => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1e9;
 const numeric = value => finite(value) ? value : typeof value === 'string' && /^[-+]?\d+(?:\.\d+)?$/.test(value.trim()) && finite(Number(value)) ? Number(value) : null;
-const atTime = value => finite(value) && value >= 0 ? value : null;
+// Dates use milliseconds since the epoch, independently of bounded stat values.
+const atTime = value => Number.isSafeInteger(value) && value >= 0 && value <= 8.64e15 ? value : null;
 const list = value => Array.isArray(value) ? value : [];
 const has = (object,key) => Object.prototype.hasOwnProperty.call(object || {},key);
 const fullTier = value => Number.isInteger(value) && value >= 0 && value <= 10 ? value : null;

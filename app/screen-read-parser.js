@@ -1,5 +1,5 @@
 // OCR proposals only: never scale an item, infer drop sources or publish a fact.
-export const SCREEN_READ_PARSER_VERSION = 2;
+export const SCREEN_READ_PARSER_VERSION = 3;
 const clean = value => String(value ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim();
 const number = value => Number(String(value).replace(/,/g,''));
 const statNames = {
@@ -69,7 +69,7 @@ function stats(text, confidence, { character = false } = {}) {
     for (const [label,key] of Object.entries(statNames).sort((a,b)=>b[0].length-a[0].length)) {
         const regex = new RegExp(`(?:^|[ \\t|])${escaped(label)}[ \\t]*[:=]?[ \\t]*([+-]?[\\d,]+(?:\\.\\d+)?)[ \\t]*(?:\\/[ \\t]*([\\d,]+))?(?=$|[ \\t%|])`,'im');
         const match = text.match(regex);
-        if (!match || (label==='HP' && /HP\s+Regen/i.test(match[0])) || /^[-+]?0\d/.test(match[1])) continue;
+        if (!match || (label==='HP' && /HP\s+Regen/i.test(match[0])) || /^[-+]?0\d/.test(match[1]) || key!=='attackSpeed'&&text.slice(match.index+match[0].length).startsWith('%')) continue;
         if (character && ['hp','mana','endurance'].includes(key) && match[2] !== undefined) {
             fields.push(field(`${key}Current`,match[0],number(match[1]),confidence));
             fields.push(field(`${key}Maximum`,match[0],number(match[2]),confidence));
@@ -87,8 +87,37 @@ function itemName(lines) {
     }
     return '';
 }
+export function screenReadRefinementRegions(input={}) {
+    const words=Array.isArray(input.words)?input.words:[],pane=itemRegion(words);if(!pane)return [];
+    const paneWords=words.filter(word=>word.bbox&&word.bbox.x0>=pane.x&&word.bbox.x1<=pane.right&&word.bbox.y0>=pane.y),rows=wordRows(paneWords);
+    const name=pane.name||itemName(rows.map(row=>row.words.map(word=>word.text).join(' '))),regions=[];
+    const nameRow=rows.find(row=>row.words.map(word=>word.text).join(' ')===name);
+    if(nameRow){const bounds=nameRow.words.map(word=>word.bbox),height=Math.max(...bounds.map(box=>box.y1))-Math.min(...bounds.map(box=>box.y0));
+        regions.push({role:'item-name',x:Math.min(...bounds.map(box=>box.x0))-height*.3,y:Math.min(...bounds.map(box=>box.y0))-height*.3,
+            width:Math.max(...bounds.map(box=>box.x1))-Math.min(...bounds.map(box=>box.x0))+height*.6,height:height*1.6,preprocessing:'green',layout:'line'});}
+    const statIndex=rows.findIndex(row=>row.words.some(word=>/^(?:AC|HP|Weight|Size)[:.]?$/i.test(clean(word.text))));
+    if(statIndex>=0){const first=rows[statIndex],labelHeight=Math.min(...first.words.filter(word=>/^(?:AC|HP|Weight|Size)[:.]?$/i.test(clean(word.text))).map(word=>word.bbox.y1-word.bbox.y0)),selected=rows.slice(statIndex).filter(row=>row.y-first.y<labelHeight*1.5).flatMap(row=>row.words),bounds=selected.map(word=>word.bbox);
+        if(bounds.length)regions.push({role:'item-stats',x:Math.min(...bounds.map(box=>box.x0))-labelHeight*.3,y:first.y-labelHeight*.2,
+            width:Math.max(...bounds.map(box=>box.x1))-Math.min(...bounds.map(box=>box.x0))+labelHeight*.6,height:Math.max(...bounds.map(box=>box.y1))-first.y+labelHeight*.4,preprocessing:'inverted',layout:'block',scale:4});}
+    return regions;
+}
+function refinedWords(input,baseWords){
+    const words=baseWords.map(word=>({...word}));
+    for(const pass of (Array.isArray(input.refinements)?input.refinements:[]).slice(0,2)){
+        if(!['item-name','item-stats'].includes(pass.role))continue;
+        for(const candidate of (Array.isArray(pass.words)?pass.words:[]).slice(0,200)){
+            if(!candidate.bbox||Number(candidate.confidence)<50)continue;
+            const box=candidate.bbox,height=Math.max(1,box.y1-box.y0),center=(box.x0+box.x1)/2;
+            const matches=words.map((word,index)=>({word,index})).filter(({word})=>word.bbox&&Math.abs(word.bbox.y0-box.y0)<Math.max(3,height*.55)&&center>=word.bbox.x0-height*.3&&center<=word.bbox.x1+height*.3);
+            matches.sort((a,b)=>Math.abs((a.word.bbox.x0+a.word.bbox.x1)/2-center)-Math.abs((b.word.bbox.x0+b.word.bbox.x1)/2-center));
+            const match=matches[0]?.index??-1;
+            if(match>=0&&Number(candidate.confidence)>=Number(words[match].confidence)+10)words[match]=candidate;
+        }
+    }
+    return words;
+}
 export function parseScreenRead(input = {}) {
-    const raw = clean(input.text).slice(0,16384), words = Array.isArray(input.words) ? input.words.slice(0,2000) : [];
+    const raw = clean(input.text).slice(0,16384),baseWords=Array.isArray(input.words)?input.words.slice(0,2000):[],words = refinedWords(input,baseWords);
     const confidence = Math.max(0,Math.min(100,Number(input.confidence) || 0));
     if (!raw) return [];
     const metadata = { kind:input.kind === 'manual' ? 'manual':'ocr', owner:input.owner || 'contribution', sessionId:input.sessionId || '',
@@ -99,11 +128,19 @@ export function parseScreenRead(input = {}) {
     const observations = [];
     if (name && name.length > 2) {
         const fields = [field('name',name,name,confidence), ...stats(itemText,confidence)];
+        // Region OCR sees a compact two-column examine stat table more clearly
+        // than a whole scene. Punctuation after a label is OCR evidence, not a
+        // decimal repair in the value; missing numeric punctuation stays absent.
+        for(const pass of (Array.isArray(input.refinements)?input.refinements:[]).filter(pass=>pass.role==='item-stats').slice(0,1)){
+            for(const entry of stats(String(pass.text||'').replace(/\b(AC|HP|Weight)\.(?=[ \t])/g,'$1'),Math.min(confidence,Number(pass.confidence)||0))){
+                const existing=fields.findIndex(value=>value.key===entry.key);if(existing<0)fields.push(entry);
+            }
+        }
         const tier = itemText.match(/\bTier[ \t]*[:=]?[ \t]*(\d+)[ \t]*\/[ \t]*(\d+)/i) || name.match(/\+(\d+)\s*$/);
         if (tier && Number(tier[1])<=100) fields.push(field('tier',tier[0],Number(tier[1]),confidence));
         for (const [label,key] of [['Class','classes'],['Race','races'],['Slot','slots'],['Size','size']]) {
             const found = itemText.match(new RegExp(`^${label}[ \\t]*:[ \\t]*(.+)$`,'im'));
-            if (found) fields.push(field(key,found[0],key==='size' ? found[1].trim() : found[1].split(/\s*[,/]\s*|\s+/).filter(Boolean),confidence));
+            if (found) fields.push(field(key,found[0],key==='size' ? found[1].trim().split(/\s+/)[0] : found[1].split(/\s*[,/]\s*|\s+/).filter(Boolean),confidence));
         }
         const augmentNames = lines.filter(line=>/^(?:\w+ )?Exaltation\s*:/i.test(line) && !/:\s*empty\s*$/i.test(line)).map(line=>line.replace(/^[^:]+:\s*/,'')).slice(0,12);
         if (augmentNames.length) fields.push(field('augmentNames',augmentNames.join('; '),augmentNames,confidence));
@@ -111,8 +148,9 @@ export function parseScreenRead(input = {}) {
         if (effects.length) fields.push(field('effects',effects.join('; '),effects,confidence));
         if (/\bModified\b/i.test(itemText)) fields.push(field('modified','Modified',true,confidence));
         if (/\bNo Trade\b|\bNo Drop\b/i.test(itemText)) fields.push(field('noTrade','No Trade',true,confidence));
+        const initialPane=itemRegion(baseWords),initialLines=wordLines(initialPane?baseWords.filter(word=>word.bbox&&word.bbox.x0>=initialPane.x&&word.bbox.x1<=initialPane.right&&word.bbox.y0>=initialPane.y):baseWords).split('\n').map(clean),initialName=initialPane?.name||itemName(initialLines);
         observations.push({ ...metadata, parser:{name:'item-examine',version:SCREEN_READ_PARSER_VERSION},
-            subject:{kind:'item',name}, fields, evidence:{text:fields.map(entry=>entry.raw).join('\n').slice(0,16384),imageId:null} });
+            subject:{kind:'item',name}, fields, evidence:{text:[...fields.map(entry=>entry.raw),...(initialName&&initialName!==name?[`Initial item name OCR: ${initialName}`]:[]),...(Array.isArray(input.refinements)?input.refinements:[]).slice(0,2).map(pass=>`${pass.role} region OCR:\n${clean(pass.text).slice(0,2000)}`)].join('\n').slice(0,16384),imageId:null} });
     }
     // A visible inventory/stat heading is required; item-only panes cannot become
     // an authoritative character total. Geometry excludes the examine region.

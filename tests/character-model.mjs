@@ -57,6 +57,24 @@ const instanceRestart=createCharacterModel({storage:removalStorage,now:()=>202})
 assert.equal(instanceRestart.intake(instanceObservation).ignored,true,'Past stable-instance captures remain removed even after evidence retention expired');
 assert.equal(instanceRestart.intake({...instanceObservation,id:'fresh-instance-examine',at:201}).deduplicated,false,'A new examine after removal is allowed');
 
+const epoch=Date.UTC(2026,9,22,12),epochStorage=memory(),epochModel=createCharacterModel({storage:epochStorage,now:()=>epoch});
+const epochObservation=(id,capturedAt)=>({id,sessionId:'epoch-session',capturedAt:new Date(capturedAt).toISOString(),item:{name:'Epoch fixture',instanceKey:'epoch-copy',tier:0}});
+const oldestEpochObservation=epochObservation('epoch-first',epoch-10000),epochCard=epochModel.intake(oldestEpochObservation).candidate;
+assert.equal(epochCard.createdAt,epoch,'Real epoch timestamps do not use the stat-value bound');
+assert.equal(epochCard.evidence[0].at,epoch-10000,'The capture parser ISO timestamp is retained');
+for(let index=0;index<CHARACTER_LIMITS.evidence+2;index++)epochModel.intake(epochObservation(`epoch-later-${index}`,epoch-9000+index));
+epochModel.setStatSnapshot('base',{stats:{HP:100},at:epoch-5000});
+assert.equal(epochModel.snapshot().statSnapshots.base.at,epoch-5000);
+epochModel.removeCandidate(epochCard.id);
+const epochRestart=createCharacterModel({storage:epochStorage,now:()=>epoch+1000});
+assert.equal(epochRestart.snapshot().updatedAt,epoch);
+assert.equal(epochRestart.snapshot().statSnapshots.base.at,epoch-5000,'Observed stat timestamps survive reload');
+assert.equal(epochRestart.snapshot().removedInstances[0].at,epoch,'Stable-instance removal cutoff survives real-date persistence');
+assert.equal(epochRestart.intake(oldestEpochObservation).ignored,true,'Old journal evidence stays removed beyond the retained evidence window at real dates');
+assert.equal(epochRestart.intake(epochObservation('epoch-fresh',epoch+1)).deduplicated,false,'A new real-date capture after the removal remains available');
+epochRestart.setStatSnapshot('equipped',{stats:{HP:110},at:8.64e15+1});
+assert.equal(epochRestart.snapshot().statSnapshots.equipped.at,null,'Invalid date-range timestamps remain unknown');
+
 model.setStatSnapshot('base',{stats:{HP:100,MP:null},confirmed:true,evidence:{text:'PRIVATE_BASE_CAPTURE'}});
 model.setStatSnapshot('equipped',{stats:{HP:450,MP:300},confirmed:true});
 const totals=model.totals();

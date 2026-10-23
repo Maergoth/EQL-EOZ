@@ -1,6 +1,6 @@
 # Capture and observation pipeline
 
-Status: initial implementation and local verification, 2026-10-22. Owner: `capture_pipeline_089`.
+Status: 0.9.0 calibration and release verification, 2026-10-22. Owner: `capture_pipeline_089`.
 Parent plan: [Capture, wiki contributions and character snapshots](../CAPTURE_CONTRIBUTIONS.md).
 The design contract follows the implementation ledger below. Unmeasured platform,
 packaged and live-game behavior remains an explicit acceptance item.
@@ -8,17 +8,19 @@ packaged and live-game behavior remains an explicit acceptance item.
 ## Implementation ledger and exact API
 
 Implemented files: `desktop/capture-host.cjs`, `capture-image.cjs`,
-`screen-read-journal.cjs`, `ocr-service.cjs`, `ocr-worker.cjs`,
+`screen-read-journal.cjs`, `capture-reader.cjs`, `ocr-service.cjs`, `ocr-worker.cjs`,
 `capture-source-preload.cjs`; `app/capture-source.html`, `capture-source.js` and
 `screen-read-parser.js`. Existing parser changes are additive `sourceEvidence`
 and `sourceConfidence` fields, preserving its current source attribution/totals.
 
 `new CaptureHost({electron,origin,getMainWindow,root?,journal?,ocr?,onObservation?,now?})`
 registers exact-main-frame `eye-of-zomm:capture` IPC. Actions are `status`,
-`sources`, `start({mode,sourceId,sessionId?})`, `stop({mode?})`, `pause`, `resume`,
+`sources`, `start({mode,sourceId,sessionId?,region?,referenceSize?})`,
+`stop({mode?})`, `pause`, `resume`,
 `read({afterSequence,limit})`, `observe-log({event,context})`,
-`import-image({mode?,sessionId?})` and
-`clear-history`. Events are `eye-of-zomm:capture-status` and
+`import-image({mode?,sessionId?})`, `preview`,
+`set-region({region,referenceSize,sourceId,sessionId})` and `clear-history`.
+Events are `eye-of-zomm:capture-status` and
 `eye-of-zomm:capture-observation`. No initialization call is required.
 `dispose()` is asynchronous and must participate in app shutdown flushing.
 The existing DiscoveryHost calls the trusted `captureScreenshot({sourceId?})`
@@ -37,6 +39,32 @@ alphanumeric/underscore/hyphen contract as Start. Imports reserve the one OCR
 worker, cancel any stale live job, and release the hold afterward while retaining
 the existing capture owner/source. A failed or cancelled import cannot leak an
 old result into the new review session.
+
+`preview` is an explicit exact-main-window action against the current running
+source's last captured frame; it does not select or capture another display.
+It returns a proportional PNG preview up to 1200×800 with original encoded
+`sourceSize`, source/session identity and current selection. `region` stores
+normalized finite `{x,y,width,height}` coordinates within 0–1; `referenceSize`
+must match the frame's exact pixel dimensions and each selected dimension must
+be at least 16 source pixels. `set-region` checks current source/session, cancels
+stale OCR generations and clears dedup without destroying the capture stream.
+Null region resets full-frame reading. A source-size change resets calibration
+with a visible warning. Settings persists at most 12 optional area profiles by
+source label/type and owner, with reference dimensions; it does not enable
+capture on restart. Include the examine/Inventory heading in a selected area
+so the parser can identify the pane; isolated numbers cannot establish its type.
+
+`capture-image.cjs` exports pure `normalizeCaptureRegion(region,referenceSize)`
+and `prepareCaptureImage({image,region,referenceSize})`. The latter returns
+`{png,input:{sourceSize,region:pixelRectangle,scale},warning?}`. Its final resize
+stays within 16 megapixels and 8192 pixels on either axis. `capture-reader.cjs`
+exports `recognizeCaptureImage({ocr,image,region?,referenceSize?,nativeImage,
+isCurrent}) -> {result,input,warning,cancelled?}`. The result retains scene
+text/word geometry and at most two anchored name/stat row refinements; input
+records each region, scale, preprocessing/layout and confidence. Every awaited
+recognition is guarded by `isCurrent()` before and after, preventing Stop or a
+new import/source from reviving stale OCR. Mock results without word boxes
+remain a single pass.
 
 Source startup rechecks its operation revision after journal initialization and
 ignores errors from a superseded source load. Every OCR startup, message, exit,
@@ -85,26 +113,29 @@ Local observations:
 - `prepare-ocr-assets.mjs` assembled 14 resolved packages and 240 size/digest
   verified files, including notices. OCR dependencies are development/build
   inputs; packages receive one physical `resources/ocr-runtime` resource tree.
-  CI now includes Windows/Linux source and packaged-ASAR capture paths, plus
-  wiki-auth and workspace native gates. Those CI/packaged/Linux results were
-  **not yet observed** during this handoff.
+  Both Windows/Linux source and packaged-ASAR capture paths, wiki-auth and
+  workspace native gates passed at `5b967c5` in CI39874322031 and Windows
+  installer39874315883. Linux used Ubuntu22.04/Xvfb/Openbox, establishing X11
+  behavior; native Wayland remains unverified. The final calibration changes
+  require new exact-head CI/package validation before release.
 - Private calibration used the supplied **748×331** composite screenshot at
   1x, 2x and 3x, plus an explicit examine-pane crop at 2x/3x/4x with color,
   inverted grayscale and high contrast under sparse/block segmentation. This is
   separate from the large synthetic fixture tests. Mean full-image OCR confidence
   was 28/52/54; these values are engine estimates, not measured accuracy.
-- The default single color pass now enlarges sources narrower than 1000 pixels
-  by 3x (1000–1599 by 2x), bounded to 16 megapixels and an 8192-pixel dimension
-  after enlargement. The supplied image produces one editable item proposal at
-  the default 3x: **`Boots of the Leng Road +10`, AC 14, tier 10**. The visual
-  screenshot reads `Boots of the Long Road +10`; the misspelling remains observed
-  OCR evidence for the contributor to correct or match to the catalog. It is
-  not silently replaced with a guessed canonical name.
-- The explicit crop's 4x color/block pass recognizes
-  **`Boots of the Long Road «10`**, tier 10, Class/Race ALL. Inverted/high-contrast
-  processing does not consistently improve names or numeric fields; it remains
-  a calibration option, not an automatic multi-pass capture cost. The original
-  supplied file is untouched and no private image is committed.
+- The initial sparse color pass now enlarges sources narrower than 1000 pixels
+  by 3x and normal-resolution captures by 2x whenever the final 16MP/8192 limits
+  permit it; 4K falls back to 1x. At most two small item rows are refined: a
+  green-name mask (ordinary color for white text) and an inverted stat table,
+  each limited to 1MP output. These regions are derived from detected pane/word
+  coordinates, not hardcoded item names, stats or screen positions.
+- The production reader now produces **`Boots of the Long Road +10`, AC14,
+  HP15, tier10, Size SMALL** from the supplied tiny composite in approximately
+  2.3 seconds and three bounded passes. Higher-confidence aligned row words
+  replace only their nearest corresponding scene word, retaining the initial
+  `Leng` spelling and both raw row reads as evidence. The final name combines
+  observed words across those reads; no wiki catalog value supplies OCR truth.
+  The private report is `D:\EQLWiki\.local\validation\eoz-090-reader.json`.
 - AC 14 is grounded in aligned same-row word geometry. Two parser defects found
   during calibration are fixed: whitespace cannot cross rows to consume an
   unrelated number, and tall noisy glyphs cannot shift a small digit to the next
@@ -112,31 +143,44 @@ Local observations:
   name can recover an unreadable Description tab. Leading-zero integers such as
   OCR `Weight 02` are omitted because the decimal may have been lost; the parser
   does not invent `0.2`.
-- HP 15, Weight 0.2 and a complete character snapshot are visually present but
-  **not reliably extracted** from this tiny overlapping screenshot. A larger
-  source and explicit user review remain necessary. Final private text/geometry/
-  proposal evidence is outside Git at
-  `D:\EQLWiki\.local\validation\eoz-capture-ocr-final.json`.
+- Weight0.2 and complete character totals remain **unreliable** on the tiny
+  composite. Narrow decimal experiments repeatedly returned `02`, sometimes at
+  95% engine confidence; that remains unknown, never inferred as 0.2 or 2.
+  Larger source panels/manual review are needed. The source screenshot was
+  untouched and no private images/text reports enter Git.
+- All four actual 2560×1369 combat/world screenshots from the player's directory
+  were measured as negative controls: **zero item/character proposals each**,
+  one scene pass each, approximately 3.9/5.2/6.2/8.2 seconds. Visible player bars,
+  target names and a discipline tooltip did not become examined items or totals.
+  Private reports: `eoz-090-negative-{0..3}.json` under the same ignored validation
+  directory. These are actual game images; they do not establish accuracy for
+  larger item/Inventory panes that were not present.
 - After the calibration changes, `npm run test:capture` passed again (including
-  synthetic cross-row/height/missing-tab regressions, bounded scaling, offline
-  Character import and live/import worker arbitration). The actual Windows
+  synthetic cross-row/height/missing-tab/nearest-word regressions, bounded scaling,
+  normalized region/reset/mapped refinements, cancellation, offline Character
+  import and live/import worker arbitration). Separate actual OCR of large
+  synthetic item/character fixtures still passes with the new reader, preserving
+  known item stats and character current/max values. The actual Windows
   persistent synthetic source smoke also passed again in approximately four
   seconds. No installed profile, live wiki or user clipboard content was used
   as a fixture.
 
-Remaining work before claiming the capture feature complete: broader real-game
-accuracy/usability, optional user-selected regions, packaged and Linux native
-outcomes, root UI review, retention/error acceptance and PR review. The capture
-branch remains separate from the urgent font/cache hotfix.
+The owner authorizes publication of 0.9.0 after the final PR11 checks. Remaining
+release work is the root-owned calibration UI acceptance, final changed-head
+Windows/Linux package checks and publication. Broader skin/resolution accuracy,
+native Wayland and actual production wiki login/writes remain explicit limits.
 
 ### Repeating private calibration
 
 Use `node scripts/calibrate-screen-read.mjs --image PRIVATE.png --output
-PRIVATE-results.json` with paths outside Git. Optional `--crop x,y,width,height`
-adds a bounded in-memory crop matrix; it never changes or copies the source
-image. The report contains private recognized text and word geometry and must
-remain ignored. Production capture uses one sparse color pass and one reusable
-offline worker, with one in-flight frame and one replaceable newest frame.
+PRIVATE-results.json --reader` with paths outside Git to measure the real reader.
+The helper also accepts private JPEG files for negative calibration; the app's
+manual import remains PNG only. Optional `--crop x,y,width,height`, `--scales`,
+`--layouts`, `--preprocessing` and `--only-crop` run a bounded research matrix
+without changing or copying the source image. Reports contain private recognized
+text/word geometry and must remain ignored. Production uses one reusable offline
+worker, a scene pass plus at most two small refinements, one in-flight frame and
+one replaceable newest frame.
 
 ## Existing source contracts
 

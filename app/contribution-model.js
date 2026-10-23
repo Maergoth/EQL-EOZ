@@ -106,7 +106,9 @@ export function buildContributionDraft(input, blueprints) {
     } else {
         if (!candidate.playerText) blockers.push('Write the zone introduction in your own words.');
         categories.add('Zones');
-        text = `${era}${candidate.playerText}\n\n{| class="zoneTopTable"\n! Name in /who\n| ${literalWikiText(field('whoName') || candidate.name)}\n|}\n`;
+        const whoName=field('whoName');
+        if(!whoName)warnings.push('No verified /who zone name; that field remains Unknown.');
+        text = `${era}${candidate.playerText}\n\n{| class="zoneTopTable"\n! Name in /who\n| ${literalWikiText(whoName || 'Unknown')}\n|}\n`;
         if (field('dynamicZoneSupported') === true) text += `\n== What's in this zone? ==\n{{Special:DynamicZoneList/${candidate.title}}}\n`;
         else warnings.push('A new zone may need a wiki DynamicZoneList allowlist update; no nonworking list was inserted.');
     }
@@ -168,7 +170,9 @@ export function patchContributionRelationship(source, { role, itemTitle, npcTitl
     const escaped=targetTitle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/ /g,'[ _]');
     let scope=current;
     if(role==='item-source'){
+        if(/^={1,6}[ \t]*[^=\r\n]*\b(?:raid|normal)[ \t]+(?:instance|zone)\b[^=\r\n]*={1,6}[ \t]*$/im.test(current))throw new Error('Choose the correct existing normal/raid source section in the wiki source editor.');
         const headings=[...current.matchAll(/^[ \t]*\[\[([^\]|]+)(?:\|[^\]]*)?\]\][ \t]*\r?$/gm)],zoneKey=contributionNameKey(zoneTitle),zone=headings.findIndex(heading=>contributionNameKey(heading[1])===zoneKey);
+        if(headings.filter(heading=>contributionNameKey(heading[1])===zoneKey).length>1)throw new Error('The item has multiple source sections for this zone; choose the verified instance in the wiki source editor.');
         scope=zone<0?'':current.slice(headings[zone].index,headings[zone+1]?.index??current.length);
     }
     const already=role==='npc-loot'?new RegExp(`\\{\\{\\s*:\\s*${escaped}\\s*(?:[}|])`,'i').test(scope):new RegExp(`\\[\\[\\s*${escaped}\\s*(?:[\\]|])`,'i').test(scope);
@@ -177,7 +181,7 @@ export function patchContributionRelationship(source, { role, itemTitle, npcTitl
         const addition=role==='npc-loot'?`<ul><li>{{:${targetTitle}}}</li></ul>`:`${link(zoneTitle)}\n* ${link(targetTitle)}`;
         const empty=/^\s*(?:(?:\*\s*)?None|<ul>\s*<li>\s*(?:\{\{:\s*)?None(?:\}\})?\s*<\/li>\s*<\/ul>)?\s*$/i.test(current);
         const value=`\n${empty?'':current.trim()+'\n\n'}${addition}\n\n`,field=fields[0];
-        text=field?source.slice(0,field.valueStart)+value+source.slice(field.end):source.slice(0,template.end-2)+`\n| ${parameter} = ${value}`+source.slice(template.end-2);
+        text=field?source.slice(0,field.valueStart)+value+source.slice(field.end):source.slice(0,template.end-2)+`| ${parameter} = ${value}`+source.slice(template.end-2);
     }
     if (zoneTitle) {
         const zone=contributionTitle(zoneTitle), key=contributionNameKey(zone);

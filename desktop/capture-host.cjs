@@ -5,7 +5,8 @@ const { pathToFileURL } = require('node:url');
 const crypto = require('node:crypto');
 const { ScreenReadJournal } = require('./screen-read-journal.cjs');
 const { OcrService } = require('./ocr-service.cjs');
-const { validateCapturePng,captureOcrScale } = require('./capture-image.cjs');
+const { validateCapturePng,normalizeCaptureRegion } = require('./capture-image.cjs');
+const { recognizeCaptureImage } = require('./capture-reader.cjs');
 const CHANNEL = 'eye-of-zomm:capture', SOURCE_CHANNEL = 'eye-of-zomm:capture-source';
 const MODES = new Set(['contribution','character']);
 const clean = (value, length = 240) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,length);
@@ -28,6 +29,7 @@ class CaptureHost {
         this.generation = 0; this.revision = 0; this.ownerStartedAt = 0; this.lastFrame = null; this.pending = null;
         this.processing = null; this.skippedFrames = 0; this.lastObservationAt = null; this.disposed = false;
         this.contributionResume = null; this.hold = false; this.sequence = 0; this.seen = new Map();
+        this.region=null;this.referenceSize=null;this.sourceSize=null;this.calibrationWarning=null;
         this.parseModule = import(pathToFileURL(path.join(__dirname,'..','app','screen-read-parser.js')).href);
         electron.ipcMain.handle(CHANNEL,(event,action,value)=>this.handle(event,action,value));
         electron.ipcMain.handle(SOURCE_CHANNEL,(event,action,value)=>this.handleSource(event,action,value));
@@ -43,10 +45,12 @@ class CaptureHost {
             event.senderFrame===window.webContents.mainFrame && event.senderFrame?.url===`${this.origin}/capture-source.html`);
     }
     getStatus() {
-        return { enabled:this.enabled,phase:this.phase,owner:this.owner,source:this.source ? {label:clean(this.source.name),type:this.source.id.startsWith('screen:')?'display':'window'}:null,
+        return { enabled:this.enabled,phase:this.phase,owner:this.owner,source:this.source ? {id:this.source.id,label:clean(this.source.name),type:this.source.id.startsWith('screen:')?'display':'window'}:null,
             sessionId:this.sessionId,characterSessionId:this.owner==='character'?this.sessionId:null,generation:this.generation,
             queuedFrames:this.pending?1:0,skippedFrames:this.skippedFrames,lastObservationAt:this.lastObservationAt,
-            contributionPaused:this.owner==='character'&&Boolean(this.contributionResume),error:this.error };
+            contributionPaused:this.owner==='character'&&Boolean(this.contributionResume),error:this.error,
+            hasPreview:Boolean(this.lastFrame&&this.lastFrame.sourceId===this.source?.id&&this.phase==='running'),
+            sourceSize:this.sourceSize,region:this.region,referenceSize:this.referenceSize,calibrationWarning:this.calibrationWarning };
     }
     emitStatus() {
         const main = this.getMainWindow();
@@ -63,6 +67,8 @@ class CaptureHost {
         if (action==='read') return this.journal.read(value);
         if (action==='clear-history') { await this.journal.clear(); return this.getStatus(); }
         if (action==='import-image') return this.importImage(value);
+        if (action==='preview') return this.preview();
+        if (action==='set-region') return this.setRegion(value);
         if (action==='observe-log') return this.ingestLogObservation(value?.event,value?.context);
         throw new Error('Unknown screen-reading action.');
     }
@@ -79,20 +85,23 @@ class CaptureHost {
         await this.ocr.stop();
         if (this.processing) await this.processing.catch(()=>{});
     }
-    async start({mode,sourceId,sessionId} = {}) {
+    async start({mode,sourceId,sessionId,region=null,referenceSize=null} = {}) {
         if (!MODES.has(mode) || (sourceId!==undefined && typeof sourceId!=='string') || (sessionId!==undefined && !/^[\w-]{1,120}$/.test(sessionId))) throw new Error('Invalid screen-reading session.');
         if (this.disposed) throw new Error('Screen reading has closed.');
+        const selection=normalizeCaptureRegion(region,referenceSize);
         const source = sourceId ? this.choices.find(choice=>choice.id===sourceId) : this.source;
         if (!source) throw new Error('Choose a currently available game window or display first.');
         if (this.owner==='character' && mode==='contribution') {
-            this.contributionResume = {source,sessionId:sessionId||crypto.randomUUID()}; this.emitStatus(); return this.getStatus();
+            this.contributionResume = {source,sessionId:sessionId||crypto.randomUUID(),...selection}; this.emitStatus(); return this.getStatus();
         }
-        const previous = this.owner==='contribution' && this.phase==='running' ? {source:this.source,sessionId:this.sessionId}:null;
+        const previous = this.owner==='contribution' && this.phase==='running' ? {source:this.source,sessionId:this.sessionId,region:this.region,referenceSize:this.referenceSize}:null;
         const revision=++this.revision; await this.cancelWork({destroySource:true});
         if(revision!==this.revision||this.disposed)return this.getStatus();
         if (mode==='character' && previous) this.contributionResume = previous;
         this.enabled = true; this.owner = mode; this.sessionId = sessionId || crypto.randomUUID();
-        this.source = source; this.phase = 'selecting'; this.error = null; this.ownerStartedAt = this.now(); this.seen.clear(); this.emitStatus();
+        this.source = source; this.phase = 'selecting'; this.error = null; this.ownerStartedAt = this.now(); this.seen.clear();
+        this.region=selection?.region||null;this.referenceSize=selection?.referenceSize||null;this.sourceSize=null;this.calibrationWarning=null;
+        this.emitStatus();
         try {
             await this.journal.initialize();
             if(revision!==this.revision||this.disposed)return this.getStatus();
@@ -151,7 +160,7 @@ class CaptureHost {
         const restore = this.owner==='character' && mode==='character' ? this.contributionResume:null;
         const revision=++this.revision; this.contributionResume=null;this.enabled=false;this.phase='disabled';this.owner=null;this.sessionId='';
         await this.cancelWork({destroySource:true});this.emitStatus();
-        if (revision===this.revision && restore && this.choices.some(source=>source.id===restore.source.id)) return this.start({mode:'contribution',sourceId:restore.source.id,sessionId:restore.sessionId});
+        if (revision===this.revision && restore && this.choices.some(source=>source.id===restore.source.id)) return this.start({mode:'contribution',sourceId:restore.source.id,sessionId:restore.sessionId,region:restore.region,referenceSize:restore.referenceSize});
         return this.getStatus();
     }
     async pause() {
@@ -159,7 +168,26 @@ class CaptureHost {
     }
     async resume() {
         if (!this.owner || !this.source) throw new Error('Choose a capture source first.');
-        return this.start({mode:this.owner,sourceId:this.source.id,sessionId:this.sessionId});
+        return this.start({mode:this.owner,sourceId:this.source.id,sessionId:this.sessionId,region:this.region,referenceSize:this.referenceSize});
+    }
+    preview() {
+        if(this.disposed||this.phase!=='running'||!this.lastFrame||this.lastFrame.sourceId!==this.source?.id)throw new Error('Start capture and wait for a frame before calibrating.');
+        const image=this.electron.nativeImage.createFromBuffer(this.lastFrame.png),sourceSize=image.getSize();
+        const scale=Math.min(1,1200/sourceSize.width,800/sourceSize.height);
+        const thumbnail=scale===1?image:image.resize({width:Math.max(1,Math.round(sourceSize.width*scale)),height:Math.max(1,Math.round(sourceSize.height*scale)),quality:'best'});
+        return {dataUrl:thumbnail.toDataURL(),sourceSize,sourceId:this.source.id,owner:this.owner,sessionId:this.sessionId,region:this.region,referenceSize:this.referenceSize};
+    }
+    async setRegion({region=null,referenceSize=null,sourceId,sessionId}={}) {
+        if(this.disposed||this.phase!=='running'||this.hold||!this.lastFrame||sourceId!==this.source?.id||sessionId!==this.sessionId)throw new Error('Capture changed. Open a fresh calibration preview.');
+        const selection=normalizeCaptureRegion(region,referenceSize);
+        if(selection&&(selection.referenceSize.width!==this.sourceSize?.width||selection.referenceSize.height!==this.sourceSize?.height))throw new Error('Capture size changed. Open a fresh calibration preview.');
+        const revision=++this.revision;this.hold=true;this.generation++;this.pending=null;
+        try{
+            await this.ocr.stop();if(this.processing)await this.processing.catch(()=>{});
+            if(revision!==this.revision||this.disposed)return this.getStatus();
+            this.region=selection?.region||null;this.referenceSize=selection?.referenceSize||null;this.calibrationWarning=null;this.seen.clear();
+            return this.getStatus();
+        }finally{this.hold=false;this.emitStatus();}
     }
     submitFrame(value) {
         if (this.phase!=='running' || this.hold || !this.owner) return {accepted:false};
@@ -171,7 +199,14 @@ class CaptureHost {
         const image = this.electron.nativeImage.createFromBuffer(png);
         const size = image.getSize();
         if (image.isEmpty() || size.width!==value.width || size.height!==value.height) throw new Error('Invalid capture dimensions.');
+        const sizeChanged=this.sourceSize?.width!==size.width||this.sourceSize?.height!==size.height;
+        this.sourceSize=size;
+        if(this.region&&(this.referenceSize.width!==size.width||this.referenceSize.height!==size.height)){
+            this.region=null;this.referenceSize=null;this.calibrationWarning='The capture size changed. Region calibration was reset to the full frame.';
+            this.generation++;this.pending=null;this.seen.clear();
+        }
         this.lastFrame = {png,at:value.capturedAt,sourceId:this.source?.id};
+        if(sizeChanged)this.emitStatus();
         const frame = {png,image,size,capturedAt:value.capturedAt,generation:this.generation,owner:this.owner,sessionId:this.sessionId};
         if (this.pending) this.skippedFrames++;
         this.pending = frame;
@@ -184,14 +219,14 @@ class CaptureHost {
             try {
                 const hash = digest(frame.png);
                 if (this.seen.has(`frame:${hash}`)) {this.skippedFrames++;continue;}
-                const scale = captureOcrScale(frame.size);
-                const png = scale===1 ? frame.png : frame.image.resize({width:frame.size.width*scale,height:frame.size.height*scale,quality:'best'}).toPNG();
-                const result = await this.ocr.recognize(png);
+                const read=await recognizeCaptureImage({ocr:this.ocr,image:frame.image,region:this.region,referenceSize:this.referenceSize,nativeImage:this.electron.nativeImage,
+                    isCurrent:()=>frame.generation===this.generation&&!this.disposed&&this.phase==='running'&&!this.hold});
                 if (frame.generation!==this.generation || this.phase!=='running' || this.hold) continue;
+                if(read.cancelled)continue;
+                if(read.warning)this.calibrationWarning=read.warning;
                 const {parseScreenRead} = await this.parseModule;
-                const observations = parseScreenRead({...result,owner:frame.owner,sessionId:frame.sessionId,
-                    capturedAt:new Date(frame.capturedAt).toISOString(),input:{frameId:hash,captureGeneration:frame.generation,
-                        sourceSize:frame.size,region:{x:0,y:0,width:frame.size.width,height:frame.size.height},scale}});
+                const observations = parseScreenRead({...read.result,owner:frame.owner,sessionId:frame.sessionId,
+                    capturedAt:new Date(frame.capturedAt).toISOString(),input:{...read.input,frameId:hash,captureGeneration:frame.generation}});
                 for (const observation of observations) await this.saveObservation(observation,frame.generation);
                 this.remember(`frame:${hash}`);this.emitStatus();
             } catch (error) {
@@ -249,16 +284,17 @@ class CaptureHost {
         if(image.isEmpty()||size.width*size.height>16*1024*1024)throw new Error('Choose an image smaller than 16 megapixels.');
         if(this.hold)throw new Error('Another screenshot is already being read.');
         this.hold=true;this.generation++;this.pending=null;
-        const generation=this.generation,scale=captureOcrScale(size),owner=mode||this.owner||'contribution';
+        const generation=this.generation,owner=mode||this.owner||'contribution';
         const reviewSession=sessionId||(owner===this.owner?this.sessionId:null)||crypto.randomUUID();
         try{
             await this.ocr.stop();if(this.processing)await this.processing.catch(()=>{});
             if(generation!==this.generation||this.disposed)return {records:[],cancelled:true};
-            const result=await this.ocr.recognize(scale===1?png:image.resize({width:size.width*scale,height:size.height*scale,quality:'best'}).toPNG());
+            const read=await recognizeCaptureImage({ocr:this.ocr,image,nativeImage:this.electron.nativeImage,isCurrent:()=>generation===this.generation&&!this.disposed});
+            if(read.cancelled||generation!==this.generation||this.disposed)return {records:[],cancelled:true};
             const {parseScreenRead}=await this.parseModule;
             const records=[];
-            for(const observation of parseScreenRead({...result,kind:'manual',owner,sessionId:reviewSession,
-                capturedAt:new Date(this.now()).toISOString(),input:{frameId:digest(png),sourceSize:size,region:{x:0,y:0,width:size.width,height:size.height},scale}})){
+            for(const observation of parseScreenRead({...read.result,kind:'manual',owner,sessionId:reviewSession,
+                capturedAt:new Date(this.now()).toISOString(),input:{...read.input,frameId:digest(png)}})){
                 const record=await this.saveObservation(observation,generation);if(record)records.push(record);
             }
             return {records,message:records.length?'Screenshot read. Review the proposed fields.':'No item examine or character stat block was recognized. Try a larger, clearer screenshot.'};
