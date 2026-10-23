@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {parseEditedStats,withDefaultItemStatLines} from '../app/capture-workspace.js';
 import {parseScreenRead} from '../app/screen-read-parser.js';
 import {createContributionQueue} from '../app/contribution-queue.js';
+import {CHARACTER_STAT_KEYS,characterStatLabel} from '../app/character-model.js';
+for(const key of [...CHARACTER_STAT_KEYS,'DMG_BONUS','HP_CURRENT','HP_MAXIMUM','MP_CURRENT','MP_MAXIMUM','END_CURRENT','END_MAXIMUM'])assert.deepEqual(parseEditedStats(`${characterStatLabel(key)}: 7`),{[key]:7},`Generated ${key} label round-trips through manual baseline editing`);
 assert.deepEqual(parseEditedStats('HP: 1,000\nMana: +200\nStrength: 75\nHP Regen: 3\nAC: ?'),{HP:1000,MP:200,STR:75,HP_REGEN:3,AC:null});
 assert.throws(()=>parseEditedStats('HP: wrong'),/Use STAT: number/);
 assert.throws(()=>parseEditedStats('Mana: 200\nMP: 100'),/only once/);

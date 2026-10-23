@@ -1,8 +1,32 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.0-x64.exe`.
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.1-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.0` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the release plan](RELEASE_090.md).
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.1` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the walkthrough/release plan](CHARACTER_WALKTHROUGH.md).
+
+## 0.9.1 guided Character and touching overlays
+
+1. Start Character from details including AA count. Select the Default Modern game
+   window inline. Remove ANY items first, examine items while unequipping, and
+   verify obvious slots fill without displacing another item. Use Second copy
+   for identical physical items and the inventory × to remove a mistaken card.
+2. Confirm all gear is off before reviewing the fresh No Equipment block. Check
+   mitigation/softcap/evasion AC and offense/accuracy separately. Correct a value,
+   wait for another read and ensure the edit persists. Confirm the baseline,
+   re-equip normal items then ANY last, and resolve remaining slots together.
+3. Correct explicit Haste in the written item text, Save item and verify a new
+   read preserves it. Inspect the baseline/gear/equipped estimates; unknown
+   server formulas must remain unknown. Canceling Save keeps capture; successful
+   Copy/Save completes once. Lost-source Resume or Choose game window retains the
+   phase. Explicit Cancel ends the walkthrough and retains captured cards.
+4. On all four unlocked overlays, hover every edge and corner. Axis/diagonal
+   arrows and actual resizing must replace the cancel cursor. Check opposite
+   anchors and locked handles. Dock each side of another panel: above/below share
+   width, side-by-side share height and edges touch. Resize the target, move the
+   group and drag a child away to detach. Repeat at monitor edges and other DPI.
+5. Cycle **Unlocked → Locked → Hidden → Unlocked**. Globally hidden groups return
+   together; individually hiding a panel detaches its relations. Verify mouse
+   input and saved layout after restart and display removal.
 
 ## 0.9.0 optional capture and contribution acceptance
 

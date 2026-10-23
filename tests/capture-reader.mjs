@@ -40,4 +40,17 @@ const atlas=await recognizeCaptureImage({image:new Image(1500,1000),nativeImage,
 assert.equal(calls,2,'three item regions share one bounded OCR atlas pass');assert.equal(atlas.result.refinements[0].tiles.length,3);
 assert(atlas.result.refinements[0].words[0].bbox.x0<500);assert(atlas.result.refinements[0].words[1].bbox.x0>800,'second atlas tile maps back to its own item, not the first pane');
 for(const operation of operations.filter(value=>value.bitmap))assert(operation.bitmap.width*operation.bitmap.height<=4*1024*1024,'the stat atlas bitmap has a fixed pixel budget');
+const componentScene={text:'Synthetic Modern component columns',confidence:90,words:[word('Inventory',100,20,100,20),word('Character',100,200,90,20),word('Vitals',200,200,60,20),word('Stats',600,200,50,20),
+    word('AC',100,300,30,20),word('121/93',220,300,75,20),word('|257',310,300,50,20),word('Attack',100,330,70,20),word('3591840',220,330,130,20),word('Agility',600,330,75,20),word('143/511',720,330,100,20)]};
+const componentProposal=screenReadRefinementRegions(componentScene).find(region=>region.role==='character-stats');assert.equal(componentProposal.tiles.length,3);
+calls=0;
+const componentRead=await recognizeCaptureImage({image:new Image(2500,1000),nativeImage,ocr:{async recognize(){calls++;if(calls===1)return componentScene;
+    const base=componentProposal.tiles[0],offense=componentProposal.tiles[1],offset=Math.ceil(base.y+base.height)-Math.floor(base.y),second=Math.ceil(offense.y+offense.height)-Math.floor(offense.y),atlas=operations.filter(value=>value.bitmap).at(-1).bitmap;
+    const scale=atlas.width/Math.max(...componentProposal.tiles.map(tile=>Math.ceil(tile.x+tile.width)-Math.floor(tile.x)));
+    return {text:'359\n840',confidence:96,words:[word('359',10,offset*scale+16+10,40,30,96),word('840',10,(offset+second)*scale+32+10,40,30,96)]};
+}}});
+assert.equal(calls,2,'column crops share the existing character refinement, with no additional OCR calls');
+assert.equal(componentRead.input.ocrPasses[1].componentPreprocessing,'local-otsu');
+assert.deepEqual(componentRead.result.refinements[0].words.map(value=>value.component),['attackOffense','attackAccuracy'],'only independently cropped pixel columns carry component provenance');
+assert(componentRead.result.refinements[0].words.every(value=>value.bbox.x1<400),'right-side attribute values cannot enter a numeric component crop');
 console.log('Capture reader: normalized region bounds/resize reset, single-pass negatives, bounded mapped refinements and cancellation passed.');

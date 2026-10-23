@@ -274,21 +274,32 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             if (owner === request && priorNotice === noticeGeneration) report('');
         } catch { if (!disposed && owner === request) report('Action unavailable · open main app.'); }
     }
-    const resizeHandle=$('#overlay-resize-handle'),dragGrip=$('#parse-drag-grip');
+    const resizeHandle=$('#overlay-resize-handle')||document.createElement('button'),dragGrip=$('#parse-drag-grip'),resizeHandles=[];
+    resizeHandle.id='overlay-resize-handle';resizeHandle.className='overlay-resize-handle';
+    for(const edge of ['n','ne','e','se','s','sw','w','nw']){
+        const handle=edge==='se'?resizeHandle:document.createElement('button');handle.type='button';handle.classList.add('overlay-resize-edge');handle.dataset.resizeEdge=edge;handle.draggable=false;
+        handle.tabIndex=edge==='se'?0:-1;handle.setAttribute('aria-label',edge==='se'?'Resize panel; drag or use arrow keys':`Resize ${edge} edge`);
+        handle.title=edge==='se'?'Resize: drag this corner, or focus it and use arrow keys':'Drag to resize';
+        // Keep hit regions outside all native draggable ancestors, including
+        // the compact Triggers content and its title/gear strip.
+        document.body.append(handle);resizeHandles.push(handle);
+    }
     if(dragGrip){dragGrip.setAttribute('aria-label',`Drag ${PANELS[panel]} to move the unlocked window`);dragGrip.title=`Drag to move ${PANELS[panel]}`;}
-    function finishResize(){const id=resizeDrag?.id;resizeDrag=null;document.body.classList.remove('is-resizing');if(id!==undefined&&resizeHandle?.hasPointerCapture?.(id))resizeHandle.releasePointerCapture(id);}
+    function finishResize(){const id=resizeDrag?.id,handle=resizeDrag?.handle;resizeDrag=null;document.body.classList.remove('is-resizing');if(id!==undefined&&handle?.hasPointerCapture?.(id))handle.releasePointerCapture(id);}
     async function flushResize(){
         if(resizeBusy||disposed)return;resizeBusy=true;
         try{while(resizePending&&!disposed){const size=resizePending;resizePending=null;await bridge.action('resize',size);}}
         catch{resizePending=null;finishResize();if(!disposed)report('Resize unavailable. Show and unlock this panel, then retry.');}
         finally{resizeBusy=false;}
     }
-    function requestResize(width,height){resizePending={width:Math.max(1,Math.min(4000,Math.round(width))),height:Math.max(1,Math.min(4000,Math.round(height)))};void flushResize();}
+    function requestResize(width,height,edge='se'){resizePending={width:Math.max(1,Math.min(4000,Math.round(width))),height:Math.max(1,Math.min(4000,Math.round(height))),edge};void flushResize();}
     function requestResizeDelta(deltaWidth,deltaHeight){resizePending={deltaWidth:Math.max(-4000,Math.min(4000,(resizePending?.deltaWidth||0)+deltaWidth)),deltaHeight:Math.max(-4000,Math.min(4000,(resizePending?.deltaHeight||0)+deltaHeight))};void flushResize();}
-    function resizePointer(event){if(!resizeDrag||event.pointerId!==resizeDrag.id)return;requestResize(resizeDrag.width+event.screenX-resizeDrag.x,resizeDrag.height+event.screenY-resizeDrag.y);}
-    listen(resizeHandle,'pointerdown',event=>{if(event.button!==0||state.preferences?.locked||state.preferences?.passThrough||!state.preferences?.visible)return;event.preventDefault();resizeDrag={id:event.pointerId,x:event.screenX,y:event.screenY,width:document.documentElement.clientWidth,height:document.documentElement.clientHeight};resizeHandle.setPointerCapture(event.pointerId);document.body.classList.add('is-resizing');});
-    listen(resizeHandle,'pointermove',resizePointer);
-    listen(resizeHandle,'pointerup',event=>{resizePointer(event);finishResize();});listen(resizeHandle,'pointercancel',finishResize);
+    function resizePointer(event){if(!resizeDrag||event.pointerId!==resizeDrag.id)return;const {edge}=resizeDrag,dx=event.screenX-resizeDrag.x,dy=event.screenY-resizeDrag.y;requestResize(resizeDrag.width+(edge.includes('e')?dx:edge.includes('w')?-dx:0),resizeDrag.height+(edge.includes('s')?dy:edge.includes('n')?-dy:0),edge);}
+    for(const handle of resizeHandles){
+        listen(handle,'dragstart',event=>event.preventDefault());
+        listen(handle,'pointerdown',event=>{if(event.button!==0||state.preferences?.locked||state.preferences?.passThrough||!state.preferences?.visible)return;event.preventDefault();resizeDrag={handle,edge:handle.dataset.resizeEdge,id:event.pointerId,x:event.screenX,y:event.screenY,width:document.documentElement.clientWidth,height:document.documentElement.clientHeight};handle.setPointerCapture(event.pointerId);document.body.style.setProperty('--resize-cursor',getComputedStyle(handle).cursor);document.body.classList.add('is-resizing');});
+        listen(handle,'pointermove',resizePointer);listen(handle,'pointerup',event=>{resizePointer(event);finishResize();});listen(handle,'pointercancel',finishResize);
+    }
     listen(resizeHandle,'keydown',event=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)||state.preferences?.locked||state.preferences?.passThrough||!state.preferences?.visible)return;event.preventDefault();const step=event.shiftKey?20:5;requestResizeDelta(({ArrowLeft:-step,ArrowRight:step}[event.key]||0),({ArrowUp:-step,ArrowDown:step}[event.key]||0));});
     function renderTimers() {
         const timers = session().timers || {};
@@ -305,7 +316,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         document.documentElement.style.setProperty('--panel-opacity', String(Math.min(1, Math.max(.15, number(prefs.backgroundOpacity) || .85))));
         applyAppearance(document,state.appearance,{panelScale:Number(prefs.fontScale) || 1});
         $('#overlay').classList.toggle('is-locked', Boolean(prefs.locked));
-        if(resizeHandle)resizeHandle.disabled=Boolean(prefs.locked||prefs.passThrough||!prefs.visible);
+        for(const handle of resizeHandles){handle.disabled=Boolean(prefs.locked||prefs.passThrough||!prefs.visible);handle.hidden=handle.disabled;}
         if(prefs.locked||prefs.passThrough||!prefs.visible){resizePending=null;finishResize();}
         if (panel !== 'timers') {
             $('#layout-lock').checked = Boolean(prefs.locked); $('#ignore-mouse').checked = Boolean(prefs.passThrough);
@@ -494,6 +505,6 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         }).catch(() => report('Map overlay unavailable · open the main map.'));
     }
     render();
-    return {render(next) {stateGeneration++; state = next || {}; render();},dispose() {disposed = true;resizePending=null;finishResize(); hideItemTooltip(); listeners.forEach(remove => remove()); unsubscribe?.(); mapController?.dispose(); discoveryNotices?.dispose(); noticeResizeObserver?.disconnect(); clearInterval(tick);}};
+    return {render(next) {stateGeneration++; state = next || {}; render();},dispose() {disposed = true;resizePending=null;finishResize();resizeHandles.forEach(handle=>handle.remove()); hideItemTooltip(); listeners.forEach(remove => remove()); unsubscribe?.(); mapController?.dispose(); discoveryNotices?.dispose(); noticeResizeObserver?.disconnect(); clearInterval(tick);}};
 }
 if (globalThis.document?.querySelector('#overlay')) mountOverlay();

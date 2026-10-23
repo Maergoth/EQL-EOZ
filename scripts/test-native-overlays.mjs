@@ -124,17 +124,17 @@ try {
                 await until(async()=>execute(owner,expected=>{const button=document.querySelector('#open-native-overlays');return button.dataset.overlayMode===expected&&!button.disabled&&button.getAttribute('aria-label').includes(expected[0].toUpperCase()+expected.slice(1));},expected),'header current-state label and accessible action');
             };
             assert.equal((await state()).globalMode,'hidden');
-            await cycleHeader('locked');
+            await cycleHeader('unlocked');
             await until(() => Object.keys(panels()).length === 4, 'four native overlays');
             assert.deepEqual(Object.keys(panels()).sort(),['intel','map','parse','timers']);
             for (const window of Object.values(panels())) await until(async () => execute(window, () => Boolean(document.querySelector('#panel-content')?.children.length)), 'overlay renderer');
             const cycleFocusBefore=[...nativeCalls.values()].flat().filter(call=>call[0]==='focus').length;
-            await cycleHeader('unlocked');
-            for(const window of Object.values(panels()))assert.equal(window.isResizable(),true,'every unlocked native window can resize');
-            await cycleHeader('hidden');await cycleHeader('locked');
+            await cycleHeader('locked');await cycleHeader('hidden');await cycleHeader('unlocked');
+            for(const window of Object.values(panels()))assert.equal(window.isResizable(),false,'transparent windows use guarded custom edges instead of unsupported native borders');
+            await cycleHeader('locked');
             await control('hide','map');await control('lock','map',false);
             await until(async()=>execute(owner,()=>document.querySelector('#open-native-overlays').dataset.overlayMode==='unlocked'),'mixed state comes from the owner');
-            await cycleHeader('hidden');await cycleHeader('locked');
+            await cycleHeader('locked');await cycleHeader('hidden');await cycleHeader('unlocked');await cycleHeader('locked');
             assert.equal([...nativeCalls.values()].flat().filter(call=>call[0]==='focus').length,cycleFocusBefore,'global cycles never activate native windows');
             const ids = Object.values(panels()).map(window => window.id);
             assert.equal(new Set(ids).size, 4);
@@ -181,14 +181,19 @@ try {
             assert(nativeCalls.get(panels().parse.id).some(call => call[0] === 'setIgnoreMouseEvents' && call[1] === true));
             await control('restore-mouse'); await control('unlock-all');
             assert.equal((await state()).panels.parse.passThrough, false);
-            assert.equal(panels().parse.isResizable(), true); assert.equal(panels().parse.isMovable(), true);
+            assert.equal(panels().parse.isResizable(), false,'custom hit regions resize transparent overlays'); assert.equal(panels().parse.isMovable(), true);
             assert.equal(nativeCalls.get(panels().parse.id).filter(call => call[0] === 'setMovable').at(-1)[1],true);
             if(process.platform !== 'linux')assert.equal(panels().parse.isFocusable(),true);
             await until(async()=>execute(panels().parse,()=>getComputedStyle(document.querySelector('#parse-drag-grip')).webkitAppRegion==='drag'),'unlocked dedicated Parse drag region');
             const parseGrip=await execute(panels().parse,()=>{const grip=document.querySelector('#parse-drag-grip'),rect=grip.getBoundingClientRect(),select=document.querySelector('#encounter-scope').getBoundingClientRect();return{width:rect.width,height:rect.height,right:rect.right,selectLeft:select.left,headerRegion:getComputedStyle(document.querySelector('#overlay-header')).webkitAppRegion,selectRegion:getComputedStyle(document.querySelector('#encounter-scope')).webkitAppRegion,tabRegion:getComputedStyle(document.querySelector('[data-tab="healing"]')).webkitAppRegion,resizeHint:getComputedStyle(document.querySelector('#overlay-resize-handle')).display,resizeCursor:getComputedStyle(document.querySelector('#overlay-resize-handle')).cursor};});
             assert(parseGrip.width>=24&&parseGrip.height>=20&&parseGrip.right<=parseGrip.selectLeft,'Parse has an exposed grip separate from encounter controls');
             assert.equal(parseGrip.headerRegion,'no-drag');assert.equal(parseGrip.selectRegion,'no-drag');assert.equal(parseGrip.tabRegion,'no-drag');assert.equal(parseGrip.resizeHint,'block');assert.equal(parseGrip.resizeCursor,'nwse-resize');
-            const parseBeforeResize=panels().parse.getBounds();panels().parse.setSize(parseBeforeResize.width+36,parseBeforeResize.height+24);
+            const parseBeforeResize=panels().parse.getBounds(),separateTimer=panels().timers.getBounds();
+            // The expanded all-panel magnet would attach Parse to the default
+            // Triggers dock six pixels below it. Test independent resize first;
+            // touching/group propagation is exercised explicitly afterward.
+            panels().timers.setBounds({...separateTimer,x:parseBeforeResize.x+parseBeforeResize.width+50,y:parseBeforeResize.y+parseBeforeResize.height+120});
+            panels().parse.setSize(parseBeforeResize.width+36,parseBeforeResize.height+24);
             await until(async()=>{const prefs=(await state()).panels.parse.bounds;return prefs.width===parseBeforeResize.width+36&&prefs.height===parseBeforeResize.height+24;},'unlocked native resize persists the new Parse bounds');
             panels().parse.setBounds(parseBeforeResize);
             await until(async()=>{const prefs=(await state()).panels.parse.bounds;return prefs.width===parseBeforeResize.width&&prefs.height===parseBeforeResize.height;},'Parse bounds restore for the remaining synthetic checks');
@@ -213,7 +218,7 @@ try {
             const resizeTarget={x:100,y:100,width:parseBeforeResize.width+86,height:parseBeforeResize.height+40};panels().parse.setBounds(resizeTarget);
             const actualTarget=panels().parse.getBounds(),timerWindow=panels().timers;
             timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+9,width:actualTarget.width-8,height:84});
-            await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height+6&&bounds.width===actualTarget.width;},'Triggers snaps to current resized native Parse bounds, not its old defaults');
+            await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height&&bounds.width===actualTarget.width;},'Triggers touches current resized native Parse bounds and shares its width');
             // Native setBounds is fixture positioning, not user height intent.
             // Establish manual height through the real own-panel resize path.
             await action('timers','resize',{deltaWidth:0,deltaHeight:20});

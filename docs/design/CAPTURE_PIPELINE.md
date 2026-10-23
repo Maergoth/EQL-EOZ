@@ -82,6 +82,24 @@ error and timeout callback is bound to its exact worker; recognition also checks
 that its awaited initialization still belongs to the active worker. A retired
 worker or completed job cannot cancel a replacement job while termination drains.
 
+The Character walkthrough keeps that explicit owner/session through transient
+OCR timeouts, canvas/IPC frame failures and blank/minimized frames. OCR failures
+stop only the failed worker, retain the selected capture stream and retry on a
+later frame with bounded 2–30 second backoff; successful reads clear the warning.
+Frame warnings also clear on valid duplicate frames. `getStatus()` adds
+`readWarning` and `resumable`. Genuine source end, renderer loss or permission
+failure releases the stream and worker into a visible resumable error. Resume
+is explicit, re-enumerates the selected source and revision-checks cancellation;
+it cannot restart after Stop, permission loss or disposal by itself. Encoding
+which finishes after page cancellation cannot post a stale frame.
+
+`listSources()` adds `recommended:boolean`. The pure
+`preferredCaptureSource(sources)` helper recommends only one enumerated exact
+EverQuest/EverQuest Legends game-window identity, excluding displays,
+browser/launcher titles and ambiguous multiple game windows. It never enables
+capture. The walkthrough still requires an explicit source/start action; app
+startup and ordinary tab navigation cannot authorize capture.
+
 `ocr-runtime.cjs` exports synchronous `validateOcrRuntime(runtimeRoot)` for the
 artifact gate and packaged OCR startup. It checks every bounded manifest path,
 physical file size/SHA-256, package version and resolved package entry within
@@ -586,3 +604,69 @@ they depend on them. Root owns shared files and their final integration.
 The original context/design audit preceded implementation. The ledger at the top
 records what was subsequently exercised; proposed sections do not override its
 explicit limitations.
+
+## Character walkthrough follow-up: written item text and Modern components
+
+Parser version 5 adds `rawStatBlock`, a separate item observation field containing
+at most 8,192 characters and 60 lines. It preserves the observed metadata/stat
+block and unknown intervening written lines, plus relevant independently read
+stat refinements. Its full value is retained separately from the 512-character
+`field.raw` preview, and appears first in scoped item evidence. It is never an
+automatically confirmed wiki `statLines` value. Original pane identity, tier,
+observed numbers and raw evidence remain separate from catalog/base values.
+
+An observed isolated Done button ends the block; chat/command lines stop it.
+When no closing button is recognized, retention ends at the last recognizable
+item metadata/stat/effect/cast/cooldown row, preserving unknown intervening lines.
+This bounds relevant text without claiming that unreadable pixels, offscreen or
+scrolled-out content were captured. The original journal provenance still applies;
+no screenshot or full desktop/chat text is persisted by this change.
+
+`parseItemStatBlock(text)` is the shared pure entry point for explicit Character
+text edits/reparse. It returns `{fields,conflicts,warnings}` with recognized
+numeric fields only. It rejects text over the same character/line bounds;
+different repeated values for one key are omitted and reported as conflicts.
+It does not mutate the supplied text, read a catalog, scale a tier or verify a
+fact. Returned field confidence is zero until an owner separately records its
+manual/observation provenance. Explicit Haste percentages are parsed as `haste`,
+distinct from `attackSpeed`; effect names/ranks such as Worn Effect: Haste 12
+and an item's own name do not manufacture a numeric Haste stat. Range, Damage
+Bonus and the full Endurance Regen spelling join the existing supported stat
+aliases. Unsupported written lines remain raw text rather than invented numbers.
+
+The local active client file
+`C:/EverQuest Legends/uifiles/default_modern/EQUI_InventoryWindow.xml` was read
+without modification. Its `IWS_ArmorClassScreen` orders CurrentMitigation
+(EQType22), slash, SoftcapMitigation (853), vertical divider, Evasion (403).
+The tooltips explicitly identify mitigation, mitigation softcap and evasion.
+`IWS_AttackScreen` orders CurrentOffense (23), vertical divider, Accuracy (402),
+whose tooltips identify offense and accuracy. Therefore Modern observation keys
+are `acMitigation`, `acMitigationSoftcap`, `acEvasion`, `attackOffense` and
+`attackAccuracy`. The middle AC value is not a maximum, and Attack's two values
+are not melee/ranged or an aggregate. Generic item AC/Attack remain separate.
+
+Missing component separators cannot turn concatenated OCR digits into a giant
+single component. When the independently observed Modern AC divider establishes
+the shared column, the existing character refinement atlas may include small
+Offense/Accuracy digit crops and, when needed, an Evasion crop. The crop stops
+before another attribute label; its coordinates, component role and local Otsu
+contrast preprocessing are recorded. It reads the original pixels rather than
+splitting a recognized digit string. A single numeric result with confidence at
+least 85 is required; multiple, malformed, weak or conflicting readings remain
+unknown. Tall OCR noise is excluded before character rows are aligned. The
+existing maximum two refinements, four source tiles, 4MP stat atlas and source
+pixel limits are unchanged; there is no extra OCR call or cloud service.
+
+Focused parser/reader tests and the actual canvas-only Modern pixel gate pass
+against source dependencies and the assembled offline OCR runtime. The updated
+synthetic image exercises explicit item Haste, all five AC/Attack components,
+independent item panes and right-side Inventory resources/attributes/resists.
+Private provided-image measurement on 2026-10-23 recovered all five requested
+components from the selected Inventory area, with no incorrect component values.
+The full frame recovered the three AC components and left both Attack components
+unknown. All three item panes and their separately retained stat text were
+recognized. This is measured evidence for that supplied Modern image, not a claim
+that every item, skin, resolution or live source is calibrated. Private source,
+measurement reports and temporary helper output remain outside Git. Measurement
+helpers run under an awaited parent with ignored pipes, closed-output/error exit
+guards and watchdog cleanup; no installed player profile is used.

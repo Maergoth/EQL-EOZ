@@ -26,6 +26,15 @@ catalog search, base recovery, overlay layout controls and Map Auto Z,
 bringing the archive to 33 images across 29 browsable versions. Its publication gate
 also checks the final calibrated capture UI and preserves every older version.
 
+Version 0.9.1 adds five actual synthetic Character captures: inline source,
+20px base review, written item/Haste editing, final guided review and computed
+equipped estimates. These were captured by `test-character-walkthrough.mjs`
+with a disposable profile and fake capture/share boundaries, and visually
+inspected before copying. Historical 0.9.0 images remain intact. The current
+guide describes the changed baseline-only flow; older entries describe their
+original controls. A sixth capture shows the actual unlocked native Parse and
+its resize grip, bringing the archive to 39 images across 30 browsable versions.
+
 Each PNG is stored under `app/assets/whats-new/<version>/` and has a reviewed
 SHA-256 in its step. Files were extracted as binary Git objects, without image
 regeneration or re-encoding. Original top-level images remain available to the

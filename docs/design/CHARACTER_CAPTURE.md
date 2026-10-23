@@ -42,17 +42,22 @@ Pass `storage:null` for an isolated fixture. Reads and snapshots are copies.
 | `snapshot()` | Version-1 JSON state: metadata, candidates, equipment, statSnapshots and updatedAt. Keep this local. |
 | `intake(observation, {wikiItem?, icon?})` | Returns `{ok,candidate,deduplicated,saved}`. A removed replay returns `{ok:true,ignored:true,deduplicated:true,candidate:null}`. Accepts `observation.item` or capture parser field-array proposals. |
 | `updateCandidate(id, patch)` | Edits reviewed fields, without replacing the physical-copy ID or evidence. |
+| `mergeObservation(id, observation, {wikiItem?,icon?})` | Explicit same-copy recapture selected by the walkthrough, not name matching or general journal replay. Returns candidate plus `mergedStatKeys`/`preservedStatKeys`; appends bounded evidence, merges only new unedited observed fields, and preserves the exact card/assignment. |
 | `duplicateCandidate(id)` | Explicitly creates another physical copy with its own ID and no claimed capture evidence. |
 | `removeCandidate(id)` | Removes a card and its assignment. |
 | `assign(id, slotId, {replace?,allowIncompatible?})` | Moves the same copy between slots. Occupied/incompatible/unknown slots return `needsConfirmation:true` until the caller explicitly enables the relevant override. |
 | `unassign(slotId)` | Clears the slot and keeps the inventory card. |
-| `setMetadata(patch)` | Name, server, level, race, up to three classes, named session. Unknown numeric level is null. |
+| `setMetadata(patch)` | Name, server, level, race, up to three distinct classes, nullable nonnegative integer `aaCount`, named session. Unknown numeric values remain null. AA count is descriptive; it does not determine AA bonuses. |
+| `beginSnapshot(metadataPatch?)` | One save clears equipment assignments and the No Equipment baseline, merges metadata, and retains all inventory cards, removal markers and legacy equipped observations. |
+| `autoAssign(id)` | Uses the current edited card. Returns `{ok,assigned,slot,reason,choices,saved?}`. Already-assigned copies remain in place. Free paired slots use canonical order; unknown/ANY/multiple kinds or occupied slots defer without displacement. |
+| `characterAutoAssignment(snapshot,id)` | Pure placement decision with the same result fields; does not mutate the snapshot. |
 | `setStatSnapshot('base' \| 'equipped', value)` | Value is `{stats,confirmed?,evidence?,at?,notes?,label?}`. Null clears a capture. `base` means observed **No Equipment**. |
-| `totals()` | Separate captured `base`/`equipped`, derived item sums with per-stat completeness/unknown-card IDs, empty slots and warnings. |
+| `totals()` | Separate captured `base`/legacy `equipped`, `derived` gear sums, `computed` equipped estimates with provenance/caveats, empty slots and warnings. |
 | `reset()` | Clears character state and retains bounded replay-removal markers. UI should offer clear confirmation/recovery as appropriate. |
 | `characterItemStats(candidate)` | Effective item values with basis, completeness, uncertainty and warnings. |
 | `characterSlotCompatibility(candidate, slotId)` | Returns compatible/unknown/warning. Both ear slots accept EAR, both wrists WRIST and both fingers FINGER. |
 | `characterObservationInput(observation)` | Converts the shared capture parser's immutable `{fields:[{key,value,...}],subject}` proposals into an editable item/stat input. |
+| `characterStatLabel(key)` | Shared UI/PNG labels, including Mitigation AC, AC softcap, Evasion AC, Offense and Accuracy. |
 | `characterShareSummary(snapshot)` | Shareable JSON, deliberately excluding raw text, capture/session identifiers, source images and unassigned inventory. |
 
 `CHARACTER_SLOTS` contains 23 stable IDs, including charm and power source:
@@ -61,6 +66,11 @@ primary,secondary,finger1,finger2,chest,legs,feet,waist,ammo,power`.
 Each has an English label and catalog slot kind. The UI can use exactly the same
 assign operation for drag/drop and keyboard-accessible card + slot selects.
 Replacement returns the displaced card ID; that card remains in inventory.
+Pass `{autoAssign:true}` as an intake option to place a new captured card when
+safe. Replayed evidence does not move a manually unassigned card. `ANY` remains
+an explicit slot kind and can be placed manually after review; it always defers
+automatic placement. A card with several meaningful slot kinds also defers even
+if only one of those slots is free.
 
 ## Item and observation semantics
 
@@ -113,7 +123,12 @@ melee/ranged or current/maximum fields. Explicit `damageBonus` remains a separat
 `DMG_BONUS` value; it is never added to observed `DMG`, substituted for `DELAY` or
 scaled again. Attribute/resist and resource current/
 maximum keys retain their existing separate mappings through review, persistence
-and the share summary. Synthetic interoperability checks cover these contracts;
+and the share summary. Modern component rows use `acMitigation`,
+`acMitigationSoftcap`, `acEvasion`, `attackOffense`, and `attackAccuracy`, mapped to
+`AC_MITIGATION`, `AC_MITIGATION_SOFTCAP`, `AC_EVASION`, `ATK_OFFENSE`, and
+`ATK_ACCURACY`. They never create generic AC/ATK, maximum, melee or ranged aliases.
+Explicit `haste` maps to `HASTE` independently of `ATTACK_SPEED`.
+Synthetic interoperability checks cover these contracts;
 they do not certify another skin or publish any live character data.
 
 An observation ID within its session is idempotent. An explicit stable
@@ -129,11 +144,74 @@ cutoffs also suppress older captures beyond the six-record evidence window.
 A new observation, session, manual add, or new examine after the cutoff remains
 available. Marker retention is bounded and contains no raw OCR text or pixels.
 
-No Equipment and equipped totals are distinct observations. The model never
-replaces either with a base-plus-gear calculation. Caps, buffs, worn effects,
-combat state and server formulas are not inferred. The calculated column marks
-partial sums with `*` and reports unknown contributors. Empty slots are stated
-separately; an empty assignment is not proof of the player's actual equipment.
+Same-copy recapture also keeps up to 6000 global `observationRefs`, independently
+of the six evidence texts per card. Each private record contains only observation
+ID, session ID, target card ID and nullable journal sequence. Exact old IDs still
+deduplicate after their text expires. Removal/reset/inventory eviction clears
+their target ID to a tombstone; they cannot later move to a different copy.
+These references and edit metadata never enter the share summary or image.
+
+The private journal is bounded by bytes/time (64 MB/seven days), rather than a
+1000-observation count. Reference metadata also shares the Character storage
+budget and expires before inventory under pressure. Expiring a sequenced
+reference advances the persisted `observationFloor`; unmatched older journal
+records at or below that floor are expired rather than recreated during replay.
+The journal persists monotonic sequence numbers across pruning. Newer journal
+captures and fresh manual additions remain available without a name/tier-based
+removal rule that could suppress another physical copy. Unsequenced external
+observations have only bounded exact-ID coverage. Existing saved characters
+cannot retroactively reconstruct IDs that were already forgotten before this
+tracking was introduced.
+
+The guided flow needs a No Equipment baseline and reviewed item placements.
+An equipped capture is optional legacy evidence; it never replaces the computed
+estimate. `computed[key]` contains `{value,complete,method,baseKey,baseValue,
+baseConfirmed,gearKey,gearValue,unknownCandidates,caveats}`. Attributes, resists,
+regen and resources receive a base-plus-known-gear additive estimate. Resource
+maximum keys use item HP/Mana/Endurance; current resources remain unknown when
+gear is assigned. A missing baseline stays unknown; incomplete items produce a
+partial known subtotal. `complete` describes known additive inputs, not formula
+accuracy. Removing or moving gear recalculates these records immediately.
+
+Caps, buffs, worn effects, encumbrance and attribute-derived resource changes
+remain explicit caveats. Assigned gear does not manufacture AC/ATK component or
+haste-stacking values. Their calculated value stays null with baseline context
+retained; component gear values are null because no conversion is supported.
+Generic item AC/ATK sums remain separately available in `derived`. With no gear
+assigned, an existing baseline is returned as `observed-baseline`. Empty slots
+are stated separately; an empty assignment does not prove actual game equipment.
+
+This boundary follows a read-only review of the primary
+[EQEmu client stat source](https://github.com/EQEmu/EQEmu/blob/master/zone/client_mods.cpp)
+and [combat source](https://github.com/EQEmu/EQEmu/blob/master/zone/attack.cpp)
+on 2026-10-23. Those sources show caps, skill/class dependencies and AA/server
+modifiers beyond a simple item sum. They are background evidence, not verified
+EQL server formulas, so no EQEmu combat conversion is transplanted here. Class,
+level and total AA count alone cannot reconstruct the required rule context.
+
+`candidate.rawStatBlock` retains the pane-scoped producer `rawStatBlock` as
+editable plain text, bounded to 8192 characters and 60 lines. `statBlockText` and
+array `statLines` are accepted as legacy intake aliases. Raw text never becomes
+verified numeric stats, outgoing wiki `statLines`, HTML or script. It persists
+locally and is excluded from share JSON and PNGs along with private evidence.
+
+Saving an item records bounded local `editedStatKeys` (up to 96) and
+`editedFields` for slots, tier/progress, required level and raw text. Reviewing
+an observed stat block protects its explicit values and deliberate removals;
+newly read, previously unedited keys can still fill gaps. `mergeObservation`
+allows an explicit unedited null conflict to clear an earlier number, while an
+absent field leaves it alone. Changing an unedited tier clears an old fractional
+numerator unless the new read provides compatible progress. Manual tier/progress
+edits are protected together. A known new compatibility read may update the card
+but never moves its existing assignment; the UI can expose any mismatch.
+
+Recapture keeps the name, identity, augments, notes and manual fields. Optional
+catalog metadata fills missing catalog base/identity only and never manufactures
+observed numbers. Cards without prior capture evidence preserve old manual stat
+values conservatively across recapture/restart. Edit tracking starts with edits
+made under this contract; earlier captured cards do not encode which old values
+were manually changed. This method is explicitly selected by the walkthrough for
+an already established copy. Ordinary intake/replay semantics are unchanged.
 
 ## Bounds and persistence
 
@@ -164,8 +242,8 @@ instead of producing clipped or silently incomplete exports.
 
 EQL dark/gold colors and the selected local font family are used. Export text
 has a readable 18 px minimum and follows larger settings up to a 1.3 multiplier.
-The result includes separately observed base/equipped values, partial calculated
-sums, gear icons/names/tiers/required levels/augments/stats, empty slots and
+The result includes the observed baseline, partial gear sums, equipped additive
+estimates and unknown component formulas, gear icons/names/tiers/required levels/augments/stats, empty slots and
 uncertainty. Item text uses canvas text operations, never HTML or script. No
 network calls occur. A trusted `resolveIcon` callback must read the local pack
 only. Determinism is within the same browser/font environment; installed font
@@ -176,6 +254,37 @@ authenticated service after its explicit preview/upload action. These modules
 do not contain credentials, issue upload requests or select a wiki user.
 
 ## Observed validation
+
+On 2026-10-23, the guided snapshot model checks passed synthetic regressions for
+metadata/AA count persistence, independently labeled AC/ATK components, full raw
+pane text bounds/privacy, deterministic free paired slots, ANY/multiple-kind
+deferral, no displacement, base-plus-gear provenance, optional legacy equipped
+evidence, unknown combat formulas, current resources, partial augments and batched
+fresh-snapshot reset retaining inventory. `node tests/character-catalog.mjs` also
+passed against the updated model.
+
+The real isolated Chromium canvas command below passed again with external
+requests blocked. Theme/10px and Verdana/20px exports were deterministic within
+the runtime (1800 × 4096 / 377,008 bytes and 1800 × 4352 / 601,101 bytes).
+The additional guided export at Verdana/20px was 1800 × 4096 / 386,918 bytes,
+visually inspected with readable component labels, unknown formulas, calculated
+resource maxima, all named slots, and a separated footer. Its SHA-256 is
+`67bc2f3e2420fc1ec9c6c3a8c241c2912d43d5a67e1046d4699e88fce96b9e8f`.
+Private output is under
+`D:\EQLWiki\.local\validation\eoz-character-walkthrough-model`.
+These are synthetic model/canvas checks; they do not establish game formula
+accuracy, a completed guided native UI, production wiki writes or installed app
+acceptance. Earlier validation records below describe their earlier sources.
+
+Additional synthetic recapture checks passed for improved readings, explicit
+null conflicts, bounded/idempotent evidence, preserved edits/removals and slot
+identity, newly observed keys, catalog-versus-observed separation, legacy manual
+cards, edit protection after restart, and clearing incompatible old progress.
+The replay regression also covers old IDs beyond six evidence texts, more than
+1000 removed IDs, all 6000 references and cap expiration, storage-pressure
+expiration without deleting inventory, fresh physical copies/manual additions,
+reset/restart persistence, and preventing an observation from moving between
+copies. Every fixture is synthetic and uses an isolated in-memory store.
 
 `node tests/character-model.mjs` passed synthetic checks for physical copies,
 observation replay, tier/augment variants, paired slots, move/replace/remove,

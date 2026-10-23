@@ -15,10 +15,10 @@ export function drawModernOcrFixture(document){
         for(const [label,value,y,other,otherValue]of rows){text(label,x+24,y);text(value,x+210,y);if(other){text(other,x+355,y);text(otherValue,x+500,y);}}
         ctx.strokeStyle='#bec7d2';ctx.strokeRect(x+24,700,20,20);text('Modified',x+57,696);
     }
-    examine(20,'Synthetic Ember Boots +3','Feet',3,5,[['Size','MEDIUM',415,'AC','31'],['HP','147',457,'Weight','1.7'],['Strength','27',499],['Stamina','28',541],['SV. Fire','19',583],['Required Level','22',625]]);
+    examine(20,'Synthetic Ember Boots +3','Feet',3,5,[['Size','MEDIUM',415,'AC','31'],['HP','147',457,'Weight','1.7'],['Strength','27',499],['Haste','23%',541],['SV. Fire','19',583],['Required Level','22',625]]);
     examine(700,'Synthetic Quartz Blade +6','Primary',6,18,[['Size','MEDIUM',415,'AC','29'],['HP','83',457,'Weight','2.3'],['Base Dmg','13',499],['Dmg Bon','17',541],['Delay','31',583],['Attack Speed','18%',625]]);
     panel(1600,24,920,820);text('Inventory',1624,45,30);text('Character Vitals',1624,150,30);text('Stats',2050,150,30);text('and Resists',2140,150,30);
-    for(const [index,label,value]of [[0,'HP','337/901'],[1,'Mana','225/703'],[2,'Endurance','119/509'],[3,'AC','43'],[4,'Attack','46/107'],[5,'HP Regen','11']]){text(label,1624,210+index*44);text(value,1840,210+index*44);}
+    for(const [index,label,value]of [[0,'HP','337/901'],[1,'Mana','225/703'],[2,'Endurance','119/509'],[3,'AC','61/43 | 127'],[4,'Attack','46 | 107'],[5,'HP Regen','11']]){text(label,1624,210+index*44);text(value,1840,210+index*44);}
     for(const [index,label]of ['STR','STA','AGI','DEX','WIS','INT','CHA'].entries()){text(label,2050,210+index*32);text(`${111+index}/${211+index}`,2250,210+index*32);}
     text('Resists',2050,449);
     for(const [index,label]of ['SV. Poison','SV. Magic','SV. Disease','SV. Fire','SV. Cold','SV. Void'].entries()){text(label,2050,490+index*32);text(`${31+index}/${131+index}`,2250,490+index*32);}

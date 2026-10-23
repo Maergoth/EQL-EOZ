@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { CHARACTER_SLOTS, CHARACTER_LIMITS, CHARACTER_STORAGE_KEY, createCharacterModel, characterItemStats, characterObservationInput, characterShareSummary, characterSlotCompatibility, normalizeCharacterStats, safeCharacterIcon } from '../app/character-model.js';
+import { CHARACTER_SLOTS, CHARACTER_LIMITS, CHARACTER_STORAGE_KEY, createCharacterModel, characterAutoAssignment, characterItemStats, characterObservationInput, characterShareSummary, characterSlotCompatibility, characterStatLabel, normalizeCharacterStats, safeCharacterIcon } from '../app/character-model.js';
 import { CHARACTER_SHARE_LIMITS, characterShareLayout } from '../app/character-share.js';
 
 const memory=()=>{const data=new Map();return {getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value)};};
@@ -41,6 +41,163 @@ assert.equal(modernSummary.stats.derived.HP.value,69,'Derived gear sums remain s
 for(const slot of ['feet','primary','finger1']){const entry=modernSummary.equipment.find(entry=>entry.slot===slot);assert.equal(entry.item.fraction,18);assert.equal(entry.item.stats.ATK,77);assert.equal(entry.item.stats.ATTACK_SPEED,12);assert.equal(entry.item.stats.DMG_BONUS,4);assert.equal(entry.item.stats.DMG,9);assert.equal(entry.item.stats.DELAY,24);assert.equal(entry.item.stats.HP,23);}
 assert(characterShareLayout(modernRestored.snapshot()).height<=CHARACTER_SHARE_LIMITS.maxHeight,'Modern keys remain within the complete share layout');
 assert.equal(characterObservationInput(proposal('legacy-tier','item',{tier:10})).fraction,undefined,'A tier alone never invents fractional progress');
+
+// Guided Character work uses a no-equipment observation, not a mandatory
+// equipped capture. These fresh numbers/strings are entirely synthetic.
+const guidedStorage=memory(),guided=createCharacterModel({storage:guidedStorage,now:()=>12345});
+guided.setMetadata({name:'Synthetic Guide',server:'Synthetic Server',classes:['WAR','CLR','WAR'],level:47,aaCount:123});
+assert.deepEqual(guided.snapshot().metadata.classes,['WAR','CLR']);assert.equal(guided.snapshot().metadata.aaCount,123);
+guided.setMetadata({aaCount:''});assert.equal(guided.snapshot().metadata.aaCount,null,'Blank AA count stays unknown');
+for(const invalid of [-1,2.5,Infinity]){guided.setMetadata({aaCount:invalid});assert.equal(guided.snapshot().metadata.aaCount,null);}
+guided.setMetadata({aaCount:0});assert.equal(guided.snapshot().metadata.aaCount,0,'An explicit zero AA count survives');
+const componentValues={acMitigation:82,acMitigationSoftcap:141,acEvasion:116,attackOffense:73,attackAccuracy:99,haste:0,
+    hpCurrent:115,hpMaximum:235,manaCurrent:35,manaMaximum:110,enduranceCurrent:67,enduranceMaximum:180,str:61,agi:65,resistFire:11};
+const componentInput=characterObservationInput(proposal('synthetic-components','character',componentValues));
+assert.equal(componentInput.stats.AC,undefined);assert.equal(componentInput.stats.ATK,undefined,'Distinct components do not invent a generic total');
+assert.deepEqual(Object.fromEntries(['AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','ATK_OFFENSE','ATK_ACCURACY','HASTE'].map(key=>[key,componentInput.stats[key]])),
+    {AC_MITIGATION:82,AC_MITIGATION_SOFTCAP:141,AC_EVASION:116,ATK_OFFENSE:73,ATK_ACCURACY:99,HASTE:0});
+assert.deepEqual(['AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','ATK_OFFENSE','ATK_ACCURACY'].map(characterStatLabel),['Mitigation AC','AC softcap','Evasion AC','Offense','Accuracy']);
+guided.setStatSnapshot('base',{stats:componentInput.stats,confirmed:true});
+assert.equal(guided.totals().computed.AC_MITIGATION.value,82,'No assigned gear retains the observed baseline');
+const syntheticRaw='Description\nSynthetic Guide Ring\nClass: ALL\nFingers\nHP 17\nUnknown effect: synthetic only';
+const guidedObservation=proposal('guided-ring-a','item',{slots:['Fingers'],hp:17,mana:6,endurance:8,str:3,agi:2,resistFire:4,ac:9,attack:5,haste:12,rawStatBlock:syntheticRaw});
+const guidedA=guided.intake(guidedObservation,{autoAssign:true});
+assert.equal(guidedA.assignment.slot,'finger1');assert.equal(guidedA.candidate.rawStatBlock,syntheticRaw);
+assert.equal(guidedA.candidate.observedStatsComplete,false,'Auto placement does not certify OCR stats');
+guided.updateCandidate(guidedA.candidate.id,{observedStatsComplete:true,augmentStatus:'included'});
+const guidedB=guided.intake({...guidedObservation,id:'guided-ring-b'},{autoAssign:true});
+assert.notEqual(guidedA.candidate.id,guidedB.candidate.id);assert.equal(guidedB.assignment.slot,'finger2','A second physical copy takes the free paired slot');
+guided.updateCandidate(guidedB.candidate.id,{observedStatsComplete:true,augmentStatus:'none'});
+const guidedC=guided.intake({...guidedObservation,id:'guided-ring-c'},{autoAssign:true});
+assert.equal(guidedC.assignment.assigned,false);assert.equal(guidedC.assignment.reason,'occupied','Auto placement never replaces either paired copy');
+assert.equal(guided.autoAssign(guidedA.candidate.id).reason,'already-assigned');
+for(const [slots,reason]of [[['PRIMARY','SECONDARY'],'multiple-slot-kinds'],[['ANY'],'any-slot'],[['ANY','HEAD'],'any-slot'],[[],'unknown-slots']]){
+    const card=guided.intake(item(`Deferred ${reason} ${slots.join('-')}`,{slots}),{autoAssign:true});
+    assert.equal(card.assignment.assigned,false);assert.equal(card.assignment.reason,reason);
+}
+const any=guided.snapshot().candidates.find(card=>card.slots.includes('ANY'));
+assert.equal(characterSlotCompatibility(any,'head').compatible,true,'ANY remains available for explicit manual review');
+assert.equal(characterAutoAssignment(guided.snapshot(),'missing').ok,false);
+const guidedTotals=guided.totals();
+assert.equal(guidedTotals.equipped,null,'An equipped capture is not needed to calculate estimates');
+assert.equal(guidedTotals.computed.HP_MAXIMUM.value,269);assert.equal(guidedTotals.computed.HP_MAXIMUM.gearKey,'HP');
+assert.equal(guidedTotals.computed.MP_MAXIMUM.value,122);assert.equal(guidedTotals.computed.END_MAXIMUM.value,196);
+assert.equal(guidedTotals.computed.STR.value,67);assert.equal(guidedTotals.computed.SV_FIRE.value,19);assert.equal(guidedTotals.computed.STR.complete,true);
+assert.equal(guidedTotals.computed.HP_CURRENT.value,null,'Gear never predicts current HP');assert.equal(guidedTotals.computed.HP_CURRENT.baseValue,115);
+for(const key of ['AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','ATK_OFFENSE','ATK_ACCURACY','HASTE']){
+    assert.equal(guidedTotals.computed[key].value,null,`${key} is not a base+item-stat conversion`);assert.equal(guidedTotals.computed[key].method,'formula-unknown');
+}
+assert.equal(guidedTotals.computed.AC_MITIGATION.baseValue,82);assert.equal(guidedTotals.derived.AC.value,18);assert.equal(guidedTotals.derived.ATK.value,10);
+assert(guidedTotals.computed.HP_MAXIMUM.caveats.some(text=>text.includes('percentage AA')));
+guided.updateCandidate(guidedB.candidate.id,{augmentStatus:'unknown'});
+assert.equal(guided.totals().computed.HP_MAXIMUM.complete,false);assert.equal(guided.totals().computed.HP_MAXIMUM.value,269,'Known additive subtotal remains visibly partial');
+assert.deepEqual(guided.totals().computed.HP_MAXIMUM.unknownCandidates,[guidedB.candidate.id]);
+guided.removeCandidate(guidedB.candidate.id);assert.equal(guided.totals().computed.HP_MAXIMUM.value,252,'Removing gear immediately updates the estimate');
+guided.unassign('finger1');assert.equal(guided.totals().computed.HP_MAXIMUM.value,235);assert.equal(guided.totals().computed.ATK_OFFENSE.value,73);
+guided.autoAssign(guidedA.candidate.id);
+guided.setStatSnapshot('equipped',{stats:{HP_MAXIMUM:999},confirmed:true});
+const guidedRestored=createCharacterModel({storage:guidedStorage}),guidedSummary=characterShareSummary(guidedRestored.snapshot());
+assert.equal(guidedSummary.stats.computed.HP_MAXIMUM.value,252);assert.equal(guidedSummary.stats.equipped.stats.HP_MAXIMUM,999,'Optional prior capture stays independent');
+assert.equal(guidedRestored.snapshot().candidates.find(card=>card.id===guidedA.candidate.id).rawStatBlock,syntheticRaw,'Complete scoped text survives persistence');
+assert.equal(JSON.stringify(guidedSummary).includes('Unknown effect: synthetic only'),false,'Private raw OCR block is not included in share JSON');
+const oversizedRaw=Array.from({length:100},(_,index)=>`${index} ${'x'.repeat(200)}`).join('\n');
+guided.updateCandidate(guidedA.candidate.id,{rawStatBlock:oversizedRaw});
+const boundedRaw=guided.snapshot().candidates.find(card=>card.id===guidedA.candidate.id).rawStatBlock;
+assert(boundedRaw.length<=8192&&boundedRaw.split('\n').length<=60,'Editable raw text has independent line and character bounds');
+const beforeBegin=guided.snapshot(),begin=guided.beginSnapshot({name:'Synthetic next guide'}),afterBegin=guided.snapshot();
+assert.equal(begin.ok,true);assert.deepEqual(afterBegin.equipment,{});assert.equal(afterBegin.statSnapshots.base,null);
+assert.deepEqual(afterBegin.candidates,beforeBegin.candidates,'Starting a fresh guided snapshot keeps the inventory and edited raw text');
+assert.deepEqual(afterBegin.removedObservations,beforeBegin.removedObservations);assert.deepEqual(afterBegin.statSnapshots.equipped,beforeBegin.statSnapshots.equipped);
+assert.equal(afterBegin.metadata.name,'Synthetic next guide');assert.equal(afterBegin.metadata.aaCount,0);
+
+const mergeStorage=memory(),mergeModel=createCharacterModel({storage:mergeStorage,now:()=>12345});
+const captured=(id,values)=>({...proposal(id,'item',values),kind:'ocr',parser:{name:'item-examine',version:1},capturedAt:'2026-10-23T12:00:00.000Z'});
+const originalMerge=captured('merge-original',{name:'Synthetic editable item',slots:['HEAD'],tier:2,fraction:1,hp:31,mana:14,wis:3,rawStatBlock:'Original synthetic pane'});
+const mergedCard=mergeModel.intake(originalMerge,{autoAssign:true}).candidate;
+assert.equal(mergeModel.snapshot().equipment.head,mergedCard.id);
+const improved=captured('merge-improved',{name:'Untrusted changed title',slots:['FEET'],tier:3,hp:35,mana:null,haste:9,rawStatBlock:'Improved complete synthetic pane\nUnknown label still retained'}),immutableImproved=structuredClone(improved);
+const improvedResult=mergeModel.mergeObservation(mergedCard.id,improved,{wikiItem:{name:'Synthetic catalog title',stats:{HP:999,STR:222},iconId:'Exact_Synthetic'}});
+assert.equal(improvedResult.ok,true);assert.equal(improvedResult.candidate.id,mergedCard.id);assert.equal(improvedResult.candidate.name,'Synthetic editable item');
+assert.equal(improvedResult.candidate.observedStats.HP,35);assert.equal(improvedResult.candidate.observedStats.MP,null,'An explicitly conflicted observed value clears the stale number');
+assert.equal(improvedResult.candidate.observedStats.HASTE,9);assert.equal(improvedResult.candidate.observedStats.WIS,3,'An absent new field does not erase a prior read');
+assert.equal(improvedResult.candidate.observedStats.STR,undefined,'Catalog base fields never become observed examine values');assert.equal(improvedResult.candidate.baseStats.STR,222);
+assert.equal(improvedResult.candidate.tier,3);assert.equal(improvedResult.candidate.fraction,null,'A changed tier cannot reuse a numerator with the old denominator');
+assert.equal(improvedResult.candidate.rawStatBlock,'Improved complete synthetic pane\nUnknown label still retained');assert.deepEqual(improvedResult.candidate.slots,['FEET']);
+assert.equal(mergeModel.snapshot().equipment.head,mergedCard.id,'Recapture preserves the exact slot even when new compatibility differs');
+assert.equal(mergeModel.autoAssign(mergedCard.id).reason,'already-assigned');assert.deepEqual(improved,immutableImproved,'Recapture does not mutate the parser proposal');
+const evidenceLength=improvedResult.candidate.evidence.length;mergeModel.mergeObservation(mergedCard.id,improved);assert.equal(mergeModel.snapshot().candidates[0].evidence.length,evidenceLength,'Repeated proposal evidence is idempotent');
+mergeModel.updateCandidate(mergedCard.id,{observedStats:{HP:123,HASTE:9},slots:['HEAD'],tier:4,fraction:2,rawStatBlock:'Manually corrected synthetic block',notes:'Keep manual notes',wikiTitle:'Manual identity',wikiMatch:'confirmed'});
+const afterEdit=mergeModel.mergeObservation(mergedCard.id,captured('merge-after-edit',{hp:777,mana:88,wis:7,haste:99,resistFire:15,slots:['FEET'],tier:6,fraction:18,rawStatBlock:'A later automated block'}));
+assert.equal(afterEdit.candidate.observedStats.HP,123);assert.equal(afterEdit.candidate.observedStats.HASTE,9);
+assert.equal(afterEdit.candidate.observedStats.MP,undefined);assert.equal(afterEdit.candidate.observedStats.WIS,undefined,'Deliberate stat removals remain removed');
+assert.equal(afterEdit.candidate.observedStats.SV_FIRE,15,'A newly observed, previously unedited key still fills a gap');
+assert.deepEqual(afterEdit.candidate.slots,['HEAD']);assert.equal(afterEdit.candidate.tier,4);assert.equal(afterEdit.candidate.fraction,2);
+assert.equal(afterEdit.candidate.rawStatBlock,'Manually corrected synthetic block');assert.equal(afterEdit.candidate.notes,'Keep manual notes');assert.equal(afterEdit.candidate.wikiTitle,'Manual identity');assert.equal(afterEdit.candidate.wikiMatch,'confirmed');
+assert(afterEdit.preservedStatKeys.includes('HP'));assert(afterEdit.mergedStatKeys.includes('SV_FIRE'));
+const mergeRestart=createCharacterModel({storage:mergeStorage,now:()=>12346});
+const afterRestart=mergeRestart.mergeObservation(mergedCard.id,captured('merge-restarted',{hp:555,mana:55,attackSpeed:18}));
+assert.equal(afterRestart.candidate.observedStats.HP,123);assert.equal(afterRestart.candidate.observedStats.MP,undefined);assert.equal(afterRestart.candidate.observedStats.ATTACK_SPEED,18,'Edit protection and new-key merging persist after restart');
+assert.equal(afterRestart.candidate.evidence.at(-1).at,Date.parse('2026-10-23T12:00:00.000Z'));
+for(let index=0;index<10;index++)mergeRestart.mergeObservation(mergedCard.id,captured(`merge-bound-${index}`,{attackSpeed:18+index}));
+assert.equal(mergeRestart.snapshot().candidates[0].evidence.length,CHARACTER_LIMITS.evidence);
+assert.equal(mergeRestart.mergeObservation('missing',improved).ok,false);
+const legacyManualStorage=memory();legacyManualStorage.setItem(CHARACTER_STORAGE_KEY,JSON.stringify({schemaVersion:1,candidates:[{id:'legacy-manual',name:'Synthetic old manual',observedStats:{HP:11},evidence:[]}]}));
+const legacyManual=createCharacterModel({storage:legacyManualStorage});
+assert.equal(legacyManual.mergeObservation('legacy-manual',captured('legacy-new',{hp:99,haste:5})).candidate.observedStats.HP,11,'Old manual values without capture evidence are conservatively retained');
+assert.equal(legacyManual.mergeObservation('legacy-manual',captured('legacy-newer',{hp:100})).candidate.observedStats.HP,11,'Legacy protection remains after the first captured evidence is appended');
+assert.equal(legacyManual.snapshot().candidates[0].observedStats.HASTE,5);
+assert.equal(JSON.stringify(characterShareSummary(mergeRestart.snapshot())).includes('editedStatKeys'),false,'Local edit tracking is not public share metadata');
+
+// Exact observation identities outlive the six text evidence records. Real
+// journal sequences also prevent resurrection when bounded references expire.
+const replayStorage=memory(),replayModel=createCharacterModel({storage:replayStorage,now:()=>12345});
+const journalItem=(id,sequence,sessionId='synthetic-reference-session')=>({...captured(id,{name:'Synthetic replay item',slots:['HEAD'],hp:19}),sessionId,sequence});
+const replayFirst=journalItem('reference-first',1),replayCard=replayModel.intake(replayFirst).candidate;
+for(let index=0;index<12;index++)replayModel.mergeObservation(replayCard.id,journalItem(`reference-later-${index}`,index+2));
+assert.equal(replayModel.snapshot().candidates[0].evidence.length,6);assert.equal(replayModel.snapshot().observationRefs.length,13);
+const replayRestart=createCharacterModel({storage:replayStorage});
+assert.equal(replayRestart.intake(replayFirst).candidate.id,replayCard.id,'An original ID still deduplicates after its evidence text expired');
+assert.equal(replayRestart.snapshot().candidates.length,1);
+const unrelated=replayRestart.intake(journalItem('unrelated-copy',14)).candidate;
+assert.notEqual(unrelated.id,replayCard.id,'A fresh ID never merges physical copies by identical name or stats');
+assert.equal(replayRestart.mergeObservation(unrelated.id,replayFirst).ok,false,'Explicit recapture cannot reassign another card\'s observation identity');
+replayRestart.removeCandidate(replayCard.id);
+const removedReplay=createCharacterModel({storage:replayStorage});
+assert.equal(removedReplay.intake(replayFirst).ignored,true,'X removal suppresses old exact IDs beyond six evidence records after restart');
+assert.equal(removedReplay.mergeObservation(unrelated.id,replayFirst).ignored,true,'A discarded old read cannot be merged into another physical copy');
+assert.equal(removedReplay.intake(journalItem('fresh-after-remove',15)).deduplicated,false,'A new capture after removal remains available');
+assert.equal(removedReplay.intake(journalItem('reference-first',16,'another-synthetic-session')).deduplicated,false,'ID equality in a different capture session does not conflate copies');
+assert.equal(JSON.stringify(characterShareSummary(removedReplay.snapshot())).includes('observationRefs'),false,'Private identity references never enter share JSON');
+
+const referenceStorage=memory(),referenceCandidate={id:'retained-reference-copy',name:'Synthetic retained copy',slots:['HEAD'],observedStats:{HP:4},augmentStatus:'none'};
+const references=Array.from({length:CHARACTER_LIMITS.observationRefs},(_,index)=>({observationId:`journal-${index+1}`,sessionId:'synthetic-long-journal',candidateId:referenceCandidate.id,sequence:index+1}));
+referenceStorage.setItem(CHARACTER_STORAGE_KEY,JSON.stringify({schemaVersion:1,candidates:[referenceCandidate],observationRefs:references}));
+const manyReferences=createCharacterModel({storage:referenceStorage});
+assert.equal(manyReferences.intake(journalItem('journal-1',1,'synthetic-long-journal')).candidate.id,referenceCandidate.id);
+manyReferences.mergeObservation(referenceCandidate.id,journalItem('journal-overflow',CHARACTER_LIMITS.observationRefs+1,'synthetic-long-journal'));
+assert.equal(manyReferences.snapshot().observationRefs.length,CHARACTER_LIMITS.observationRefs);assert.equal(manyReferences.snapshot().observationFloor,1);
+const boundedReferences=createCharacterModel({storage:referenceStorage});
+assert.equal(boundedReferences.intake(journalItem('journal-1',1,'synthetic-long-journal')).ignored,true,'Evicted metadata expires old journal replay instead of creating another card');
+boundedReferences.removeCandidate(referenceCandidate.id);
+const longRemoved=createCharacterModel({storage:referenceStorage});
+assert.equal(longRemoved.intake(journalItem('journal-500',500,'synthetic-long-journal')).ignored,true,'Removal covers more than1000 exact journal IDs');
+assert.equal(longRemoved.intake(journalItem(`journal-${CHARACTER_LIMITS.observationRefs}`,CHARACTER_LIMITS.observationRefs,'synthetic-long-journal')).ignored,true);
+assert.equal(longRemoved.intake(journalItem('fresh-long-journal',CHARACTER_LIMITS.observationRefs+2,'synthetic-long-journal')).deduplicated,false);
+longRemoved.reset();const afterReferenceReset=createCharacterModel({storage:referenceStorage});assert.equal(afterReferenceReset.intake(replayFirst).ignored,true,'Reset keeps the bounded journal floor');
+assert.equal(afterReferenceReset.intake({item:{name:'Synthetic manual after reset'}}).ok,true,'The replay floor does not block a fresh manual add');
+
+// ID metadata shares the total storage budget and yields before item cards.
+const pressureStorage=memory(),pressureReferences=[];
+let pressureSeed={schemaVersion:1,candidates:[referenceCandidate],observationRefs:pressureReferences};
+for(let index=1;index<=4500;index++)pressureReferences.push({observationId:'r'.repeat(140)+index,sessionId:'s'.repeat(100),candidateId:referenceCandidate.id,sequence:index});
+while(JSON.stringify(pressureSeed).length>CHARACTER_LIMITS.storageBytes-10000)pressureReferences.pop();
+pressureStorage.setItem(CHARACTER_STORAGE_KEY,JSON.stringify(pressureSeed));
+const pressureModel=createCharacterModel({storage:pressureStorage}),beforeReferencePressure=pressureModel.snapshot().observationRefs.length;
+const pressureStats=Object.fromEntries(Array.from({length:48},(_,index)=>[`SYNTHETIC_STAT_${String(index).padStart(17,'0')}`,1000000000]));
+pressureModel.updateCandidate(referenceCandidate.id,{rawStatBlock:'x'.repeat(8192),icon:'data:image/png;base64,'+'A'.repeat(23970),baseStats:pressureStats,augments:Array.from({length:8},()=>({name:'Synthetic bounded augment',stats:pressureStats,statsComplete:true}))});
+const afterReferencePressure=pressureModel.snapshot();assert.equal(afterReferencePressure.candidates.length,1,'Inventory is preserved before expiring ID-only metadata');
+assert(afterReferencePressure.observationRefs.length<beforeReferencePressure);assert(afterReferencePressure.observationFloor>0);assert(pressureStorage.getItem(CHARACTER_STORAGE_KEY).length<=CHARACTER_LIMITS.storageBytes);
+const pressureRestart=createCharacterModel({storage:pressureStorage});assert.equal(pressureRestart.intake(journalItem('r'.repeat(140)+'1',1,'s'.repeat(100))).ignored,true,'Storage pressure expiration remains replay-safe after reload');
 const progressStorage=memory(),progressModel=createCharacterModel({storage:progressStorage});
 const unknownProgress=progressModel.intake({id:'unread-progress',sessionId:'synthetic',item:{name:'Synthetic Progress',instanceKey:'same-copy',tier:6,baseStats:{HP:100},baseStatsComplete:true,augmentStatus:'none'}}).candidate;
 const zeroProgress=progressModel.intake({id:'explicit-zero-progress',sessionId:'synthetic',item:{name:'Synthetic Progress',instanceKey:'same-copy',tier:6,fraction:0,baseStats:{HP:100},baseStatsComplete:true,augmentStatus:'none'}}).candidate;
@@ -188,7 +345,7 @@ if(process.argv.includes('--render-demo')) {
     const temporary=await mkdtemp(join(tmpdir(),'eoz-character-share-'));
     const outputIndex=process.argv.indexOf('--output'),output=outputIndex<0 ? join(temporary,'screenshots') : resolve(process.argv[outputIndex+1]);
     await mkdir(output,{recursive:true});
-    const fixture=async({root,output,snapshot,modernSnapshot,progressSnapshot,profile})=>{
+    const fixture=async({root,output,snapshot,modernSnapshot,progressSnapshot,guidedSnapshot,profile})=>{
         const {app,BrowserWindow}=require('electron'),http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
         app.setPath('userData',profile);await app.whenReady();
         const server=http.createServer(async(req,res)=>{try {const requested=new URL(req.url,'http://fixture').pathname;
@@ -215,10 +372,19 @@ if(process.argv.includes('--render-demo')) {
             assert.ok(modern.text.some(text=>text.includes('Tier 6 · progress ?')),'Unread fractional progress is visibly unknown');
             await fs.writeFile(path.join(output,'character-modern-interop.png'),Buffer.from(modern.dataUrl.split(',')[1],'base64'));
             console.log(`Rendered modern interoperability: ${modern.width}x${modern.height}, ${modern.size} bytes, observed fields drawn distinctly`);
+            const guided=await window.webContents.executeJavaScript(`(async()=>{const {renderCharacterShare}=await import('/app/character-share.js');const draw=CanvasRenderingContext2D.prototype.fillText,text=[];CanvasRenderingContext2D.prototype.fillText=function(value,...args){text.push(String(value));return draw.call(this,value,...args);};try{const result=await renderCharacterShare(${JSON.stringify(guidedSnapshot)},{appearance:{fontFamily:'verdana',fontSize:20}});return {dataUrl:result.dataUrl,text,width:result.width,height:result.height,size:result.blob.size,summary:result.summary};}finally{CanvasRenderingContext2D.prototype.fillText=draw;}})()`);
+            for(const value of ['0 AAs','Mitigation AC','AC softcap','Evasion AC','Offense','Accuracy','Equipped · additive estimate'])assert.ok(guided.text.some(text=>text.includes(value)),`Guided share visibly draws ${value}`);
+            assert(guided.text.includes('252'),'Calculated maximum HP is drawn from base plus item HP');
+            assert.equal(guided.summary.stats.computed.AC_MITIGATION.value,null);assert.equal(guided.summary.stats.computed.AC_MITIGATION.baseValue,82);
+            assert.equal(guided.summary.stats.equipped.stats.HP_MAXIMUM,999,'Legacy equipped evidence remains separate from the drawn estimate');
+            assert(!guided.text.includes('999'),'Legacy equipped capture does not replace the guided estimate in the PNG');
+            assert.equal(guided.text.some(text=>text.includes('Unknown effect: synthetic only')),false,'Private raw pane text is not rendered');
+            await fs.writeFile(path.join(output,'character-guided-estimate.png'),Buffer.from(guided.dataUrl.split(',')[1],'base64'));
+            console.log(`Rendered guided estimates: ${guided.width}x${guided.height}, ${guided.size} bytes; components and unknown formulas stay separate`);
         } finally {window.destroy();server.close();app.quit();}
     };
     try {
-        await writeFile(join(temporary,'main.cjs'),`(${fixture.toString()})(${JSON.stringify({root,output,snapshot:createCharacterDemo(),modernSnapshot:modernRestored.snapshot(),progressSnapshot:progressRestored.snapshot(),profile:join(temporary,'profile')})}).catch(error=>{console.error(error);require('electron').app.exit(1);});`);
+        await writeFile(join(temporary,'main.cjs'),`(${fixture.toString()})(${JSON.stringify({root,output,snapshot:createCharacterDemo(),modernSnapshot:modernRestored.snapshot(),progressSnapshot:progressRestored.snapshot(),guidedSnapshot:guidedRestored.snapshot(),profile:join(temporary,'profile')})}).catch(error=>{console.error(error);require('electron').app.exit(1);});`);
         const electron=createRequire(import.meta.url)('electron'),env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
         const status=await new Promise((resolve,reject)=>{const child=spawn(electron,[join(temporary,'main.cjs')],{env,stdio:'inherit',windowsHide:true});child.on('error',reject);child.on('exit',resolve);});
         assert.equal(status,0,'Real canvas fixture succeeds');

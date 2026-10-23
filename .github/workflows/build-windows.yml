@@ -36,6 +36,8 @@ jobs:
         run: npm run test:desktop-worker
       - name: Test native overlay windows
         run: npm run test:native-overlays
+      - name: Test all-panel native resize and touching overlay docks
+        run: npm run test:overlay-resize
       - name: Test Intel ordering and viewport stability
         run: npm run test:intel-stability
       - name: Test main window placement and startup
@@ -62,6 +64,8 @@ jobs:
         run: npm run test:capture-calibration
       - name: Test contribution and character workflows with a loopback wiki
         run: npm run test:capture-workspace
+      - name: Test guided Character capture and base-only estimates
+        run: npm run test:character-walkthrough
       - name: Test installed system fonts and changed-stat colors
         run: npm run test:system-fonts
       - name: Fetch production bootstrap data

@@ -12,6 +12,12 @@ const MODES = new Set(['contribution','character']);
 const clean = (value, length = 240) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,length);
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const isOwnWindow = name => /^Eye of Zomm|^EQLWiki - Eye of Zomm/i.test(name);
+function preferredCaptureSource(sources=[]) {
+    const games=sources.filter(source=>typeof source?.id==='string'&&source.id.startsWith('window:')&&
+        /^(?:EverQuest(?: Legends)?)(?:$|\s*[([])/i.test(String(source.name||''))&&
+        !/\b(?:Chrome|Chromium|Firefox|Edge|Opera|Brave|browser|launchpad|launcher|patcher)\b/i.test(source.name));
+    return games.length===1?games[0].id:null;
+}
 const sameOrigin=(value,origin)=>{try{return new URL(value).origin===origin;}catch{return false;}};
 function isCapturePermission(permission,details){
     // Electron 43 reports getDisplayMedia as media with no camera/mic types.
@@ -30,6 +36,7 @@ class CaptureHost {
         this.processing = null; this.skippedFrames = 0; this.lastObservationAt = null; this.disposed = false;
         this.contributionResume = null; this.hold = false; this.sequence = 0; this.seen = new Map();
         this.region=null;this.referenceSize=null;this.sourceSize=null;this.calibrationWarning=null;
+        this.readWarning=null;this.frameWarning=null;this.readErrors=0;this.nextReadAt=0;
         this.parseModule = import(pathToFileURL(path.join(__dirname,'..','app','screen-read-parser.js')).href);
         electron.ipcMain.handle(CHANNEL,(event,action,value)=>this.handle(event,action,value));
         electron.ipcMain.handle(SOURCE_CHANNEL,(event,action,value)=>this.handleSource(event,action,value));
@@ -50,7 +57,8 @@ class CaptureHost {
             queuedFrames:this.pending?1:0,skippedFrames:this.skippedFrames,lastObservationAt:this.lastObservationAt,
             contributionPaused:this.owner==='character'&&Boolean(this.contributionResume),error:this.error,
             hasPreview:Boolean(this.lastFrame&&this.lastFrame.sourceId===this.source?.id&&this.phase==='running'),
-            sourceSize:this.sourceSize,region:this.region,referenceSize:this.referenceSize,calibrationWarning:this.calibrationWarning };
+            sourceSize:this.sourceSize,region:this.region,referenceSize:this.referenceSize,calibrationWarning:this.calibrationWarning,
+            readWarning:this.readWarning||this.frameWarning,resumable:Boolean(this.enabled&&this.owner&&this.source&&['error','paused'].includes(this.phase)) };
     }
     emitStatus() {
         const main = this.getMainWindow();
@@ -76,7 +84,8 @@ class CaptureHost {
         if (this.disposed) throw new Error('Screen reading has closed.');
         const sources = await this.electron.desktopCapturer.getSources({types:['window','screen'],thumbnailSize:{width:0,height:0},fetchWindowIcons:false});
         this.choices = sources.filter(source=>!isOwnWindow(source.name));
-        return this.choices.map(source=>({id:source.id,name:clean(source.name),type:source.id.startsWith('screen:')?'display':'window'}));
+        const preferred=preferredCaptureSource(this.choices);
+        return this.choices.map(source=>({id:source.id,name:clean(source.name),type:source.id.startsWith('screen:')?'display':'window',recommended:source.id===preferred}));
     }
     async cancelWork({ destroySource = false } = {}) {
         this.generation++; this.pending = null; this.lastFrame = null;
@@ -101,6 +110,7 @@ class CaptureHost {
         this.enabled = true; this.owner = mode; this.sessionId = sessionId || crypto.randomUUID();
         this.source = source; this.phase = 'selecting'; this.error = null; this.ownerStartedAt = this.now(); this.seen.clear();
         this.region=selection?.region||null;this.referenceSize=selection?.referenceSize||null;this.sourceSize=null;this.calibrationWarning=null;
+        this.readWarning=null;this.frameWarning=null;this.readErrors=0;this.nextReadAt=0;
         this.emitStatus();
         try {
             await this.journal.initialize();
@@ -133,6 +143,7 @@ class CaptureHost {
         window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
         window.webContents.on('will-navigate',(event,url)=>{if(url!==`${this.origin}/capture-source.html`)event.preventDefault();});
         window.webContents.on('render-process-gone',()=>{if(this.captureWindow===window)void this.fail('Screen capture stopped. Choose the game window again.');});
+        window.on('closed',()=>{if(this.captureWindow===window&&!this.disposed)void this.fail('The capture window closed. Resume capture to choose the game window again.');});
         await window.loadURL(captureUrl);
         if (this.captureWindow!==window || this.disposed) return;
         // Static call into our own isolated page, with the initiating user's gesture.
@@ -143,8 +154,9 @@ class CaptureHost {
     }
     async handleSource(event,action,value) {
         if (!this.isSource(event) || this.disposed) throw new Error('Capture source is unavailable.');
-        if (action==='configuration') return {allowed:this.phase==='selecting',intervalMs:2000};
-        if (action==='started') { clearTimeout(this.sourceTimer);this.sourceTimer=null;this.phase='running';this.error=null;this.emitStatus();return {ok:true}; }
+        if (action==='configuration') return {allowed:this.enabled&&this.phase==='selecting',intervalMs:2000};
+        if (action==='started') { if(!this.enabled||this.phase!=='selecting')return {ok:false};clearTimeout(this.sourceTimer);this.sourceTimer=null;this.phase='running';this.error=null;this.emitStatus();return {ok:true}; }
+        if (action==='frame-error') { if(this.enabled&&this.phase==='running'){this.frameWarning='A capture frame was unavailable. Waiting for the selected game window.';this.emitStatus();}return {ok:true}; }
         if (action==='error' || action==='ended') { await this.fail(action==='ended'?'The selected capture source ended. Choose it again.':clean(value,500));return {ok:false}; }
         if (action==='frame') return this.submitFrame(value);
         throw new Error('Unknown capture source action.');
@@ -167,7 +179,10 @@ class CaptureHost {
         this.revision++;this.phase='paused';this.contributionResume=null;await this.cancelWork({destroySource:true});this.emitStatus();return this.getStatus();
     }
     async resume() {
-        if (!this.owner || !this.source) throw new Error('Choose a capture source first.');
+        if (!this.enabled || !this.owner || !this.source) throw new Error('Choose a capture source first.');
+        const revision=this.revision;await this.listSources();
+        if(revision!==this.revision||this.disposed)return this.getStatus();
+        if(!this.choices.some(source=>source.id===this.source.id)){await this.fail('The selected game window is no longer available. Choose a source and start capture again.');return this.getStatus();}
         return this.start({mode:this.owner,sourceId:this.source.id,sessionId:this.sessionId,region:this.region,referenceSize:this.referenceSize});
     }
     preview() {
@@ -206,7 +221,9 @@ class CaptureHost {
             this.generation++;this.pending=null;this.seen.clear();
         }
         this.lastFrame = {png,at:value.capturedAt,sourceId:this.source?.id};
-        if(sizeChanged)this.emitStatus();
+        const recoveredFrame=Boolean(this.frameWarning);this.frameWarning=null;
+        if(sizeChanged||recoveredFrame)this.emitStatus();
+        if(this.now()<this.nextReadAt){this.skippedFrames++;return {accepted:false,retrying:true};}
         const frame = {png,image,size,capturedAt:value.capturedAt,generation:this.generation,owner:this.owner,sessionId:this.sessionId};
         if (this.pending) this.skippedFrames++;
         this.pending = frame;
@@ -228,13 +245,16 @@ class CaptureHost {
                 const observations = parseScreenRead({...read.result,owner:frame.owner,sessionId:frame.sessionId,
                     capturedAt:new Date(frame.capturedAt).toISOString(),input:{...read.input,frameId:hash,captureGeneration:frame.generation}});
                 for (const observation of observations) await this.saveObservation(observation,frame.generation);
+                this.readWarning=null;this.readErrors=0;this.nextReadAt=0;
                 this.remember(`frame:${hash}`);this.emitStatus();
             } catch (error) {
                 if (frame.generation===this.generation && !this.disposed) {
-                    this.phase='error';this.error=clean(error.message,500);this.pending=null;this.emitStatus();
-                    // Destroy the source immediately; do not recursively await this pump.
-                    if(this.captureWindow){const window=this.captureWindow;this.captureWindow=null;if(!window.isDestroyed())window.destroy();}
-                    void this.ocr.stop();
+                    // A timeout or unreadable frame does not revoke the user's
+                    // selected stream. Retry later with one fresh worker, keeping
+                    // the Character session and its queued observations intact.
+                    this.readErrors++;this.nextReadAt=this.now()+Math.min(30000,2000*2**Math.min(this.readErrors-1,4));
+                    this.readWarning=`Screen reading will retry: ${clean(error.message,380)}`;this.pending=null;this.emitStatus();
+                    await this.ocr.stop();
                 }
             }
         }
@@ -326,4 +346,4 @@ class CaptureHost {
         await this.cancelWork({destroySource:true});await this.journal.close();
     }
 }
-module.exports={CaptureHost,CHANNEL,SOURCE_CHANNEL};
+module.exports={CaptureHost,CHANNEL,SOURCE_CHANNEL,preferredCaptureSource};

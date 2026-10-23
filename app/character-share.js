@@ -1,10 +1,9 @@
 import { appearanceFont, normalizeAppearance } from './appearance.js';
-import { CHARACTER_SLOTS, characterShareSummary, safeCharacterIcon } from './character-model.js';
+import { CHARACTER_SLOTS, characterShareSummary, characterStatLabel, safeCharacterIcon } from './character-model.js';
 
 export const CHARACTER_SHARE_LIMITS = Object.freeze({width:1800,minHeight:2400,maxHeight:8192,maxPixels:15000000,maxBytes:12000000,maxIconDimension:256});
 const COLORS = Object.freeze({background:'#070b12',panel:'#0e141e',line:'#66582d',gold:'#d8b75c',heading:'#f0d77f',text:'#e9edf3',muted:'#9ba8b8',warning:'#e6c84c'});
-const labels = {MP:'Mana',END:'Endurance',ATK:'Attack',SV_MAGIC:'Magic resist',SV_FIRE:'Fire resist',SV_COLD:'Cold resist',SV_POISON:'Poison resist',SV_DISEASE:'Disease resist',SV_CORRUPTION:'Void resist',ATTACK_SPEED:'Attack speed %',DMG_BONUS:'Damage bonus',HP_REGEN:'HP regen',MANA_REGEN:'Mana regen',END_REGEN:'End. regen'};
-const label = key => labels[key] || key.replace(/_/g,' ');
+const label = characterStatLabel;
 const format = value => value === null || value === undefined ? '?' : Number.isInteger(value) ? String(value) : String(Math.round(value*1000)/1000);
 const entries = stats => Object.entries(stats || {});
 const clean = value => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g,' ');
@@ -80,7 +79,14 @@ export async function renderCharacterShare(snapshot,{document=globalThis.documen
     const wrap=(value,maxWidth,options={})=>{
         ctx.font=`${options.bold ? '700 ' : ''}${size*(options.scale || 1)}px ${options.family || stack}`;
         const rows=[];let row='';
-        for(const char of clean(value)) { if(row && ctx.measureText(row+char).width>maxWidth) {rows.push(row.trim());row='';} row+=char; }
+        for(const char of clean(value)) {
+            if(row && ctx.measureText(row+char).width>maxWidth) {
+                const boundary=row.lastIndexOf(' ');
+                if(boundary>0) {rows.push(row.slice(0,boundary).trim());row=row.slice(boundary+1);}
+                else {rows.push(row.trim());row='';}
+            }
+            row+=char;
+        }
         if(row) rows.push(row.trim()); return rows.length ? rows : [''];
     };
     const lines=(rows,x,y,options={})=>rows.forEach((row,index)=>text(row,x,y+index*line,options));
@@ -92,21 +98,22 @@ export async function renderCharacterShare(snapshot,{document=globalThis.documen
     const titleRows=wrap(title,1704,{scale:1.9,bold:true,family:heading});
     if(titleRows.length>1) throw new Error('The character name is too long for the share header. Review it before exporting.');
     lines(titleRows,48,70,{color:COLORS.heading,bold:true,scale:1.9,family:heading});
-    const meta=[identity.server,identity.level===null ? '' : `Level ${identity.level}`,identity.race,...identity.classes].filter(Boolean).join('  ·  ');
+    const meta=[identity.server,identity.level===null ? '' : `Level ${identity.level}`,identity.race,...identity.classes,identity.aaCount===null?'':`${identity.aaCount} AAs`].filter(Boolean).join('  ·  ');
     text(meta || 'Character details not recorded',48,134,{color:COLORS.muted});
-    text(identity.sessionName || 'Equipment and separately observed character values',48,164,{color:COLORS.muted,scale:.85});
+    text(identity.sessionName || 'Equipment estimates from an observed No Equipment baseline',48,164,{color:COLORS.muted,scale:.85});
 
     const columnWidth=558, gap=15, statY=plan.headerHeight;
     const columns=[{title:'No Equipment · observed',data:summary.stats.base?.stats,confirmed:summary.stats.base?.confirmed},
-        {title:'Equipped total · observed',data:summary.stats.equipped?.stats,confirmed:summary.stats.equipped?.confirmed},
-        {title:'Gear sums · calculated',data:summary.stats.derived,derived:true}];
+        {title:'Gear sums · calculated',data:summary.stats.derived,derived:true},
+        {title:'Equipped · additive estimate',data:summary.stats.computed,derived:true,computed:true}];
     columns.forEach((column,index)=>{
         const x=48+index*(columnWidth+gap);panel(x,statY,columnWidth,plan.statsHeight);
         text(column.title,x+18,statY+17,{color:COLORS.heading,bold:true});
-        text(column.derived ? '* = partial; empty slots omitted' : column.data ? column.confirmed ? 'Reviewed capture' : 'Unconfirmed capture' : 'Not captured · unknown values',x+18,statY+48,{color:COLORS.muted,scale:.8});
+        text(column.computed ? '* = partial; ? = formula or baseline unknown' : column.derived ? '* = partial; empty slots omitted' : column.data ? column.confirmed ? 'Reviewed capture' : 'Unconfirmed capture' : 'Not captured · unknown values',x+18,statY+48,{color:COLORS.muted,scale:.8});
         Object.keys(summary.stats.derived).forEach((key,statIndex)=>{
             const col=statIndex%2,row=Math.floor(statIndex/2),sx=x+18+col*270,sy=statY+79+row*line;
-            const value=column.derived ? `${format(column.data[key].value)}${column.data[key].complete ? '' : '*'}` : format(column.data?.[key]);
+            const record=column.data?.[key],gearUnknown=column.derived&&!column.computed&&summary.stats.computed[key]?.gearKey===null;
+            const value=column.derived ? `${format(gearUnknown?null:record.value)}${!gearUnknown&&record.value!==null&&!record.complete?'*':''}` : format(record);
             // Character stat keys are bounded at 32 chars; wrap very long keys
             // at a smaller readable font inside their own column.
             const name=label(key), fontScale=ctx.measureText(name).width>165 ? .72 : .86;
@@ -161,7 +168,7 @@ export async function renderCharacterShare(snapshot,{document=globalThis.documen
         }
         y+=rowHeight+14;
     }
-    const caveat=wrap(summary.caveat,width-96,{scale:.84});lines(caveat,48,height-100,{color:COLORS.muted,scale:.84});
+    const caveat=wrap(summary.caveat,width-96,{scale:.84});lines(caveat,48,height-124,{color:COLORS.muted,scale:.84});
     text('Unknown is shown as ?  ·  Share preview contains assigned gear only',48,height-38,{color:COLORS.gold,scale:.75});
     const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value ? resolve(value) : reject(new Error('PNG encoding failed.')),'image/png'));
     if(blob.size>CHARACTER_SHARE_LIMITS.maxBytes) throw new Error('The share image exceeds the 12 MB export limit.');
