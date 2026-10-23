@@ -43,8 +43,12 @@ for (const required of ['frame: true', 'skipTaskbar: false']) {
 if (/setAlwaysOnTop|always-on-top/.test(desktop)) throw new Error('Main-window pin behavior must remain removed.');
 
 const viewer = readFileSync(join(root, 'app/zoneviewer/viewer.html'), 'utf8');
-for (const required of ['setView(mode)', 'installZoneLoadGuard(app, {', 'zoneLoadGuard.isReady(selected)', 'app.currentZoneRecord.id !== selected.id', 'app.currentZoneRecord.format !== selected.format', 'selectViewerZoneOption(select.options, zoneName)', 'selectedFloorIndices?.clear?.()', 'app.eqWorldToThree', 'lastSyncedLocation', 'lastSyncedGround', 'findGroundPointAt(point.x, point.z, point.y)', 'focusTopViewAt(lastSyncedGround)', 'headingTracker.push', 'setRareMobs(records = [])', 'eoz-rare-mob-selected', 'eyeOfZommHasZoneArchives', "reason:'no-zone-archives'", 'routeGuidance', 'renderRouteGuidance', 'navigationResult', 'clearPath()']) {
+for (const required of ['setView(mode)', 'installZoneLoadGuard(app, {', 'zoneLoadGuard.isReady(selected)', 'app.currentZoneRecord.id !== selected.id', 'app.currentZoneRecord.format !== selected.format', 'selectViewerZoneOption(select.options, zoneName)', 'selectedFloorIndices?.clear?.()', 'app.eqWorldToThree', 'lastSyncedLocation', 'lastSyncedGround', "from './player-state.js'", 'installViewerPlayerState({app,root,externalSlice:overlayMode})', 'playerState.observe(location)', 'const ground = observation.ground', 'clearPlayerLocation()', 'focusTopViewAt(lastSyncedGround)', 'headingTracker.push', 'setRareMobs(records = [])', 'eoz-rare-mob-selected', 'eyeOfZommHasZoneArchives', "reason:'no-zone-archives'", 'routeGuidance', 'renderRouteGuidance', 'navigationResult', 'clearPath()']) {
     if (!viewer.includes(required)) throw new Error(`Map integration check is missing: ${required}`);
+}
+const playerState = readFileSync(join(root, 'app/zoneviewer/player-state.js'), 'utf8');
+for (const required of ['knownViewerLocation', 'findGroundPointAt?.(point.x,point.z,point.y)', 'ground=(grounded?probe:point).clone()', "ring.name='eoz-player-ground-marker'", 'setAutoZ', 'clear()']) {
+    if (!playerState.includes(required)) throw new Error(`Shared player marker integration check is missing: ${required}`);
 }
 if (!viewer.includes("type:'eoz-route-cancelled'")) throw new Error('Viewer cancel does not notify the route owner.');
 for (const required of ['exportViewerCollisionGeometry', 'cropCollisionGeometryForRoute', 'scheduleCandidateRoute', 'resetSpatialRouteState', "type:'eoz-route-candidate-ready'", 'spatial:{']) {

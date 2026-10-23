@@ -87,6 +87,7 @@ function normalizeCandidate(value={}) {
         iconId:clean(value.iconId,120), icon:safeCharacterIcon(value.icon), slots:characterSlotKinds(value.slots), tier,
         fraction:tierFraction(value.fraction,tier),
         observedStats:normalizeCharacterStats(value.observedStats), baseStats:normalizeCharacterStats(value.baseStats),
+        unscaledStatKeys:[...new Set(list(value.unscaledStatKeys).slice(0,CHARACTER_LIMITS.stats).map(keyFor).filter(key=>/^[A-Z][A-Z0-9_]{0,31}$/.test(key)))],
         observedStatsComplete:value.observedStatsComplete === true, baseStatsComplete:value.baseStatsComplete === true,
         augments:list(value.augments).slice(0,CHARACTER_LIMITS.augments).map(augmentRecord),
         augmentStatus:['none','included','excluded','unknown'].includes(value.augmentStatus) ? value.augmentStatus : 'unknown',
@@ -129,12 +130,13 @@ function normalizeState(value) {
 export function characterItemStats(candidate) {
     const item = normalizeCandidate(candidate), observed = Object.keys(item.observedStats).length > 0;
     const stats = observed ? {...item.observedStats} : Object.fromEntries(Object.entries(item.baseStats).map(([key,value]) =>
-        [key,value === null || item.tier === null || item.fraction === null ? null : scaleItemStat(key,value,item.tier,{fraction:item.fraction})]));
+        [key,value === null || item.tier === null || item.fraction === null || item.tier>0&&item.unscaledStatKeys.includes(key) ? null : scaleItemStat(key,value,item.tier,{fraction:item.fraction})]));
     const warnings = [];
     let complete = observed ? item.observedStatsComplete : item.baseStatsComplete && item.tier !== null && item.fraction !== null;
     let uncertainAll = false;
     if (!observed && item.tier === null) warnings.push('Item tier is unknown; catalog base stats are not an equipped value.');
     if (!observed && item.tier !== null && item.fraction === null) warnings.push('Fractional progress is unknown; review it before scaling catalog base stats.');
+    if (!observed && item.tier>0 && item.unscaledStatKeys.length) warnings.push(`Tier adjustment is unverified for ${item.unscaledStatKeys.join(', ')}; those equipped values remain unknown.`);
     if (!complete) warnings.push('Item stats are incomplete.');
     if (item.augmentStatus === 'unknown') { complete=false; uncertainAll=true; warnings.push('Augment presence or stat inclusion needs review.'); }
     if (item.augmentStatus === 'excluded') {
@@ -250,6 +252,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             wikiMatch:options.wikiItem ? 'suggested' : source.wikiMatch,iconId:source.iconId ?? wiki.iconId,icon:options.icon || source.icon,
             slots:source.slots?.length ? source.slots : wiki.slots,tier:source.tier,fraction:source.fraction,observedStats:source.observedStats || source.stats,
             observedStatsComplete:source.statsComplete || source.observedStatsComplete,baseStats:wiki.stats || source.baseStats,
+            unscaledStatKeys:source.unscaledStatKeys,
             baseStatsComplete:options.wikiItem ? true : source.baseStatsComplete,augments:source.augments,augmentStatus:source.augmentStatus,
             level:source.level,notes:source.notes,evidence:[evidence],createdAt:timestamp(),updatedAt:timestamp()});
         if (!candidate.name) return {ok:false,error:'An item name is required.'};

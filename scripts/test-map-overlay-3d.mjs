@@ -12,6 +12,8 @@ import {fileURLToPath} from 'node:url';
 // and display are then substituted for camera assertions; these empty archives
 // deliberately have no zone WLD. No installed profile/game files are required.
 const root=fileURLToPath(new URL('../',import.meta.url)),require=createRequire(import.meta.url),electron=require('electron');
+const screenshotsIndex=process.argv.indexOf('--screenshots'),screenshots=screenshotsIndex>=0?resolve(process.argv[screenshotsIndex+1]||'ci-screenshots/map-player'):null;
+if(screenshots)await mkdir(screenshots,{recursive:true});
 const temporary=await mkdtemp(join(tmpdir(),'eoz-map-3d-smoke-'));
 try{
     const profile=join(temporary,'profile'),game=join(temporary,'synthetic-game'),log=join(game,'Logs','eqlog_Fixture_Test.txt');
@@ -31,16 +33,16 @@ try{
     await writeFile(join(profile,'data','eye-of-zomm-pack.json'),JSON.stringify({
         meta:{schemaVersion:3,version:'synthetic-3d-smoke',sample:true,currentEra:'Classic'},
         zones:[{name:'Mistmoore Castle',viewerName:'Mistmoore Castle',aliases:['mistmoore','The Castle of Mistmoore']},{name:'Plane of Hate',viewerName:'Plane of Hate',aliases:['hateplane']}],
-        npcs:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false,avgLevel:26,era:'Classic',loc:[10,20,12]},
-            {name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true,avgLevel:26,era:'Classic',loc:[100,80,12]},
-            {name:'Unknown Elevation Watcher',zone:'Mistmoore Castle',avgLevel:26,era:'Classic',loc:[140,120]}],
+        npcs:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false,avgLevel:26,era:'Classic',loc:[-320,-320,12]},
+            {name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true,avgLevel:26,era:'Classic',loc:[320,280,12]},
+            {name:'Unknown Elevation Watcher',zone:'Mistmoore Castle',avgLevel:26,era:'Classic',loc:[-300,300]}],
         items:[{name:'Normal Fixture Ring',classes:['MNK'],era:'Classic',slots:['FINGER'],stats:{HP:10},dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:false}]},
             {name:'Raid Fixture Ring',classes:['MNK'],era:'Classic',slots:['FINGER'],stats:{HP:20},dropSources:[{name:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true}]},
             {name:'Unknown Height Fixture Ring',classes:['MNK'],era:'Classic',slots:['FINGER'],stats:{HP:5},dropSources:[{name:'Unknown Elevation Watcher',zone:'Mistmoore Castle'}]}]
     }));
     const pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
     await writeFile(join(temporary,'package.json'),JSON.stringify({name:'eoz-map-3d-smoke',version:pkg.version,main:'main.cjs'}));
-    const run=async({root,log})=>{
+    const run=async({root,log,screenshots})=>{
         const {app,BrowserWindow}=require('electron'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
         const show=BrowserWindow.prototype.showInactive;
         // Visible, nonactivating windows let the real visibility lifecycle run.
@@ -69,6 +71,7 @@ try{
             const frame=()=>map.webContents.mainFrame.frames.find(candidate=>candidate.url.includes('/zoneviewer/viewer.html?overlay=1'));
             const childExecute=(fn,...args)=>execute(frame(),fn,...args);
             const click=action=>mainExecute(map,action=>document.querySelector(`[data-map-action="${action}"]`).click(),action);
+            const capture=async name=>{if(!screenshots)return;await mainExecute(map,()=>{for(const animation of document.getAnimations())if(animation.effect?.getTiming().iterations!==Infinity)animation.finish();});map.webContents.sendInputEvent({type:'mouseMove',x:120,y:20});map.webContents.invalidate();await wait(300);const image=await map.webContents.capturePage();await fs.writeFile(path.join(screenshots,name),image.toPNG());};
             await click('mode');
             await until(()=>frame()&&childExecute(()=>Boolean(window.eqlEyeOfZommViewer?.focusAtLocation&&window.eqlZoneViewer?.renderer)),'shipped overlay viewer API and WebGL renderer');
             const policy=await childExecute(async()=>{
@@ -114,12 +117,11 @@ try{
             assert.equal(hydrated.excluded,true,'Zone-prefixed private/unused root text cannot be swept into EQG hydration');
             assert.equal(hydrated.worker.type,'error');assert.match(hydrated.worker.message,/The parser did not produce a zone GLB/);
             assert(hydrated.worker.progress.some(message=>message==='Decoding mistmoore (S3D)…'),'The real parser Worker receives hydrated source files before reporting the expected empty-archive result');
-            await childExecute(()=>{
+            const installGeometry=()=>{
                 const app=window.eqlZoneViewer,api=window.eqlEyeOfZommViewer,V=app.perspective.position.constructor;
                 window.syntheticFocusResults=[];
-                const focus=api.focusAtLocation.bind(api);
-                api.focusAtLocation=(...args)=>{const result=focus(...args);window.syntheticFocusResults.push(result);return result;};
-                const select=api.setOverlaySelection.bind(api);api.setOverlaySelection=id=>{window.syntheticSelection=id;return select(id);};
+                if(api.focusAtLocation){const focus=api.focusAtLocation.bind(api);api.focusAtLocation=(...args)=>{const result=focus(...args);window.syntheticFocusResults.push(result);return result;};}
+                if(api.setOverlaySelection){const select=api.setOverlaySelection.bind(api);api.setOverlaySelection=id=>{window.syntheticSelection=id;return select(id);};}
                 // Keep real folder restoration, zone selection, maps and lazy
                 // archive reads. Substitute geometry only for camera checks.
                 app.cache.get=async()=>null;app.cache.set=async()=>{};app.cache.clearPrefix=async()=>{};
@@ -139,13 +141,20 @@ try{
                         app.setViewerControlsEnabled(true);app.els.overlay.hidden=true;app.els.zoneBadge.textContent='Synthetic plane (no archive)';
                         app.fp.setScene(app.scene);app.requestRender();
                 };
-            });
+            };
+            await childExecute(installGeometry);
             await until(()=>childExecute(()=>window.eqlZoneViewer.currentZoneRecord?.id==='mistmoore'&&window.eqlZoneViewer.zoneGroup.getObjectByName('synthetic-ci-plane-not-an-archive')&&window.eqlZoneViewer.mode==='top'),'real Top camera on synthetic geometry');
             const top=await childExecute(()=>{const app=window.eqlZoneViewer;app.renderer.render(app.scene,app.camera);return{mode:app.mode,webgl:app.renderer.getContext().getParameter(app.renderer.getContext().VERSION),lost:app.renderer.getContext().isContextLost(),triangles:app.renderer.info.render.triangles,canvas:app.renderer.domElement instanceof HTMLCanvasElement};});
             assert(top.canvas&&!top.lost&&/WebGL/.test(top.webgl)&&top.triangles>=2,'Actual shipped WebGL renderer draws the synthetic plane');
+            const marker=await childExecute(()=>{const app=window.eqlZoneViewer,ring=app.scene.getObjectByName('eoz-player-ground-marker');return{visible:ring?.visible,position:ring?.position.toArray(),basis:ring?.userData.groundBasis,status:window.eqlEyeOfZommViewer.status().playerMarker};});
+            assert.equal(marker.visible,true);assert.deepEqual(marker.position,[-10,12.24,20]);assert.equal(marker.basis,'collision-ground');
+            assert.equal(marker.status.markerVisible,true);assert.equal(await mainExecute(map,()=>document.querySelector('[data-map-auto-z]').getAttribute('aria-pressed')),'true');
+            await capture('map-player-top.png');
             await click('mode');await until(()=>childExecute(()=>window.eqlZoneViewer.mode==='first'),'real First Person mode');
             const beforeFocus=await childExecute(()=>({camera:window.eqlZoneViewer.perspective.position.toArray(),hud:window.eqlZoneViewer.els.coord.textContent}));
             assert(Math.abs(beforeFocus.camera[0]+10)<.01&&Math.abs(beforeFocus.camera[2]-20)<.01&&Math.abs(beforeFocus.camera[1]-18)<.01,'Follow keeps the logged player centered when cycling Top to First with no new log sample');
+            assert.deepEqual(await childExecute(()=>window.eqlZoneViewer.scene.getObjectByName('eoz-player-ground-marker').position.toArray()),marker.position,'The same ground marker remains present in First Person');
+            await capture('map-player-first.png');
             const sources=(await state()).snapshot.session.map.npcs,raid=sources.find(npc=>npc.raidInstance),unknown=sources.find(npc=>npc.loc.length===2);
             assert(raid?.id&&unknown?.id,'Fixture retains exact normal/raid and unknown-height identities');
             const nativeAction=(name,payload)=>mainExecute(map,(name,payload)=>window.eyeOfZommOverlay.action(name,payload),name,payload);
@@ -156,7 +165,9 @@ try{
             assert.equal(focused.mode,'first');assert.notDeepEqual(focused.camera,beforeFocus.camera);assert.equal(focused.hud,beforeFocus.hud,'Inspecting an NPC cannot replace the last logged HUD position');
             assert.equal(focused.result.ok,true);assert.equal(focused.result.heightEstimated,false);assert.equal(focused.result.cameraFloorZ,12);
             assert.equal(focused.selection,raid.id);assert.equal(focused.active.length,1,'Exact source identity activates one same-name variant');
-            assert(Math.abs(focused.camera[0]+100)<.01&&Math.abs(focused.camera[2]-80)<.01&&Math.abs(focused.camera[1]-18)<.01,'Real FP camera reaches the exact raid source on the synthetic floor');
+            assert.deepEqual(await childExecute(()=>window.eqlZoneViewer.scene.getObjectByName('eoz-player-ground-marker').position.toArray()),marker.position,'NPC inspection cannot move the player ground marker');
+            assert.equal(await mainExecute(map,()=>document.querySelector('[data-map-auto-z]').getAttribute('aria-pressed')),'false','Inspecting a mob floor disables Auto Z');
+            assert(Math.abs(focused.camera[0]+320)<.01&&Math.abs(focused.camera[2]-280)<.01&&Math.abs(focused.camera[1]-18)<.01,'Real FP camera reaches the exact raid source on the synthetic floor');
             assert.equal((await state()).snapshot.session.map.selectedNpcId,raid.id);assert.equal(owner.isVisible(),false);assert.equal(focusCalls,focusCount,'Camera preview neither opens nor activates main');
             await mainExecute(map,()=>{const slider=document.querySelector('[data-map-z]');slider.value=slider.max;slider.dispatchEvent(new Event('input',{bubbles:true}));});
             await nativeAction('session:map-focus',{id:unknown.id,npc:unknown.name,zone:'Mistmoore Castle',raidInstance:false});
@@ -165,6 +176,39 @@ try{
             assert.equal(unknownFocus.result.heightEstimated,true);assert.equal(unknownFocus.result.cameraFloorZ,12);assert.equal(unknownFocus.camera[1],18,'Missing Z grounds on the actual synthetic surface, not zero');assert.equal(unknownFocus.hud,beforeFocus.hud);
             await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===12),'unknown-height focus centers slice on camera floor');
             const after=await state();assert.equal(after.snapshot.sessionId,sessionId);assert.deepEqual(after.snapshot.session.map.location,logged,'Native camera motion never changes parser position or route start');
+            const inspectionCamera=unknownFocus.camera;
+            await fs.appendFile(log,`[${stamp}] Your Location is 13, 23, 14\n`);
+            await until(()=>childExecute(()=>window.eqlZoneViewer.scene.getObjectByName('eoz-player-ground-marker')?.position.x===-13),'new log sample updates the player marker with Follow off');
+            assert.deepEqual(await childExecute(()=>window.eqlZoneViewer.perspective.position.toArray()),inspectionCamera,'New player evidence leaves the inspection camera unchanged');
+            assert.equal(await mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)),12,'NPC/manual floor inspection survives new elevations');
+            await mainExecute(map,()=>document.querySelector('[data-map-auto-z]').click());
+            await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===14),'Auto Z re-enable consumes latest logged height');
+            await fs.appendFile(log,`[${stamp}] Your Location is 14, 24, 16\n`);
+            await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===16),'enabled Auto Z follows later logs');
+            const cleared=await childExecute(()=>{const api=window.eqlEyeOfZommViewer;api.clearPlayerLocation();return api.status().playerMarker;});
+            assert.equal(cleared.markerVisible,false);assert.equal(cleared.hasKnownZ,false,'Clear removes old source height as well as its mesh');
+            const mainFrame=owner.webContents.mainFrame.frames.find(candidate=>/\/zoneviewer\/viewer.html$/.test(candidate.url));
+            assert(mainFrame,'Main app retains its ordinary shared viewer document');
+            await execute(mainFrame,installGeometry);
+            const mainAutoZ=await execute(mainFrame,async()=>{
+                const api=window.eqlEyeOfZommViewer,app=window.eqlZoneViewer;
+                await api.useConfiguredFolder();const loaded=await api.loadZone('Mistmoore Castle');if(!loaded.ok)throw Error('Main synthetic zone failed: '+JSON.stringify(loaded));
+                app.currentBounds.min.y=-500;app.currentBounds.max.y=500;app.els.clip.min='-500';app.els.clip.max='500';
+                api.setView('top');api.syncLocation({x:4,y:6,z:12},{mode:'top'});
+                const first={marker:app.scene.getObjectByName('eoz-player-ground-marker')?.position.toArray(),state:api.status().playerMarker,button:document.querySelector('.eoz-auto-z')?.getAttribute('aria-pressed'),slice:app.renderer.clippingPlanes.map(value=>value.constant),range:[Number(app.els.clip.min),Number(app.els.clip.max)]};
+                api.setView('first');api.syncLocation({x:4,y:6,z:12},{mode:'first'});const camera=app.perspective.position.toArray();
+                app.els.clip.value='300';app.els.clip.dispatchEvent(new Event('input'));api.syncLocation({x:5,y:7,z:16},{moveCamera:false});
+                const manual={state:api.status().playerMarker,clip:Number(app.els.clip.value),camera:app.perspective.position.toArray()};
+                document.querySelector('.eoz-auto-z').click();const enabled={state:api.status().playerMarker,slice:app.renderer.clippingPlanes.map(value=>value.constant)};
+                const rejected=api.syncLocation({x:0,y:0,z:null},{moveCamera:false});
+                api.clearPlayerLocation();const cleared=api.status().playerMarker;
+                return{first,camera,manual,enabled,rejected,cleared};
+            });
+            assert.equal(mainAutoZ.first.state.autoZ,true);assert.equal(mainAutoZ.first.button,'true');assert.deepEqual(mainAutoZ.first.marker,[-6,12.24,4]);assert.deepEqual(mainAutoZ.first.slice,[37,13]);
+            assert.deepEqual(mainAutoZ.first.range,[-500,500],'Main Auto Z retains the full zone range instead of trapping the manual slider in the automatic band');
+            assert.equal(mainAutoZ.manual.state.autoZ,false);assert.equal(mainAutoZ.manual.clip,300,'The actual range input can inspect a far floor outside the previous automatic slice');assert.deepEqual(mainAutoZ.manual.camera,mainAutoZ.camera,'Main record-only sync leaves camera unchanged');
+            assert.equal(mainAutoZ.enabled.state.autoZ,true);assert.deepEqual(mainAutoZ.enabled.slice,[41,9]);assert.equal(mainAutoZ.rejected.ok,false,'Unknown main elevation never becomes zero');
+            assert.equal(mainAutoZ.cleared.markerVisible,false);assert.equal(mainAutoZ.cleared.hasKnownZ,false);
             await click('reset');await until(()=>mainExecute(map,()=>document.querySelector('[data-map-action="mode"]').textContent==='Map'&&!document.querySelector('.native-map-3d-frame')),'Reset unloads 3D iframe');
             await wait(1150);assert.equal(await mainExecute(map,()=>Boolean(document.querySelector('.native-map-3d-frame'))),false,'Retained snapshots cannot replay a consumed mob focus after Reset');
             await click('mode');await until(()=>Boolean(frame()),'new lazy iframe after choosing Top');
@@ -174,21 +218,21 @@ try{
             await fs.appendFile(log,[`[${stamp}] [26 MNK] Fixture (Iksar) ZONE: Plane of Hate (hateplane)`,`[${stamp}] Your Location is 10, 20, 122`].join('\n')+'\n');
             await until(async()=>{const value=await state();return value.snapshot.session.map.zone==='Plane of Hate'&&value.snapshot.session.map.location?.z===122;},'Hate zone and logged location');
             await control('show','map');
-            await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===120&&Number(document.querySelector('[data-map-z]').max)>=300),'Hate map data loads and starts at Z120 instead of ceiling midpoint or logged Z');
+            await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===122&&Number(document.querySelector('[data-map-z]').max)>=300),'Known logged height wins over Hate fallback or ceiling midpoint');
             await mainExecute(map,()=>{const slider=document.querySelector('[data-map-z]');slider.value='135';slider.dispatchEvent(new Event('input',{bubbles:true}));});
             await fs.appendFile(log,`[${stamp}] Your Location is 11, 21, 128\n`);
             await until(async()=>{const value=await state();return value.snapshot.session.map.location?.z===128;},'later logged Hate position');
             assert.equal(await mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)),135,'New positions and heartbeats preserve a deliberate slice');
-            await click('reset');assert.equal(await mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)),120,'Reset restores the Hate presentation default');
+            await click('reset');assert.equal(await mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)),128,'Reset enables Auto Z at the newest known logged height');
             await fs.appendFile(log,[`[${stamp}] [26 MNK] Fixture (Iksar) ZONE: The Castle of Mistmoore (mistmoore)`,`[${stamp}] Your Location is 10, 20, 12`].join('\n')+'\n');
             await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===12),'other zones keep their normal logged elevation default');
-            console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,realConfiguredFolder:true,realS3dEqgHydration:true,realParserWorker:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,unknownHeightGrounded:true,resetAndHideUnload:true,hateDefaultAndManualSlice:true}));
+            console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,realConfiguredFolder:true,realS3dEqgHydration:true,realParserWorker:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,groundMarkerBothViews:true,followOffMarker:true,autoZManualReenable:true,mainViewerAutoZ:true,unknownHeightGrounded:true,resetAndHideUnload:true,hateFallbackAndManualSlice:true}));
             BrowserWindow.prototype.focus=originalFocus;app.exit(0);
         }
         app.on('browser-window-created',()=>{if(started)return;started=true;void inspect().catch(error=>{console.error(error.stack);app.exit(1);});});
         setTimeout(()=>{console.error('3D overlay smoke exceeded 55 seconds');app.exit(2);},55000).unref();require(path.join(root,'desktop/main.cjs'));
     };
-    await writeFile(join(temporary,'main.cjs'),`const {app}=require('electron');app.setPath('userData',${JSON.stringify(profile)});(${run.toString()})(${JSON.stringify({root,log})});`);
+    await writeFile(join(temporary,'main.cjs'),`const {app}=require('electron');app.setPath('userData',${JSON.stringify(profile)});(${run.toString()})(${JSON.stringify({root,log,screenshots})});`);
     const result=await new Promise((resolve,reject)=>{const child=spawn(electron,[temporary,'--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--mute-audio'],{windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);child.once('error',reject);child.once('exit',code=>resolve({code,output}));});
     assert.equal(result.code,0,result.output);assert.match(result.output,/EOZ_MAP_3D_SMOKE=.*"ok":true/);console.log(result.output.match(/EOZ_MAP_3D_SMOKE=.*/)[0]);
 }finally{if(dirname(temporary)!==resolve(tmpdir())||!basename(temporary).startsWith('eoz-map-3d-smoke-'))throw Error('Unexpected 3D-smoke cleanup path');await rm(temporary,{recursive:true,force:true});}

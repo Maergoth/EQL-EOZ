@@ -2,16 +2,19 @@
 const { Worker } = require('node:worker_threads');
 const path = require('node:path');
 const fs = require('node:fs');
+const {validateOcrRuntime}=require('./ocr-runtime.cjs');
 class OcrService {
     constructor({ resourcesPath, packaged = false, runtimeRoot, workerPath, workerExecArgv, timeoutMs = 45000 } = {}) {
         this.runtimeRoot = runtimeRoot || (packaged ? path.join(resourcesPath, 'ocr-runtime') : path.join(__dirname,'..'));
         this.workerPath = workerPath || (packaged ? path.join(this.runtimeRoot,'ocr-worker.cjs') : path.join(__dirname,'ocr-worker.cjs'));
         this.timeoutMs = timeoutMs; this.worker = null; this.pending = null; this.initializing = null; this.startup = null; this.nextId = 0;
         this.workerExecArgv=workerExecArgv;
+        this.packaged=packaged;
     }
     initialize() {
         if (this.initializing) return this.initializing;
         if (!fs.existsSync(this.workerPath)) return Promise.reject(new Error('The local OCR runtime is missing. Reinstall Eye of Zomm.'));
+        if(this.packaged)try{validateOcrRuntime(this.runtimeRoot);}catch{return Promise.reject(new Error('The bundled OCR runtime is incomplete or changed. Reinstall Eye of Zomm.'));}
         let worker;
         try { worker = new Worker(this.workerPath, { workerData:{ runtimeRoot:this.runtimeRoot },...(this.workerExecArgv?{execArgv:this.workerExecArgv}:{}) }); }
         catch (error) { return Promise.reject(error); }

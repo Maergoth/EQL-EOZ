@@ -10,7 +10,9 @@ const expected={'tesseract.js':'7.0.0','tesseract.js-core':'7.0.0','@tesseract.j
 async function copyTree(from,to){
     await mkdir(to,{recursive:true});
     for(const entry of await readdir(from,{withFileTypes:true})){
-        if(entry.name==='node_modules'||entry.name==='.git')continue;
+        // electron-builder always omits these non-runtime placeholders. Do not
+        // claim them in the manifest of the physical resource tree it ships.
+        if(['node_modules','.git','.gitkeep','.DS_Store'].includes(entry.name))continue;
         if(entry.isSymbolicLink())throw new Error('OCR runtime packages must not contain symlinks.');
         if(entry.isDirectory())await copyTree(join(from,entry.name),join(to,entry.name));
         else if(entry.isFile())await copyFile(join(from,entry.name),join(to,entry.name));

@@ -21,6 +21,7 @@ const requiredModules = [
 assert.deepEqual(packagedArchivePaths('linux'), ['dist/linux-unpacked/resources/app.asar'], 'Linux package verification cannot select a stale Windows archive');
 assert.deepEqual(packagedArchivePaths('win32'), ['dist/win-unpacked/resources/app.asar']);
 assert.throws(() => packagedArchivePaths('unknown'), /No packaged archive contract/);
+requiredModules.push('app/zoneviewer/player-state.js','app/character-catalog.js','app/item-base-recovery.js','app/item-base-review.js','app/item-base-review-ui.js','desktop/ocr-runtime.cjs');
 for (const relative of requiredModules) assert(PACKAGED_RUNTIME_SOURCES.includes(relative), `Package gate omits ${relative}`);
 const checker = await readFile(new URL('../scripts/check-packaged-artifact.mjs', import.meta.url), 'utf8');
 assert(checker.includes('verifyPackagedRuntimeSources(packagedText,'), 'Artifact verification must execute the source-byte gate');
@@ -78,7 +79,8 @@ try {
     }
 
     // Verify each newly required runtime module against a real, incomplete ASAR.
-    for (const relative of requiredModules) {
+    requiredModules.push('app/zoneviewer/player-state.js','app/character-catalog.js','app/item-base-recovery.js','app/item-base-review.js','app/item-base-review-ui.js','desktop/ocr-runtime.cjs');
+for (const relative of requiredModules) {
         await rm(join(fixture, relative));
         await buildArchive();
         assert.throws(() => verifyPackagedRuntimeSources(packagedText, sourceText),

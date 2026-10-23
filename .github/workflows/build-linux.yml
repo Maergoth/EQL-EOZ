@@ -40,6 +40,7 @@ jobs:
             npm run test:main-cache
             npm run test:map-overlay-3d
             npm run test:native-overlays -- --screenshots ci-screenshots/linux
+            npm run test:intel-stability
             npm run test:discovery-notices
             npm run test:appearance -- --screenshots ci-screenshots/linux-appearance
             npm run test:wiki-auth

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const { OverlayHost, PANEL_IDS, RECOVERY_SHORTCUT, clampBounds, normalizePreferences, sessionCommand } = require('../desktop/overlay-host.cjs');
+const { OverlayHost, PANEL_IDS, RECOVERY_SHORTCUT, clampBounds, normalizePreferences, sessionCommand, globalOverlayMode, snapTriggersBounds } = require('../desktop/overlay-host.cjs');
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
 const display = (x = 0, y = 0, width = 1920, height = 1040) => ({ workArea:{ x, y, width, height } });
@@ -31,7 +31,7 @@ class Window extends EventEmitter {
     isMaximized() { return false; }
     restore() {}
     show() { this.visible = true; }
-    focus() {}
+    focus() { this.nativeCalls.push(['focus']); }
     setIgnoreMouseEvents(...args) { this.ignoreMouse = args[0]; this.nativeCalls.push(['ignore-mouse', ...args]); }
     setResizable(value) { this.resizable = value; }
     setMovable(value) { this.movable = value; }
@@ -107,6 +107,57 @@ test('persisting upgraded preferences removes the retired Consider panel', () =>
     assert.equal(writes.at(-1).panels.consider,undefined);
     assert.equal(writes.at(-1).panels.map.visible,true);
 }, {saved:{panels:{consider:{visible:true}}}}));
+
+test('global cycle resolves mixed states and changes every known panel atomically', () => fixture(async ({host,writes,mainEvent,nativeWindows}) => {
+    assert.equal(host.getState().globalMode,'hidden');assert.equal(nativeWindows.length,0);
+    const preserved=JSON.parse(JSON.stringify(host.getState().panels));
+    for(const expected of ['locked','unlocked','hidden','locked']){
+        const state=await host.handleMainRequest(mainEvent,'control',{action:'cycle-all'});
+        assert.equal(state.globalMode,expected);
+        for(const id of PANEL_IDS){const prefs=state.panels[id],win=host.windows.get(id);assert.equal(prefs.visible,expected!=='hidden',`${id} visibility in ${expected}`);if(expected!=='hidden')assert.equal(prefs.locked,expected==='locked');assert.equal(win.resizable,!prefs.locked);assert.equal(win.movable,!prefs.locked);assert.equal(win.nativeCalls.some(call=>call[0]==='focus'),false);assert.deepEqual(prefs.bounds,preserved[id].bounds);assert.equal(prefs.passThrough,preserved[id].passThrough);assert.equal(prefs.fontScale,preserved[id].fontScale);assert.equal(prefs.backgroundOpacity,preserved[id].backgroundOpacity);}
+        assert.equal(writes.at(-1).panels.map.visible,expected!=='hidden','one saved owner state includes panels that were never individually opened');
+    }
+    await host.control('hide','map');assert.equal(host.getState().globalMode,'locked','a partially visible locked set resolves deterministically');
+    await host.control('lock','map',false);assert.equal(host.getState().globalMode,'unlocked','a hidden unlocked panel is included in global state');
+    await host.control('pass-through','parse',true);await host.control('cycle-all');assert.equal(host.getState().globalMode,'hidden');
+    await host.control('cycle-all');assert.equal(host.getState().globalMode,'locked');assert.equal(host.getState().panels.parse.passThrough,true,'Ignore mouse remains an independent explicit preference');
+    await host.control('cycle-all');assert.equal(host.getState().globalMode,'unlocked');assert(Object.values(host.getState().panels).every(panel=>panel.passThrough===false),'global layout editing restores mouse input on all four panels');
+    assert.deepEqual([...host.windows.keys()],PANEL_IDS);assert.equal(nativeWindows.length,4,'cycles reuse existing windows');
+}));
+
+test('global mode ignores unknown panel IDs and hidden takes precedence over old lock settings',()=>{
+    assert.equal(globalOverlayMode({retired:{visible:true,locked:false}}),'hidden');
+    assert.equal(globalOverlayMode({parse:{visible:false,locked:false}}),'hidden');
+    assert.equal(globalOverlayMode({parse:{visible:true,locked:true},map:{visible:false,locked:false}}),'unlocked');
+});
+
+test('Triggers magnet uses current Parse bounds, resize edges and one monitor only',()=>{
+    const screens=[display(),display(1920)],parse={x:100,y:100,width:600,height:350};
+    assert.deepEqual(snapTriggersBounds({x:107,y:464,width:420,height:64},parse,screens),{x:100,y:456,width:420,height:64});
+    assert.deepEqual(snapTriggersBounds({x:101,y:456,width:591,height:64},parse,screens,{resizing:true}),{x:100,y:456,width:600,height:64});
+    const distant={x:800,y:800,width:420,height:64};assert.deepEqual(snapTriggersBounds(distant,parse,screens),distant);
+    const otherScreen={x:1923,y:456,width:420,height:64};assert.deepEqual(snapTriggersBounds(otherScreen,{x:1500,y:100,width:420,height:350},screens),otherScreen,'no cross-monitor magnet');
+});
+
+test('own-panel resize is bounded, unlocked-only and retains explicit Triggers height',()=>fixture(async({host,overlayEvent,mainEvent})=>{
+    await host.control('show-all');
+    await assert.rejects(host.handleOverlayRequest(overlayEvent('parse'),'resize',{width:500,height:300}),/Unlock/);
+    await host.control('unlock-all');
+    const parse=host.windows.get('parse');parse.setBounds({x:100,y:100,width:600,height:350});
+    const timer=host.windows.get('timers');timer.setBounds({x:102,y:458,width:420,height:64});
+    const changed=await host.handleOverlayRequest(overlayEvent('timers'),'resize',{width:592,height:110});assert.equal(changed.ok,true);assert.deepEqual(timer.getBounds(),{x:100,y:456,width:600,height:110});assert.equal(host.getState().panels.timers.manualHeight,true);
+    assert.equal(normalizePreferences(host.getState(),host.displays()).panels.timers.manualHeight,true,'manual height survives preference normalization/restart');
+    await publish(host,mainEvent);assert.equal(timer.getBounds().height,110,'snapshot/content fitting cannot undo an explicit resize');
+    await host.handleOverlayRequest(overlayEvent('timers'),'content-height',55);assert.equal(timer.getBounds().height,110);
+    for(const value of [{width:NaN,height:100},{width:4001,height:100},{width:100,height:-1}])await assert.rejects(host.handleOverlayRequest(overlayEvent('parse'),'resize',value),/Invalid/);
+    await host.handleOverlayRequest(overlayEvent('parse'),'resize',{width:1,height:1});assert.equal(parse.getBounds().width,260);assert.equal(parse.getBounds().height,160);
+    await host.handleOverlayRequest(overlayEvent('parse'),'resize',{deltaWidth:5,deltaHeight:20});assert.equal(parse.getBounds().width,265);assert.equal(parse.getBounds().height,180,'keyboard deltas use current native bounds');
+    await assert.rejects(host.handleOverlayRequest(overlayEvent('intel'),'resize',{width:500,height:300}),/Unlock/);
+    const foreign={...overlayEvent('parse'),senderFrame:{url:host.panelUrl('parse')}};await assert.rejects(host.handleOverlayRequest(foreign,'resize',{width:500,height:300}),/unavailable/);
+    await host.control('pass-through','parse',true);await assert.rejects(host.handleOverlayRequest(overlayEvent('parse'),'resize',{width:500,height:300}),/Unlock/);await host.control('pass-through','parse',false);
+    await host.control('hide','parse');await assert.rejects(host.handleOverlayRequest(overlayEvent('parse'),'resize',{width:500,height:300}),/Unlock/);
+    await host.control('reset-layout');assert.equal(host.getState().panels.timers.manualHeight,false);
+}));
 
 test('bounds stay on the correct monitor and recover after disconnection', () => {
     assert.deepEqual(clampBounds({ x:2200, y:100, width:400, height:500 }, [display(), display(1920)]), { x:2200, y:100, width:400, height:500 });

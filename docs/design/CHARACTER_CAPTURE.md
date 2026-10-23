@@ -71,6 +71,11 @@ Fractional progress is nullable: an unread value stays null, while an explicitly
 reviewed zero remains zero. Unknown progress is shown in sharing and kept distinct
 from zero during variant matching. Catalog-only values remain unknown until both
 tier and progress are known; observed examine values are still usable unchanged.
+Bounded `unscaledStatKeys` metadata retains known catalog base values whose
+tier adjustment lacks required context. Those derived values stay null above
+tier zero; direct observed examine stats still take precedence. The Character
+catalog currently uses this for conditional SV Void scaling. See
+[catalog search and base recovery](../CHARACTER_CATALOG_BASE_RECOVERY.md).
 `wikiMatch` is `suggested`, `confirmed` or `unmatched`; passing a known catalog
 record suggests a match for review and does not claim human confirmation.
 

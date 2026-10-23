@@ -1,5 +1,30 @@
 # Wiki contribution integration design
 
+## Reviewed base values from an upgraded drop (0.9.0)
+
+Contribute to Wiki can propose base statistics by reversing the shared item
+scaling rules from an explicitly reviewed tier and exact fractional progress.
+The original tiered numbers and capture evidence remain intact. The review
+requires confirmation that those numbers exclude augments/other modifiers;
+the app never subtracts unknown augment values. Integer rounding can produce
+multiple bases, so ambiguous choices begin blank. Unknown progress, unsupported
+contextual fields and unreliable weight inversions cannot become selected bases.
+
+Applying choices produces unverified stat text. Publication still requires its
+Verified control, current duplicate checks and complete per-page review. The
+pure draft builder independently rechecks the source fingerprint, selected
+forward roundtrips and exact outgoing stat text; changed observations/text or a
+legacy confirmed statsblock cannot bypass that review. Numeric annotated fields
+are treated as stats, not preserved as contributor prose. Ordinary notes and
+confirmed identity lines survive. Unresolved stats are omitted with warnings,
+and the wiki notes explicitly identify the recovered values as inferences.
+
+See [the implementation plan](../CHARACTER_CATALOG_BASE_RECOVERY.md) and
+`app/item-base-recovery.js`, `item-base-review.js`, and `item-base-review-ui.js`.
+Synthetic pure and native loopback checks exercise tier4 recovery, ambiguity,
+unverified output, stale review, restart and preservation. They are not a
+production wiki write or a proof of the underlying OCR observation.
+
 Owner: `wiki_contribution_089`. Status: implemented; local synthetic and native
 integration checks passed, 2026-10-22. Feature PR review is still required.
 Parent plan: [CAPTURE_CONTRIBUTIONS.md](../CAPTURE_CONTRIBUTIONS.md).

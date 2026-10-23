@@ -11,6 +11,12 @@
 - Include existing-item source edits for confirmed NPC loot when the zone and normal/raid identity are known; leave unverified zone `/who` names Unknown.
 - Build character equipment from separate physical item cards, nullable tiers and upgrade progress, augment evidence and 23 named slots with keyboard/select alternatives. Preserve observed No Equipment and equipped statistics separately from calculated gear sums.
 - Preserve real capture timestamps and removed-card cutoffs across character reloads and journal replay.
+- Search the cached item catalog in Character, preview tier/progress changes in green and add separate physical copies without inventing examine observations.
+- Recover reviewed base-stat proposals from tiered drops, forward-check possible values, require choices for rounded ambiguity and omit unsupported or unresolved stats. Preserve the original evidence and label wiki inference explicitly.
+- Cycle every overlay through Locked, Unlocked and Hidden from the header. Add visible Parse/Triggers drag grips and resize corners; snap Triggers against the current resized Parse bounds and retain manual height.
+- Paint the latest logged player location in both 3D views. Auto Z follows known elevation; manual slicing and NPC inspection keep their own camera/floor until Auto Z is resumed. Unknown height never becomes zero.
+- Keep Intel in a stable mob order and retain its visible row and expanded loot during routine updates. A fresh consider or named kill still reveals its matching mob once.
+- Include and physically verify every external offline OCR dependency in packaged downloads; isolate packaged OCR checks from development dependencies.
 - Preview, copy or save a bounded character PNG. Optional uploads target the authenticated user's own talk page after explicit review; partial upload/talk failures remain recoverable.
 - Keep game-log evidence authoritative for supported events and treat OCR output as proposals. Validation uses synthetic/offline OCR, native Windows/Linux X11 and loopback-wiki fixtures; production login/write, foreground-game composition and native-Wayland acceptance remain manual.
 

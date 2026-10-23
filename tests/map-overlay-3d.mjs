@@ -5,9 +5,9 @@ import {installOverlayMode} from '../app/zoneviewer/overlay-mode.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
 function fixture(apis){
-    const frames=[],modes=[],focuses=[],locations=[],selections=[],applied=[],statuses=[];
+    const frames=[],modes=[],focuses=[],locations=[],locationOptions=[],clears=[],selections=[],applied=[],statuses=[];
     const makeApi=()=>({useConfiguredFolder:async()=>({ok:true}),loadZone:async name=>({ok:true,name}),
-        setView:mode=>modes.push(mode),syncLocation:location=>locations.push(location),setRareMobs(){},setOverlaySelection(){},
+        setView:mode=>modes.push(mode),syncLocation:(location,options)=>{locations.push(location);locationOptions.push(options);},clearPlayerLocation:()=>clears.push(true),setRareMobs(){},setOverlaySelection(){},
         setOverlayRoute(){},setOverlaySlice(){},overlayZoom(){},resize(){},focusAtLocation:loc=>{focuses.push(loc);return {ok:true};}});
     const document={createElement(){const listeners=new Map();const frame={listeners,style:{},removed:false,
         contentWindow:{eqlEyeOfZommViewer:apis?.shift?.()||makeApi(),listeners:new Map(),addEventListener(type,handler){this.listeners.set(type,handler);}},
@@ -16,7 +16,7 @@ function fixture(apis){
     const session={zone:'Synthetic Zone',map:{zone:'Synthetic Zone',viewerZone:'synthetic',dataVersion:1,location:{x:10,y:20,z:30,at:1},
         npcs:[{id:'normal',name:'Synthetic Keeper',loc:[1,2],raidInstance:false},{id:'raid',name:'Synthetic Keeper',loc:[3,4,5],raidInstance:true}],route:{points:[]}}};
     const controller=mountMapOverlay3D({root,getSession:()=>session,onStatus:message=>statuses.push(message),onSelectNpc:npc=>selections.push(npc),onFocusApplied:focus=>applied.push(focus)});
-    return {controller,frames,session,modes,focuses,locations,selections,applied,statuses,makeApi};
+    return {controller,frames,session,modes,focuses,locations,locationOptions,clears,selections,applied,statuses,makeApi};
 }
 const f=fixture();
 try{
@@ -29,6 +29,11 @@ try{
     f.controller.render({...f.session,map:{...f.session.map,focus}});await tick();
     assert.deepEqual(f.focuses,[[3,4,5]]);assert.deepEqual(f.applied,[focus]);assert.equal(f.locations.length,playerSyncsBeforeFocus,'NPC focus does not call the logged-player synchronization API');
     f.controller.render({...f.session,map:{...f.session.map,focus}});await tick();assert.equal(f.focuses.length,1,'One focus sequence is applied once');
+    f.controller.setFollow(false);const latest={x:11,y:21,z:31,at:2};
+    f.controller.render({...f.session,map:{...f.session.map,focus,location:latest}});await tick();
+    assert.equal(f.locations.at(-1),latest,'The player marker receives new log samples while camera Follow is off');
+    assert.equal(f.locationOptions.at(-1).moveCamera,false,'Updating a marker never pulls an inspection camera back to the player');
+    f.controller.render({...f.session,map:{...f.session.map,location:null}});await tick();assert.equal(f.clears.length,1,'A source clear removes the old player marker even in the same zone');
     await f.controller.setMode('map');assert.equal(f.frames[0].removed,true,'Returning to Map releases the decoder/camera iframe');
 }finally{f.controller.dispose();}
 

@@ -1,5 +1,26 @@
 const knownZ=value=>(typeof value==='number'||typeof value==='string'&&value.trim()!=='')&&Number.isFinite(Number(value));
 
+// Shared presentation-only clipping for the main viewer and native overlay.
+export function applyViewerSlice(app,{center,tolerance=25}={}){
+    if(!Number.isFinite(center)||!Number.isFinite(tolerance)||tolerance<1||tolerance>250)return {ok:false};
+    const upper=center+tolerance,lower=center-tolerance,clip=app.els?.clip;
+    if(!clip||!app.renderer)return {ok:false,reason:'slice-unavailable'};
+    // Auto Z owns the clipping planes, not the user's available floor range.
+    // Preserve the full zone/manual bounds while keeping the automatic ceiling
+    // below the maximum (the upstream slider treats its maximum as unclipped).
+    const minimum=lower-10,maximum=upper+Math.max(10,Number(clip.step)||1)*2;
+    const bound=(value,fallback)=>knownZ(value)?Number(value):fallback;
+    clip.min=String(Math.min(bound(clip.min,minimum),bound(app.currentBounds?.min?.y,minimum),minimum));
+    clip.max=String(Math.max(bound(clip.max,maximum),bound(app.currentBounds?.max?.y,maximum),maximum));
+    clip.value=String(upper);app.updateClipping();
+    const materials=[...(app.loadedMaterials||[]),...(app.mapMaterials||[])],template=materials.find(material=>material.clippingPlanes?.length)?.clippingPlanes[0];
+    if(!template?.clone)return {ok:false,reason:'slice-unavailable'};
+    const ceiling=template.clone(),floor=template.clone();ceiling.normal.set(0,-1,0);ceiling.constant=upper;floor.normal.set(0,1,0);floor.constant=-lower;
+    for(const material of materials){material.clippingPlanes=[];material.clipShadows=false;material.needsUpdate=true;}
+    // Global planes clip the shared route and independent player marker too.
+    app.renderer.clippingPlanes=[ceiling,floor];app.renderer.localClippingEnabled=true;app.requestRender?.();return {ok:true};
+}
+
 // Adapt the existing decoder/camera rather than creating a second navigation
 // engine. These methods change only this viewer's camera and presentation.
 export function installOverlayMode({app,root,api,onSlice=()=>{}}){
@@ -32,21 +53,7 @@ export function installOverlayMode({app,root,api,onSlice=()=>{}}){
         return {ok:true,heightEstimated:!hasZ,cameraFloorZ:ground.y};
     }
     function setSlice({center,tolerance=25}={}){
-        if(!Number.isFinite(center)||!Number.isFinite(tolerance)||tolerance<1||tolerance>250)return {ok:false};
-        onSlice({center,tolerance});
-        const upper=center+tolerance,lower=center-tolerance;
-        const clip=app.els?.clip;
-        if(!clip)return {ok:false,reason:'slice-unavailable'};
-        clip.min=String(lower-10);clip.max=String(upper+Math.max(10,Number(clip.step)||1)*2);clip.value=String(upper);app.updateClipping();
-        const materials=[...(app.loadedMaterials||[]),...(app.mapMaterials||[])];
-        const template=materials.find(material=>material.clippingPlanes?.length)?.clippingPlanes[0];
-        if(!template?.clone)return {ok:false,reason:'slice-unavailable'};
-        const ceiling=template.clone(),floor=template.clone();ceiling.normal.set(0,-1,0);ceiling.constant=upper;floor.normal.set(0,1,0);floor.constant=-lower;
-        for(const material of materials){material.clippingPlanes=[];material.clipShadows=false;material.needsUpdate=true;}
-        // Global planes also clip the shared golden route, whose materials do
-        // not belong to the decoder's zone-material collection.
-        app.renderer.clippingPlanes=[ceiling,floor];
-        app.renderer.localClippingEnabled=true;app.requestRender?.();return {ok:true};
+        const result=applyViewerSlice(app,{center,tolerance});if(result.ok)onSlice({center,tolerance});return result;
     }
     function setRoute(points=[]){
         if(!Array.isArray(points)||points.length>5000||points.some(point=>!['x','y','z'].every(key=>Number.isFinite(point?.[key]))))return {ok:false};

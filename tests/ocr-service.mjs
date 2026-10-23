@@ -13,7 +13,7 @@ function fixture(){
         terminate(){this.terminated=true;return new Promise(resolve=>{this.finish=()=>{this.emit('exit',1);resolve(1);};});}
     }
     const sandbox={module:{exports:{}},__dirname:'D:/synthetic-eoz',Buffer,
-        require:name=>name==='node:worker_threads'?{Worker}:name==='node:fs'?{existsSync:()=>true}:require(name),
+        require:name=>name==='node:worker_threads'?{Worker}:name==='node:fs'?{existsSync:()=>true}:name==='./ocr-runtime.cjs'?require('../desktop/ocr-runtime.cjs'):require(name),
         setTimeout:callback=>{const timer={callback,cleared:false};timers.push(timer);return timer;},clearTimeout:timer=>{timer.cleared=true;}};
     vm.runInNewContext(source,sandbox,{filename:'ocr-service.cjs'});
     const service=new sandbox.module.exports.OcrService({timeoutMs:100});
