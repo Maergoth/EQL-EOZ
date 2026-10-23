@@ -4,12 +4,14 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.1 adds a guided Character walkthrough, editable item text and touching
-overlay docks.** Enter character details and AA count, select the game window
-inside the flow, unequip and read items, review your No Equipment baseline,
-re-equip, confirm ANY slots and save. See the
-[walkthrough/release plan](docs/CHARACTER_WALKTHROUGH.md) for implementation and
-check scope. The existing reviewed wiki contribution workflow is retained.
+**0.9.2 reads compact Default Modern item tooltips and catches brief screen
+changes more frequently.** Distinct captured frames wait in a bounded local
+queue while OCR is busy, and valid item reads survive advancing the Character
+walkthrough. Keep each tooltip visible until its card appears; reading progress
+and saturation are shown in the flow. See the
+[tooltip capture plan](docs/TOOLTIP_CAPTURE.md) and
+[guided walkthrough](docs/CHARACTER_WALKTHROUGH.md) for implementation and check
+scope. The existing reviewed wiki contribution workflow is retained.
 
 In **Settings → Screen reading**, start an explicitly selected source, then use
 **Calibrate OCR area** to draw around a complete examine or Inventory/stat pane.
@@ -39,7 +41,7 @@ On Linux, make the AppImage executable and launch it, or install the deb using y
 
 ## A look around
 
-The Character walkthrough images show the actual **0.9.1 component with synthetic records and capture/share APIs**. Capture and contribution images show 0.9.0 with a loopback-only wiki; font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+The tooltip-reading image shows the actual **0.9.2 Character component with synthetic records and capture status**; other guided Character images show 0.9.1. Capture and contribution images show 0.9.0 with a loopback-only wiki; font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 
@@ -172,13 +174,16 @@ assumptions or selected values invalidates that review.
 
 In **Character**, enter name, server, classes, level and AA count, then start the
 walkthrough. Select the game window inline; Default Modern is the calibrated
-skin. Remove ANY-slot equipment first and examine items while unequipping.
-Obvious slots fill automatically. Keep each item visible until its card appears;
-use Second copy for two physically identical items. Each inventory card has a
+skin. Remove ANY-slot equipment first and show each item's hover tooltip or
+examine window while unequipping. Obvious slots fill automatically. Keep each
+item visible until its card appears; if reading is catching up, pause on the
+next tooltip rather than moving through more items. Reading remains local and
+temporary frame queuing is bounded. Use Second copy for two physically
+identical items. Each inventory card has a
 top-right × to remove it. Read an item screenshot and manual cards remain in
 Equipment and captured items.
 
-![Character walkthrough with inline source selection](app/assets/whats-new/0.9.1/character-inline-source.png)
+![Character tooltip-reading instructions, item cards and queued reading status](app/assets/whats-new/0.9.2/character-tooltip-capture.png)
 
 After confirming all equipment is off, review one fresh **No Equipment** block.
 Mitigation AC, AC softcap, evasion AC, offense and accuracy are separate values.

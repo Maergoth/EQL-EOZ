@@ -64,26 +64,27 @@ async function run({root,temporary,screenshots}){
         await window.loadURL(origin);
         await execute(async()=>{
             const {mountCaptureWorkspace}=await import('/app/capture-workspace.js');
-            let statusListener=()=>{},observationListener=()=>{},sequence=0;
-            let state={enabled:false,phase:'disabled',owner:null,source:null,sessionId:'',hasPreview:false};
+            let statusListener=()=>{},observationListener=()=>{},sequence=0,firstFrameAt=0;
+            let state={enabled:false,phase:'disabled',owner:null,source:null,sessionId:'',hasPreview:false,generation:0,generationStartedAt:0};
             const source={id:'window:synthetic-game',name:'EverQuest · Synthetic Fixture',label:'EverQuest · Synthetic Fixture',type:'window',recommended:true};
-            const starts=[],stops=[],resumes=[],notices=[],saveCalls=[],copyCalls=[],reads=[],sourcesCalls=[];
+            const starts=[],stops=[],resumes=[],notices=[],saveCalls=[],copyCalls=[],reads=[],sourcesCalls=[],imports=[];
             const emit=patch=>{state={...state,...patch};statusListener(state);};
             const model=()=>JSON.parse(localStorage.getItem('eql-eye-of-zomm-character-v1'));
             const flow=()=>JSON.parse(localStorage.getItem('eql-eye-of-zomm-character-walkthrough-v1'))||{step:'details',active:false};
             const observe=(kind,values,patch={})=>{
-                const observation={id:`synthetic-observation-${++sequence}`,sequence,owner:'character',sessionId:flow().sessionId,capturedAt:new Date().toISOString(),source:'screen-read',parser:{version:'synthetic-ui'},subject:{kind,name:values.name||'Synthetic character'},fields:Object.entries(values).map(([key,value])=>({key,value,confidence:90,raw:`${key}: ${value}`})),evidence:{text:'Synthetic observation; no game or player pixels.'},...patch};
+                const observation={id:`synthetic-observation-${++sequence}`,sequence,kind:'ocr',owner:'character',sessionId:flow().sessionId,capturedAt:new Date().toISOString(),input:{sourceId:state.source?.id,captureGeneration:state.generation},source:'screen-read',parser:{version:'synthetic-ui'},subject:{kind,name:values.name||'Synthetic character'},fields:Object.entries(values).map(([key,value])=>({key,value,confidence:90,raw:`${key}: ${value}`})),evidence:{text:'Synthetic observation; no game or player pixels.'},...patch};
                 observationListener(observation);return observation;
             };
-            const api={status:async()=>state,sources:async()=>{sourcesCalls.push(true);return[{id:'screen:fixture',name:'Synthetic display',type:'screen'},source];},
+            const api={status:async()=>{const snapshot=structuredClone(state);if(fixture.deferStatus)return new Promise(resolve=>{fixture.releaseStatus=()=>{fixture.deferStatus=false;fixture.releaseStatus=null;resolve(snapshot);};});return snapshot;},sources:async()=>{sourcesCalls.push(true);return[{id:'screen:fixture',name:'Synthetic display',type:'screen'},source];},
                 onStatus:fn=>{statusListener=fn;return()=>{statusListener=()=>{};};},onObservation:fn=>{observationListener=fn;return()=>{observationListener=()=>{};};},
-                read:async value=>{reads.push(value);return{records:[],lastSequence:sequence};},
-                start:async value=>{starts.push(value);emit({enabled:true,phase:'running',owner:value.mode,sessionId:value.sessionId,source,characterSessionId:value.sessionId,contributionPaused:true,resumable:false,hasPreview:false});return state;},
+                read:async value=>{reads.push(value);const records=(fixture.replayRecords||[]).filter(record=>record.sequence>(value.afterSequence||0));return{records,lastSequence:Math.max(sequence,...records.map(record=>record.sequence))};},
+                importImage:async value=>{imports.push(value);const generation=state.generation+1;emit({generation,generationStartedAt:Date.now()});return new Promise(resolve=>{fixture.pendingImport={finish(entries){const records=entries.map(({kind,values})=>observe(kind,values,{kind:'manual',sessionId:value.sessionId,input:{sourceId:null,captureGeneration:generation}}));fixture.pendingImport=null;resolve({records,message:'Synthetic screenshot read.'});}};});},
+                start:async value=>{starts.push(value);firstFrameAt=Date.now();await new Promise(done=>setTimeout(done,25));emit({enabled:true,phase:'running',owner:value.mode,sessionId:value.sessionId,source,characterSessionId:value.sessionId,contributionPaused:true,resumable:false,hasPreview:false,generation:state.generation+1,generationStartedAt:firstFrameAt});return state;},
                 stop:async value=>{stops.push(value);emit({enabled:false,phase:'disabled',owner:null,sessionId:'',source:null,hasPreview:false,resumable:false});return state;},
-                resume:async()=>{resumes.push(true);emit({phase:'running',resumable:false,error:null,readWarning:null});return state;}};
+                resume:async()=>{resumes.push(true);emit({phase:'running',resumable:false,error:null,readWarning:null,generation:state.generation+1,generationStartedAt:Date.now()});return state;}};
             const share={savePng:async value=>{saveCalls.push({png:value.startsWith('data:image/png;base64,'),length:value.length});return{ok:fixture.saveSucceeds};},copyPng:async value=>{copyCalls.push({png:value.startsWith('data:image/png;base64,'),length:value.length});return{ok:true};}};
             const mount=()=>mountCaptureWorkspace({capture:api,wiki:null,share,notify:value=>notices.push(value),getPack:()=>({items:[],icons:{}})});
-            window.fixture={source,starts,stops,resumes,notices,saveCalls,copyCalls,reads,sourcesCalls,emit,observe,model,flow,mount,saveSucceeds:false,get state(){return state;}};
+            window.fixture={source,starts,stops,resumes,notices,saveCalls,copyCalls,reads,sourcesCalls,imports,emit,observe,model,flow,mount,saveSucceeds:false,get state(){return state;},get firstFrameAt(){return firstFrameAt;}};
             fixture.workspace=mount();
         });
         await until(()=>execute(()=>fixture.reads.length===1),'empty local journal replay');
@@ -100,12 +101,15 @@ async function run({root,temporary,screenshots}){
         const boots={name:'Synthetic Trail Boots',slots:['Feet'],tier:2,fraction:0,hp:37,str:9,haste:12,rawStatBlock:'Feet\nTier: 2\nHP: 37\nSTR: 9\nHaste: 12%\nWorn Effect: Trail Sense'};
         const any={name:'Synthetic Universal Sigil',slots:['ANY'],tier:1,fraction:0,hp:11,str:2,rawStatBlock:'ANY\nHP: 11\nSTR: 2'};
         const removed={name:'Synthetic Spare Cap',slots:['Head'],tier:0,fraction:0,hp:19,str:3,rawStatBlock:'Head\nHP: 19\nSTR: 3'};
-        await observe('item',boots);await observe('item',any);await observe('item',removed);
+        await observe('item',boots,{capturedAt:new Date(await execute(()=>fixture.firstFrameAt)).toISOString()});await observe('item',any);await observe('item',removed);
         let current=await model();assert.equal(current.candidates.length,3);
         const bootsId=current.candidates.find(c=>c.name===boots.name).id,anyId=current.candidates.find(c=>c.name===any.name).id,removedId=current.candidates.find(c=>c.name===removed.name).id;
         assert.equal(current.equipment.feet,bootsId,'Unambiguous Feet are assigned automatically');
         assert(!Object.values(current.equipment).includes(anyId),'ANY awaits the user choice');
         assert.equal(current.equipment.head,removedId);
+        await execute(()=>fixture.emit({reading:true,queuedFrames:2}));assert.match(await execute(()=>document.querySelector('[data-walkthrough-reading]').textContent),/Reading.*2 waiting.*Wait for each item card/);
+        if(screenshots){const bounds=window.getBounds();window.setContentSize(1280,1000);await snapshot('character-tooltip-capture.png',{selector:'[data-walkthrough-stage]'});window.setBounds(bounds);}
+        await execute(()=>fixture.emit({reading:false,queuedFrames:0,lastReadAt:Date.now(),lastReadItemCount:0}));assert.match(await execute(()=>document.querySelector('[data-walkthrough-reading]').textContent),/last frame had no readable item tooltip/);
         assert.equal(await execute(()=>document.querySelector('[data-calculated-stat="HP"]').cells[2].textContent),'56 *','Only assigned gear contributes to the gear total');
         const x=await execute(id=>{const b=document.querySelector(`[data-inventory-remove="${id}"]`),r=b.getBoundingClientRect(),p=b.closest('.character-item-wrap').getBoundingClientRect();return{label:b.getAttribute('aria-label'),right:p.right-r.right,top:r.top-p.top,width:r.width,height:r.height};},removedId);
         assert.match(x.label,/Remove Synthetic Spare Cap/);assert(x.width>=20&&x.height>=20&&x.top>=0&&x.top<16&&x.right>=0&&x.right<16,`Inventory X is a visible top-right action: ${JSON.stringify(x)}`);
@@ -134,7 +138,11 @@ async function run({root,temporary,screenshots}){
         assert.equal((await model()).candidates.length,2,'Removed card stays removed after remount and a new observation ID');
         // Neither equipped pixels nor a previous session can seed the baseline.
         await observe('character',{hp:999,str:999});
-        await click('[data-walkthrough-next]');await step('base');
+        const lateUnequipAt=await execute(()=>Date.now());await new Promise(done=>setTimeout(done,5));await click('[data-walkthrough-next]');await step('base');
+        const cardsBeforeLate=(await model()).candidates.length,bootsSeen=(await model()).candidates.find(c=>c.id===bootsId).seenCount;
+        await observe('item',boots,{capturedAt:new Date(lateUnequipAt).toISOString()});assert.equal((await model()).candidates.length,cardsBeforeLate,'Late Unequip OCR merges into its original card after Next');assert((await model()).candidates.find(c=>c.id===bootsId).seenCount>bootsSeen);
+        const acceptedLate=await observe('item',{name:'Synthetic Brief Hover Bracer',slots:['Wrist'],hp:0,str:0,rawStatBlock:'Wrist\nHP: 0\nSTR: 0'},{capturedAt:new Date(lateUnequipAt).toISOString()});assert.equal((await model()).candidates.length,cardsBeforeLate+1,'A distinct brief Unequip tooltip still becomes a card after Next');
+        const rejectedBaseItem=await observe('item',{name:'Synthetic Base-phase Tooltip',slots:['Primary'],hp:999});assert.equal((await model()).candidates.length,cardsBeforeLate+1,'A tooltip actually captured during Base is not ingested');
         const gate=await execute(()=>fixture.flow());
         assert.equal(await execute(()=>document.querySelector('[data-walkthrough-base-values]').value),'');
         await observe('character',{hp:999,str:999},{capturedAt:new Date(gate.baseAfterAt-1).toISOString(),sequence:gate.baseAfterSequence+1});
@@ -147,11 +155,32 @@ async function run({root,temporary,screenshots}){
         await execute(()=>{const input=document.querySelector('[data-walkthrough-base-values]');input.value=input.value.replace('HP: 600','HP: 605');input.dispatchEvent(new Event('input',{bubbles:true}));input.blur();});
         await observe('character',{hp:699,str:79},{capturedAt:new Date(gate.baseAfterAt+7).toISOString(),sequence:gate.baseAfterSequence+5});
         assert.match(await execute(()=>document.querySelector('[data-walkthrough-base-values]').value),/HP: 605/,'A later read cannot overwrite a deliberate base correction after blur');
-        await execute(()=>{fixture.workspace.dispose();fixture.workspace=fixture.mount();});await step('base');
+        const readsBeforeRemount=await execute(()=>fixture.reads.length);
+        await execute((acceptedLate,rejectedBaseItem)=>{const canceled={...acceptedLate,id:'synthetic-invalidated-journal-row',subject:{kind:'item',name:'Synthetic Canceled Crop'},fields:[{key:'name',value:'Synthetic Canceled Crop'},{key:'hp',value:999}]};fixture.replayRecords=[acceptedLate,rejectedBaseItem,canceled];fixture.deferStatus=true;fixture.workspace.dispose();fixture.workspace=fixture.mount();},acceptedLate,rejectedBaseItem);await step('base');
+        await until(()=>execute(()=>typeof fixture.releaseStatus==='function'),'deferred capture status on remount');assert.equal(await execute(()=>fixture.reads.length),readsBeforeRemount,'Journal replay waits until capture status is confirmed');
+        await execute(()=>{fixture.emit({generation:fixture.state.generation+1,generationStartedAt:Date.now()});fixture.releaseStatus();});
+        await until(()=>execute(reads=>fixture.reads.length>reads,readsBeforeRemount),'journal replay after current generation status');
+        assert.equal((await model()).candidates.length,cardsBeforeLate+1,'A delayed old status response cannot restore canceled-generation journal records or duplicate accepted cards');
         assert.match(await execute(()=>document.querySelector('[data-walkthrough-base-values]').value),/HP: 605/,'Base corrections survive a workspace remount');
         await snapshot('character-base-stat-review.png',{font:20});
         await execute(()=>document.querySelector('[data-walkthrough-base]').requestSubmit());await step('reequip');
         assert.equal((await model()).statSnapshots.base.stats.HP,605);
+        // The file picker/OCR invocation, not its completion timestamp, decides
+        // whether a manual Inventory image belongs to this Base phase.
+        const seenBeforeImport=(await model()).candidates.find(card=>card.id===bootsId).seenCount;
+        await click('[data-walkthrough-stage] [data-character-import]');await until(()=>execute(()=>Boolean(fixture.pendingImport)),'pending manual import from Re-equip');
+        await click('[data-walkthrough-back]');await step('base');
+        await execute(boots=>fixture.pendingImport.finish([{kind:'character',values:{hp:9999,str:999}},{kind:'item',values:boots}]),boots);
+        await until(()=>execute(()=>!fixture.pendingImport),'late Re-equip file read completed');
+        assert.equal(await execute(()=>document.querySelector('[data-walkthrough-base-values]').value),'','A Re-equip Inventory import completing after Back cannot populate fresh Base values');
+        assert((await model()).candidates.find(card=>card.id===bootsId).seenCount>seenBeforeImport,'The same delayed import may still update an eligible item card');
+        assert.equal((await model()).statSnapshots.base.stats.HP,605,'A stale manual read does not overwrite the accepted baseline');
+        const manualBaseValues={hp:605,mana:240,endurance:410,str:75,acMitigation:61,acMitigationSoftcap:43,acEvasion:127,attackOffense:46,attackAccuracy:107};
+        const readManualBase=async()=>{await click('[data-walkthrough-stage] [data-character-import]');await until(()=>execute(()=>Boolean(fixture.pendingImport)),'manual import initiated in Base');await execute(values=>fixture.pendingImport.finish([{kind:'character',values}]),manualBaseValues);await until(()=>execute(()=>/HP: 605/.test(document.querySelector('[data-walkthrough-base-values]').value)),'legitimate Base import accepted');};
+        await readManualBase();assert.match(await execute(()=>document.querySelector('[data-walkthrough-base-age]').textContent),/Fresh No Equipment/);
+        await execute(()=>fixture.emit({generation:fixture.state.generation+1,generationStartedAt:Date.now()}));
+        assert.equal(await execute(()=>document.querySelector('[data-walkthrough-base-values]').value),'','A later capture-generation change clears an unreviewed manual proposal');
+        await readManualBase();await execute(()=>document.querySelector('[data-walkthrough-base]').requestSubmit());await step('reequip');
         const originalCount=(await model()).candidates.length;
         await observe('item',boots);
         current=await model();assert.equal(current.candidates.length,originalCount,'Re-equipped same physical item merges into its card');
@@ -195,9 +224,14 @@ async function run({root,temporary,screenshots}){
         // The flow remains visibly resumable after a real source pause/loss.
         await execute(()=>fixture.emit({phase:'paused',resumable:true,readWarning:'Synthetic source temporarily unavailable.'}));
         await until(()=>execute(()=>Boolean(document.querySelector('[data-walkthrough-resume]'))),'inline resume after source pause');
+        assert.match(await execute(()=>document.querySelector('[data-walkthrough-reading]').textContent),/paused.*Resume capture/);
         await click('[data-walkthrough-resume]');await until(()=>execute(()=>fixture.state.phase==='running'),'capture resumes');
         assert.equal(await execute(()=>fixture.resumes.length),1);assert.equal(await execute(()=>fixture.flow().step),'reequip');
-        await click('[data-walkthrough-next]');await step('slots');
+        const lateReequipAt=await execute(()=>Date.now()),currentInput=await execute(()=>({sourceId:fixture.state.source.id,captureGeneration:fixture.state.generation}));await new Promise(done=>setTimeout(done,5));await click('[data-walkthrough-next]');await step('slots');
+        const slotsCount=(await model()).candidates.length;await observe('item',boots,{capturedAt:new Date(lateReequipAt).toISOString()});assert.equal((await model()).candidates.length,slotsCount,'Late Re-equip OCR merges after advancing to Slots');
+        await observe('item',{name:'Synthetic Brief Hover Gloves',slots:['Hands'],hp:0,str:0,rawStatBlock:'Hands\nHP: 0\nSTR: 0'},{capturedAt:new Date(lateReequipAt).toISOString()});assert.equal((await model()).candidates.length,slotsCount+1,'A distinct brief Re-equip tooltip still becomes a card in Slots');
+        for(const patch of [{input:{...currentInput,captureGeneration:currentInput.captureGeneration-1}},{input:{...currentInput,sourceId:'window:retired'}},{sessionId:'retired-session'}])await observe('item',{name:'Synthetic Rejected Source Item',slots:['Primary'],hp:999},{capturedAt:new Date(lateReequipAt).toISOString(),...patch});
+        await observe('item',{name:'Synthetic Slots-phase Tooltip',slots:['Primary'],hp:999});assert.equal((await model()).candidates.length,slotsCount+1,'Wrong source/generation/session and Slots-time frames stay rejected');
         assert.equal(await execute(id=>document.querySelector(`[data-walkthrough-slot="${id}"]`).value,anyId),'');
         await click('[data-walkthrough-next]');assert.equal(await execute(()=>fixture.flow().step),'slots','Unresolved ANY cannot silently complete');
         await execute(id=>{const select=document.querySelector(`[data-walkthrough-slot="${id}"]`);select.value='charm';select.dispatchEvent(new Event('change',{bubbles:true}));},anyId);
@@ -214,6 +248,7 @@ async function run({root,temporary,screenshots}){
         assert.equal(await execute(()=>fixture.flow().step),'review');assert.equal(await execute(()=>fixture.state.phase),'running');assert.equal(await execute(()=>fixture.stops.length),0,'Canceled save must keep capture running');
         assert.match(await execute(()=>document.querySelector('[data-share-status]').textContent),/canceled.*active/i);
         await execute(()=>fixture.saveSucceeds=true);await click('[data-share-save]');await step('complete');
+        const completedCards=(await model()).candidates.length;await observe('item',{name:'Synthetic Closed Flow Tooltip',slots:['Primary'],hp:999},{capturedAt:new Date(lateReequipAt).toISOString()});assert.equal((await model()).candidates.length,completedCards,'A closed walkthrough cannot consume a delayed live item');
         assert.equal(await execute(()=>fixture.stops.length),1);assert.deepEqual(await execute(()=>fixture.stops[0]),{mode:'character'});
         assert.equal(await execute(()=>fixture.saveCalls.every(c=>c.png&&c.length>1000)),true);
         await click('[data-share-copy]');await until(()=>execute(()=>fixture.copyCalls.length===1),'copy remains available for the finished preview');

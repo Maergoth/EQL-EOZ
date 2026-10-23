@@ -1,7 +1,8 @@
 # Capture and observation pipeline
 
-Status: 0.9.0 calibration and release verification, 2026-10-22. Owner: `capture_pipeline_089`.
+Status: 0.9.2 brief-tooltip follow-up, 2026-10-23. Owner: `capture_pipeline_089`.
 Parent plan: [Capture, wiki contributions and character snapshots](../CAPTURE_CONTRIBUTIONS.md).
+Current acceptance and ownership: [brief item tooltip capture](../TOOLTIP_CAPTURE.md).
 The design contract follows the implementation ledger below. Unmeasured platform,
 packaged and live-game behavior remains an explicit acceptance item.
 
@@ -39,6 +40,12 @@ alphanumeric/underscore/hyphen contract as Start. Imports reserve the one OCR
 worker, cancel any stale live job, and release the hold afterward while retaining
 the existing capture owner/source. A failed or cancelled import cannot leak an
 old result into the new review session.
+Manual observations carry `input.captureGeneration` for that exact import. The
+Character workspace separately checks the initiating phase/context before using
+such a file as a No Equipment proposal; its completion timestamp cannot prove
+that an older image was captured after a phase change. Explicit manual imports
+are not suppressed by live-screen semantic dedup; selecting the same PNG again
+returns a new review record with its own sequence, time and import generation.
 
 `preview` is an explicit exact-main-window action against the current running
 source's last captured frame; it does not select or capture another display.
@@ -263,8 +270,8 @@ manual import remains PNG only. Optional `--crop x,y,width,height`, `--scales`,
 `--layouts`, `--preprocessing` and `--only-crop` run a bounded research matrix
 without changing or copying the source image. Reports contain private recognized
 text/word geometry and must remain ignored. Production uses one reusable offline
-worker, a scene pass plus at most two small refinements, one in-flight frame and
-one replaceable newest frame.
+worker and a scene pass plus at most two small refinements. The 0.9.2 acquisition
+and bounded distinct-frame queue replace the original newest-frame slot below.
 
 ## Existing source contracts
 
@@ -452,12 +459,36 @@ and rejects new work immediately.
 
 ## OCR processing and evidence
 
-Start with one in-flight job, one replaceable newest-frame slot, and an adaptive
-minimum sampling interval of two seconds. Do not queue a backlog of screenshots
-behind slow OCR; count skipped frames. Character's explicit Capture now may
-replace a pending automatic frame but cannot start concurrent recognition.
-Timeout/crash handling terminates the worker; show an error after a bounded
-retry, with an explicit Resume. Stop must not wait indefinitely for recognition.
+The 0.9.2 source requests an 8 fps window/display stream and compares a 256x144
+thumbnail every 125 ms. It encodes changed full PNGs no more often than every
+250 ms, with a 750 ms unchanged-frame heartbeat. Only one encode/IPC can be
+active. A calibrated area's normalized rectangle drives the comparison; full
+frame remains the default. These are requested upper bounds, not a guarantee
+that a minimized source or compositor supplies every frame. See the official
+[Electron acquisition example](https://www.electronjs.org/docs/latest/api/desktop-capturer/).
+
+The host processes one offline OCR job at a time, with at least 250 ms between
+scene starts. Its FIFO retains at most 12 distinct compressed PNGs and 48 MiB,
+dropping queued frames older than 15 seconds. Native image decode waits until
+the serial read slot. Exact duplicates are coalesced while active/queued.
+Completed screen hashes and OCR semantic duplicates expire after three seconds,
+allowing unchanged Inventory pixels to produce fresh baseline evidence after a
+walkthrough transition. Game-log identity/cursor deduplication does not expire
+with this screen-specific window. Repeated items merge into their existing
+physical card under the existing Character rules.
+Overflow removes the oldest queued frame and updates a visible warning/count;
+busy game backgrounds can still exceed throughput. The player should keep each
+complete item tooltip visible until its editable card appears. Queued pixels
+are ephemeral and never become a continuous image/video recording.
+
+Before drawing, source configuration supplies the current owner, source,
+session and generation; the timestamp precedes PNG encoding. Main rechecks all
+four identities. Each queued frame snapshots its crop/reference dimensions.
+Stop, pause, source/owner changes, imports and area/size changes invalidate all
+stale queued/in-flight work. Timeout/crash handling terminates the failed worker
+and retains the existing bounded retry policy. Stop cannot wait indefinitely
+for recognition. Character item intake uses its original capture-phase window;
+No Equipment still requires a new frame after the player's confirmation.
 
 Initial full-source analysis finds visible item/stat panes; subsequent work uses
 stable recognized or user-adjusted regions and change hashes. A user can choose

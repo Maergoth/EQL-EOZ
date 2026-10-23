@@ -6,6 +6,22 @@ OCR, authentication, clipboard/save and own-talk submission belong to their
 separate services. These modules never open a source, read game memory, submit a
 wiki edit, load remote artwork or interpret an item's text as markup.
 
+The 0.9.2 intake layer in `app/character-walkthrough.js` retains at most 32
+item-reading windows with phase start/end, selected source and capture
+generation. `syncCapture(status)` binds them to the explicitly started source;
+`acceptsItem` uses the original frame timestamp so an earlier eligible item can
+finish after Next. A frame taken during Base/Slots cannot become an item merely
+because OCR completes later. Replay respects the saved tracked windows, while
+already accepted model cards stay available. Explicit screenshot imports use
+their initiating action's eligibility; completion/cancellation invalidates that
+token. No Equipment still requires its own new timestamp and sequence after
+confirmation. A manual file has no trustworthy capture time, so its import must
+also have been initiated in that same Base phase, after its cutoff, with matching
+session/source context and the exact import generation. A pending Re-equip file
+cannot become a fresh baseline after Back; its eligible item records can still
+complete. Unreviewed proposals clear when their context expires; manual edits
+remain available. See [the capture follow-up](../TOOLTIP_CAPTURE.md) for evidence.
+
 ## UI contract
 
 ```js

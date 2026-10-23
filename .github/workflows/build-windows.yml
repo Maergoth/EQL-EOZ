@@ -60,6 +60,8 @@ jobs:
         run: npm run test:capture-native
       - name: Test Default Modern pane geometry through real offline OCR
         run: npm run test:modern-ocr
+      - name: Test compact hover tooltips and mixed panes through real offline OCR
+        run: npm run test:hover-ocr
       - name: Test OCR area calibration controls and saved source regions
         run: npm run test:capture-calibration
       - name: Test contribution and character workflows with a loopback wiki

@@ -2,6 +2,29 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
   {
+    "version": "0.9.2",
+    "title": "Capture brief item tooltips",
+    "changes": [
+      "Read compact Default Modern hover tooltips as well as full examine panes, including single-word item names and bare equipment-slot labels.",
+      "Compare screen changes eight times per second and encode changed frames at most four times per second. One offline OCR worker reads a bounded queue of distinct temporary frames; saturation is reported visibly.",
+      "Keep eligible item results when OCR finishes after advancing from unequip or re-equip. Reject stale source/session results and keep the No Equipment baseline fresh.",
+      "Read unchanged Inventory stats again after entering the baseline step, without repeatedly adding the same item card. Game-log cursor deduplication is retained.",
+      "Show reading and queued-frame feedback inside the walkthrough. Keep each complete tooltip visible until its item card appears. Default Modern remains the calibrated skin; other skins and live composition remain unverified."
+    ],
+    "steps": [
+      {
+        "title": "Hover, capture and wait for the card",
+        "image": "0.9.2/character-tooltip-capture",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Use Default Modern. While unequipping or re-equipping, hover each item or open its examine window. Keep the complete name, Class/Race, slot and footer visible until its card appears. Reading status shows a busy frame and how many are waiting. The bounded local queue helps retain brief views; wait for each card when reading is catching up. Valid earlier item frames may finish after Next, while No Equipment requires a fresh reading after confirmation.",
+        "alt": "Character unequip walkthrough with three synthetic item cards, automatic equipment slots and reading status showing two frames waiting.",
+        "caption": "Actual 0.9.2 Character component with synthetic observations and capture status in a disposable profile. Native stream and offline tooltip OCR are exercised separately; no player pixels.",
+        "imageSha256": "46416c79fe7c97e9f273d7d7ba9d62f7406bf2d1d485f099e30c99fb000f2c8c"
+      }
+    ]
+  },
+  {
     "version": "0.9.1",
     "title": "Guided character capture and touching overlays",
     "changes": [

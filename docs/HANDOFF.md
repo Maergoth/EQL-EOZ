@@ -1,5 +1,11 @@
 # Eye of Zomm contributor handoff
 
+The **0.9.2 follow-up** addresses brief Default Modern hover tooltips, sampling
+and bounded OCR queuing, and item results that complete after advancing the
+Character walkthrough. [The current plan](TOOLTIP_CAPTURE.md) records exact
+ownership, source evidence and acceptance; earlier package checks do not
+certify these changes.
+
 The **0.9.1 follow-up** replaces independent Character capture forms with one
 guided walkthrough, computed equipped estimates, durable item-text review and
 all-panel touching docks. See [the current plan](CHARACTER_WALKTHROUGH.md) and

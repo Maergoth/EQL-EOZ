@@ -19,10 +19,13 @@ try {
     await writeFile(join(profile,'data','eye-of-zomm-pack.json'),JSON.stringify({meta:{schemaVersion:3,version:'window-lifecycle-fixture',currentEra:'Classic',sample:true},zones:[],npcs:[],items:[]}));
     const pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
     const release=RELEASE_HISTORY.find(entry=>entry.version===pkg.version);
-    assert(release?.steps.length>1,'The current illustrated walkthrough must support Next and Previous');
-    const expectedTourCount=release.steps.length;
+    assert(release?.steps.length>0,'The current illustrated walkthrough must include a reviewed page');
+    const navigationRelease=RELEASE_HISTORY.slice(RELEASE_HISTORY.indexOf(release)).find(entry=>entry.steps.length>1);
+    assert(navigationRelease,'An available illustrated release must exercise Next and Previous');
+    const describeTour=entry=>({version:entry.version,count:entry.steps.length,firstTitle:entry.steps[0].title,secondTitle:entry.steps[1]?.title,lastTitle:entry.steps.at(-1).title,image:`/assets/whats-new/${entry.steps[0].image}.png`});
+    const currentTour=describeTour(release),navigationTour=describeTour(navigationRelease);
     await writeFile(join(temporary,'package.json'),JSON.stringify({name:'eoz-window-lifecycle-fixture',version:pkg.version,main:'main.cjs'}));
-    const run=async({root,profile,scenario,expectedTourCount,version})=>{
+    const run=async({root,profile,scenario,currentTour,navigationTour,version})=>{
         const electron=require('electron'),{app,BrowserWindow,screen}=electron,Module=require('node:module'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
         const optionsById=new Map(),callsById=new Map();
         function RecordedWindow(options){
@@ -51,16 +54,29 @@ try {
             if(scenario==='edit'){
                 await execute(owner,()=>{document.querySelector('[data-view="settings"]').click();document.getElementById('open-whats-new').click();});
                 await until(()=>execute(owner,()=>Boolean(document.querySelector('.whats-new-dialog')?.open)),'manual walkthrough');
-                const walkthrough=await execute(owner,async()=>{
+                const walkthrough=await execute(owner,async(currentTour,navigationTour)=>{
                     const dialog=document.querySelector('.whats-new-dialog'),next=dialog.querySelector('[data-tour-next]');
-                    const source=dialog.querySelector('[data-tour-image]');await new Promise(resolve=>{if(source.complete)resolve();else{source.onload=resolve;source.onerror=resolve;}});
-                    const imageLoaded=source.complete&&source.naturalWidth>0;
-                    next.click();const second=dialog.querySelector('[data-tour-count]').textContent;
-                    dialog.querySelector('[data-tour-previous]').click();
+                    const imageReady=async()=>{const source=dialog.querySelector('[data-tour-image]');await new Promise(resolve=>{if(source.complete)resolve();else{source.onload=resolve;source.onerror=resolve;}});return source.complete&&source.naturalWidth>0&&!source.hidden;};
+                    const page=()=>({version:dialog.querySelector('[data-tour-version]').value,count:dialog.querySelector('[data-tour-count]').textContent,title:dialog.querySelector('#whats-new-title').textContent,previousDisabled:dialog.querySelector('[data-tour-previous]').disabled,next:next.textContent,image:new URL(dialog.querySelector('[data-tour-image]').src).pathname});
+                    const select=version=>{const picker=dialog.querySelector('[data-tour-version]');picker.value=version;picker.dispatchEvent(new Event('change',{bubbles:true}));};
+                    const current={...page(),imageLoaded:await imageReady()};
+                    // A hotfix can legitimately have one illustrated page. Use
+                    // the real history picker for multi-page navigation while
+                    // retaining every current-version/load/close assertion.
+                    select(navigationTour.version);const navigation={first:{...page(),imageLoaded:await imageReady()}};
+                    next.click();navigation.second=page();dialog.querySelector('[data-tour-previous]').click();navigation.previous=page();
+                    select(currentTour.version);await imageReady();for(let index=1;index<currentTour.count;index++)next.click();
+                    const done={...page()};next.click();done.closed=!dialog.open;done.focusRestored=document.activeElement?.id==='open-whats-new';
+                    document.getElementById('open-whats-new').click();const escape={...page(),imageLoaded:await imageReady()};
                     dialog.dispatchEvent(new Event('cancel',{cancelable:true}));
-                    return {imageLoaded,second,version:dialog.querySelector('[data-tour-version]').value,closed:!dialog.open,focusRestored:document.activeElement?.id==='open-whats-new'};
-                });
-                assert.equal(walkthrough.imageLoaded,true);assert.equal(walkthrough.version,version);assert.equal(walkthrough.second,`2 of ${expectedTourCount}`);assert.equal(walkthrough.closed,true);assert.equal(walkthrough.focusRestored,true);
+                    escape.closed=!dialog.open;escape.focusRestored=document.activeElement?.id==='open-whats-new';return {current,navigation,done,escape};
+                },currentTour,navigationTour);
+                const assertFirst=(page,tour)=>{assert.equal(page.imageLoaded,true);assert.equal(page.version,tour.version);assert.equal(page.count,`1 of ${tour.count}`);assert.equal(page.title,tour.firstTitle);assert.equal(page.image,tour.image);assert.equal(page.previousDisabled,true);assert.equal(page.next,tour.count===1?'Done':'Next');};
+                assertFirst(walkthrough.current,currentTour);assertFirst(walkthrough.navigation.first,navigationTour);
+                assert.equal(walkthrough.navigation.second.version,navigationTour.version);assert.equal(walkthrough.navigation.second.count,`2 of ${navigationTour.count}`);assert.equal(walkthrough.navigation.second.title,navigationTour.secondTitle);assert.equal(walkthrough.navigation.second.previousDisabled,false);
+                assert.equal(walkthrough.navigation.previous.count,`1 of ${navigationTour.count}`);assert.equal(walkthrough.navigation.previous.title,navigationTour.firstTitle);assert.equal(walkthrough.navigation.previous.previousDisabled,true);
+                assert.equal(walkthrough.done.version,version);assert.equal(walkthrough.done.count,`${currentTour.count} of ${currentTour.count}`);assert.equal(walkthrough.done.title,currentTour.lastTitle);assert.equal(walkthrough.done.next,'Done');assert.equal(walkthrough.done.closed,true);assert.equal(walkthrough.done.focusRestored,true);
+                assertFirst(walkthrough.escape,currentTour);assert.equal(walkthrough.escape.closed,true);assert.equal(walkthrough.escape.focusRestored,true);
                 await execute(owner,()=>{document.querySelector('[data-view="settings"]').click();document.getElementById('settings-minimize-to-tray').click();});
                 await until(async()=> (await state()).minimizeToTray,'minimize checkbox persistence');
                 await execute(owner,()=>document.getElementById('settings-start-minimized').click());
@@ -78,7 +94,7 @@ try {
                 const normalBounds=owner.getNormalBounds();
                 assert(normalBounds.x>=area.x&&normalBounds.y>=area.y&&normalBounds.x+normalBounds.width<=area.x+area.width&&normalBounds.y+normalBounds.height<=area.y+area.height);
                 owner.maximize();await until(()=>owner.isMaximized(),'native maximize');
-                console.log('EOZ_WINDOW_LIFECYCLE='+JSON.stringify({ok:true,scenario,bounds:normalBounds,maximized:true,settings:await state()}));
+                console.log('EOZ_WINDOW_LIFECYCLE='+JSON.stringify({ok:true,scenario,bounds:normalBounds,maximized:true,settings:await state(),tour:{current:version,currentSteps:currentTour.count,navigationVersion:navigationTour.version,done:true,escapeFocus:true}}));
             }else if(scenario==='restore'){
                 const settings=await state();
                 if(settings.trayAvailable){assert.equal(owner.isVisible(),false);assert.equal(callsById.get(owner.id).show,0);assert.equal(owner.isMaximized(),false,'Hidden startup defers maximization');}
@@ -125,7 +141,7 @@ try {
             const config=JSON.parse(await readFile(configFile,'utf8'));config.minimizeToTray=false;config.startMinimized=true;await writeFile(configFile,JSON.stringify(config));
             const placement=JSON.parse(await readFile(placementFile,'utf8'));placement.maximized=scenario==='taskbar-max';await writeFile(placementFile,JSON.stringify(placement));
         }
-        await writeFile(join(temporary,'main.cjs'),`const {app}=require('electron');app.setPath('userData',${JSON.stringify(profile)});(${run.toString()})(${JSON.stringify({root,profile,scenario,expectedTourCount,version:pkg.version})}).catch(error=>{console.error(error.stack);app.exit(1);});`);
+        await writeFile(join(temporary,'main.cjs'),`const {app}=require('electron');app.setPath('userData',${JSON.stringify(profile)});(${run.toString()})(${JSON.stringify({root,profile,scenario,currentTour,navigationTour,version:pkg.version})}).catch(error=>{console.error(error.stack);app.exit(1);});`);
         const result=await new Promise((resolve,reject)=>{
             const child=spawn(electron,[temporary,'--disable-gpu','--mute-audio'],{windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';
             child.stdout.on('data',chunk=>{output+=chunk;});child.stderr.on('data',chunk=>{output+=chunk;});child.once('error',reject);child.once('exit',code=>resolve({code,output}));

@@ -1,8 +1,23 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.1-x64.exe`.
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.2-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.1` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the walkthrough/release plan](CHARACTER_WALKTHROUGH.md).
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.2` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the tooltip capture plan](TOOLTIP_CAPTURE.md).
+
+## 0.9.2 compact item tooltips
+
+1. In Default Modern, start the Character walkthrough and hover an equipped
+   item's name/icon while unequipping. Its compact tooltip should produce one
+   editable card without opening the larger examine window. Include a one-word
+   item name, a weapon and an armor item. Keep each tooltip visible until its
+   card appears, especially when the reading queue grows.
+2. Move between several items, then advance to No Equipment while a previous
+   item is still being read. The earlier item should arrive once; a stat frame
+   captured before the No Equipment step must never become the new baseline.
+3. Change the selected source/area, pause and resume, then cancel. Old queued
+   results must not appear in a different source/session or revive capture.
+   A saturated queue should show a warning instead of claiming every item was
+   captured. Record resolution, font/UI scale and missed/incorrect fields.
 
 ## 0.9.1 guided Character and touching overlays
 

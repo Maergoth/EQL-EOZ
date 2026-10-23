@@ -1,5 +1,5 @@
 // OCR proposals only: never scale an item, infer drop sources or publish a fact.
-export const SCREEN_READ_PARSER_VERSION = 5;
+export const SCREEN_READ_PARSER_VERSION = 6;
 const clean = value => String(value ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim();
 const number = value => Number(String(value).replace(/,/g,''));
 const statNames = {
@@ -9,7 +9,7 @@ const statNames = {
     'SV Poison':'resistPoison', 'SV Magic':'resistMagic', 'SV Disease':'resistDisease', 'SV Fire':'resistFire',
     'SV Cold':'resistCold', 'SV Corruption':'resistCorruption', 'SV Void':'resistCorruption',
     'HP Regen':'hpRegen', 'Mana Regen':'manaRegen', 'End Regen':'enduranceRegen', 'Endurance Regen':'enduranceRegen', 'Attack Speed':'attackSpeed', Haste:'haste', Range:'range',
-    'Required Level':'requiredLevel', 'Recommended Level':'recommendedLevel', 'Base Dmg':'damage','Dmg Bon':'damageBonus','Damage Bonus':'damageBonus',Attack:'attack',
+    'Required Level':'requiredLevel', 'Recommended Level':'recommendedLevel', 'Base Dmg':'damage','Backstab Dmg':'backstabDamage','Dmg Bon':'damageBonus','Damage Bonus':'damageBonus',Attack:'attack',
     'SV. Poison':'resistPoison','SV. Magic':'resistMagic','SV. Disease':'resistDisease','SV. Fire':'resistFire','SV. Cold':'resistCold','SV. Void':'resistCorruption'
 };
 const escaped = value => value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
@@ -32,6 +32,37 @@ const wordLines = words => wordRows(words).map(row=>row.words.map(word=>word.tex
 const label = value => clean(value).replace(/^[^a-z]+|[^a-z]+$/gi,'').toLowerCase();
 const nameTokens = value => new Set(clean(value).toLowerCase().match(/[a-z]{4,}/g)||[]);
 const slotNames=value=>clean(value).replace(/\bPower\s+Source\b/gi,'PowerSource').split(/\s*[,/]\s*|\s+/).filter(Boolean).map(slot=>/^powersource$/i.test(slot)?'Power Source':/^shoulder$/i.test(slot)?'Shoulders':slot);
+const bareSlot=/^(?:ANY|Charm|Power[ \t]?Source|Feet|Primary|Secondary|Fingers?|Head|Face|Neck|Shoulders?|Arms|Hands|Wrists?|Back|Chest|Waist|Legs|Ears?|Ranged?|Ammo)(?:[ \/]+(?:Primary|Secondary|Fingers?))?$/i;
+function hoverItemRegions(words){
+    const regions=[];
+    for(const classWord of words.filter(word=>word.bbox&&label(word.text)==='class')){
+        const font=Math.max(3,classWord.bbox.y1-classWord.bbox.y0),left=Math.max(0,classWord.bbox.x0-font*6),right=classWord.bbox.x0+font*34;
+        const boundary=words.filter(word=>word.bbox&&label(word.text)==='class'&&word.bbox.x0>classWord.bbox.x0+font*8&&Math.abs(word.bbox.y0-classWord.bbox.y0)<font*8).reduce((end,word)=>Math.min(end,word.bbox.x0-font*6),right);
+        const nearby=words.filter(word=>word.bbox&&word.bbox.x0>=left&&word.bbox.x1<=boundary&&word.bbox.y0>=classWord.bbox.y0-font*5&&word.bbox.y1-word.bbox.y0<=font*2.2),rows=wordRows(nearby);
+        if(nearby.some(word=>descriptionLabel(word.text)&&word.bbox.y0<classWord.bbox.y0&&word.bbox.y0>classWord.bbox.y0-font*10))continue;
+        const race=nearby.find(word=>label(word.text)==='race'&&Math.abs(word.bbox.x0-classWord.bbox.x0)<font&&word.bbox.y0>classWord.bbox.y0&&word.bbox.y0<classWord.bbox.y0+font*4);
+        if(!race)continue;
+        const slot=rows.find(row=>row.y>race.bbox.y0&&row.y<race.bbox.y0+font*4&&bareSlot.test(row.words.map(word=>word.text).join(' ')));
+        // The Modern hover footer distinguishes an item tooltip from character
+        // metadata, chat links and discipline/spell descriptions. A repeated
+        // title/Description tab is absent in these actual hover surfaces.
+        const footer=rows.find(row=>row.y>race.bbox.y0&&row.y<race.bbox.y0+font*45&&/^Hold\b.*\b(?:RMB|ALT\+LMB)\b.*\b(?:inspect|upgrade)\b.*\bitem\b/i.test(row.words.map(word=>word.text).join(' ')));
+        if(!slot||!footer||!nearby.some(word=>/^Weight[:.]?$/i.test(clean(word.text)))||!nearby.some(word=>/^Size[:.]?$/i.test(clean(word.text))))continue;
+        const candidates=rows.filter(row=>row.y<classWord.bbox.y0-font*.5&&row.y>classWord.bbox.y0-font*5).map(row=>{const selected=row.words.filter(word=>word.bbox.x0>=classWord.bbox.x0-font*.5);return {row,words:selected,text:selected.map(word=>word.text).join(' ')};});
+        const name=candidates.find(candidate=>/[a-z]{3}/i.test(candidate.text)&&! /^(?:Lore(?:[ \t]+(?:Equipped|No)|$)|No (?:Trade|Drop)|Class\b|Race\b|Tier\b)/i.test(candidate.text));
+        const step=race.bbox.y0-classWord.bbox.y0,nameTop=name?Math.min(...name.words.map(word=>word.bbox.y0)):classWord.bbox.y0-step*2,
+            nameBottom=name?Math.max(...name.words.map(word=>word.bbox.y1)):classWord.bbox.y0-step,
+            metadata=candidates.find(candidate=>candidate.row.y>nameTop&&/^(?:Lore(?:[ \t]+(?:Equipped|No)|$)|No (?:Trade|Drop))/i.test(candidate.text)),
+            bandTop=Math.max(0,nameTop-font*.4),bandBottom=Math.max(name?nameBottom:bandTop+4,Math.min(nameBottom+font*.4,metadata?metadata.row.y-Math.max(1,font*.1):classWord.bbox.y0-step-font*.1)),
+            nameBand={x:Math.max(left,classWord.bbox.x0-font*.4),y:bandTop,width:boundary-classWord.bbox.x0+font*.4,height:Math.max(4,bandBottom-bandTop)};
+        // Class/Race ink heights vary with the platform font and sparse OCR.
+        // An observed title row must fit completely; when green text was missed,
+        // its independently observed Lore/No Trade row bounds the reread below.
+        regions.push({x:left,y:Math.max(0,name?.row.y??nameBand.y),right:boundary,bottom:footer.y,font,name:name?nameWithoutChrome(name.text):'',hover:true,classWord,nameBand});
+        if(regions.length===4)break;
+    }
+    return regions;
+}
 function fallbackItemRegion(words) {
     // Missing/mangled Description is common at small game font sizes. Require
     // aligned Class + Race labels and an independently repeated title/body name;
@@ -58,7 +89,7 @@ function itemRegions(words) {
     const descriptions = words.filter(word => word.bbox && (/^description$/i.test(clean(word.text)) ||
         clean(word.text).length>=8 && descriptionLabel(word.text) && words.some(other=>other.bbox&&Number(other.confidence)>=50&&/^lore$/i.test(clean(other.text))&&
             Math.abs(other.bbox.y0-word.bbox.y0)<Math.max(16,word.bbox.y1-word.bbox.y0)&&other.bbox.x0>word.bbox.x0)));
-    if (!descriptions.length){const fallback=fallbackItemRegion(words);return fallback?[{...fallback,font:20}]:[];}
+    if (!descriptions.length){const hover=hoverItemRegions(words);if(hover.length)return hover;const fallback=fallbackItemRegion(words);return fallback?[{...fallback,font:20}]:[];}
     const regions=descriptions.slice(0,4).map(description=>{
         const font=Math.max(3,description.bbox.y1-description.bbox.y0),candidates=words.filter(word=>word.bbox&&label(word.text)==='class'&&word.bbox.y0>description.bbox.y1&&word.bbox.y0<description.bbox.y0+font*12&&Math.abs(word.bbox.x0-description.bbox.x0)<font*16);
         candidates.sort((a,b)=>a.bbox.y0-b.bbox.y0||Math.abs(a.bbox.x0-description.bbox.x0)-Math.abs(b.bbox.x0-description.bbox.x0));
@@ -72,11 +103,16 @@ function itemRegions(words) {
         // Side-by-side panes must never contribute each other's columns.
         for(const other of regions)if(other!==pane&&Math.abs(other.description.bbox.y0-pane.description.bbox.y0)<pane.font*6&&other.x>pane.x)pane.right=Math.min(pane.right,other.x);
     }
-    return regions;
+    const combined=[...regions,...hoverItemRegions(words)].slice(0,4);
+    for(const pane of combined)for(const other of combined)if(other!==pane){
+        if(other.x>pane.x&&Math.abs(other.y-pane.y)<pane.font*8)pane.right=Math.min(pane.right,other.x);
+        if(other.y>pane.y+pane.font*8&&other.x<pane.right&&other.right>pane.x)pane.bottom=Math.min(pane.bottom,other.y);
+    }
+    return combined;
 }
 function wordsInPane(words,pane){return words.filter(word=>word.bbox&&word.bbox.x0>=pane.x&&word.bbox.x1<=pane.right&&word.bbox.y0>=pane.y&&word.bbox.y0<pane.bottom&&word.bbox.y1-word.bbox.y0<=pane.font*2.2);}
 function itemStatBlock(text,name=''){
-    const lines=String(text).split(/\r?\n/).map(clean).filter(Boolean),start=lines.findIndex(line=>nameWithoutChrome(line)!==name&&(/^(?:No (?:Trade|Drop)|Class\s*:|Race\s*:|Slot\s*:|Tier\s*\d|Size\s*:|AC\b|HP\b)/i.test(line)||Object.keys(statNames).some(label=>new RegExp(`(?:^|[ \\t|])${escaped(label)}[ \\t]*[:=;]?[ \\t]*(?:%[ \\t]*)?[+-]?[\\d,]+`,'i').test(line))));
+    const lines=String(text).split(/\r?\n/).map(clean).filter(Boolean),start=lines.findIndex(line=>nameWithoutChrome(line)!==name&&(/^(?:Lore (?:Equipped|No)|No (?:Trade|Drop)|Class\s*:|Race\s*:|Slot\s*:|Tier\s*\d|Size\s*:|AC\b|HP\b)/i.test(line)||Object.keys(statNames).some(label=>new RegExp(`(?:^|[ \\t|])${escaped(label)}[ \\t]*[:=;]?[ \\t]*(?:%[ \\t]*)?[+-]?[\\d,]+`,'i').test(line))));
     if(start<0)return '';
     const content=lines.slice(start),done=content.findIndex(line=>/^Done$/i.test(line)),stop=content.findIndex(line=>/^\[|^(?:You (?:say|tell|have (?:slain|entered)|hit|slash)|Your Location|OOC\b|Auction\b)/i.test(line));
     const end=Math.min(done<0?content.length:done,stop<0?content.length:stop),bounded=content.slice(0,end);
@@ -84,7 +120,7 @@ function itemStatBlock(text,name=''){
     // row. Unknown intervening lines remain editable evidence; below-pane chat
     // and world labels never become part of a supposedly complete stat block.
     let last=bounded.length-1;
-    if(done<0){last=bounded.findLastIndex(line=>/^(?:No (?:Trade|Drop)|Class\s*:|Race\s*:|Slot\s*:|Tier\b|Size\b|Modified\b|(?:Click|Worn|Focus|Proc) Effect\s*:|(?:\w+ )?Exaltation\s*:|Cast Time\s*:|Cooldown\s*:|Required Level\b|Recommended Level\b)/i.test(line)||Object.keys(statNames).some(name=>new RegExp(`(?:^|[ \\t|])${escaped(name)}[ \\t]*[:=;]?[ \\t]*(?:%[ \\t]*)?[+-]?[\\d,]+`,'i').test(line)));}
+    if(done<0){last=bounded.findLastIndex(line=>/^(?:No (?:Trade|Drop)|Class\s*:|Race\s*:|Slot\s*:|Tier\b|Size\b|Modified\b|(?:Click|Worn|Focus|Proc|Combat) Effects?\b|(?:\w+ )?Exaltation\s*:|Cast Time\s*:|Cooldown\s*:|Required Level\b|Recommended Level\b)/i.test(line)||Object.keys(statNames).some(name=>new RegExp(`(?:^|[ \\t|])${escaped(name)}[ \\t]*[:=;]?[ \\t]*(?:%[ \\t]*)?[+-]?[\\d,]+`,'i').test(line)));}
     const result=[];let length=0;
     for(const line of bounded.slice(0,last+1).slice(0,60)){const value=line.slice(0,512);if(length+value.length+1>8192)break;result.push(value);length+=value.length+1;}
     return result.join('\n');
@@ -113,7 +149,7 @@ function modernCharacterComponents(text,confidence){
     return entries;
 }
 function stats(text, confidence, { character = false, modern = false } = {}) {
-    text=text.replace(/\bSV\.(?=[a-z])/gi,'SV. ');
+    text=text.replace(/\bSV\.(?=[a-z])/gi,'SV. ').replace(/\b(Base|Backstab)Dmg\b/gi,'$1 Dmg');
     const fields = character&&modern?modernCharacterComponents(text,confidence):[];
     // Long labels first avoid parsing an item's HP Regen as HP.
     for (const [label,key] of Object.entries(statNames).sort((a,b)=>b[0].length-a[0].length)) {
@@ -121,6 +157,7 @@ function stats(text, confidence, { character = false, modern = false } = {}) {
         const regex = new RegExp(`(?:^|[ \\t|])${escaped(label)}[ \\t]*[:=;]?[ \\t]*${percent?'(?:%[ \\t]*)?':''}([+-]?[\\d,]+(?:\\.\\d+)?)[ \\t]*(?:\\/[ \\t]*([\\d,]+))?(?=$|[ \\t%|+])`,'im');
         const match = text.match(regex);
         if (!match || (label==='HP' && /HP\s+Regen/i.test(match[0])) || /^[-+]?0\d/.test(match[1]) || !percent&&text.slice(match.index+match[0].length).startsWith('%')) continue;
+        if(key==='damage'&&/^DMG$/i.test(label)&&/\bBackstab[ \t]*$/i.test(text.slice(0,match.index)))continue;
         if(key==='haste'&&/^(?:Click|Worn|Focus|Proc) Effect\s*:/i.test(text.slice(0,match.index).split('\n').at(-1).trim()))continue;
         // Modern attributes/resources are displayed as explicit pairs. A lone
         // "1510" may be a lost slash/current value, not a four-digit attribute.
@@ -137,10 +174,11 @@ function stats(text, confidence, { character = false, modern = false } = {}) {
 export function parseItemStatBlock(text){
     const rawText=typeof text==='string'?text:'',lines=rawText.split(/\r?\n/),warnings=[];
     if(typeof text!=='string'||rawText.length>8192||lines.length>60)return {fields:[],conflicts:[],warnings:['Item stat text must contain at most 8,192 characters and 60 lines.']};
-    const values=new Map(),boundary=new RegExp(`(?=\\b(?:${Object.keys(statNames).sort((a,b)=>b.length-a.length).map(escaped).join('|')})[ \\t]*[:=;]?[ \\t]*(?:%[ \\t]*)?[+-]?[\\d,]+)`,'gi');
+    const values=new Map(),boundary=new RegExp(`\\b(?:${Object.keys(statNames).sort((a,b)=>b.length-a.length).map(escaped).join('|')})[ \\t]*[:=;]?[ \\t]*(?:%[ \\t]*)?(?=[+-]?[\\d,]+)`,'gi');
     for(const line of lines){
-        if(/^(?:Click|Worn|Focus|Proc) Effect\s*:|^(?:\w+ )?Exaltation\s*:|^Item(?: Name)?\s*:/i.test(clean(line)))continue;
-        for(const part of line.split(boundary))for(const entry of stats(part,0)){
+        if(/^(?:Click|Worn|Focus|Proc|Combat) Effects?\s*:?|^(?:\w+ )?Exaltation\s*:|^Item(?: Name)?\s*:/i.test(clean(line)))continue;
+        const starts=[...line.matchAll(boundary)].map(match=>match.index),parts=starts.length?starts.map((start,index)=>line.slice(start,starts[index+1])):[line];
+        for(const part of parts)for(const entry of stats(part,0)){
             const previous=values.get(entry.key)||[];previous.push(entry);values.set(entry.key,previous);
         }
     }
@@ -162,14 +200,15 @@ function itemName(lines) {
 export function screenReadRefinementRegions(input={}) {
     const words=Array.isArray(input.words)?input.words.slice(0,2000):[],panes=itemRegions(words),regions=[],tables=[];
     for(const pane of panes){const rows=wordRows(wordsInPane(words,pane)),identity=paneName(words,pane),nameRow=rows.find(row=>nameWithoutChrome(row.words.map(word=>word.text).join(' '))===identity.name&&row.y>(pane.description?.bbox.y1??-Infinity));
-        if(panes.length===1&&nameRow){const bounds=nameRow.words.map(word=>word.bbox),height=Math.max(...bounds.map(box=>box.y1))-Math.min(...bounds.map(box=>box.y0));
+        if(pane.hover&&pane.nameBand){regions.push({role:'item-name',...pane.nameBand,preprocessing:'color',layout:'line'});}
+        else if(panes.length===1&&nameRow){const bounds=nameRow.words.map(word=>word.bbox),height=Math.max(...bounds.map(box=>box.y1))-Math.min(...bounds.map(box=>box.y0));
             regions.push({role:'item-name',x:Math.min(...bounds.map(box=>box.x0))-height*.3,y:Math.min(...bounds.map(box=>box.y0))-height*.3,
                 width:Math.max(...bounds.map(box=>box.x1))-Math.min(...bounds.map(box=>box.x0))+height*.6,height:height*1.6,preprocessing:'green',layout:'line'});}
         const first=rows.find(row=>row.words.some(word=>/^(?:AC|HP|Weight|Size)[:.]?$/i.test(clean(word.text)))),last=rows.find(row=>row.y>(first?.y??Infinity)&&row.words.some(word=>/^Modified$/i.test(clean(word.text))));
         if(first){const selected=rows.filter(row=>row.y>=first.y&&row.y<(last?.y??first.y+pane.font*22)).flatMap(row=>row.words),bounds=selected.map(word=>word.bbox);
             const attribute=selected.find(word=>/^(?:Strength|Stamina|Intelligence|Wisdom|Agility|Dexterity|Charisma):?$/i.test(clean(word.text)));
-            const start=attribute?attribute.bbox.y0:first.y;
-            if(bounds.length)tables.push({x:Math.min(...bounds.map(box=>box.x0))-pane.font*.5,y:start-pane.font*.4,width:Math.max(...bounds.map(box=>box.x1))-Math.min(...bounds.map(box=>box.x0))+pane.font,height:Math.max(...bounds.map(box=>box.y1))-start+pane.font*.8,preprocessing:attribute?'source-threshold':'inverted'});}
+            const start=attribute&&!pane.hover?attribute.bbox.y0:first.y;
+            if(bounds.length)tables.push({x:Math.min(...bounds.map(box=>box.x0))-pane.font*.5,y:start-pane.font*.4,width:Math.max(...bounds.map(box=>box.x1))-Math.min(...bounds.map(box=>box.x0))+pane.font,height:Math.max(...bounds.map(box=>box.y1))-start+pane.font*.8,preprocessing:attribute&&!pane.hover?'source-threshold':'inverted'});}
     }
     if(tables.length)regions.push({role:'item-stats',...(tables.length===1?tables[0]:{tiles:tables,preprocessing:'source-threshold'}),layout:'block',scale:4});
     const character=characterRegion(words,panes);
@@ -179,7 +218,13 @@ export function screenReadRefinementRegions(input={}) {
 function characterRegion(words,panes){
     const available=words.filter(word=>word.bbox&&!panes.some(pane=>word.bbox.x0>=pane.x&&word.bbox.x1<=pane.right&&word.bbox.y0>=pane.y&&word.bbox.y0<pane.bottom));
     const inventory=available.find(word=>/^Inventory$/i.test(clean(word.text))),vitals=available.find(word=>/^Character$/i.test(clean(word.text))&&available.some(other=>/^Vitals$/i.test(clean(other.text))&&other.bbox.x0>word.bbox.x0&&Math.abs(other.bbox.y0-word.bbox.y0)<20));
-    if(!inventory||!vitals)return null;
+    if(!inventory||!vitals){
+        const heading=wordRows(available).find(row=>/^Character Stats$/i.test(row.words.map(word=>word.text).join(' ')));
+        if(!heading||!inventory)return null;
+        const font=Math.max(3,heading.height),left=heading.words[0].bbox.x0;
+        if(inventory.bbox.y0<=heading.y||inventory.bbox.y0>heading.y+font*5||Math.abs(inventory.bbox.x0-left)>font*2)return null;
+        return {x:Math.max(0,left-font*.5),y:Math.max(0,heading.y-font*.5),right:left+font*24,bottom:heading.y+font*30,font,modern:false};
+    }
     const font=Math.max(3,vitals.bbox.y1-vitals.bbox.y0),heading=available.find(word=>/^Stats$/i.test(clean(word.text))&&word.bbox.x0>vitals.bbox.x0&&Math.abs(word.bbox.y0-vitals.bbox.y0)<font);
     if(!heading)return null;
     return {x:Math.max(0,vitals.bbox.x0-font*.5),y:Math.max(0,vitals.bbox.y0-font*.5),right:heading.bbox.x0+font*24,bottom:vitals.bbox.y0+font*25,font};
@@ -208,16 +253,20 @@ function refinedCharacterComponents(words,confidence){
     return fields;
 }
 function refinedWords(input,baseWords){
-    const words=baseWords.map(word=>({...word}));
+    const words=baseWords.map(word=>({...word})),hoverNames=hoverItemRegions(baseWords).map(pane=>pane.nameBand);
     for(const pass of (Array.isArray(input.refinements)?input.refinements:[]).slice(0,2)){
         if(pass.role!=='item-name')continue;
         for(const candidate of (Array.isArray(pass.words)?pass.words:[]).slice(0,200)){
-            if(!candidate.bbox||Number(candidate.confidence)<50)continue;
+            if(!candidate.bbox)continue;
             const box=candidate.bbox,height=Math.max(1,box.y1-box.y0),center=(box.x0+box.x1)/2;
             const matches=words.map((word,index)=>({word,index})).filter(({word})=>word.bbox&&Math.abs(word.bbox.y0-box.y0)<Math.max(3,height*.55)&&center>=word.bbox.x0-height*.3&&center<=word.bbox.x1+height*.3);
             matches.sort((a,b)=>Math.abs((a.word.bbox.x0+a.word.bbox.x1)/2-center)-Math.abs((b.word.bbox.x0+b.word.bbox.x1)/2-center));
             const match=matches[0]?.index??-1;
-            if(match>=0&&Number(candidate.confidence)>=Number(words[match].confidence)+10)words[match]=candidate;
+            if(match>=0&&Number(candidate.confidence)>=50&&Number(candidate.confidence)>=Number(words[match].confidence)+10)words[match]=candidate;
+            // Keep a whole observed name row, including uncertain words; losing
+            // its low-confidence prefix would falsely turn it into another
+            // item. Such proposals retain that word's conservative confidence.
+            else if(match<0&&words.length<2000&&Number(pass.confidence)>=50&&/[a-z0-9]/i.test(candidate.text)&&hoverNames.some(region=>box.x0>=region.x&&box.x1<=region.x+region.width&&box.y0>=region.y&&box.y1<=region.y+region.height))words.push(candidate);
         }
     }
     return words;
@@ -275,7 +324,8 @@ export function parseScreenRead(input = {}) {
     if (name && name.length > 2) {
         const rawStatBlock=itemStatBlock(itemText,name);
         const parsedStats=parseItemStatBlock(rawStatBlock);
-        const fields = [field('name',name,name,confidence), ...parsedStats.fields.map(entry=>({...entry,confidence}))];
+        const nameConfidence=region?.hover?Math.min(confidence,...wordsInPane(words,region).filter(word=>word.bbox.y0>=region.nameBand.y&&word.bbox.y1<=region.nameBand.y+region.nameBand.height).map(word=>Number(word.confidence)||0)):confidence;
+        const fields = [field('name',name,name,nameConfidence), ...parsedStats.fields.map(entry=>({...entry,confidence}))];
         // Region OCR sees a compact two-column examine stat table more clearly
         // than a whole scene. Punctuation after a label is OCR evidence, not a
         // decimal repair in the value; missing numeric punctuation stays absent.
@@ -296,11 +346,12 @@ export function parseScreenRead(input = {}) {
         const tier = itemText.match(/\bTier[ \t]*[:=]?[ \t]*(\d+)(?:[ \t]+(\d+)[ \t]*\/[ \t]*(\d+)|[ \t]*\/[ \t]*(\d+))?/i) || name.match(/\+(\d+)\s*$/);
         if (tier && Number(tier[1])<=100) fields.push(field('tier',tier[0],Number(tier[1]),confidence));
         if(tier?.[2]!==undefined&&Number(tier[3])===2**Number(tier[1])&&Number(tier[2])>=0&&Number(tier[2])<Number(tier[3]))fields.push(field('fraction',tier[0],Number(tier[2]),confidence),field('fractionMaximum',tier[0],Number(tier[3]),confidence));
+        if(region?.hover){const weight=fields.findIndex(entry=>entry.key==='weight');if(weight>=0&&Number.isInteger(fields[weight].value)){conflicts.add('weight');fields.splice(weight,1);}}
         for (const [label,key] of [['Class','classes'],['Race','races'],['Slot','slots'],['Size','size']]) {
-            const found = (key==='size'?[itemText,...statPasses.map(pass=>pass.text)].join('\n'):itemText).match(new RegExp(`^${label}[ \\t]*:[ \\t]*(.+)$`,'im'));
+            const found = (key==='size'?[itemText,...statPasses.map(pass=>pass.text)].join('\n'):itemText).match(new RegExp(`^${label}[ \\t]*${key==='size'?'[:=]?[ \\t]+':':[ \\t]*'}(.+)$`,'im'));
             if (found) fields.push(field(key,found[0],key==='size' ? found[1].trim().split(/\s+/)[0] : key==='slots'?slotNames(found[1]):found[1].split(/\s*[,/]\s*|\s+/).filter(Boolean),confidence));
         }
-        if(!fields.some(entry=>entry.key==='slots')){const slot=lines.find(line=>/^(?:Charm|Power[ \t]?Source|Feet|Primary|Secondary|Fingers?|Head|Face|Neck|Shoulders?|Arms|Hands|Wrists?|Back|Chest|Waist|Legs|Ears?|Ranged?|Ammo)(?:[ \/]+(?:Primary|Secondary|Fingers?))?$/i.test(line));if(slot)fields.push(field('slots',slot,slotNames(slot),confidence));}
+        if(!fields.some(entry=>entry.key==='slots')){const slot=lines.find(line=>bareSlot.test(line));if(slot)fields.push(field('slots',slot,slotNames(slot),confidence));}
         const augmentNames = lines.map(line=>line.replace(/^[^a-z]+/i,'')).filter(line=>/^(?:\w+ )?Exaltation\s*:/i.test(line)).map(line=>line.replace(/^[^:]+:\s*/,'')).filter(value=>distance(value.toLowerCase(),'empty')>1).slice(0,12);
         if (augmentNames.length) fields.push(field('augmentNames',augmentNames.join('; '),augmentNames,confidence));
         const effects = lines.filter(line=>/^(?:Click|Worn|Focus|Proc) Effect\s*:/i.test(line)).slice(0,12);
@@ -317,11 +368,11 @@ export function parseScreenRead(input = {}) {
     // A visible inventory/stat heading is required; item-only panes cannot become
     // an authoritative character total. Geometry excludes the examine region.
     const character=characterRegion(words,panes),characterWords=character?words.filter(word=>word.bbox&&word.bbox.x0>=character.x&&word.bbox.x1<=character.right&&word.bbox.y0>=character.y&&word.bbox.y1<=character.bottom&&word.bbox.y1-word.bbox.y0<=character.font*1.8):[],characterText=character?wordLines(characterWords):words.length?wordLines(words.filter(word=>!panes.some(pane=>wordsInPane([word],pane).length))):raw;
-    if (character||/\bInventory\b|^Character Stats\b/im.test(characterText)) {
-        const fields = stats(characterText,confidence,{character:true,modern:!!character}),conflicts=new Set(),evidence=[characterText];
+    if (character||!words.length&&/\bInventory\b|^Character Stats\b/im.test(characterText)) {
+        const modern=!!character&&character.modern!==false,fields = stats(characterText,confidence,{character:true,modern}),conflicts=new Set(),evidence=[characterText];
         for(const pass of (Array.isArray(input.refinements)?input.refinements:[]).slice(0,2).filter(pass=>pass.role==='character-stats')){const ordinary=(pass.words||[]).filter(word=>!word.component&&(!character||word.bbox&&word.bbox.y1-word.bbox.y0<=character.font*1.8)),mapped=alignedTableWords(characterWords,ordinary),text=wordLines(mapped)||String(pass.text||'');evidence.push(wordLines(pass.words||[])||String(pass.text||''));
-            for(const key of numericDisagreements(characterWords,ordinary,{character:true,modern:!!character})){conflicts.add(key);const index=fields.findIndex(entry=>entry.key===key);if(index>=0)fields.splice(index,1);}
-            for(const entry of [...stats(text,Math.min(confidence,Number(pass.confidence)||0),{character:true,modern:!!character}),...refinedCharacterComponents(pass.words||[],confidence)]){
+            for(const key of numericDisagreements(characterWords,ordinary,{character:true,modern})){conflicts.add(key);const index=fields.findIndex(entry=>entry.key===key);if(index>=0)fields.splice(index,1);}
+            for(const entry of [...stats(text,Math.min(confidence,Number(pass.confidence)||0),{character:true,modern}),...refinedCharacterComponents(pass.words||[],confidence)]){
                 if(entry.key.startsWith('resist')&&(pass.words||[]).some(word=>String(word.text).includes(`${entry.value}/`)&&Number(word.confidence)<95))continue;
                 const existing=fields.findIndex(value=>value.key===entry.key);if(existing<0&&!conflicts.has(entry.key))fields.push(entry);else if(existing>=0&&fields[existing].value!==entry.value){conflicts.add(entry.key);fields.splice(existing,1);}}
         }

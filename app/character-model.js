@@ -7,7 +7,7 @@ export const CHARACTER_LIMITS = Object.freeze({ candidates:120, evidence:6, stat
 export const CHARACTER_STAT_KEYS = Object.freeze(['AC','AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','HP','MP','END','ATK','ATK_OFFENSE','ATK_ACCURACY','STR','STA','AGI','DEX','WIS','INT','CHA','SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE','HP_REGEN','MANA_REGEN','END_REGEN','HASTE']);
 const STAT_LABELS=Object.freeze({MP:'Mana',END:'Endurance',ATK:'Attack',AC_MITIGATION:'Mitigation AC',AC_MITIGATION_SOFTCAP:'AC softcap',AC_EVASION:'Evasion AC',
     ATK_OFFENSE:'Offense',ATK_ACCURACY:'Accuracy',SV_MAGIC:'Magic resist',SV_FIRE:'Fire resist',SV_COLD:'Cold resist',SV_POISON:'Poison resist',SV_DISEASE:'Disease resist',
-    SV_CORRUPTION:'Void resist',ATTACK_SPEED:'Attack speed %',DMG_BONUS:'Damage bonus',HP_REGEN:'HP regen',MANA_REGEN:'Mana regen',END_REGEN:'End. regen'});
+    SV_CORRUPTION:'Void resist',ATTACK_SPEED:'Attack speed %',DMG_BONUS:'Damage bonus',BACKSTAB_DMG:'Backstab dmg',HP_REGEN:'HP regen',MANA_REGEN:'Mana regen',END_REGEN:'End. regen'});
 export const characterStatLabel=key=>STAT_LABELS[key] || String(key||'').replace(/_/g,' ');
 export const CHARACTER_SLOTS = Object.freeze([
     ['charm','Charm','CHARM'],['ear1','Left ear','EAR'],['head','Head','HEAD'],['face','Face','FACE'],['ear2','Right ear','EAR'],
@@ -66,7 +66,7 @@ function evidenceRecord(value={}) {
 const OBSERVATION_STATS = Object.freeze({ac:'AC',acMitigation:'AC_MITIGATION',acMitigationSoftcap:'AC_MITIGATION_SOFTCAP',acEvasion:'AC_EVASION',
     attackOffense:'ATK_OFFENSE',attackAccuracy:'ATK_ACCURACY',hp:'HP',mana:'MP',endurance:'END',str:'STR',sta:'STA',agi:'AGI',dex:'DEX',wis:'WIS',int:'INT',cha:'CHA',
     resistPoison:'SV_POISON',resistMagic:'SV_MAGIC',resistDisease:'SV_DISEASE',resistFire:'SV_FIRE',resistCold:'SV_COLD',resistCorruption:'SV_CORRUPTION',
-    weight:'WT',damage:'DMG',damageBonus:'DMG_BONUS',delay:'DELAY',hpCurrent:'HP_CURRENT',hpMaximum:'HP_MAXIMUM',manaCurrent:'MP_CURRENT',manaMaximum:'MP_MAXIMUM',
+    weight:'WT',damage:'DMG',damageBonus:'DMG_BONUS',backstabDamage:'BACKSTAB_DMG',delay:'DELAY',hpCurrent:'HP_CURRENT',hpMaximum:'HP_MAXIMUM',manaCurrent:'MP_CURRENT',manaMaximum:'MP_MAXIMUM',
     enduranceCurrent:'END_CURRENT',enduranceMaximum:'END_MAXIMUM',attack:'ATK',attackMelee:'ATK_MELEE',attackRanged:'ATK_RANGED',attackSpeed:'ATTACK_SPEED',haste:'HASTE',hpRegen:'HP_REGEN',manaRegen:'MANA_REGEN',enduranceRegen:'END_REGEN'});
 
 /** Adapt the capture parser's immutable field proposals to editable character
