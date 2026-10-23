@@ -9,6 +9,14 @@ the same frame's complete tooltip region recovers its item and supported stats
 in about 1.6 seconds versus 6.5 seconds for the failed full-scene read. This
 single-frame comparison does not establish transient capture throughput.
 
+A deterministic transition test also reproduces live-video reads producing one
+frame's fingerprint with the next frame's PNG. The source now freezes once for
+detector geometry, fingerprinting and encoding, following PNUT's coherent-frame
+pattern. The regression and independent cleanup/throttle review pass. Native
+fixtures match original PNG hashes, capture times and context within real tooltip
+exposures, including multiple valid compositor variants; late heartbeats cannot
+substitute for queued items.
+
 Source changes, actual-pixel measurements and acceptance are tracked in
 [LIVE_CAPTURE_RECOVERY.md](docs/LIVE_CAPTURE_RECOVERY.md). Private screenshots,
 OCR text and profile projections are excluded from Git. Exact-head CI,

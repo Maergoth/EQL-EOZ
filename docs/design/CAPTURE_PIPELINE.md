@@ -480,9 +480,14 @@ not a guarantee that a minimized source or compositor supplies every frame.
 See the official
 [Electron acquisition example](https://www.electronjs.org/docs/latest/api/desktop-capturer/).
 
-Acquisition continues while PNG encoding awaits. Before the single encoder,
+Acquisition freezes one frame before visual detection and fingerprinting; the
+same immutable pixels become the queued PNG. Independent live-video reads can
+otherwise mix one tooltip's geometry/key with the next tooltip's pixels. A
+deterministic video-advance regression exercises that race. Acquisition continues
+while PNG encoding awaits. Before the single encoder,
 the source retains at most two raw canvas snapshots and 64 MiB of pending pixel
-bytes, plus its one active encoding canvas. Items precede one replaceable scene;
+bytes, plus its one active encoding canvas and one capped working frame during
+analysis. The working frame is released on every nonqueue return. Items precede one replaceable scene;
 queued duplicate pane pixels coalesce. Each snapshot carries its original
 capture time and immutable context. Source changes, null configuration,
 source-size/ROI/generation changes and disposal release pending canvases;

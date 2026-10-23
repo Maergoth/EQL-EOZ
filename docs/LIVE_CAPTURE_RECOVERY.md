@@ -242,5 +242,36 @@ mapping and evidence isolation; it does not claim native 4K recognition.
   satisfy this generic stream check, while the priority fixture specifically
   requires visual-item reads. Bounded mismatch diagnostics preserve the stage
   ledger and original observations. The stricter native gate passes locally.
-- The final post-review normal `npm test` passed. Pending: exact-head CI/platform/package
+- Subsequent Windows CI on `8970a4b` stops before C admission. The last accepted
+  frame is B; duplicate counters alone cannot identify a C rejection. Source
+  video is 984 x 680 with a 25 px native caption and 984 x 655 client viewport.
+  Synthetic probes at that geometry, including the exact observed CI crop,
+  show distinct A/B/C keys. An observed weapon PNG sometimes carries chest-height
+  ROI metadata. Failure-only diagnostics now retain bounded synthetic game,
+  current-video, submitted/rejected PNGs and key/crop/context ledgers.
+- Owner-requested PNUT comparison uses
+  [current capture.py at 8c25cc0](https://github.com/Maergoth/pnut-mnm/blob/8c25cc0615e767e406418e9263f68a3d0858e52e/mnmparse/capture.py).
+  PNUT copies all crops from one native Windows Graphics Capture frame view,
+  then publishes pixels/frame count/time under one lock. Its nominal native
+  ceiling is also 8 fps. It has no Chromium forced-refresh mechanism to copy;
+  its optional MSS/GDI fallback and latest-only queue are separate policies.
+  Reuse the coherent-frame pattern while retaining portable acquisition and
+  bounded transient-item retention. EoZ currently samples live video separately
+  for detector, fingerprint and final PNG. A deterministic transition probe
+  reproduces a production bug: advancing the video after fingerprinting queues
+  B pixels under A's key, allowing a valid different tooltip to be suppressed.
+  Freeze once before all analysis and enqueue those same pixels. The working
+  frame is bounded/released separately from pending snapshots and the encoder;
+  no backend replacement or platform-specific dependency is needed.
+- The coherent-frame regression, independent lifecycle/memory review and source
+  tests pass. Windows native/4K priority tests retain all exact item images with
+  unchanged timing/queue assertions. Saved actual native 4K pixels still produce
+  a usable automatically cropped item in approximately 1.54 seconds of OCR. The
+  undelayed private photographic-background case retains all three exact names,
+  with B/C captures 39/189 ms into fixed two-second exposures and zero drops.
+  These prove the coherent-frame change; the separate Windows CI C symptom
+  remains subject to the new bounded failing-pixel diagnostics if it recurs.
+- The final coherent-source normal `npm test` and full native capture gate also
+  pass, including exact admitted images, fresh baseline and Stop.
+  Pending: exact-head CI/platform/package
   checks and publication. No new release is yet claimed.

@@ -1,6 +1,6 @@
 // This isolated local window has no log, wiki authentication or main-app IPC.
 // Cheap change sampling continues independently of the serial main-process OCR.
-let stream=null,stopped=false,timer=null,busy=false,encoding=false,contextRevision=0,lastSampledAt=-Infinity,lastFingerprint=null,lastIdentity='',lastContext='',lastSceneAt=-Infinity;
+let stream=null,stopped=false,timer=null,busy=false,encoding=false,contextRevision=0,lastFrozenAt=-Infinity,lastSampledAt=-Infinity,lastFingerprint=null,lastIdentity='',lastContext='',lastSceneAt=-Infinity;
 const snapshots=[],MAX_PENDING_SNAPSHOTS=2,MAX_PENDING_BYTES=64*1024*1024,MAX_RAW_AGE_MS=15000;
 let pendingBytes=0;
 const paneMemory=new Map();
@@ -38,9 +38,9 @@ async function encodeSnapshots(){
         finally{releaseSnapshot(snapshot);}
     }}finally{encoding=false;}
 }
-function fingerprint(region){
+function fingerprint(image,region){
     const context=comparison.getContext('2d',{alpha:false,willReadFrequently:true}),crop=region||{x:0,y:0,width:1,height:1};
-    context.drawImage(video,crop.x*video.videoWidth,crop.y*video.videoHeight,crop.width*video.videoWidth,crop.height*video.videoHeight,0,0,comparison.width,comparison.height);
+    context.drawImage(image,crop.x*image.width,crop.y*image.height,crop.width*image.width,crop.height*image.height,0,0,comparison.width,comparison.height);
     return context.getImageData(0,0,comparison.width,comparison.height).data;
 }
 function samePixels(left,right){if(!left||left.length!==right.length)return false;for(let i=0;i<left.length;i++)if(left[i]!==right[i])return false;return true;}
@@ -95,12 +95,12 @@ function detectItemPanes({data,width,height}){
     }
     return candidates;
 }
-function visualPanes(){
-    const scale=Math.min(1,1920/video.videoWidth,1200/video.videoHeight),width=Math.max(1,Math.round(video.videoWidth*scale)),height=Math.max(1,Math.round(video.videoHeight*scale));
+function visualPanes(image){
+    const scale=Math.min(1,1920/image.width,1200/image.height),width=Math.max(1,Math.round(image.width*scale)),height=Math.max(1,Math.round(image.height*scale));
     if(visual.width!==width||visual.height!==height){visual.width=width;visual.height=height;}
     // Area sampling keeps one-pixel pane borders visible at half resolution;
     // nearest-neighbour sampling can skip an entire horizontal border.
-    const context=visual.getContext('2d',{alpha:false,willReadFrequently:true});context.imageSmoothingEnabled=true;context.drawImage(video,0,0,width,height);
+    const context=visual.getContext('2d',{alpha:false,willReadFrequently:true});context.imageSmoothingEnabled=true;context.drawImage(image,0,0,width,height);
     return detectItemPanes({data:context.getImageData(0,0,width,height).data,width,height});
 }
 function pixelKey(pixels){let a=2166136261,b=2246822519;for(let i=0;i<pixels.length;i+=4){const value=pixels[i]|pixels[i+1]<<8|pixels[i+2]<<16;a=Math.imul(a^value,16777619);b=Math.imul(b^value,3266489917);}return (a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0');}
@@ -114,13 +114,21 @@ async function sample(){
         const stateAt=Date.now(),state=await api.state(),capture=state.capture;if(stopped||stream!==selectedStream)return;
         if(!capture){setContext('');return;}
         const at=Date.now(),identity=captureIdentity(capture,video.videoWidth,video.videoHeight);setContext(identity);pruneSnapshots();
-        if(at-lastSampledAt<250)return;
+        if(at-lastFrozenAt<250)return;
+        const sourceWidth=video.videoWidth,sourceHeight=video.videoHeight,scale=Math.min(1,4096/sourceWidth,2160/sourceHeight);
+        const width=Math.max(1,Math.round(sourceWidth*scale)),height=Math.max(1,Math.round(sourceHeight*scale)),rawBytes=width*height*4;
+        if(rawBytes>MAX_PENDING_BYTES){sourceDrop('capacity');return;}
+        // Freeze one bounded working frame. Native video can advance between
+        // drawImage calls, so detector geometry, key and PNG must share pixels.
+        // This canvas becomes the queued snapshot, or is released in finally.
+        canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+        const capturedAt=Date.now();canvas.getContext('2d',{alpha:false}).drawImage(video,0,0,width,height);lastFrozenAt=capturedAt;
         let pixels,itemRegion=null,visualKey=null,memoryKey=null,sceneFallback=false,selectionKind=capture.region?'configured':'scene';
-        if(capture.region){pixels=fingerprint(capture.region);if(identity===lastIdentity&&samePixels(pixels,lastFingerprint)&&at-lastSampledAt<750)return;visualKey=pixelKey(pixels);}
+        if(capture.region){pixels=fingerprint(canvas,capture.region);if(identity===lastIdentity&&samePixels(pixels,lastFingerprint)&&at-lastSampledAt<750)return;visualKey=pixelKey(pixels);}
         else{
-            const candidates=visualPanes();
+            const candidates=visualPanes(canvas);
             const choices=[];for(const region of candidates){
-                const key=[region.x,region.y,region.width,region.height].map(v=>Math.round(v*1000)).join(':'),next=fingerprint(region),previous=paneMemory.get(key);
+                const key=[region.x,region.y,region.width,region.height].map(v=>Math.round(v*1000)).join(':'),next=fingerprint(canvas,region),previous=paneMemory.get(key);
                 if(!previous||!samePixels(next,previous.pixels)||at-previous.at>=5000)choices.push({region,pixels:next,key,at:previous?.at??-Infinity});
             }
             const choice=choices.sort((a,b)=>a.at-b.at)[0];if(choice){itemRegion=choice.region;pixels=choice.pixels;memoryKey=choice.key;visualKey=pixelKey(pixels);selectionKind='visual-item';sceneFallback=at-lastSceneAt>=5000;}
@@ -128,25 +136,20 @@ async function sample(){
             // panes and Inventory/zone evidence. Scenery cannot fill the FIFO.
             if(!itemRegion&&at-lastSceneAt<(candidates.length?5000:1500))return;
         }
-        const scale=Math.min(1,4096/video.videoWidth,2160/video.videoHeight);
-        const width=Math.max(1,Math.round(video.videoWidth*scale)),height=Math.max(1,Math.round(video.videoHeight*scale)),rawBytes=width*height*4;
         const duplicate=snapshots.findIndex(snapshot=>selectionKind==='scene'?snapshot.frame.selectionKind==='scene':snapshot.frame.selectionKind===selectionKind&&snapshot.frame.visualKey===visualKey);
         // Retain the first item's acquisition time: a later identical heartbeat
         // must not move equipment evidence across a walkthrough phase boundary.
         if(duplicate>=0&&selectionKind!=='scene'){snapshots[duplicate].frame.sceneFallback||=sceneFallback;if(sceneFallback)lastSceneAt=at;return;}
         if(duplicate>=0)discardSnapshot(duplicate);
-        if(rawBytes>MAX_PENDING_BYTES){sourceDrop('capacity');return;}
         while(snapshots.length>=MAX_PENDING_SNAPSHOTS||pendingBytes+rawBytes>MAX_PENDING_BYTES){
             const scene=snapshots.findIndex(snapshot=>snapshot.frame.selectionKind==='scene');
             if(scene<0&&selectionKind==='scene')return;
             const old=discardSnapshot(scene<0?0:scene);if(old.frame.selectionKind!=='scene')sourceDrop('capacity');
         }
-        canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
-        const capturedAt=Date.now();canvas.getContext('2d',{alpha:false}).drawImage(video,0,0,canvas.width,canvas.height);
         lastSampledAt=capturedAt;lastFingerprint=pixels;lastIdentity=identity;
         if(memoryKey){paneMemory.set(memoryKey,{pixels,at:capturedAt});if(paneMemory.size>8)paneMemory.delete(paneMemory.keys().next().value);}if(selectionKind==='scene'||sceneFallback)lastSceneAt=capturedAt;
         snapshots.push({canvas,rawBytes,stream:selectedStream,revision:contextRevision,identity,frame:{width,height,capturedAt,
-            sourceWidth:video.videoWidth,sourceHeight:video.videoHeight,captureGeneration:capture.generation,
+            sourceWidth,sourceHeight,captureGeneration:capture.generation,
             owner:capture.owner,sessionId:capture.sessionId,sourceId:capture.sourceId,selectionKind,itemRegion,visualKey,sceneFallback,
             sourceTiming:{configurationMs:at-stateAt}}});pendingBytes+=rawBytes;canvas=null;void encodeSnapshots();
     }catch{if(!stopped&&stream===selectedStream)await api.signal('frame-error').catch(()=>{});}

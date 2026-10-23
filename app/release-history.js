@@ -8,7 +8,7 @@ export const RELEASE_HISTORY = freeze([
       "Keep capturing missing items during Confirm slots and Save snapshot, until the walkthrough completes or is cancelled. Retain the fresh No Equipment baseline and source/session guards.",
       "Recover repeated reads from the current walkthrough as one physical item card, preserving their evidence and manual corrections.",
       "Automatically locate complete Default Modern tooltip panes, crop and enlarge them for offline OCR, and prioritize their changing pixels over animated scenery. Periodic full-scene reads and manually calibrated areas remain available.",
-      "Keep acquiring brief tooltip snapshots while an earlier screenshot is being encoded. Temporary snapshots and queued PNGs stay bounded; one offline OCR worker reads them serially.",
+      "Keep acquiring brief tooltip snapshots while an earlier screenshot is being encoded. Detect, fingerprint and read each tooltip from the same frozen frame so transitions cannot hide a different item as a duplicate. Temporary snapshots and queued PNGs stay bounded; one offline OCR worker reads them serially.",
       "Keep compact tooltip name and stat rereads when Inventory is also visible. Uncertain OCR text and values remain editable."
     ],
     "steps": [
