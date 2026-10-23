@@ -67,6 +67,10 @@ Replacement returns the displaced card ID; that card remains in inventory.
 Each card retains name, wiki title/match state, exact icon ID, compatible slot
 kinds, nullable tier, fractional tier progress, required level, catalog base
 stats, observed examine stats, completeness flags, augments and bounded evidence.
+Fractional progress is nullable: an unread value stays null, while an explicitly
+reviewed zero remains zero. Unknown progress is shown in sharing and kept distinct
+from zero during variant matching. Catalog-only values remain unknown until both
+tier and progress are known; observed examine values are still usable unchanged.
 `wikiMatch` is `suggested`, `confirmed` or `unmatched`; passing a known catalog
 record suggests a match for review and does not claim human confirmation.
 
@@ -90,6 +94,22 @@ damage/delay and regens to the existing stat keys. Resource `*Current` and
 from a current-HP field. Unknown parser fields remain in the original private
 journal rather than being treated as additive stats. The supplied observation
 ID/session, text, time and parser version are retained as bounded local evidence.
+
+For the supported `default_modern` layout, producer slot arrays such as `Feet`,
+`Primary` and `Fingers` normalize to the existing feet, primary and paired finger
+slots. Explicit `Tier N numerator/2^N` progress is supplied as `tier` plus
+`fraction` (the numerator), with observed `fractionMaximum` retained in private
+parser evidence. The adapter preserves `fraction`; it never infers progress from
+a tier alone or legacy `Tier 10/10` text. The parser validates the denominator.
+An unambiguous observed `attack` maps to `ATK`; `attackSpeed` maps to the separate
+`ATTACK_SPEED` key and never implies `HASTE`. A bare Attack pair in the modern
+Inventory pane denotes ambiguous components and must not become invented
+melee/ranged or current/maximum fields. Explicit `damageBonus` remains a separate
+`DMG_BONUS` value; it is never added to observed `DMG`, substituted for `DELAY` or
+scaled again. Attribute/resist and resource current/
+maximum keys retain their existing separate mappings through review, persistence
+and the share summary. Synthetic interoperability checks cover these contracts;
+they do not certify another skin or publish any live character data.
 
 An observation ID within its session is idempotent. An explicit stable
 `item.instanceKey` within a session can accumulate evidence for the same card,
@@ -172,6 +192,29 @@ renders produced identical PNG bytes within that runtime. These are synthetic
 canvas checks, not live game OCR, installed-app upgrades, clipboard/save-host
 acceptance or live wiki uploads. UI/host tests remain the integration owner's
 responsibility.
+
+The additional Default Modern (`default_modern`) interoperability check on
+2026-10-22 passed the model and real canvas encoder with nullable progress,
+separate Attack/Attack speed/Damage bonus values, current/maximum resources and
+Void resist labels. Unknown progress remains unknown after persistence and in
+the PNG; explicit zero remains distinct. The inspected modern export was
+1800 × 3904, 278,517 bytes.
+
+`node tests/modern-ocr.mjs` also passed actual pinned offline OCR with both source
+dependencies and the assembled `.generated/ocr-runtime`. It reads only the
+2560 × 1100 canvas-generated synthetic fixture at
+`tests/fixtures/screen-read/modern-layout.png`; it never captures a screen or
+opens a game source. The fixture has two independent examine panes and Inventory
+on the right. Checks cover item names, split label/value columns, slots, explicit
+tier progress, resource current/maximum, seven attributes, six resists, bounded
+refinement and usable Character cards without cross-pane fields. A conflicting
+regen digit must remain unknown rather than becoming the wrong value. Main and
+worker network access is denied; temporary profiles are bounded and removed.
+Regenerate with `node scripts/create-modern-ocr-fixture.mjs`. The visually
+inspected PNG SHA-256 is
+`5f9b0d3c6b40ec4d8d79725aca5ddb26ba4172b4cb1cf4ff67d8346ba3f1c8ec`.
+This is a synthetic pixel regression, not evidence of another skin, production
+wiki writes, native Wayland support or universal live-game OCR accuracy.
 
 ### 0.9.0 platform and Character acceptance audit
 

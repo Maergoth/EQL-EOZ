@@ -23,6 +23,7 @@ const atTime = value => Number.isSafeInteger(value) && value >= 0 && value <= 8.
 const list = value => Array.isArray(value) ? value : [];
 const has = (object,key) => Object.prototype.hasOwnProperty.call(object || {},key);
 const fullTier = value => Number.isInteger(value) && value >= 0 && value <= 10 ? value : null;
+const tierFraction = (value,tier) => tier === null || numeric(value) === null ? null : Math.max(0,Math.min(2 ** tier - 1,Math.floor(numeric(value))));
 const keyFor = value => clean(value,32).toUpperCase().replace(/[ -]+/g,'_');
 
 export function normalizeCharacterStats(value) {
@@ -57,8 +58,8 @@ function evidenceRecord(value={}) {
 
 const OBSERVATION_STATS = Object.freeze({ac:'AC',hp:'HP',mana:'MP',endurance:'END',str:'STR',sta:'STA',agi:'AGI',dex:'DEX',wis:'WIS',int:'INT',cha:'CHA',
     resistPoison:'SV_POISON',resistMagic:'SV_MAGIC',resistDisease:'SV_DISEASE',resistFire:'SV_FIRE',resistCold:'SV_COLD',resistCorruption:'SV_CORRUPTION',
-    weight:'WT',damage:'DMG',delay:'DELAY',hpCurrent:'HP_CURRENT',hpMaximum:'HP_MAXIMUM',manaCurrent:'MP_CURRENT',manaMaximum:'MP_MAXIMUM',
-    enduranceCurrent:'END_CURRENT',enduranceMaximum:'END_MAXIMUM',attackMelee:'ATK_MELEE',attackRanged:'ATK_RANGED',haste:'HASTE',hpRegen:'HP_REGEN',manaRegen:'MANA_REGEN',enduranceRegen:'END_REGEN'});
+    weight:'WT',damage:'DMG',damageBonus:'DMG_BONUS',delay:'DELAY',hpCurrent:'HP_CURRENT',hpMaximum:'HP_MAXIMUM',manaCurrent:'MP_CURRENT',manaMaximum:'MP_MAXIMUM',
+    enduranceCurrent:'END_CURRENT',enduranceMaximum:'END_MAXIMUM',attack:'ATK',attackMelee:'ATK_MELEE',attackRanged:'ATK_RANGED',attackSpeed:'ATTACK_SPEED',haste:'HASTE',hpRegen:'HP_REGEN',manaRegen:'MANA_REGEN',enduranceRegen:'END_REGEN'});
 
 /** Adapt the capture parser's immutable field proposals to editable character
  * inputs. Unknown fields stay in the original observation/journal, not in sums.
@@ -69,7 +70,7 @@ export function characterObservationInput(observation={}) {
     const fields=Object.fromEntries(observation.fields.slice(0,100).filter(field=>typeof field?.key==='string').map(field=>[field.key,field.value]));
     const stats={};
     for (const [key,target] of Object.entries(OBSERVATION_STATS)) if(has(fields,key)) stats[target]=fields[key];
-    return {name:fields.name || observation.subject?.name,tier:fields.tier,slots:fields.slots,stats,
+    return {name:fields.name || observation.subject?.name,tier:fields.tier,fraction:fields.fraction,slots:fields.slots,stats,
         level:fields.requiredLevel,augments:list(fields.augmentNames).map(name=>({name})),augmentStatus:'unknown',statsComplete:false};
 }
 function metadata(value={}) {
@@ -84,7 +85,7 @@ function normalizeCandidate(value={}) {
     return { id:clean(value.id,100), instanceKey:clean(value.instanceKey,200), name:clean(value.name), wikiTitle:clean(value.wikiTitle),
         wikiMatch:['confirmed','suggested','unmatched'].includes(value.wikiMatch) ? value.wikiMatch : 'unmatched',
         iconId:clean(value.iconId,120), icon:safeCharacterIcon(value.icon), slots:characterSlotKinds(value.slots), tier,
-        fraction:tier === null ? 0 : Math.max(0,Math.min(2 ** tier - 1,Math.floor(numeric(value.fraction) || 0))),
+        fraction:tierFraction(value.fraction,tier),
         observedStats:normalizeCharacterStats(value.observedStats), baseStats:normalizeCharacterStats(value.baseStats),
         observedStatsComplete:value.observedStatsComplete === true, baseStatsComplete:value.baseStatsComplete === true,
         augments:list(value.augments).slice(0,CHARACTER_LIMITS.augments).map(augmentRecord),
@@ -128,11 +129,12 @@ function normalizeState(value) {
 export function characterItemStats(candidate) {
     const item = normalizeCandidate(candidate), observed = Object.keys(item.observedStats).length > 0;
     const stats = observed ? {...item.observedStats} : Object.fromEntries(Object.entries(item.baseStats).map(([key,value]) =>
-        [key,value === null || item.tier === null ? null : scaleItemStat(key,value,item.tier,{fraction:item.fraction})]));
+        [key,value === null || item.tier === null || item.fraction === null ? null : scaleItemStat(key,value,item.tier,{fraction:item.fraction})]));
     const warnings = [];
-    let complete = observed ? item.observedStatsComplete : item.baseStatsComplete && item.tier !== null;
+    let complete = observed ? item.observedStatsComplete : item.baseStatsComplete && item.tier !== null && item.fraction !== null;
     let uncertainAll = false;
     if (!observed && item.tier === null) warnings.push('Item tier is unknown; catalog base stats are not an equipped value.');
+    if (!observed && item.tier !== null && item.fraction === null) warnings.push('Fractional progress is unknown; review it before scaling catalog base stats.');
     if (!complete) warnings.push('Item stats are incomplete.');
     if (item.augmentStatus === 'unknown') { complete=false; uncertainAll=true; warnings.push('Augment presence or stat inclusion needs review.'); }
     if (item.augmentStatus === 'excluded') {
@@ -214,7 +216,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         catch { if (!warned) { warned=true;warn('Character changes remain in memory because local storage could not save them.'); } return false; }
     };
     const get = id => state.candidates.find(candidate=>candidate.id===id);
-    const variantKey = source => JSON.stringify([fullTier(source.tier),numeric(source.fraction)||0,list(source.augments).map(augment=>[clean(augment.name),clean(augment.id)])]);
+    const variantKey = source => JSON.stringify([fullTier(source.tier),tierFraction(source.fraction,fullTier(source.tier)),list(source.augments).map(augment=>[clean(augment.name),clean(augment.id)])]);
     const rememberRemoval = candidate => {
         for(const evidence of candidate.evidence) if(evidence.observationId && !state.removedObservations.some(record=>record.observationId===evidence.observationId&&record.sessionId===evidence.sessionId)) state.removedObservations.push({observationId:evidence.observationId,sessionId:evidence.sessionId});
         state.removedObservations=state.removedObservations.slice(-CHARACTER_LIMITS.removedObservations);

@@ -8,10 +8,11 @@ export const RELEASE_HISTORY = freeze([
       "Add Contribute to Wiki and Character workspaces, sharing the existing main/overlay font settings and log session.",
       "Make local screen reading opt-in, with explicit source selection, visible capture ownership and bounded offline OCR/journal retention. Character capture pauses contribution capture; imported screenshots do not enable continuous reading.",
       "Calibrate an optional OCR area from the selected source preview. Saved areas reset safely when capture size changes; bounded item-name/stat follow-up reads preserve evidence and leave unresolved values unknown.",
+      "Use the Default Modern (default_modern) game UI for screen reading. Read separate examine and Inventory panes, centered names, split stat columns and explicit upgrade progress. Other skins are not yet calibrated.",
       "Keep editable item/NPC/zone candidates and evidence locally. Review extracted fields, uncertain values and fresh potential wiki matches before preparing a page plan from the current wiki blueprints.",
       "Use the wiki's normal login in a dedicated isolated window. Require explicit review and publish acknowledgement for every planned page; retain conflict guards, per-page results and retry of unfinished changes.",
       "Include reviewed item-source changes for confirmed NPC loot with a known zone and normal/raid identity. Keep unverified zone /who names Unknown and preserve real character-capture timestamps across reloads.",
-      "Build character equipment from separate physical item cards, nullable tiers, augment evidence and 23 named slots with keyboard/select alternatives. Preserve observed No Equipment and equipped statistics separately from calculated gear sums.",
+      "Build character equipment from separate physical item cards, nullable tiers and upgrade progress, augment evidence and 23 named slots with keyboard/select alternatives. Preserve observed No Equipment and equipped statistics separately from calculated gear sums.",
       "Preview, copy or save a bounded character PNG. Optional uploads target the authenticated user's own talk page after explicit review; partial upload/talk failures remain recoverable.",
       "Keep game-log evidence authoritative for supported events and treat OCR output as proposals. Validation uses synthetic/offline OCR, native Windows/Linux X11 and loopback-wiki fixtures; production login/write, foreground-game composition and native-Wayland acceptance remain manual."
     ],
@@ -21,7 +22,7 @@ export const RELEASE_HISTORY = freeze([
         "image": "0.9.0/screen-reading",
         "view": "settings",
         "action": "Open Settings",
-        "copy": "Logs supply supported events; optional local screen reading adds visible examine windows and character stats. In Settings, enable Screen reading, choose a window or display and press Start. Pause or Stop at any time. Read a screenshot imports one image without enabling continuous capture.",
+        "copy": "Use the Default Modern (default_modern) game UI skin for screen reading; other skins are not yet calibrated. Logs supply supported events independently of the UI skin. In Settings, enable Screen reading, choose a window or display and press Start. Pause or Stop at any time. Read a screenshot imports one image without enabling continuous capture.",
         "alt": "Eye of Zomm 0.9.0 Screen reading settings with explicit source, Start, Pause, Stop and screenshot-import controls.",
         "caption": "Actual interface with synthetic folder/log labels. Opt-in controls are shown after a fixture import; continuous capture remains disabled.",
         "imageSha256": "7ab5c47da2ce5ed9b92950ed14102c00655820f4ae5c36a34f91a0a8c4c7df53"
@@ -61,7 +62,7 @@ export const RELEASE_HISTORY = freeze([
         "image": "0.9.0/augments",
         "view": "character",
         "action": "Open Character",
-        "copy": "Edit tier, wiki match, catalog base stats, observed examine values and augment details before sharing. State whether the examine values already include the augments; included values are not added again. Capture No Equipment and equipped totals separately. Calculated item sums remain a separate comparison because buffs, caps and effects are not assumed.",
+        "copy": "Edit tier, progress, wiki match, catalog base stats, observed examine values and augment details before sharing. Leave unread progress blank instead of assuming zero. State whether the examine values already include the augments; included values are not added again. Capture No Equipment and equipped totals separately. Calculated item sums remain a separate comparison because buffs, caps and effects are not assumed.",
         "alt": "Expanded Character card editor with a synthetic augment name, separately observed augment statistics and completeness checkbox.",
         "caption": "Actual editable augment section from the isolated fixture. Synthetic values demonstrate review rather than game-derived accuracy.",
         "imageSha256": "6c2bd6862712ee4c50a267db5b72b1fe27d3087a4d30341791004342d74672b8"

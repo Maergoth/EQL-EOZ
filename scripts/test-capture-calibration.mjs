@@ -21,10 +21,10 @@ async function run({root,temporary,screenshots}){
         res.setHeader('Content-Type',name.endsWith('.css')?'text/css':'text/javascript');res.end(await fs.readFile(path.join(root,name)));
     }catch{res.writeHead(404).end();}});
     await new Promise(done=>server.listen(0,'127.0.0.1',done));const origin=`http://127.0.0.1:${server.address().port}`;
-    const window=new BrowserWindow({show:false,width:1024,height:768,webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true}});
+    const window=new BrowserWindow({show:false,width:1024,height:768,webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true,backgroundThrottling:false}});
     window.webContents.session.webRequest.onBeforeRequest((details,done)=>done({cancel:!details.url.startsWith(origin+'/')}));
     const execute=(fn,...args)=>window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
-    const until=async(fn,label)=>{const end=Date.now()+8000;while(Date.now()<end){if(await fn())return;await new Promise(done=>setTimeout(done,30));}throw Error(`Timed out: ${label}`);};
+    const until=async(fn,label)=>{const end=Date.now()+8000;while(Date.now()<end){if(await fn())return;await new Promise(done=>setTimeout(done,30));}const diagnostic=await execute(()=>({dialogOpen:document.querySelector('.ocr-area-dialog')?.open,dialogInert:document.querySelector('.ocr-area-dialog')?.inert,previewPresent:document.querySelector('[data-area-image]')?.hasAttribute('src'),calibrateDisabled:document.querySelector('[data-capture-calibrate]')?.disabled,percentValid:[...document.querySelectorAll('[data-area-percent]')].map(input=>({name:input.name,value:input.value,valid:input.validity.valid})),source:window.fixture?.state,calls:window.fixture?.calls.length,notices:window.fixture?.notices.slice(-3),closeSeen:window.fixture?.reopenCloseSeen,decodeHeld:Boolean(window.fixture?.releaseReopenDecode)}));throw Error(`Timed out: ${label}; synthetic state=${JSON.stringify(diagnostic)}`);};
     const click=selector=>execute(selector=>document.querySelector(selector).click(),selector);
     const open=async()=>{await click('[data-capture-calibrate]');await until(()=>execute(()=>document.querySelector('.ocr-area-dialog').open),'calibration opens');};
     const closed=()=>until(()=>execute(()=>!document.querySelector('.ocr-area-dialog').open),'calibration closes');
@@ -65,12 +65,16 @@ async function run({root,temporary,screenshots}){
         await until(()=>execute(()=>Math.abs(Number(document.querySelector('[data-area-percent="width"]').value)-46)<1),'native pointer rectangle including the pane heading');
         await execute(()=>{document.querySelector('[data-area-status]').textContent='Synthetic preview · drag or adjust percentages before saving';document.documentElement.style.setProperty('--ui-font-scale',String(20/13));});
         if(screenshots){await fs.mkdir(screenshots,{recursive:true});for(const font of [20,13]){await execute(font=>{document.documentElement.style.setProperty('--ui-font-scale',String(font/13));document.querySelector('.ocr-area-dialog').scrollTop=0;},font);window.showInactive();await execute(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));await fs.writeFile(path.join(screenshots,font===13?'ocr-area-calibration.png':'ocr-area-calibration-20px.png'),(await window.capturePage()).toPNG());window.hide();}}
-        // Hold decode during a same-task Save/reopen. Chromium's actual queued
-        // close event must arrive while the new preview is opening, then leave
-        // that new operation intact. No sleeps or longer timeouts mask the race.
-        await execute(()=>{const image=document.querySelector('[data-area-image]');fixture.originalDecode=image.decode.bind(image);image.decode=()=>new Promise(resolve=>fixture.releaseReopenDecode=resolve);fixture.reopenCloseSeen=false;document.querySelector('.ocr-area-dialog').addEventListener('close',()=>{fixture.reopenCloseSeen=true;},{once:true});});
-        await execute(async()=>{document.querySelector('[data-area-save]').click();await Promise.resolve();document.querySelector('[data-capture-calibrate]').click();});
-        await until(()=>execute(()=>Boolean(fixture.releaseReopenDecode)&&fixture.reopenCloseSeen),'native queued close during fresh preview decode');
+        // Capture Chromium's real queued close before the product listener,
+        // then deliver that exact notification during a fresh, held decode.
+        // This exercises the race without assuming platform task/microtask order.
+        await execute(()=>{fixture.reopenCloseSeen=false;document.querySelector('.ocr-area-dialog').addEventListener('close',event=>{event.stopImmediatePropagation();fixture.reopenCloseSeen=event.isTrusted;fixture.reopenCloseEvent=event;},{once:true,capture:true});});
+        await click('[data-area-save]');await closed();
+        await until(()=>execute(()=>fixture.reopenCloseSeen),'native queued close captured after Save');
+        await execute(()=>{const image=document.querySelector('[data-area-image]');fixture.originalDecode=image.decode.bind(image);image.decode=()=>new Promise(resolve=>fixture.releaseReopenDecode=resolve);});
+        await click('[data-capture-calibrate]');
+        await until(()=>execute(()=>Boolean(fixture.releaseReopenDecode)),'fresh preview decode held');
+        await execute(()=>{document.querySelector('.ocr-area-dialog').dispatchEvent(fixture.reopenCloseEvent);delete fixture.reopenCloseEvent;});
         assert.equal(await execute(()=>document.querySelector('[data-area-image]').hasAttribute('src')),true,'The previous queued close must not clear a fresh preview while decoding');
         await execute(()=>{document.querySelector('[data-area-image]').decode=fixture.originalDecode;fixture.releaseReopenDecode();delete fixture.releaseReopenDecode;});
         await until(()=>execute(()=>document.querySelector('.ocr-area-dialog').open),'fresh preview survives the previous close event');
