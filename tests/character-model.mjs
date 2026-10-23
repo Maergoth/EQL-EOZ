@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { CHARACTER_SLOTS, CHARACTER_LIMITS, CHARACTER_STORAGE_KEY, createCharacterModel, characterAutoAssignment, characterItemStats, characterObservationInput, characterShareSummary, characterSlotCompatibility, characterStatLabel, normalizeCharacterStats, safeCharacterIcon } from '../app/character-model.js';
 import { CHARACTER_SHARE_LIMITS, characterShareLayout } from '../app/character-share.js';
+import {parseScreenRead} from '../app/screen-read-parser.js';
 
 const memory=()=>{const data=new Map();return {getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value)};};
 const storage=memory(),model=createCharacterModel({storage,now:()=>12345});
@@ -41,6 +42,25 @@ assert.equal(modernSummary.stats.derived.HP.value,69,'Derived gear sums remain s
 for(const slot of ['feet','primary','finger1']){const entry=modernSummary.equipment.find(entry=>entry.slot===slot);assert.equal(entry.item.fraction,18);assert.equal(entry.item.stats.ATK,77);assert.equal(entry.item.stats.ATTACK_SPEED,12);assert.equal(entry.item.stats.DMG_BONUS,4);assert.equal(entry.item.stats.DMG,9);assert.equal(entry.item.stats.DELAY,24);assert.equal(entry.item.stats.HP,23);}
 assert(characterShareLayout(modernRestored.snapshot()).height<=CHARACTER_SHARE_LIMITS.maxHeight,'Modern keys remain within the complete share layout');
 assert.equal(characterObservationInput(proposal('legacy-tier','item',{tier:10})).fraction,undefined,'A tier alone never invents fractional progress');
+
+// Real hover geometry goes through the producer, adapter and public summary.
+// Weapon damage and backstab damage are independent observed quantities.
+const hoverWord=(text,x,y,width=80)=>({text,confidence:96,bbox:{x0:x,y0:y,x1:x+width,y1:y+20}});
+const hoverDamage=parseScreenRead({owner:'character',sessionId:'synthetic-hover-damage',text:'Synthetic compact hover',words:[
+    hoverWord('Needlefern +3',100,10,300),hoverWord('Lore Equipped, No Trade',100,35,300),hoverWord('Class:',100,60,55),hoverWord('ROG',165,60),hoverWord('Race:',100,85,55),hoverWord('ALL',165,85),hoverWord('Primary',100,110),hoverWord('Secondary',190,110,100),hoverWord('Size:',20,160,50),hoverWord('SMALL',130,160,75),hoverWord('HP:',250,160,40),hoverWord('73',350,160,30),hoverWord('Weight',20,185,70),hoverWord('1.4',150,185,30),hoverWord('Base Dmg:',250,185,100),hoverWord('18',380,185,30),hoverWord('Backstab Dmg:',250,210,130),hoverWord('15',400,210,30),hoverWord('Hold RMB or ALT+LMB to inspect or upgrade item',20,420,520)
+]})[0];
+assert(hoverDamage);assert.equal(hoverDamage.fields.find(field=>field.key==='damage').value,18);assert.equal(hoverDamage.fields.find(field=>field.key==='backstabDamage').value,15);
+const hoverStorage=memory(),hoverModel=createCharacterModel({storage:hoverStorage}),hoverCard=hoverModel.intake({...hoverDamage,id:'hover-damage-a'}).candidate;
+assert.equal(hoverCard.observedStats.DMG,18);assert.equal(hoverCard.observedStats.BACKSTAB_DMG,15);assert.equal(characterStatLabel('BACKSTAB_DMG'),'Backstab dmg');
+hoverModel.assign(hoverCard.id,'primary');hoverModel.setStatSnapshot('base',{stats:{DMG:2,BACKSTAB_DMG:1},confirmed:true});
+const hoverSummary=characterShareSummary(hoverModel.snapshot()),hoverShared=hoverSummary.equipment.find(entry=>entry.slot==='primary').item;
+assert.equal(hoverShared.stats.DMG,18);assert.equal(hoverShared.stats.BACKSTAB_DMG,15,'Backstab damage is not folded into base weapon damage');
+assert.equal(hoverSummary.stats.computed.BACKSTAB_DMG.value,null);assert.equal(hoverSummary.stats.computed.BACKSTAB_DMG.method,'unsupported','An observed backstab value does not invent an equipped damage formula');
+hoverModel.updateCandidate(hoverCard.id,{observedStats:{...hoverCard.observedStats,BACKSTAB_DMG:17}});
+const hoverRestored=createCharacterModel({storage:hoverStorage});assert.equal(hoverRestored.snapshot().candidates[0].observedStats.BACKSTAB_DMG,17);
+hoverRestored.mergeObservation(hoverCard.id,{...hoverDamage,id:'hover-damage-b'});
+const correctedHover=characterShareSummary(hoverRestored.snapshot()).equipment.find(entry=>entry.slot==='primary').item;
+assert.equal(correctedHover.stats.DMG,18);assert.equal(correctedHover.stats.BACKSTAB_DMG,17,'A persisted deliberate backstab correction survives a later OCR read');
 
 // Guided Character work uses a no-equipment observation, not a mandatory
 // equipped capture. These fresh numbers/strings are entirely synthetic.

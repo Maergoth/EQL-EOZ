@@ -102,3 +102,14 @@ live 4K throughput. No private image or output enters a fixture or release.
   illustrated What's New archive; 31 versions/40 history images are verified.
 - Pending: exact-head Windows/Linux/package gates and final anonymous public
   download/extraction verification. Preserve every older release.
+
+The first PR build at `0eee876` passed source checks but stopped at the native
+window-lifecycle fixture: it incorrectly required every current release tour
+to contain multiple pages. The correction verifies the actual single-page
+current tour and uses the real history picker to exercise an older multi-page
+tour. Current image/title/count, Previous/Next, Done, Escape and focus assertions
+remain covered; the corrected four native lifecycle scenarios pass locally.
+Those initial runs did not reach capture or packaging and are not acceptance
+evidence for those stages. Final integration also retains newly parsed backstab
+damage in editable/shared item statistics separately from base damage; no
+equipped-total formula is inferred for it.
