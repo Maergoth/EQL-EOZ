@@ -222,5 +222,25 @@ mapping and evidence isolation; it does not claim native 4K recognition.
   on the resize-guard-fixed source: B/C captures 328/193 ms after draw, all
   three exact identities and original provenance, calibration/clipboard,
   unchanged fresh baseline, journal and Stop. The strict 500 ms assertion stays.
-- Pending: final post-review source check, exact-head CI/platform/package
+- Final-head CI on `279950f` exposed two additional native-fixture failures:
+  Windows reaches the three names but fails the generic queued-record
+  provenance assertion; Linux admits all three pixel stages without overflow
+  but retains three pending visual frames rather than the fixture's exact two.
+  Investigate their original records/native transition variants before changing
+  assertions. Preserve timing, original source/session/generation/timestamps,
+  fixed exposure and bounded queues. The release remains unmerged.
+- The corrected priority fixture reproduces Linux's three native variants and
+  passes by matching retained B/C PNG SHA-256, original timestamps and trusted
+  context to actual stage exposures. Every pending visual variant must map to
+  a marked stage; final named OCR records must map to their original admitted
+  image. Native and 4K stream gates pass on Windows and private WSL Linux with
+  the unchanged two-second exposures, delayed PNG, held OCR and zero drops.
+- The native fixture now hides its final tooltip before releasing OCR and
+  matches each named result's exact PNG hash, original capture time and trusted
+  context to a marked admission during that tooltip's actual exposure. A later
+  heartbeat cannot substitute; legitimate retained variants or scene reads can
+  satisfy this generic stream check, while the priority fixture specifically
+  requires visual-item reads. Bounded mismatch diagnostics preserve the stage
+  ledger and original observations. The stricter native gate passes locally.
+- The final post-review normal `npm test` passed. Pending: exact-head CI/platform/package
   checks and publication. No new release is yet claimed.
