@@ -149,3 +149,8 @@ four-panel docking is staged separately within a compact work area and asserts
 each relation before propagation. The full main-app smoke isolates its pair
 subsection and also passes a 1024×700 test-only work-area contract. Native input,
 touching/size/anchor/collision assertions and production guards remain intact.
+Repeated native drags also wait for both viewport dimensions and settle the
+previous release before resetting bounds; bounded pointer/bounds diagnostics
+cover any platform mismatch. Local native acceptance includes DPR 1 with a
+1024×700 work area and the default DPR 1.5. The calibration fixture uses the
+current recommended-source contract and the actual guided Character start.

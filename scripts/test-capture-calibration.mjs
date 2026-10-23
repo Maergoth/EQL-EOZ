@@ -35,9 +35,9 @@ async function run({root,temporary,screenshots}){
             const {mountCaptureWorkspace}=await import('/app/capture-workspace.js');
             const canvas=document.createElement('canvas');canvas.width=1600;canvas.height=900;const ctx=canvas.getContext('2d');ctx.fillStyle='#0c1725';ctx.fillRect(0,0,1600,900);ctx.fillStyle='#192f48';ctx.fillRect(300,180,700,550);ctx.strokeStyle='#d8b75c';ctx.strokeRect(300,180,700,550);ctx.fillStyle='#f0d77f';ctx.font='32px sans-serif';ctx.fillText('SYNTHETIC EXAMINE PANE',330,235);ctx.fillStyle='white';for(const [index,text]of ['Synthetic Shield +3','Slot: SECONDARY','AC 12','HP 45','STR 8'].entries())ctx.fillText(text,330,310+index*65);
             let listener=()=>{},state={enabled:false,phase:'disabled',source:null,owner:null,sessionId:'',hasPreview:false};
-            const source={id:'window:fixture',label:'EverQuest Synthetic Calibration',type:'window'},calls=[],starts=[],notices=[];
+            const source={id:'window:fixture',label:'EverQuest Synthetic Calibration',type:'window',recommended:true},calls=[],starts=[],notices=[];
             const emit=patch=>{state={...state,...patch};listener(state);};
-            const api={status:async()=>state,sources:async()=>[{...source,name:source.label}],onStatus:fn=>{listener=fn;return()=>{listener=()=>{};};},onObservation:()=>()=>{},read:async()=>({records:[]}),preview:async()=>({dataUrl:canvas.toDataURL(),sourceSize:state.sourceSize,sourceId:state.source.id,owner:state.owner,sessionId:state.sessionId,region:state.region,referenceSize:state.referenceSize}),setRegion:async value=>{calls.push(value);emit({region:value.region,referenceSize:value.region?value.referenceSize:null,calibrationWarning:null});return state;},start:async value=>{starts.push(value);emit({enabled:true,phase:'running',source,owner:value.mode,sessionId:`fixture-${starts.length}`,sourceSize:{width:1600,height:900},region:value.region||null,referenceSize:value.referenceSize||null,hasPreview:true});return state;}};
+            const api={status:async()=>state,sources:async()=>[{...source,name:source.label}],onStatus:fn=>{listener=fn;return()=>{listener=()=>{};};},onObservation:()=>()=>{},read:async()=>({records:[]}),preview:async()=>({dataUrl:canvas.toDataURL(),sourceSize:state.sourceSize,sourceId:state.source.id,owner:state.owner,sessionId:state.sessionId,region:state.region,referenceSize:state.referenceSize}),setRegion:async value=>{calls.push(value);emit({region:value.region,referenceSize:value.region?value.referenceSize:null,calibrationWarning:null});return state;},start:async value=>{starts.push(value);emit({enabled:true,phase:'running',source,owner:value.mode,sessionId:value.sessionId||`fixture-${starts.length}`,sourceSize:{width:1600,height:900},region:value.region||null,referenceSize:value.referenceSize||null,hasPreview:true});return state;}};
             const mount=()=>mountCaptureWorkspace({capture:api,wiki:null,share:null,notify:value=>notices.push(value)});
             window.fixture={api,source,calls,starts,notices,emit,mount,get state(){return state;},workspace:mount()};
         });
@@ -54,7 +54,9 @@ async function run({root,temporary,screenshots}){
         await click('[data-capture-sources]');await click('[data-capture-start]');
         await until(()=>execute(()=>fixture.starts.length===1),'restored area start');
         assert.deepEqual(await execute(()=>fixture.starts[0].region),{x:.1,y:.2,width:.3,height:.4});
-        await click('[data-character-start]');await until(()=>execute(()=>fixture.starts.length===2),'character start');
+        await execute(()=>{const form=document.querySelector('[data-character-metadata]');for(const[key,value]of Object.entries({name:'Synthetic Calibration',server:'Example Realm',classes:'WAR',level:10,aaCount:0}))form.elements[key].value=String(value);form.requestSubmit();});
+        await until(()=>execute(()=>document.querySelector('[data-walkthrough-source-select]')?.value==='window:fixture'),'Character inline recommended source');
+        await click('[data-walkthrough-start-source]');await until(()=>execute(()=>fixture.starts.length===2),'character start');
         assert.equal(await execute(()=>Boolean(fixture.starts[1].region)),false,'Calibration is scoped to the capture owner');
         await open();
         await percent({x:90,width:30});await click('[data-area-save]');assert.equal(await execute(()=>fixture.calls.length),1,'Invalid rectangles never reach capture');
