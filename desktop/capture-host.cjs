@@ -9,6 +9,7 @@ const { validateCapturePng,normalizeCaptureRegion } = require('./capture-image.c
 const { recognizeCaptureImage } = require('./capture-reader.cjs');
 const CHANNEL = 'eye-of-zomm:capture', SOURCE_CHANNEL = 'eye-of-zomm:capture-source';
 const MODES = new Set(['contribution','character']);
+const FRAME_QUEUE_LIMIT=12,FRAME_QUEUE_BYTES=48*1024*1024,FRAME_QUEUE_AGE=15000,OCR_INTERVAL=250,SCREEN_DEDUP_MS=3000;
 const clean = (value, length = 240) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,length);
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const isOwnWindow = name => /^Eye of Zomm|^EQLWiki - Eye of Zomm/i.test(name);
@@ -31,8 +32,12 @@ class CaptureHost {
         this.journal = journal || new ScreenReadJournal({ root:root || path.join(electron.app.getPath('userData'),'capture','journal') });
         this.ocr = ocr || new OcrService({ packaged:electron.app.isPackaged,resourcesPath:process.resourcesPath });
         this.onObservation = onObservation; this.choices = []; this.source = null; this.captureWindow = null;
+        this.retiredSources=new WeakSet();
         this.owner = null; this.sessionId = ''; this.phase = 'disabled'; this.enabled = false; this.error = null;
-        this.generation = 0; this.revision = 0; this.ownerStartedAt = 0; this.lastFrame = null; this.pending = null;
+        this.generation = 0; this.generationStartedAt=this.now();this.revision = 0; this.ownerStartedAt = 0; this.lastFrame = null; this.pending = [];
+        this.queuedBytes=0;this.activeFrameHash=null;this.activeFrameGeneration=null;this.overflowFrames=0;this.queueWarning=null;this.ocrStartedAt=0;this.readDelay=null;
+        this.frameStatusAt=0;this.frameStatusTimer=null;
+        this.lastReadAt=null;this.lastReadItemCount=null;
         this.processing = null; this.skippedFrames = 0; this.lastObservationAt = null; this.disposed = false;
         this.contributionResume = null; this.hold = false; this.sequence = 0; this.seen = new Map();
         this.region=null;this.referenceSize=null;this.sourceSize=null;this.calibrationWarning=null;
@@ -53,17 +58,20 @@ class CaptureHost {
     }
     getStatus() {
         return { enabled:this.enabled,phase:this.phase,owner:this.owner,source:this.source ? {id:this.source.id,label:clean(this.source.name),type:this.source.id.startsWith('screen:')?'display':'window'}:null,
-            sessionId:this.sessionId,characterSessionId:this.owner==='character'?this.sessionId:null,generation:this.generation,
-            queuedFrames:this.pending?1:0,skippedFrames:this.skippedFrames,lastObservationAt:this.lastObservationAt,
+            sessionId:this.sessionId,characterSessionId:this.owner==='character'?this.sessionId:null,generation:this.generation,generationStartedAt:this.generationStartedAt,ownerStartedAt:this.ownerStartedAt,
+            queuedFrames:this.pending.length,queuedBytes:this.queuedBytes,queueLimit:FRAME_QUEUE_LIMIT,queueByteLimit:FRAME_QUEUE_BYTES,
+            overflowFrames:this.overflowFrames,queueWarning:this.queueWarning,reading:this.phase==='running'&&!this.hold&&this.activeFrameGeneration===this.generation&&Boolean(this.activeFrameHash),lastFrameAt:this.lastFrame?.at??null,lastReadAt:this.lastReadAt,lastReadItemCount:this.lastReadItemCount,skippedFrames:this.skippedFrames,lastObservationAt:this.lastObservationAt,
             contributionPaused:this.owner==='character'&&Boolean(this.contributionResume),error:this.error,
             hasPreview:Boolean(this.lastFrame&&this.lastFrame.sourceId===this.source?.id&&this.phase==='running'),
             sourceSize:this.sourceSize,region:this.region,referenceSize:this.referenceSize,calibrationWarning:this.calibrationWarning,
-            readWarning:this.readWarning||this.frameWarning,resumable:Boolean(this.enabled&&this.owner&&this.source&&['error','paused'].includes(this.phase)) };
+            readWarning:this.readWarning||this.frameWarning||this.queueWarning,resumable:Boolean(this.enabled&&this.owner&&this.source&&['error','paused'].includes(this.phase)) };
     }
     emitStatus() {
+        this.frameStatusAt=Date.now();
         const main = this.getMainWindow();
         if (main && !main.isDestroyed()) main.webContents.send('eye-of-zomm:capture-status',this.getStatus());
     }
+    emitFrameStatus(){const delay=250-(Date.now()-this.frameStatusAt);if(delay<=0){if(this.frameStatusTimer)clearTimeout(this.frameStatusTimer);this.frameStatusTimer=null;this.emitStatus();}else if(!this.frameStatusTimer){this.frameStatusTimer=setTimeout(()=>{this.frameStatusTimer=null;if(!this.disposed)this.emitStatus();},delay);this.frameStatusTimer.unref?.();}}
     async handle(event,action,value) {
         if (this.disposed || !this.isMain(event)) throw new Error('Screen reading is available only in the main app.');
         if (action==='status') return this.getStatus();
@@ -88,12 +96,18 @@ class CaptureHost {
         return this.choices.map(source=>({id:source.id,name:clean(source.name),type:source.id.startsWith('screen:')?'display':'window',recommended:source.id===preferred}));
     }
     async cancelWork({ destroySource = false } = {}) {
-        this.generation++; this.pending = null; this.lastFrame = null;
+        this.advanceGeneration(); this.clearPending(); this.lastFrame = null;
         clearTimeout(this.sourceTimer);this.sourceTimer=null;
-        if (destroySource && this.captureWindow) { const window = this.captureWindow; this.captureWindow = null; if (!window.isDestroyed()) window.destroy(); }
+        if (destroySource && this.captureWindow) { const window = this.captureWindow; this.retiredSources.add(window.webContents);this.captureWindow = null; if (!window.isDestroyed()) window.destroy(); }
         await this.ocr.stop();
         if (this.processing) await this.processing.catch(()=>{});
     }
+    clearPending(){this.pending=[];this.queuedBytes=0;if(this.readDelay){clearTimeout(this.readDelay.timer);this.readDelay.resolve();this.readDelay=null;}}
+    advanceGeneration(at=this.now()){this.generation++;this.generationStartedAt=at;this.lastReadAt=null;this.lastReadItemCount=null;}
+    recentlySeen(key){return this.seen.has(key)&&this.now()-this.seen.get(key)<SCREEN_DEDUP_MS;}
+    discardQueued(){const frame=this.pending.shift();if(frame)this.queuedBytes-=frame.png.length;return frame;}
+    noteOverflow(){this.skippedFrames++;this.overflowFrames++;this.queueWarning=`Screen reading could not keep every changing frame (${this.overflowFrames} dropped). Hold each item still briefly or narrow the capture area.`;}
+    prunePending(){while(this.pending.length&&this.now()-this.pending[0].capturedAt>FRAME_QUEUE_AGE){this.discardQueued();this.noteOverflow();}}
     async start({mode,sourceId,sessionId,region=null,referenceSize=null} = {}) {
         if (!MODES.has(mode) || (sourceId!==undefined && typeof sourceId!=='string') || (sessionId!==undefined && !/^[\w-]{1,120}$/.test(sessionId))) throw new Error('Invalid screen-reading session.');
         if (this.disposed) throw new Error('Screen reading has closed.');
@@ -111,6 +125,8 @@ class CaptureHost {
         this.source = source; this.phase = 'selecting'; this.error = null; this.ownerStartedAt = this.now(); this.seen.clear();
         this.region=selection?.region||null;this.referenceSize=selection?.referenceSize||null;this.sourceSize=null;this.calibrationWarning=null;
         this.readWarning=null;this.frameWarning=null;this.readErrors=0;this.nextReadAt=0;
+        this.overflowFrames=0;this.queueWarning=null;
+        this.lastReadAt=null;this.lastReadItemCount=null;
         this.emitStatus();
         try {
             await this.journal.initialize();
@@ -153,8 +169,12 @@ class CaptureHost {
         });
     }
     async handleSource(event,action,value) {
+        // Already queued IPC from our own destroyed source carries no remaining
+        // authority. Deny it quietly instead of logging a normal Stop race.
+        if(this.retiredSources.has(event.sender))return action==='configuration'?{allowed:false,capture:null}:action==='frame'?{accepted:false,stale:true}:{ok:false};
         if (!this.isSource(event) || this.disposed) throw new Error('Capture source is unavailable.');
-        if (action==='configuration') return {allowed:this.enabled&&this.phase==='selecting',intervalMs:2000};
+        if (action==='configuration') return {allowed:this.enabled&&this.phase==='selecting',intervalMs:125,encodeIntervalMs:250,heartbeatMs:750,
+            capture:this.enabled&&!this.hold&&['selecting','running'].includes(this.phase)?{generation:this.generation,owner:this.owner,sessionId:this.sessionId,sourceId:this.source?.id,region:this.region}:null};
         if (action==='started') { if(!this.enabled||this.phase!=='selecting')return {ok:false};clearTimeout(this.sourceTimer);this.sourceTimer=null;this.phase='running';this.error=null;this.emitStatus();return {ok:true}; }
         if (action==='frame-error') { if(this.enabled&&this.phase==='running'){this.frameWarning='A capture frame was unavailable. Waiting for the selected game window.';this.emitStatus();}return {ok:true}; }
         if (action==='error' || action==='ended') { await this.fail(action==='ended'?'The selected capture source ended. Choose it again.':clean(value,500));return {ok:false}; }
@@ -196,7 +216,7 @@ class CaptureHost {
         if(this.disposed||this.phase!=='running'||this.hold||!this.lastFrame||sourceId!==this.source?.id||sessionId!==this.sessionId)throw new Error('Capture changed. Open a fresh calibration preview.');
         const selection=normalizeCaptureRegion(region,referenceSize);
         if(selection&&(selection.referenceSize.width!==this.sourceSize?.width||selection.referenceSize.height!==this.sourceSize?.height))throw new Error('Capture size changed. Open a fresh calibration preview.');
-        const revision=++this.revision;this.hold=true;this.generation++;this.pending=null;
+        const revision=++this.revision;this.hold=true;this.advanceGeneration();this.clearPending();
         try{
             await this.ocr.stop();if(this.processing)await this.processing.catch(()=>{});
             if(revision!==this.revision||this.disposed)return this.getStatus();
@@ -206,57 +226,69 @@ class CaptureHost {
     }
     submitFrame(value) {
         if (this.phase!=='running' || this.hold || !this.owner) return {accepted:false};
+        if(value?.captureGeneration!==this.generation||value?.owner!==this.owner||value?.sessionId!==this.sessionId||value?.sourceId!==this.source?.id)return {accepted:false,stale:true};
         if (!value || !Number.isInteger(value.width) || !Number.isInteger(value.height) || value.width<1 || value.height<1 ||
             value.width*value.height>16*1024*1024 || !value.bytes || value.bytes.byteLength>32*1024*1024 ||
-            !Number.isFinite(value.capturedAt) || value.capturedAt<this.ownerStartedAt || Math.abs(this.now()-value.capturedAt)>30000) throw new Error('Invalid capture frame.');
+            !Number.isFinite(value.capturedAt) || value.capturedAt<this.ownerStartedAt || this.now()-value.capturedAt>30000||value.capturedAt>this.now()+1000) throw new Error('Invalid capture frame.');
         const png = Buffer.from(value.bytes);
         validateCapturePng(png,{width:value.width,height:value.height});
-        const image = this.electron.nativeImage.createFromBuffer(png);
-        const size = image.getSize();
-        if (image.isEmpty() || size.width!==value.width || size.height!==value.height) throw new Error('Invalid capture dimensions.');
+        // Queue compressed PNGs only. Native decode waits until the serial OCR
+        // slot, so a brief tooltip cannot create many large decoded images.
+        const size={width:value.width,height:value.height};
         const sizeChanged=this.sourceSize?.width!==size.width||this.sourceSize?.height!==size.height;
+        if(this.sourceSize&&sizeChanged){this.advanceGeneration(value.capturedAt);this.clearPending();this.seen.clear();}
         this.sourceSize=size;
         if(this.region&&(this.referenceSize.width!==size.width||this.referenceSize.height!==size.height)){
             this.region=null;this.referenceSize=null;this.calibrationWarning='The capture size changed. Region calibration was reset to the full frame.';
-            this.generation++;this.pending=null;this.seen.clear();
+            this.clearPending();this.seen.clear();
         }
         this.lastFrame = {png,at:value.capturedAt,sourceId:this.source?.id};
         const recoveredFrame=Boolean(this.frameWarning);this.frameWarning=null;
         if(sizeChanged||recoveredFrame)this.emitStatus();
         if(this.now()<this.nextReadAt){this.skippedFrames++;return {accepted:false,retrying:true};}
-        const frame = {png,image,size,capturedAt:value.capturedAt,generation:this.generation,owner:this.owner,sessionId:this.sessionId};
-        if (this.pending) this.skippedFrames++;
-        this.pending = frame;
+        const hash=digest(png);if(this.recentlySeen(`frame:${hash}`)||this.activeFrameHash===hash||this.pending.some(frame=>frame.hash===hash)){this.skippedFrames++;return {accepted:false,duplicate:true};}
+        this.prunePending();
+        while(this.pending.length>=FRAME_QUEUE_LIMIT||this.queuedBytes+png.length>FRAME_QUEUE_BYTES){this.discardQueued();this.noteOverflow();}
+        const frame = {png,hash,size,capturedAt:value.capturedAt,generation:this.generation,owner:this.owner,sessionId:this.sessionId,sourceId:this.source?.id,
+            region:this.region?{...this.region}:null,referenceSize:this.referenceSize?{...this.referenceSize}:null};
+        this.pending.push(frame);this.queuedBytes+=png.length;
         if (!this.processing) this.processing = this.pump().finally(()=>{this.processing=null;});
-        return {accepted:true,queued:Boolean(this.pending)};
+        this.emitFrameStatus();
+        return {accepted:true,queued:this.pending.length};
     }
     async pump() {
-        while (this.pending && !this.disposed) {
-            const frame = this.pending;this.pending=null;
+        while (this.pending.length && !this.disposed) {
+            this.prunePending();if(!this.pending.length)break;
+            const frame = this.discardQueued();this.activeFrameHash=frame.hash;this.activeFrameGeneration=frame.generation;this.emitFrameStatus();
+            const isCurrent=()=>frame.generation===this.generation&&!this.disposed&&this.phase==='running'&&!this.hold&&frame.owner===this.owner&&frame.sessionId===this.sessionId&&frame.sourceId===this.source?.id;
             try {
-                const hash = digest(frame.png);
-                if (this.seen.has(`frame:${hash}`)) {this.skippedFrames++;continue;}
-                const read=await recognizeCaptureImage({ocr:this.ocr,image:frame.image,region:this.region,referenceSize:this.referenceSize,nativeImage:this.electron.nativeImage,
-                    isCurrent:()=>frame.generation===this.generation&&!this.disposed&&this.phase==='running'&&!this.hold});
-                if (frame.generation!==this.generation || this.phase!=='running' || this.hold) continue;
+                const delay=Math.max(0,OCR_INTERVAL-(Date.now()-this.ocrStartedAt));
+                if(delay)await new Promise(resolve=>{const timer=setTimeout(()=>{this.readDelay=null;resolve();},delay);this.readDelay={timer,resolve};});
+                if(!isCurrent())continue;this.ocrStartedAt=Date.now();
+                const image=this.electron.nativeImage.createFromBuffer(frame.png),size=image.getSize();
+                if(image.isEmpty()||size.width!==frame.size.width||size.height!==frame.size.height)throw new Error('Invalid capture dimensions.');
+                const read=await recognizeCaptureImage({ocr:this.ocr,image,region:frame.region,referenceSize:frame.referenceSize,nativeImage:this.electron.nativeImage,isCurrent});
+                if (!isCurrent()) continue;
                 if(read.cancelled)continue;
                 if(read.warning)this.calibrationWarning=read.warning;
                 const {parseScreenRead} = await this.parseModule;
                 const observations = parseScreenRead({...read.result,owner:frame.owner,sessionId:frame.sessionId,
-                    capturedAt:new Date(frame.capturedAt).toISOString(),input:{...read.input,frameId:hash,captureGeneration:frame.generation}});
+                    capturedAt:new Date(frame.capturedAt).toISOString(),input:{...read.input,frameId:frame.hash,captureGeneration:frame.generation,sourceId:frame.sourceId}});
                 for (const observation of observations) await this.saveObservation(observation,frame.generation);
+                if(!isCurrent())continue;
+                this.lastReadAt=this.now();this.lastReadItemCount=observations.filter(observation=>observation.subject?.kind==='item').length;
                 this.readWarning=null;this.readErrors=0;this.nextReadAt=0;
-                this.remember(`frame:${hash}`);this.emitStatus();
+                this.remember(`frame:${frame.hash}`);
             } catch (error) {
                 if (frame.generation===this.generation && !this.disposed) {
                     // A timeout or unreadable frame does not revoke the user's
                     // selected stream. Retry later with one fresh worker, keeping
                     // the Character session and its queued observations intact.
                     this.readErrors++;this.nextReadAt=this.now()+Math.min(30000,2000*2**Math.min(this.readErrors-1,4));
-                    this.readWarning=`Screen reading will retry: ${clean(error.message,380)}`;this.pending=null;this.emitStatus();
+                    this.readWarning=`Screen reading will retry: ${clean(error.message,380)}`;this.clearPending();this.emitStatus();
                     await this.ocr.stop();
                 }
-            }
+            }finally{if(this.activeFrameHash===frame.hash){this.activeFrameHash=null;this.activeFrameGeneration=null;}this.emitFrameStatus();}
         }
     }
     remember(key) { this.seen.set(key,this.now());if(this.seen.size>2000)this.seen.delete(this.seen.keys().next().value); }
@@ -264,7 +296,7 @@ class CaptureHost {
         const values=(observation.fields||[]).map(field=>[field.key,field.value]).sort((a,b)=>a[0].localeCompare(b[0]));
         const semantic = JSON.stringify([observation.owner,observation.sessionId,observation.subject,values,observation.relations||[],
             observation.kind==='game-log'?[observation.input?.logId,observation.input?.cursor,observation.capturedAt]:null]);
-        const key=digest(semantic);if(this.seen.has(key))return null;
+        const key=digest(semantic);if(observation.kind==='game-log'?this.seen.has(key):this.recentlySeen(key))return null;
         if(generation!==this.generation || this.disposed)return null;
         const record=await this.journal.append({...observation,id:crypto.randomUUID(),dedupKey:key});
         if(generation!==this.generation || this.disposed)return null;
@@ -303,7 +335,7 @@ class CaptureHost {
         const image=this.electron.nativeImage.createFromBuffer(png),size=image.getSize();
         if(image.isEmpty()||size.width*size.height>16*1024*1024)throw new Error('Choose an image smaller than 16 megapixels.');
         if(this.hold)throw new Error('Another screenshot is already being read.');
-        this.hold=true;this.generation++;this.pending=null;
+        this.hold=true;this.advanceGeneration();this.clearPending();
         const generation=this.generation,owner=mode||this.owner||'contribution';
         const reviewSession=sessionId||(owner===this.owner?this.sessionId:null)||crypto.randomUUID();
         try{
@@ -314,7 +346,7 @@ class CaptureHost {
             const {parseScreenRead}=await this.parseModule;
             const records=[];
             for(const observation of parseScreenRead({...read.result,kind:'manual',owner,sessionId:reviewSession,
-                capturedAt:new Date(this.now()).toISOString(),input:{...read.input,frameId:digest(png)}})){
+                capturedAt:new Date(this.now()).toISOString(),input:{...read.input,frameId:digest(png),sourceId:null}})){
                 const record=await this.saveObservation(observation,generation);if(record)records.push(record);
             }
             return {records,message:records.length?'Screenshot read. Review the proposed fields.':'No item examine or character stat block was recognized. Try a larger, clearer screenshot.'};
@@ -324,7 +356,7 @@ class CaptureHost {
     }
     async captureScreenshot({sourceId}={}) {
         if(this.hold)throw new Error('A screenshot is already in progress.');
-        this.hold=true;const revision=this.revision;this.generation++;this.pending=null;
+        this.hold=true;const revision=this.revision;this.advanceGeneration();this.clearPending();
         try{
             await this.ocr.stop();if(this.processing)await this.processing.catch(()=>{});
             if(this.lastFrame&&this.now()-this.lastFrame.at<10000&&(!sourceId||sourceId===this.lastFrame.sourceId)){
@@ -342,6 +374,7 @@ class CaptureHost {
     }
     async dispose() {
         if(this.disposed)return;this.disposed=true;this.phase='disabled';this.enabled=false;
+        clearTimeout(this.frameStatusTimer);this.frameStatusTimer=null;
         this.electron.ipcMain.removeHandler(CHANNEL);this.electron.ipcMain.removeHandler(SOURCE_CHANNEL);
         await this.cancelWork({destroySource:true});await this.journal.close();
     }

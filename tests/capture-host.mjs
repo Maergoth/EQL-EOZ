@@ -31,9 +31,9 @@ function fixture(){
     const host=new CaptureHost({electron,origin,getMainWindow:()=>main,journal,ocr,now:()=>now,onObservation:value=>observations.push(value)});
     host.startSource=async()=>{host.phase='running';host.emitStatus();};
     return {host,main,event:{sender:contents,senderFrame:contents.mainFrame},journal,ocr,observations,copies,handlers,crops,submitted,
-        tick(){now+=100;},advance(ms){now+=ms;},frame(id='one',width=100,height=40){return {bytes:png(id,width,height),width,height,capturedAt:now};},
+        tick(){now+=100;},advance(ms){now+=ms;},frame(id='one',width=100,height=40){return {bytes:png(id,width,height),width,height,capturedAt:now,captureGeneration:host.generation,owner:host.owner,sessionId:host.sessionId,sourceId:host.source?.id};},
         reject(error=Error('Transient synthetic OCR timeout.')){const pending=ocrPending;ocrPending=null;pending.reject(error);},
-        resolve(){const pending=ocrPending;ocrPending=null;pending.resolve({text:'Item: Synthetic Blade\nAC 12\nHP 45',confidence:85,words:[]});},
+        resolve(text='Item: Synthetic Blade\nAC 12\nHP 45'){const pending=ocrPending;ocrPending=null;pending.resolve({text,confidence:85,words:[]});},
         async waitForRead(){for(let attempt=0;attempt<200;attempt++){if(ocrPending)return;await new Promise(resolve=>setTimeout(resolve,10));}throw Error('Synthetic read did not start.');}};
 }
 const f=fixture();
@@ -52,9 +52,9 @@ try{
     assert.equal(f.observations.length,0,'cancelled contribution OCR cannot enter the character inventory');
     assert.equal(f.host.getStatus().contributionPaused,true);
     f.tick();f.host.submitFrame(f.frame('first'));f.tick();f.host.submitFrame(f.frame('replace'));f.tick();f.host.submitFrame(f.frame('latest'));
-    assert.equal(f.host.getStatus().queuedFrames,1);assert.ok(f.host.skippedFrames>=1,'frame backlog is bounded');
-    f.resolve();await new Promise(resolve=>setImmediate(resolve));f.resolve();await f.host.processing;
-    assert.equal(f.ocr.calls,3,'one cancelled and two bounded jobs were run');
+    assert.equal(f.host.getStatus().queuedFrames,2,'brief distinct frames survive while the first OCR is busy');
+    for(let index=0;index<3;index++){await f.waitForRead();f.resolve();await new Promise(resolve=>setImmediate(resolve));}await f.host.processing;
+    assert.equal(f.ocr.calls,4,'one cancelled and all three distinct queued jobs were run');
     assert.equal(f.observations.length,1,'unchanged semantic item readings deduplicate');assert.equal(f.observations[0].owner,'character');
     const same=f.observations[0];
     assert.equal(await f.host.saveObservation({...same,fields:same.fields.map(field=>({...field,confidence:field.confidence-10,raw:` ${field.raw}`}))}),null,'OCR confidence/whitespace jitter cannot create duplicate equipment cards');
@@ -90,6 +90,7 @@ assert.equal(f.handlers.size,0,'shutdown unregisters both exact-frame IPC handle
         await reading.host.handleSource(sourceEvent,'frame-error');assert.equal(reading.host.phase,'running');assert.equal(reading.host.captureWindow,window);assert.match(reading.host.getStatus().readWarning,/frame was unavailable/);
         reading.tick();reading.host.submitFrame(reading.frame('retry-success'));await reading.host.processing;assert.equal(reading.host.getStatus().readWarning,null,'a valid duplicate frame also clears transient source warnings');
         await reading.host.handleSource(sourceEvent,'ended');assert.equal(reading.host.phase,'error');assert.equal(reading.host.getStatus().resumable,true);assert.equal(reading.host.owner,'character');assert.equal(destroyed,1);assert.equal(reading.host.captureWindow,null);
+        assert.deepEqual(await reading.host.handleSource(sourceEvent,'configuration'),{allowed:false,capture:null});assert.equal((await reading.host.handleSource(sourceEvent,'frame',reading.frame('retired'))).accepted,false,'late IPC from a retired owned source stays inert');assert.equal((await reading.host.handleSource(sourceEvent,'started')).ok,false);assert.equal(reading.host.phase,'error','late startup cannot restart a retired source');
         const enumerate=reading.host.electron.desktopCapturer.getSources;reading.host.electron.desktopCapturer.getSources=async()=>[];
         await reading.host.resume();assert.equal(reading.host.phase,'error');assert.equal(reading.host.owner,'character');assert.match(reading.host.error,/no longer available/,'missing sources remain explicitly resumable without starting a replacement');
         reading.host.electron.desktopCapturer.getSources=enumerate;
@@ -190,4 +191,63 @@ async function readFrame(fixture,id,width=100,height=40){fixture.tick();assert.e
         assert.equal(delayed.host.sessionId,'replacement-character');assert.equal(delayed.host.error,null);
     }finally{await delayed.host.dispose();}
 }
-console.log('Capture host: exact IPC, ROI bounds/crop evidence/reset, stale-session rejection, Character/contribution region restoration, calibration cancellation, bounded queues and log provenance passed.');
+{
+    const queued=fixture(),captured=[];
+    try{
+        await queued.host.listSources();await queued.host.start({mode:'character',sourceId:'window:game',sessionId:'brief-tooltips'});
+        for(const id of ['amber','beryl','coral']){queued.tick();const frame=queued.frame(id);captured.push(frame.capturedAt);assert.equal(queued.host.submitFrame(frame).accepted,true);}
+        assert.equal(queued.host.getStatus().queuedFrames,2);assert.equal(queued.host.getStatus().reading,true);
+        assert.equal(queued.host.submitFrame(queued.frame('beryl')).duplicate,true,'an already queued PNG does not consume another slot');
+        assert.equal(queued.host.submitFrame(queued.frame('amber')).duplicate,true,'an active PNG does not consume another slot');
+        for(const name of ['Amber','Beryl','Coral']){await queued.waitForRead();queued.resolve(`Item: Synthetic ${name}\nAC 12\nHP 45`);await new Promise(resolve=>setImmediate(resolve));}await queued.host.processing;
+        assert.deepEqual(queued.observations.map(record=>record.subject.name),['Synthetic Amber','Synthetic Beryl','Synthetic Coral'],'brief A/B/C tooltips survive one slow serial reader in FIFO order');
+        assert.deepEqual(queued.observations.map(record=>Date.parse(record.capturedAt)),captured,'queued items preserve pixel time rather than OCR completion time');
+        for(const record of queued.observations){assert.equal(record.input.sourceId,'window:game');assert.equal(record.input.captureGeneration,queued.host.generation);assert.equal(record.sessionId,'brief-tooltips');}
+        assert.equal(queued.host.getStatus().reading,false);assert.equal(queued.host.getStatus().queuedBytes,0);assert.equal(queued.host.getStatus().lastReadItemCount,1);
+    }finally{await queued.host.dispose();}
+}
+{
+    const bounded=fixture();let decoded=0;const decode=bounded.host.electron.nativeImage.createFromBuffer;
+    bounded.host.electron.nativeImage.createFromBuffer=bytes=>{decoded++;return decode(bytes);};
+    try{
+        await bounded.host.listSources();await bounded.host.start({mode:'character',sourceId:'window:game'});bounded.tick();bounded.host.submitFrame(bounded.frame('active'));await bounded.waitForRead();
+        for(let index=0;index<20;index++){bounded.tick();bounded.host.submitFrame(bounded.frame(`changed-${index}`));}
+        let status=bounded.host.getStatus();assert.equal(status.queuedFrames,status.queueLimit);assert.ok(status.overflowFrames>=8);assert.match(status.readWarning,/could not keep every changing frame/);
+        for(let index=0;index<8;index++){bounded.tick();const frame=bounded.frame(`large-${index}`);frame.bytes=Buffer.concat([frame.bytes,Buffer.alloc(8*1024*1024)]);bounded.host.submitFrame(frame);}
+        status=bounded.host.getStatus();assert.ok(status.queuedBytes<=status.queueByteLimit,'compressed PNG memory remains bounded during moving backgrounds');assert.ok(status.queuedFrames<status.queueLimit);assert.equal(decoded,1,'queued PNGs are not natively decompressed before their OCR slot');
+        await bounded.host.pause();assert.equal(bounded.host.getStatus().queuedFrames,0);assert.equal(bounded.host.getStatus().queuedBytes,0);assert.equal(bounded.observations.length,0,'Pause cancels active and queued work');
+    }finally{await bounded.host.dispose();}
+}
+{
+    const expiring=fixture();
+    try{
+        await expiring.host.listSources();await expiring.host.start({mode:'character',sourceId:'window:game'});expiring.tick();expiring.host.submitFrame(expiring.frame('active'));await expiring.waitForRead();expiring.tick();expiring.host.submitFrame(expiring.frame('expired-queued'));expiring.advance(16000);expiring.resolve();await expiring.host.processing;
+        assert.equal(expiring.ocr.calls,1,'queued evidence older than the bounded age is not read later');assert.equal(expiring.host.getStatus().overflowFrames,1);
+    }finally{await expiring.host.dispose();}
+}
+for(const change of ['stop','owner','crop','size']){
+    const changed=fixture();
+    try{
+        await changed.host.listSources();await changed.host.start({mode:'character',sourceId:'window:game',sessionId:'old-window'});changed.tick();changed.host.submitFrame(changed.frame('active'));await changed.waitForRead();changed.tick();changed.host.submitFrame(changed.frame('queued-old'));const oldToken=changed.frame('encoded-before-change'),generation=changed.host.generation;
+        if(change==='stop')await changed.host.stop();
+        if(change==='owner')await changed.host.start({mode:'character',sourceId:'screen:one',sessionId:'new-window'});
+        if(change==='crop')await changed.host.setRegion({sourceId:'window:game',sessionId:'old-window',region:{x:0,y:0,width:.5,height:1},referenceSize:{width:100,height:40}});
+        if(change==='size'){changed.tick();const resized=changed.frame('new-size',200,40);changed.host.submitFrame(resized);assert.equal(changed.host.generationStartedAt,resized.capturedAt);changed.resolve();await new Promise(resolve=>setImmediate(resolve));await changed.waitForRead();changed.resolve('Item: Synthetic New Size\nAC 7');await changed.host.processing;}
+        assert.ok(changed.host.generation>generation);assert.equal(changed.host.submitFrame(oldToken).accepted,false,`${change} rejects PNGs whose encode started in an older generation`);
+        assert.equal(changed.observations.length,change==='size'?1:0,`${change} invalidates the old active and queued observations`);assert.equal(changed.host.getStatus().queuedBytes,0);
+    }finally{await changed.host.dispose();}
+}
+{
+    const fresh=fixture(),stats='Character Stats\nHP 330/398\nMana 296/296\nSTR 90\nSTA 105';
+    try{
+        await fresh.host.listSources();await fresh.host.start({mode:'character',sourceId:'window:game'});fresh.tick();fresh.host.submitFrame(fresh.frame('unchanged-empty-inventory'));await fresh.waitForRead();fresh.resolve(stats);await fresh.host.processing;
+        const first=fresh.observations[0];assert.equal(first.subject.kind,'character');fresh.tick();const phaseCutoff=Date.parse(first.capturedAt)+100;
+        assert.equal(fresh.host.submitFrame(fresh.frame('unchanged-empty-inventory')).duplicate,true,'immediate identical screen pixels stay coalesced');fresh.advance(3100);
+        assert.equal(fresh.host.submitFrame(fresh.frame('unchanged-empty-inventory')).accepted,true);await fresh.waitForRead();fresh.resolve(stats);await fresh.host.processing;
+        assert.equal(fresh.observations.length,2,'unchanged No Equipment stats can produce fresh baseline evidence after the phase cutoff');assert.ok(Date.parse(fresh.observations[1].capturedAt)>phaseCutoff);assert.equal(fresh.observations[1].fields.find(field=>field.key==='hpMaximum').value,398);
+        const context={live:true,at:Date.parse(first.capturedAt),logId:'synthetic-log',cursor:1},event={type:'kill',victim:'Synthetic Rat'};
+        assert.equal((await fresh.host.ingestLogObservation(event,context)).accepted,true);fresh.advance(3100);assert.equal((await fresh.host.ingestLogObservation(event,context)).accepted,false,'game-log cursor dedup remains permanent when screenshot dedup expires');
+        assert.throws(()=>fresh.host.submitFrame({...fresh.frame('future'),capturedAt:fresh.frame().capturedAt+2000}),/Invalid capture frame/);
+    }finally{await fresh.host.dispose();}
+}
+console.log('Capture host: FIFO brief tooltips, hash coalescing, compressed byte/count/age bounds, visible overflow, fresh unchanged baseline, permanent log dedup, provenance and generation cancellation passed.');

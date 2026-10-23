@@ -35,6 +35,12 @@ guide describes the changed baseline-only flow; older entries describe their
 original controls. A sixth capture shows the actual unlocked native Parse and
 its resize grip, bringing the archive to 39 images across 30 browsable versions.
 
+Version 0.9.2 adds one actual Character capture showing the hover-reading
+instructions, three synthetic item cards and queued/read status. It uses the
+existing isolated Character component fixture with synthetic observations and
+capture APIs; the real native stream/OCR test is separate. The archive now has
+40 images across 31 browsable versions. Every older image remains intact.
+
 Each PNG is stored under `app/assets/whats-new/<version>/` and has a reviewed
 SHA-256 in its step. Files were extracted as binary Git objects, without image
 regeneration or re-encoding. Original top-level images remain available to the
