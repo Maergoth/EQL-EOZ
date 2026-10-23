@@ -38,7 +38,7 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
     const commit=()=>game.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
     const previousClipboard={text:electron.clipboard.readText(),html:electron.clipboard.readHTML(),rtf:electron.clipboard.readRTF()};
     const previousImage=electron.clipboard.readImage();if(!previousImage.isEmpty())previousClipboard.image=previousImage;
-    const watchdog=setTimeout(()=>{console.error('Native capture watchdog:',JSON.stringify(diagnostics()));app.exit(1);},35000);
+    const watchdog=setTimeout(()=>{console.error('Native capture watchdog:',JSON.stringify(diagnostics()));app.exit(1);},60000);
     try{
         const sources=await host.listSources(),source=sources.find(source=>source.name==='EverQuest Synthetic Capture Fixture');
         if(!source)throw new Error('The synthetic native source could not be enumerated.');
@@ -89,7 +89,11 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         await host.pause();await game.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(baselineHtml));await commit();
         await host.resume();const baselineGeneration=host.generation;
         await until(()=>records.some(record=>record.subject.kind==='character'&&record.input?.captureGeneration===baselineGeneration),'Initial NoEquipment stat frame was not recognized');const phaseCutoff=Date.now();
-        await until(()=>records.some(record=>record.subject.kind==='character'&&record.input?.captureGeneration===baselineGeneration&&Date.parse(record.capturedAt)>phaseCutoff),'Unchanged NoEquipment pixels did not refresh after the phase cutoff',10000);
+        // A retained pre-cutoff frame can spend seven seconds in Windows IPC,
+        // then finish OCR before the three-second hash TTL starts. Allow that
+        // measured serial cycle plus the genuinely post-cutoff read; never
+        // substitute delivery/completion time for the original capture time.
+        await until(()=>records.some(record=>record.subject.kind==='character'&&record.input?.captureGeneration===baselineGeneration&&Date.parse(record.capturedAt)>phaseCutoff),'Unchanged NoEquipment pixels did not refresh after the phase cutoff',20000);
         const freshBase=records.find(record=>record.subject.kind==='character'&&record.input?.captureGeneration===baselineGeneration&&Date.parse(record.capturedAt)>phaseCutoff);
         if(freshBase.input.sourceId!==source.id||freshBase.fields.find(field=>field.key==='hpMaximum')?.value!==901)throw Error('Refreshed baseline lost its source or observed maximum.');
         console.log('EOZ_UNCHANGED_BASELINE='+JSON.stringify({ok:true,realWindowStream:true,samePixels:true,freshCaptureAfterPhase:true,ownerAndGeneration:true,screenDedupMs:3000}));

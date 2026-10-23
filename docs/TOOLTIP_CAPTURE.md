@@ -204,3 +204,13 @@ assembled OCR. All ten Windows cases also pass with every expected numeric field
 retained. Guard-negative probes reject wrong emitted values, unexplained missing
 fields, a claimed conflict without distinct written numbers, and more than one
 missing expected numeric field. Final exact-head CI/package checks remain required.
+
+At `f1b77c4`, Linux completed the native sequence and began packaging. Windows
+recovered all three exact tooltips with changed-pixel timestamps 159/422 ms after
+drawing, then exposed an undersized baseline fixture wait. An identical frame
+captured before the cutoff spent 6.9 seconds in delivery and finished OCR before
+the three-second hash TTL restarted. The original ten-second freshness deadline
+expired before a truly post-cutoff read could complete. The fixture now permits
+20 seconds for that serial freshness cycle, within a 60-second overall watchdog;
+it still requires original `capturedAt > phaseCutoff`, the same pixels, exact
+source/generation and HP maximum. No timestamp or application rule changes.
