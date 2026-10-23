@@ -303,6 +303,20 @@ mapping and evidence isolation; it does not claim native 4K recognition.
   B pixels. Native and 4K Windows gates pass all three exact items, zero drops
   and unchanged exposure/deadline/queue assertions. The same native/4K gates
   also pass on private WSL Linux, including exact B-target timing and zero drops.
+- Windows CI on `7c2a3d4` still fails only the 4K pixel-stream fixture. Both real
+  native modes pass; Linux passes. First A encoding is still 4.63/6.74 seconds;
+  one Windows job admits B but no C, the other admits A plus an A heartbeat.
+  There is no overflow. The local fixture corrections are independently useful
+  but do not establish this CI failure's cause. Collect bounded producer/video
+  stage pixels, detector decisions and raw queue/encoder state before another
+  workaround. Do not infer that a missing host admission means missing video,
+  nor treat aggregate duplicate counters as evidence of a particular dropped item.
+- The next fixture-only trace follows producer stage, immutable frozen marker,
+  green-band geometry, detected region/key, pending raw images and PNG invocation,
+  native completion and delayed callback. It keeps the existing deadlines and
+  retains at most three small synthetic stage crops, serialized only on failure.
+  Private-image/background modes do not install pixel diagnostics. Use that
+  timeline to establish the cause before changing acquisition or serialization.
 - The final coherent-source normal `npm test` and full native capture gate also
   pass, including exact admitted images, fresh baseline and Stop.
   Pending: exact-head CI/platform/package
