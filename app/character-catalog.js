@@ -1,0 +1,99 @@
+import { characterSlotKinds, normalizeCharacterStats, safeCharacterIcon } from './character-model.js';
+import { scaleItemStat } from './item-scaling.js';
+import { isItemStatModified } from './item-stat-presentation.js';
+
+// Character-local catalog access. No capture, remote request or global item-tier
+// setting is used. Selecting a catalog record never fabricates examine evidence.
+export const CHARACTER_CATALOG_LIMITS=Object.freeze({results:24,maximumResults:60,records:100000,query:160});
+const text=value=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,240);
+const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const folded=value=>text(value).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+const statsLabel=key=>({MP:'Mana',END:'Endurance',WT:'Weight',DMG:'Damage',DMG_BONUS:'Damage bonus',SV_CORRUPTION:'Void resist',ATTACK_SPEED:'Attack speed %'}[key]||key.replace(/_/g,' '));
+const number=value=>value===null?'?':Number.isInteger(value)?String(value):String(Math.round(value*1000)/1000);
+function progress(options={}){
+    const tier=Object.hasOwn(options,'tier')?options.tier:0,fraction=Object.hasOwn(options,'fraction')?options.fraction:0;
+    if(!Number.isInteger(tier)||tier<0||tier>10||!Number.isInteger(fraction)||fraction<0||fraction>=(tier===10?1:2**tier))throw Error('Choose tier 0–10 and progress from 0 to 2^tier − 1. Tier 10 is the maximum and uses progress 0.');
+    return{tier,fraction};
+}
+
+/** Bounded AND-token name/wiki-title search. Results retain catalog identity and
+ * contain original read-only item references; this function never edits a pack.
+ * An incomplete/sample pack is not evidence that a missing item does not exist.
+ */
+export function searchCharacterCatalog(pack,query='',{limit=CHARACTER_CATALOG_LIMITS.results}={}){
+    const source=Array.isArray(pack?.items)?pack.items:[],normalized=folded(String(query).slice(0,CHARACTER_CATALOG_LIMITS.query)),tokens=normalized.split(' ').filter(Boolean);
+    const incomplete=!Array.isArray(pack?.items)||pack?.meta?.sample===true||pack?.meta?.wikiEntitiesComplete!==true||source.length>CHARACTER_CATALOG_LIMITS.records;
+    const bounded=Math.max(1,Math.min(CHARACTER_CATALOG_LIMITS.maximumResults,Math.floor(Number(limit)||CHARACTER_CATALOG_LIMITS.results)));
+    if(!source.length)return{items:[],total:0,incomplete,query:normalized,status:'empty'};
+    if(!tokens.length)return{items:[],total:0,incomplete,query:normalized,status:'prompt'};
+    const matches=[];
+    for(const item of source.slice(0,CHARACTER_CATALOG_LIMITS.records)){
+        if(!item||typeof item!=='object')continue;
+        const name=folded(item.name),title=folded(item.wikiTitle),search=`${name} ${title}`;
+        if((name||title)&&tokens.every(token=>search.includes(token)))matches.push({item,score:name===normalized||title===normalized?0:name.startsWith(normalized)||title.startsWith(normalized)?1:2});
+    }
+    matches.sort((a,b)=>a.score-b.score||text(a.item.name||a.item.wikiTitle).localeCompare(text(b.item.name||b.item.wikiTitle)));
+    return{items:matches.slice(0,bounded).map(match=>match.item),total:matches.length,incomplete,query:normalized,status:matches.length?'ready':'no-match'};
+}
+
+/** A manual physical card from an explicitly selected catalog identity. The
+ * selected tier/progress is known; observedStats and capture evidence are empty.
+ * Catalog stats remain base values. Augment state needs review unless explicit.
+ */
+export function characterCatalogCard(item,options={}){
+    if(!item||typeof item!=='object'||!text(item.name||item.wikiTitle))throw Error('Choose a cached item first.');
+    const {tier,fraction}=progress(options),baseStats=normalizeCharacterStats(item.stats),name=text(item.name||item.wikiTitle);
+    return{name,wikiTitle:text(item.wikiTitle||item.name),wikiMatch:'confirmed',iconId:text(item.iconId),icon:safeCharacterIcon(options.icon),
+        slots:characterSlotKinds(item.slots),tier,fraction,baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,
+        unscaledStatKeys:Object.hasOwn(baseStats,'SV_CORRUPTION')?['SV_CORRUPTION']:[],
+        observedStats:{},observedStatsComplete:false,augments:[],augmentStatus:item.augmentStatus==='none'?'none':'unknown',
+        level:item.requiredLevel??null,notes:'Added from the local wiki catalog. Verify tier, progress, compatible slots and augments against the item you own.'};
+}
+
+/** Preview rows use the same forward scaling and modified-stat predicate as the
+ * existing item browser. Unsupported conditional Void scaling stays unknown.
+ */
+export function characterCatalogPreview(item,options={}){
+    const card=characterCatalogCard(item,options);
+    return{card,rows:Object.entries(card.baseStats).map(([key,base])=>{
+        const unsupported=card.tier>0&&card.unscaledStatKeys.includes(key),value=base===null||unsupported?null:scaleItemStat(key,base,card.tier,{fraction:card.fraction});
+        return{key,label:statsLabel(key),base,value,modified:isItemStatModified(base,value,card.tier),unsupported};
+    })};
+}
+
+/** Mount one independent search UI. onAdd receives {item:card}; it must use the
+ * ordinary model intake operation, which creates a new physical copy each time.
+ * refresh notices pack replacement; dispose removes all owned event listeners.
+ */
+export function mountCharacterCatalog({host,getPack=()=>({}),onAdd=()=>({ok:false,error:'Character inventory is unavailable.'})}={}){
+    if(!host)return{refresh(){},dispose(){}};
+    const document=host.ownerDocument,removers=[];let selected=null,result={items:[]},pack=null,packItems=null,packVersion=null,disposed=false;
+    host.innerHTML=`<h3>Search cached items</h3><p class="settings-helper">Find an item in your local wiki pack, choose its item level and add a separate copy to your inventory. Catalog values are base stats; review augments after adding.</p><label>Item name<input type="search" data-character-catalog-query maxlength="160" placeholder="Search item names or wiki titles" autocomplete="off"></label><div class="character-catalog-controls"><label>Item Level Slider <output data-character-catalog-tier-label>Tier 0</output><input data-character-catalog-tier type="range" min="0" max="10" step="1" value="0" aria-label="Character catalog item tier"></label><label>Fractional progress <span data-character-catalog-denominator>/ 1</span><input data-character-catalog-fraction type="number" min="0" max="0" step="1" value="0" aria-label="Character catalog fractional progress"></label></div><p data-character-catalog-status role="status"></p><div class="character-catalog-layout"><div class="character-catalog-results" data-character-catalog-results aria-label="Cached item results"></div><article class="character-catalog-preview" data-character-catalog-preview aria-label="Selected catalog item preview"></article></div>`;
+    const $=selector=>host.querySelector(selector),query=$('[data-character-catalog-query]'),tier=$('[data-character-catalog-tier]'),fraction=$('[data-character-catalog-fraction]'),results=$('[data-character-catalog-results]'),preview=$('[data-character-catalog-preview]'),status=$('[data-character-catalog-status]');
+    const listen=(element,event,callback)=>{element.addEventListener(event,callback);removers.push(()=>element.removeEventListener(event,callback));};
+    const options=()=>{if(!fraction.value.trim())throw Error('Enter fractional progress; use 0 for no fractional progress.');return progress({tier:Number(tier.value),fraction:Number(fraction.value)});};
+    const icon=item=>safeCharacterIcon(pack?.icons?.[item?.iconId]);
+    function paintPreview(){
+        results.querySelectorAll('[data-character-catalog-select]').forEach(button=>{const active=result.items[Number(button.dataset.characterCatalogSelect)]===selected;button.classList.toggle('is-active',active);button.setAttribute('aria-pressed',String(active));});
+        if(!selected){preview.innerHTML='<p class="empty-state">Hover, focus or select a result to preview its item stats.</p>';return;}
+        try{const {card,rows}=characterCatalogPreview(selected,{...options(),icon:icon(selected)});
+            preview.innerHTML=`<div class="character-catalog-title">${card.icon?`<img src="${escape(card.icon)}" alt="">`:'<span class="character-catalog-icon" aria-hidden="true">◇</span>'}<div><h4>${escape(card.name)}</h4><small>${escape(card.wikiTitle)}</small></div></div><p>Tier ${card.tier} · ${card.tier===10?'maximum tier':`${card.fraction}/${2**card.tier} progress`} · ${escape(card.slots.join(' / ')||'Slots unknown')}</p><dl class="character-catalog-stats">${rows.map(row=>`<div class="${row.modified?'is-scaled':''}"><dt>${escape(row.label)}</dt><dd>${row.value===null?'?':escape(number(row.value))}${row.modified?` <small>(${escape(number(row.base))} base)</small>`:''}${row.unsupported?` <small>(${escape(number(row.base))} base; tier adjustment unverified)</small>`:''}</dd></div>`).join('')}</dl>${rows.length?'':'<p class="settings-helper">No numeric base stats are available for this cached record.</p>'}<p class="settings-helper">Green values changed at this item level; base comparisons stay muted. Catalog selection confirms the wiki identity, not that you own an unaugmented item.</p><button type="button" class="primary-button" data-character-catalog-add>Add to inventory</button><p data-character-catalog-added role="status"></p>`;
+        }catch(error){preview.innerHTML=`<p class="capture-warning" role="status">${escape(error.message)}</p>`;}
+    }
+    function paintResults(){
+        try{pack=getPack()||{};packItems=pack.items;packVersion=pack.meta?.version;result=searchCharacterCatalog(pack,query.value);
+            if(!result.items.includes(selected))selected=result.items[0]||null;
+            const caution=result.incomplete?' The cached catalog is incomplete; missing results do not establish that an item is absent.':'';
+            status.textContent=({empty:'No cached items are available. Refresh wiki data in Settings, or add an item manually.',prompt:'Search cached item names or wiki titles.', 'no-match':'No matching cached items. Try fewer words or add the item manually.',ready:`${result.total} match${result.total===1?'':'es'}${result.total>result.items.length?`; showing the first ${result.items.length}. Refine your search for more.`:'.'}`}[result.status]||'')+caution;
+            results.innerHTML=result.items.map((item,index)=>`<button type="button" class="character-catalog-result" data-character-catalog-select="${index}" aria-controls="character-catalog-selected-preview" aria-pressed="false">${icon(item)?`<img src="${escape(icon(item))}" alt="">`:'<span class="character-catalog-icon" aria-hidden="true">◇</span>'}<span><strong>${escape(text(item.name||item.wikiTitle))}</strong><small>${escape(text(item.wikiTitle||item.name))}</small></span></button>`).join('');preview.id='character-catalog-selected-preview';paintPreview();
+        }catch{selected=null;result={items:[]};results.replaceChildren();preview.replaceChildren();status.textContent='The local catalog could not be read. Retry after refreshing wiki data, or add an item manually.';packItems=null;}
+    }
+    function select(event){const button=event.target.closest('[data-character-catalog-select]');if(button&&results.contains(button)){const item=result.items[Number(button.dataset.characterCatalogSelect)];if(item&&item!==selected){selected=item;paintPreview();}}}
+    listen(query,'input',paintResults);listen(query,'keydown',event=>{if(event.key==='ArrowDown'){const button=results.querySelector('button');if(button){event.preventDefault();button.focus();}}});
+    for(const event of ['mouseover','focusin','click'])listen(results,event,select);
+    listen(results,'keydown',event=>{if(!['ArrowDown','ArrowUp'].includes(event.key))return;const buttons=[...results.querySelectorAll('button')],index=buttons.indexOf(document.activeElement),next=buttons[index+(event.key==='ArrowDown'?1:-1)];if(next){event.preventDefault();next.focus();}});
+    listen(tier,'input',()=>{const capped=Number(tier.value)===10,maximum=capped?0:2**Number(tier.value)-1;fraction.max=String(maximum);if(Number(fraction.value)>maximum)fraction.value=String(maximum);$('[data-character-catalog-tier-label]').textContent=`Tier ${tier.value}${capped?' (maximum)':''}`;$('[data-character-catalog-denominator]').textContent=capped?'(maximum tier; 0 only)':`/ ${maximum+1}`;paintPreview();});listen(fraction,'input',paintPreview);
+    listen(preview,'click',event=>{if(!event.target.closest('[data-character-catalog-add]')||!selected)return;const added=$('[data-character-catalog-added]');try{const card=characterCatalogCard(selected,{...options(),icon:icon(selected)}),outcome=onAdd({item:card});if(outcome?.ok===false)throw Error(outcome.error||'This item could not be added.');if(added)added.textContent=`Added ${card.name}. Review its card and place this copy in a slot.`;}catch(error){if(added)added.textContent=error.message||'This item could not be added.';}});
+    paintResults();
+    return{refresh(){if(disposed)return;try{const next=getPack()||{};if(next!==pack||next.items!==packItems||next.meta?.version!==packVersion)paintResults();}catch{paintResults();}},dispose(){disposed=true;removers.forEach(remove=>remove());host.replaceChildren();}};
+}

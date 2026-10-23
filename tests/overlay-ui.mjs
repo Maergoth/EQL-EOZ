@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import { TABS, parseView, renderParseContent, renderIntel, renderItem, renderItemTooltip, durationLabel, timerView, renderTimerRows, renderTimerNotifications, renderSwing, escapeHtml, intelNpcKey, intelSectionKey, isRaidSource, intelTierValue, intelMobAction, panelMarkup } from '../app/overlay.js';
-import { overlayControllerPresentation } from '../app/overlay-controller.js';
+import { overlayControllerPresentation, overlayGlobalPresentation } from '../app/overlay-controller.js';
 
 const event = (type, amount, source = 'Slash') => ({ type, amount, source, victim:'a skeleton' });
 const parser = {
@@ -144,4 +144,6 @@ assert.equal(controller.panels[0].passThrough,false,'Lock layout does not imply 
 assert.match(controller.recovery,/shortcut is unavailable/);
 assert.match(overlayControllerPresentation({panels:{},recoveryShortcutRegistered:true,recoveryShortcut:'Ctrl+Shift+O'}).recovery,/Ctrl\+Shift\+O/);
 assert.match(overlayControllerPresentation({panels:{},sessionRestartCount:1}).restart,/parse history rebuilt.*Saved timer deadlines restored/);
+for(const [mode,label,next]of [['locked','Locked','show and unlock'],['unlocked','Unlocked','hide all'],['hidden','Hidden','show and lock']]){const view=overlayGlobalPresentation({panels:{},globalMode:mode});assert.equal(view.supported,true);assert.equal(view.label,`Overlays: ${label}`);assert.match(view.title,new RegExp(next));}
+assert.equal(overlayGlobalPresentation({supported:false,globalMode:'hidden'}).supported,false);
 console.log('Overlay presentation checks passed (scopes, complete aggregates, timers, safety, recovery).');

@@ -1,5 +1,6 @@
 // Pure contribution preparation. OCR observations are suggestions; only reviewed
 // fields enter wikicode. No network, account state, or narrative generation.
+import { validateItemBaseReview } from './item-base-review.js';
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 const TYPES = new Set(['item', 'npc', 'zone']);
 const CLASS_NAMES = { BER:'Berserker', BRD:'Bard', BST:'Beastlord', CLR:'Cleric', DRU:'Druid', ENC:'Enchanter', MAG:'Magician', MNK:'Monk', NEC:'Necromancer', PAL:'Paladin', RNG:'Ranger', ROG:'Rogue', SHM:'Shaman', SHD:'Shadow Knight', WAR:'Warrior', WIZ:'Wizard' };
@@ -26,7 +27,8 @@ export function normalizeContributionCandidate(input = {}) {
         fields[key] = { value:wrapped ? raw.value : raw, confirmed:wrapped ? raw.confirmed === true : (input.confirmedFields || []).includes(key) };
     }
     const field = key => fields[key]?.confirmed ? fields[key].value : undefined;
-    return { id:clean(input.id || '', 100), kind:input.kind, name, title:contributionTitle(input.title || name), fields,
+    const rawRecovery=input.baseRecovery,baseRecovery=rawRecovery&&typeof rawRecovery==='object'?{schemaVersion:rawRecovery.schemaVersion,sourceFingerprint:clean(rawRecovery.sourceFingerprint,16000),tier:rawRecovery.tier,fraction:rawRecovery.fraction,modifiersExcluded:rawRecovery.modifiersExcluded===true,reviewed:rawRecovery.reviewed===true,choices:Object.fromEntries(Object.entries(rawRecovery.choices||{}).slice(0,40))}:null;
+    return { id:clean(input.id || '', 100), kind:input.kind, name, title:contributionTitle(input.title || name), fields,baseRecovery,
         zone:clean(typeof input.zone === 'object' ? input.zone.title : input.zone || field('zone'), 230),
         instance:['normal','raid'].includes(input.instance || input.zone?.instance) ? input.instance || input.zone.instance : 'unknown',
         era:clean(input.era || field('era'), 70), playerText:clean(input.playerText || '', 12000),
@@ -78,7 +80,10 @@ export function buildContributionDraft(input, blueprints) {
         const lines = Array.isArray(field('statLines')) ? field('statLines').map(value => literalWikiText(value)).filter(Boolean).slice(0, 60) :
             typeof field('statsblock') === 'string' ? field('statsblock').split(/\r?\n|<br\s*\/?>/i).map(value => literalWikiText(value)).filter(Boolean).slice(0, 60) : [];
         if (!lines.length) blockers.push('Confirm the base item examine statistics.');
-        if (Number(candidate.fields.tier?.value) > 0 || candidate.fields.augmented?.value === true || candidate.fields.modified?.value === true || candidate.fields.augmentNames?.value?.length > 0) blockers.push('An upgraded or augmented examine cannot establish base wiki statistics. Confirm a base item separately.');
+        const recovery=validateItemBaseReview(candidate),upgraded=Number(candidate.fields.tier?.value)>0||candidate.fields.augmented?.value===true||candidate.fields.modified?.value===true||candidate.fields.augmentNames?.value?.length>0;
+        if(upgraded&&!recovery.ok)blockers.push(candidate.baseRecovery?recovery.reason:'An upgraded or augmented examine cannot establish base wiki statistics. Confirm a base item separately, or review supported reverse-scaling proposals.');
+        if(candidate.baseRecovery&&!recovery.ok&&!upgraded)blockers.push(recovery.reason);
+        if(recovery.ok)warnings.push('Base statistics are reviewed reverse-scaling inferences, not a base-item capture.',...recovery.warnings);
         const icon = field('iconId');
         if (icon !== undefined && (!Number.isInteger(Number(icon)) || Number(icon) < 0 || Number(icon) > 1000000)) blockers.push('Confirm a valid existing icon ID.');
         if (icon === undefined) warnings.push('No verified wiki icon ID; the icon field stays empty.');
@@ -92,7 +97,7 @@ export function buildContributionDraft(input, blueprints) {
         }
         for (const source of confirmedSources) categories.add(contributionTitle(source.zone));
         const drops = confirmedSources.map(source => `${link(source.zone)}\n* ${link(source.npc)}`).join('\n\n');
-        text = `${era}<onlyinclude>{{Itempage\n|itemname = ${candidate.title}\n|lucy_img_ID = ${icon === undefined ? '' : Number(icon)}\n|statsblock =\n${lines.join('<br>\n')}\n|focus_effect = ${literalWikiText(field('focusEffect') || '')}\n|notes = ${candidate.playerText}\n|dropsfrom =\n${drops}\n}}</onlyinclude>\n`;
+        text = `${era}<onlyinclude>{{Itempage\n|itemname = ${candidate.title}\n|lucy_img_ID = ${icon === undefined ? '' : Number(icon)}\n|statsblock =\n${lines.join('<br>\n')}\n|focus_effect = ${literalWikiText(field('focusEffect') || '')}\n|notes = ${[candidate.playerText,recovery.ok?literalWikiText(recovery.note):''].filter(Boolean).join('\n\n')}\n|dropsfrom =\n${drops}\n}}</onlyinclude>\n`;
     } else if (candidate.kind === 'npc') {
         if (!candidate.zone) blockers.push('Confirm the NPC zone.');
         if (!candidate.playerText) blockers.push('Write a factual NPC description in your own words.');

@@ -36,6 +36,8 @@ jobs:
         run: npm run test:desktop-worker
       - name: Test native overlay windows
         run: npm run test:native-overlays
+      - name: Test Intel ordering and viewport stability
+        run: npm run test:intel-stability
       - name: Test main window placement and startup
         run: npm run test:window-lifecycle
       - name: Test map sizing and zoom

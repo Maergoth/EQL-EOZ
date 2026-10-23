@@ -45,17 +45,18 @@ function harness() {
         return nodes.get(selector);
     };
     const viewer = {
-        zone:'', loadResult:{ ok:true }, calls:[], locations:[],
+        zone:'', loadResult:{ ok:true }, calls:[], locations:[], clears:0,
         status() { return { zone:this.zone }; },
         async loadZone(name) { this.calls.push(name); if (this.loadResult.ok) this.zone = name; return this.loadResult; },
-        syncLocation(location) { this.locations.push({ ...location }); return { ok:true, mode:'top' }; }
+        syncLocation(location) { this.locations.push({ ...location }); return { ok:true, mode:'top' }; },
+        clearPlayerLocation() { this.clears++; return {ok:true}; }
     };
     const operations = [];
     const context = vm.createContext({
         parser, pack:{ zones }, normalizedZoneKeys:new Map(), resolveZoneRecord, formatWorldLocationForPlayer,
-        settings:{ mapMode:'top' }, bridgeInfo:{ eqRootExists:true, logExists:true },
+        settings:{ mapMode:'top' }, bridgeInfo:{ eqRootExists:true, logExists:true,eqRootPath:'synthetic-root-a',logPath:'eqlog_Synthetic_example.txt' },mapDataRevision:0,
         viewerFolderStatus:'ready', viewerZoneState:{ zone:'', status:'idle', message:'' },
-        partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,
+        partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,latestLocationSync:null,
         overlaySession:{ inputs:[], consume(event, context) { this.inputs.push({ event, context }); }, flush() {} },
         wikiDiscovery:{consume() {}},
         observedLogCursor:0,captureWorkspace:{consumeLog() {}},
@@ -67,6 +68,7 @@ function harness() {
         clearActiveRoute() {}, focusIntelForConsider() {}, setActiveMapMode() {}, applyRouteGuidance() {}
     });
     const code = [
+        between(source, 'function mapSourceContext(', 'async function pollLog('),
         between(source, 'function zoneRecord(', 'function npcNameKey('),
         between(source, 'function consumeText(', 'function state('),
         between(source, 'function renderMapReadiness(', 'function renderViewPanel('),
@@ -79,6 +81,80 @@ function harness() {
         while (operations.length) await operations.shift();
         context.renderMapReadiness();
     } };
+}
+
+// Switching character/log/root invalidates positions even when the next
+// character happens to be in the same zone. Run the real source owners and
+// location sync across the preparation awaits instead of copying their guards.
+function sourceOwners(h){
+    const polls=[];
+    Object.assign(h.context,{logOffset:0,nativeMapVisible:false,viewerFolderPath:'synthetic-root-a',
+        whatsNew:{refresh(){}},mapDataLoader:{invalidations:0,invalidate(){this.invalidations++;}},
+        document:{body:{classList:{contains(){return false;}}}},
+        locationPollDelay:()=>100,schedulePoll:delay=>polls.push(delay),renderAll(){},renderLiveLocation(){},updateViewerFolderStatus(){}});
+    vm.runInContext(between(source,'async function pollLog(', 'function consumeText(')+between(source,'async function applyLogSelection(', 'async function chooseEqFolder('),h.context);
+    return polls;
+}
+for(const field of ['logPath','eqRootPath','mapDataRevision'])for(const phase of ['api','zone']){
+    const h=harness(),blocked=deferred(),arrived=deferred();
+    h.parser.zone='Mistmoore Castle';h.parser.location={x:12,y:34,z:56};h.viewer.zone='Mistmoore Castle';
+    h.context.viewerZoneState={zone:'mistmoore castle',status:phase==='zone'?'idle':'ready'};
+    if(phase==='api')h.context.waitForViewerApi=()=>{arrived.resolve();return blocked.promise;};
+    else h.context.syncZoneToViewer=()=>{arrived.resolve();return blocked.promise;};
+    const syncing=h.context.syncLocationToViewer(false,{...h.parser.location});await arrived.promise;
+    if(field==='mapDataRevision')h.context.mapDataRevision++;
+    else h.context.bridgeInfo[field]+='-changed';
+    blocked.resolve(phase==='api'?h.viewer:true);
+    assert.equal(await syncing,false,`${phase}/${field}: an old source sample is rejected in the same zone`);
+    assert.equal(h.viewer.locations.length,0);
+}
+for(const change of ['log','root','both','mode-only']){
+    const h=harness();sourceOwners(h);
+    h.parser.zone='Mistmoore Castle';h.parser.location={x:12,y:34,z:56};h.context.pendingViewerLocation={x:12,y:34,z:56};
+    const next={...h.context.bridgeInfo,logSelection:'manual'};
+    if(change==='log'||change==='both')next.logPath='eqlog_Another_example.txt';
+    if(change==='root'||change==='both')next.eqRootPath='synthetic-root-b';
+    await h.context.applyLogSelection(next);
+    const changed=change!=='mode-only';
+    assert.equal(h.parser.location===null,changed,`${change}: only an actual source change clears coordinates`);
+    assert.equal(h.context.pendingViewerLocation===null,changed);
+    assert.equal(h.viewer.clears,changed?1:0);
+    assert.equal(h.context.mapDataRevision,changed?1:0,'one source change invalidates the map generation once');
+    assert.equal(h.context.mapDataLoader.invalidations,change==='root'||change==='both'?1:0);
+}
+{
+    const h=harness();sourceOwners(h);h.parser.location={x:12,y:34,z:56};h.context.pendingViewerLocation={...h.parser.location};h.context.partialLine='Old source fragment';
+    h.context.api=async()=>({logPath:'eqlog_Another_example.txt',logExists:true,text:'',newOffset:20});await h.context.pollLog();
+    assert.equal(h.parser.character,'Another');assert.equal(h.parser.location,null);assert.equal(h.context.pendingViewerLocation,null);assert.equal(h.context.partialLine,'');assert.equal(h.context.mapDataRevision,1);assert.equal(h.viewer.clears,1,'automatic newest-log following clears the displayed player');
+}
+{
+    const h=harness(),blocked=deferred();const polls=sourceOwners(h);
+    h.context.api=()=>blocked.promise;const polling=h.context.pollLog();
+    await h.context.applyLogSelection({...h.context.bridgeInfo,logPath:'eqlog_Another_example.txt'});
+    blocked.resolve({logPath:'eqlog_Synthetic_example.txt',logExists:true,text:'Your Location is 1.00, 2.00, 3.00\n',newOffset:99});await polling;
+    assert.equal(h.context.bridgeInfo.logPath,'eqlog_Another_example.txt','an old poll cannot revert a manual log selection');assert.equal(h.parser.location,null);assert.equal(h.context.logOffset,0);assert.equal(polls.at(-1),0,'a stale poll schedules a fresh read without advancing its offset');
+}
+{
+    const h=harness(),blocked=deferred();const polls=sourceOwners(h);h.context.api=()=>blocked.promise;
+    const polling=h.context.pollLog();await h.context.applyLogSelection({...h.context.bridgeInfo,logPath:'eqlog_Another_example.txt'});h.node('#bridge-status').textContent='Fresh source ready';
+    blocked.reject(Error('Retired source failed'));await polling;assert.equal(h.node('#bridge-status').textContent,'Fresh source ready','a retired request failure cannot replace current-source feedback');assert.equal(polls.at(-1),0);
+}
+{
+    const h=harness(),queued=[];let loads=0;
+    h.context.queueViewerSync=operation=>{queued.push(operation);return Promise.resolve();};h.context.syncZoneToViewer=async()=>{loads++;return true;};
+    h.context.consumeText('You have entered The Castle of Mistmoore.\nYour Location is 1.00, 2.00, 3.00\n');
+    h.context.bridgeInfo.logPath='eqlog_Another_example.txt';h.context.clearSourceLocation();
+    assert.equal(await queued.shift()(),false,'an old queued zone-and-location batch cannot gain the replacement source identity when it finally starts');assert.equal(loads,0);assert.equal(h.viewer.locations.length,0);
+}
+{
+    const h=harness(),queued=[];h.parser.zone='Mistmoore Castle';h.viewer.zone='Mistmoore Castle';h.context.viewerZoneState={zone:'mistmoore castle',status:'ready'};
+    h.context.queueViewerSync=operation=>{const gate=deferred();queued.push({operation,gate});return gate.promise;};
+    vm.runInContext(between(source,'function queueLatestLocationSync(', 'async function waitForViewerApi('),h.context);
+    const older=h.context.queueLatestLocationSync({x:1,y:2,z:3});h.context.bridgeInfo.logPath='eqlog_Another_example.txt';h.context.clearSourceLocation();
+    h.parser.location={x:10,y:20,z:30};h.context.queueLatestLocationSync(h.parser.location);
+    const retired=queued.shift();assert.equal(await retired.operation(),false);retired.gate.resolve(false);await older;
+    const current=queued.shift();assert.ok(current,'the replacement pending sample is requeued under the current source');assert.equal(await current.operation(),true);current.gate.resolve(true);await Promise.resolve();
+    assert.equal(h.viewer.locations.length,1);assert.deepEqual(h.viewer.locations[0],{x:10,y:20,z:30});
 }
 
 {
@@ -285,4 +361,4 @@ for (const outcome of ['load-failure', 'same-zone-supersession']) {
     assert.match(context.app.els.coord.textContent, /-181\.94$/, 'An earlier zone cannot override a new zone readout');
 }
 
-console.log('Zone matching, map readiness, cross-zone location freshness, and raw /loc HUD checks passed.');
+console.log('Zone matching, map readiness, cross-zone/source location freshness, retired poll/queued-sample rejection and raw /loc HUD checks passed.');

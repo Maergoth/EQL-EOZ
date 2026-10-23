@@ -487,9 +487,27 @@ function schedulePoll(delay = 700) {
     pollTimer = setTimeout(pollLog, delay);
 }
 
+function mapSourceContext() {
+    return { logPath:String(bridgeInfo?.logPath || ''), root:String(bridgeInfo?.eqRootPath || ''), revision:mapDataRevision };
+}
+
+function mapSourceContextMatches(context) {
+    return context.logPath === String(bridgeInfo?.logPath || '') && context.root === String(bridgeInfo?.eqRootPath || '') && context.revision === mapDataRevision;
+}
+
+function clearSourceLocation() {
+    parser.location = null;
+    pendingViewerLocation = null;
+    partialLine = '';
+    mapDataRevision++;
+    try { viewerApi()?.clearPlayerLocation?.(); } catch { /* The viewer may be reloading. */ }
+}
+
 async function pollLog() {
+    const requestSource = mapSourceContext();
     try {
         const data = await api(`/api/log?offset=${encodeURIComponent(logOffset)}`);
+        if (!mapSourceContextMatches(requestSource)) { schedulePoll(0); return; }
         let changed = false;
         let requiresFullRender = false;
         const previousLogReady = Boolean(bridgeInfo?.logExists);
@@ -497,6 +515,7 @@ async function pollLog() {
             const previousLog = bridgeInfo?.logPath || '';
             bridgeInfo = bridgeInfo || {};
             bridgeInfo.logPath = data.logPath;
+            clearSourceLocation();
             parser.setCharacterFromFilename(data.logPath);
             $('#settings-log-path').textContent = data.logPath;
             changed = true;
@@ -538,6 +557,7 @@ async function pollLog() {
             routeActive:Boolean(activeRoute)
         }));
     } catch (error) {
+        if (!mapSourceContextMatches(requestSource)) { schedulePoll(0); return; }
         $('#bridge-status').textContent = 'Reconnecting';
         $('#bridge-status').className = 'status-pill status-warn';
         schedulePoll(1800);
@@ -578,8 +598,11 @@ function consumeText(text, allowTransientUi = true) {
     overlaySession.flush();
     if (zoneChanged) {
         pendingViewerLocation = null;
+        const sourceContext = mapSourceContext(), requestedZone = zoneKey(parser.zone);
         queueViewerSync(async () => {
+            if (!mapSourceContextMatches(sourceContext) || zoneKey(state().zone) !== requestedZone) return false;
             const loaded = await syncZoneToViewer(false);
+            if (!mapSourceContextMatches(sourceContext) || zoneKey(state().zone) !== requestedZone) return false;
             if (loaded && latestLocation) {
                 const synced = await syncLocationToViewer(false, latestLocation);
                 if (synced) scheduleRouteRefresh(latestLocation);
@@ -1641,9 +1664,11 @@ function queueViewerSync(operation) {
 function queueLatestLocationSync(location) {
     pendingViewerLocation = { ...location };
     if (latestLocationSync) return latestLocationSync;
+    const sourceContext = mapSourceContext(), requestedZone = zoneKey(state().zone);
     latestLocationSync = queueViewerSync(async () => {
         let result = false;
         while (pendingViewerLocation) {
+            if (!mapSourceContextMatches(sourceContext) || zoneKey(state().zone) !== requestedZone) return false;
             const newest = pendingViewerLocation;
             pendingViewerLocation = null;
             result = await syncLocationToViewer(false, newest);
@@ -1778,6 +1803,8 @@ async function syncZoneToViewer(showFeedback = true) {
 
 async function syncLocationToViewer(showFeedback = true, requestedLocation = null) {
     const s = state();
+    const sourceContext = mapSourceContext(), requestedZone = zoneKey(s.zone);
+    const isCurrent = () => mapSourceContextMatches(sourceContext) && zoneKey(state().zone) === requestedZone;
     const location = requestedLocation || s.location;
     if (!location) {
         const message = !bridgeInfo?.eqRootExists
@@ -1796,15 +1823,16 @@ async function syncLocationToViewer(showFeedback = true, requestedLocation = nul
         return false;
     }
     const apiObj = await waitForViewerApi();
+    if (!isCurrent()) return false;
     if (!apiObj) {
         if (showFeedback) showNotice('The Zone Viewer did not finish loading.', { tone:'error' });
         return false;
     }
     if (!apiObj.status()?.zone || viewerZoneState.status !== 'ready' || viewerZoneState.zone !== zoneKey(s.zone)) {
         const loaded = await syncZoneToViewer(showFeedback);
-        if (!loaded) return false;
+        if (!isCurrent() || !loaded) return false;
     }
-    if (zoneKey(state().zone) !== zoneKey(s.zone)) return false;
+    if (!isCurrent()) return false;
     const result = apiObj.syncLocation(location, { mode:settings.mapMode || 'first', timestamp:Date.now() });
     if (!result?.ok) {
         const message = result?.message || 'The zone is not ready for location sync yet.';
@@ -2023,7 +2051,9 @@ function exportDiagnostics() {
 
 async function applyLogSelection(info) {
     const previousRoot = String(bridgeInfo?.eqRootPath || '');
+    const previousLog = String(bridgeInfo?.logPath || '');
     bridgeInfo = info;
+    if (previousRoot !== String(info.eqRootPath || '') || previousLog !== String(info.logPath || '')) clearSourceLocation();
     whatsNew.refresh();
     logOffset = 0;
     partialLine = '';
@@ -2036,7 +2066,7 @@ async function applyLogSelection(info) {
     $('#titlebar-version').textContent = `v${info.version || bridgeInfo?.version || 'unknown'}`;
     $('#automatic-log').hidden = info.logSelection !== 'manual';
     $('#setup-overlay').hidden = Boolean(info.eqRootExists);
-    if (previousRoot !== String(info.eqRootPath || '')) { viewerFolderPath = ''; mapDataLoader.invalidate(); mapDataRevision++; }
+    if (previousRoot !== String(info.eqRootPath || '')) { viewerFolderPath = ''; mapDataLoader.invalidate(); }
     if (info.eqRootExists) await ensureViewerFolderConnected(false, previousRoot !== String(info.eqRootPath || ''));
     else updateViewerFolderStatus('missing');
     renderAll();
@@ -2321,10 +2351,6 @@ const overlayController = mountOverlayController({ root:document.getElementById(
 const timerSettings = mountTimerSettings({ root:document.getElementById('timer-settings'), session:overlaySession });
 const discoveryNotices = mountWikiDiscoveryNotices({root:document.getElementById('wiki-discovery-notices'),action:(action,value)=>window.eyeOfZommDiscovery.action(action,value)});
 overlaySession.onTimers(()=>discoveryNotices.render(discoveryInNative ? [] : wikiDiscovery.snapshot().pending));
-$('#open-native-overlays').addEventListener('click', async () => {
-    try { await window.eyeOfZommOverlays.control('show-all'); }
-    catch { showNotice('Native overlays require the Eye of Zomm desktop app.', { tone:'warning' }); }
-});
 const appUpdatesUi = mountAppUpdates({
     openSettings:async () => {
         setView('settings');

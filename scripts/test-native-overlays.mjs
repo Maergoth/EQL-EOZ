@@ -88,7 +88,7 @@ try {
             throw new Error(`Timed out: ${message}`);
         };
         const execute = (window, fn, ...args) => window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
-        let owner;
+        let owner,nativePhase='startup';
         const panels = () => Object.fromEntries(BrowserWindow.getAllWindows().filter(window => /\/overlay(?:-map)?\.html\?panel=/.test(window.webContents.getURL())).map(window => [new URL(window.webContents.getURL()).searchParams.get('panel'), window]));
         const state = () => execute(owner, () => window.eyeOfZommOverlays.getState());
         const control = (action, panel, value) => execute(owner, (action, panel, value) => window.eyeOfZommOverlays.control(action, panel, value), action, panel, value);
@@ -98,6 +98,7 @@ try {
             await fs.appendFile(log, texts.map(text => `[${stamp}] ${text}\n`).join(''));
         };
         const screenshot = async (window, name) => {
+            nativePhase=`capture ${name}`;
             // Hidden native windows may have a previous compositor frame even
             // though executeJavaScript already sees the current DOM.
             await execute(window, () => { const style = document.createElement('style'); style.textContent = '*,*::before,*::after{animation:none!important;transition:none!important}'; document.head.append(style); });
@@ -115,10 +116,26 @@ try {
             await until(async () => (await state()).sessionAvailable, 'first shared snapshot');
             await execute(owner, () => window.addEventListener('error',event => console.error(event.error?.stack || event.message)));
             await execute(owner, () => localStorage.setItem('eoz-smoke-owner-only', 'synthetic-owner-preference'));
-            await control('show-all');
+            await execute(owner,()=>document.querySelector('[data-tour-close]')?.click());
+            const cycleHeader=async expected=>{
+                await until(async()=>execute(owner,()=>!document.querySelector('#open-native-overlays').disabled),'global cycle button ready');
+                await execute(owner,()=>document.querySelector('#open-native-overlays').click());
+                await until(async()=>{const next=await state();return next.globalMode===expected&&Object.values(next.panels).every(panel=>panel.visible===(expected!=='hidden')&&(expected==='hidden'||panel.locked===(expected==='locked')));},`header cycle applies ${expected} to all four panels`);
+                await until(async()=>execute(owner,expected=>{const button=document.querySelector('#open-native-overlays');return button.dataset.overlayMode===expected&&!button.disabled&&button.getAttribute('aria-label').includes(expected[0].toUpperCase()+expected.slice(1));},expected),'header current-state label and accessible action');
+            };
+            assert.equal((await state()).globalMode,'hidden');
+            await cycleHeader('locked');
             await until(() => Object.keys(panels()).length === 4, 'four native overlays');
             assert.deepEqual(Object.keys(panels()).sort(),['intel','map','parse','timers']);
             for (const window of Object.values(panels())) await until(async () => execute(window, () => Boolean(document.querySelector('#panel-content')?.children.length)), 'overlay renderer');
+            const cycleFocusBefore=[...nativeCalls.values()].flat().filter(call=>call[0]==='focus').length;
+            await cycleHeader('unlocked');
+            for(const window of Object.values(panels()))assert.equal(window.isResizable(),true,'every unlocked native window can resize');
+            await cycleHeader('hidden');await cycleHeader('locked');
+            await control('hide','map');await control('lock','map',false);
+            await until(async()=>execute(owner,()=>document.querySelector('#open-native-overlays').dataset.overlayMode==='unlocked'),'mixed state comes from the owner');
+            await cycleHeader('hidden');await cycleHeader('locked');
+            assert.equal([...nativeCalls.values()].flat().filter(call=>call[0]==='focus').length,cycleFocusBefore,'global cycles never activate native windows');
             const ids = Object.values(panels()).map(window => window.id);
             assert.equal(new Set(ids).size, 4);
             const bounds = Object.values(panels()).map(window => window.getBounds());
@@ -152,6 +169,8 @@ try {
             if(process.platform !== 'linux')assert.equal(panels().parse.isFocusable(),true);
             await until(async () => execute(panels().parse, () => document.querySelector('#overlay').classList.contains('is-locked')), 'locked drag CSS');
             assert.equal(await execute(panels().parse,()=>getComputedStyle(document.querySelector('#overlay-header')).webkitAppRegion),'no-drag');
+            assert.equal(await execute(panels().parse,()=>getComputedStyle(document.querySelector('#parse-drag-grip')).display),'none');
+            assert.equal(await execute(panels().parse,()=>getComputedStyle(document.querySelector('#overlay-resize-handle')).display),'none');
             await execute(panels().parse, () => document.querySelector('[data-tab="healing"]').click());
             assert.equal(await execute(panels().parse, () => document.querySelector('[data-tab="healing"]').getAttribute('aria-pressed')), 'true', 'tabs remain usable in locked layouts');
             await execute(panels().parse, () => document.querySelector('#panel-menu-button').click());
@@ -165,7 +184,48 @@ try {
             assert.equal(panels().parse.isResizable(), true); assert.equal(panels().parse.isMovable(), true);
             assert.equal(nativeCalls.get(panels().parse.id).filter(call => call[0] === 'setMovable').at(-1)[1],true);
             if(process.platform !== 'linux')assert.equal(panels().parse.isFocusable(),true);
-            await until(async()=>execute(panels().parse,()=>getComputedStyle(document.querySelector('#overlay-header')).webkitAppRegion==='drag'),'unlocked native header drag region');
+            await until(async()=>execute(panels().parse,()=>getComputedStyle(document.querySelector('#parse-drag-grip')).webkitAppRegion==='drag'),'unlocked dedicated Parse drag region');
+            const parseGrip=await execute(panels().parse,()=>{const grip=document.querySelector('#parse-drag-grip'),rect=grip.getBoundingClientRect(),select=document.querySelector('#encounter-scope').getBoundingClientRect();return{width:rect.width,height:rect.height,right:rect.right,selectLeft:select.left,headerRegion:getComputedStyle(document.querySelector('#overlay-header')).webkitAppRegion,selectRegion:getComputedStyle(document.querySelector('#encounter-scope')).webkitAppRegion,tabRegion:getComputedStyle(document.querySelector('[data-tab="healing"]')).webkitAppRegion,resizeHint:getComputedStyle(document.querySelector('#overlay-resize-handle')).display,resizeCursor:getComputedStyle(document.querySelector('#overlay-resize-handle')).cursor};});
+            assert(parseGrip.width>=24&&parseGrip.height>=20&&parseGrip.right<=parseGrip.selectLeft,'Parse has an exposed grip separate from encounter controls');
+            assert.equal(parseGrip.headerRegion,'no-drag');assert.equal(parseGrip.selectRegion,'no-drag');assert.equal(parseGrip.tabRegion,'no-drag');assert.equal(parseGrip.resizeHint,'block');assert.equal(parseGrip.resizeCursor,'nwse-resize');
+            const parseBeforeResize=panels().parse.getBounds();panels().parse.setSize(parseBeforeResize.width+36,parseBeforeResize.height+24);
+            await until(async()=>{const prefs=(await state()).panels.parse.bounds;return prefs.width===parseBeforeResize.width+36&&prefs.height===parseBeforeResize.height+24;},'unlocked native resize persists the new Parse bounds');
+            panels().parse.setBounds(parseBeforeResize);
+            await until(async()=>{const prefs=(await state()).panels.parse.bounds;return prefs.width===parseBeforeResize.width&&prefs.height===parseBeforeResize.height;},'Parse bounds restore for the remaining synthetic checks');
+            const keyboardStart=await execute(panels().parse,()=>{const handle=document.querySelector('#overlay-resize-handle');handle.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));return{width:document.documentElement.clientWidth,height:document.documentElement.clientHeight,disabled:handle.disabled};});
+            try{await until(()=>Math.abs(panels().parse.getBounds().width-(parseBeforeResize.width+5))<=1,'Parse keyboard resize travels through the authenticated own-panel IPC with native DIP rounding');}catch(error){throw Error(`${error.message}; before=${JSON.stringify(parseBeforeResize)} start=${JSON.stringify(keyboardStart)} actual=${JSON.stringify(panels().parse.getBounds())} owner=${JSON.stringify((await state()).panels.parse)} renderer=${JSON.stringify(await execute(panels().parse,()=>document.querySelector('#overlay-status').textContent))}`);}
+            // Run visible trusted-pointer input after hidden capturePage checks:
+            // Windows Viz can stall a hidden capture immediately after this
+            // native show/resize/hide lifecycle, despite correct DOM/bounds.
+            const verifyPointerResize=async()=>{await control('show','parse');await control('lock','parse',false);await control('pass-through','parse',false);const pointerWindow=panels().parse,pointerBefore=pointerWindow.getBounds();
+            await until(async()=>execute(pointerWindow,width=>Math.abs(document.documentElement.clientWidth-width)<=1,pointerBefore.width),'native resize viewport is painted before pointer input');
+            showNativeInactive.call(pointerWindow);await execute(pointerWindow,()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+            const resizePoint=await execute(pointerWindow,()=>{const rect=document.querySelector('#overlay-resize-handle').getBoundingClientRect();window.__resizePointer=[];for(const type of ['pointerdown','pointermove','pointerup'])document.querySelector('#overlay-resize-handle').addEventListener(type,event=>window.__resizePointer.push({type,trusted:event.isTrusted,x:event.screenX,y:event.screenY,clientX:event.clientX,clientY:event.clientY}));return{x:Math.round(rect.left+rect.width/2),y:Math.round(rect.top+rect.height/2)};});
+            const pointerInput={...resizePoint,globalX:pointerBefore.x+resizePoint.x,globalY:pointerBefore.y+resizePoint.y},pointerMoved={x:resizePoint.x+24,y:resizePoint.y+16,globalX:pointerBefore.x+resizePoint.x+24,globalY:pointerBefore.y+resizePoint.y+16};
+            try{
+                pointerWindow.webContents.sendInputEvent({type:'mouseMove',...pointerInput});pointerWindow.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,...pointerInput});
+                try{await until(async()=>execute(pointerWindow,()=>document.body.classList.contains('is-resizing')&&window.__resizePointer.some(event=>event.type==='pointerdown'&&event.trusted)),'trusted injected pointer starts the explicit native resize handle');}catch(error){throw Error(`${error.message}; bounds=${JSON.stringify(pointerWindow.getBounds())} input=${JSON.stringify(pointerInput)} renderer=${JSON.stringify(await execute(pointerWindow,()=>({events:window.__resizePointer,disabled:document.querySelector('#overlay-resize-handle').disabled,rect:document.querySelector('#overlay-resize-handle').getBoundingClientRect().toJSON(),status:document.querySelector('#overlay-status').textContent})))}`);}
+                pointerWindow.webContents.sendInputEvent({type:'mouseMove',...pointerMoved});
+                try{await until(()=>{const bounds=pointerWindow.getBounds();return Math.abs(bounds.width-(pointerBefore.width+24))<=1&&Math.abs(bounds.height-(pointerBefore.height+16))<=1;},'pointer handle changes real native bounds through bounded own-panel IPC');}catch(error){throw Error(`${error.message}; before=${JSON.stringify(pointerBefore)} actual=${JSON.stringify(pointerWindow.getBounds())} pointer=${JSON.stringify(await execute(pointerWindow,()=>({events:window.__resizePointer,status:document.querySelector('#overlay-status').textContent,active:document.body.classList.contains('is-resizing')})))}`);}
+            }finally{pointerWindow.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,...pointerMoved});pointerWindow.hide();}
+            await until(async()=>execute(pointerWindow,()=>!document.body.classList.contains('is-resizing')),'resize capture releases after pointer up');
+            };
+            const resizeTarget={x:100,y:100,width:parseBeforeResize.width+86,height:parseBeforeResize.height+40};panels().parse.setBounds(resizeTarget);
+            const actualTarget=panels().parse.getBounds(),timerWindow=panels().timers;
+            timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+9,width:actualTarget.width-8,height:84});
+            await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height+6&&bounds.width===actualTarget.width;},'Triggers snaps to current resized native Parse bounds, not its old defaults');
+            // Native setBounds is fixture positioning, not user height intent.
+            // Establish manual height through the real own-panel resize path.
+            await action('timers','resize',{deltaWidth:0,deltaHeight:20});
+            const timerBeforeResize=timerWindow.getBounds();
+            const timerHandle=await execute(timerWindow,()=>{const handle=document.querySelector('#overlay-resize-handle'),grip=document.querySelector('#parse-drag-grip'),menu=document.querySelector('.hover-menu');return{cursor:getComputedStyle(handle).cursor,display:getComputedStyle(handle).display,grip:getComputedStyle(grip).webkitAppRegion,handle:handle.getBoundingClientRect().toJSON(),menu:menu.getBoundingClientRect().toJSON()};});
+            assert.equal(timerHandle.cursor,'nwse-resize');assert.equal(timerHandle.display,'block');assert.equal(timerHandle.grip,'drag');assert(timerHandle.handle.left>=timerHandle.menu.right,'Triggers resize corner is separate from its settings button');
+            await execute(timerWindow,()=>document.querySelector('#overlay-resize-handle').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',shiftKey:true,bubbles:true})));
+            await until(()=>timerWindow.getBounds().height===timerBeforeResize.height+20,'Triggers keyboard corner resize changes real native height');
+            assert.equal((await state()).panels.timers.manualHeight,true);
+            await screenshot(panels().parse,'parse-layout-editing');await screenshot(timerWindow,'triggers-layout-editing');
+            await control('reset-layout');
+            assert.equal((await state()).panels.timers.manualHeight,false,'Reset positions restores automatic compact Triggers height');
             assert.equal(nativeCalls.get(panels().parse.id).filter(call => call[0] === 'setIgnoreMouseEvents').at(-1)[1], false);
             const focusCalls = () => [...nativeCalls.values()].flat().filter(call => call[0] === 'focus').length;
             const beforeConsiderFocus = focusCalls();
@@ -674,15 +734,18 @@ try {
             }
             assert(panels().timers.getBounds().height <= 120, 'timer native window fits compact display rows');
             const parseId = panels().parse.id;
+            nativePhase='reload Parse renderer';
             await panels().parse.webContents.reload();
             await until(async () => execute(panels().parse, () => Boolean(document.querySelector('#encounter-stats')?.textContent.includes('130'))).catch(() => false), 'reload same panel');
             assert.equal(panels().parse.id, parseId);
             assert.equal((await state()).snapshot.session.parse.totalDamage, 130, 'panel reload cannot reset or double-count');
             panels().intel.destroy();
+            nativePhase='recreate Intel renderer';
             await control('show', 'intel');
             await until(async () => panels().intel && execute(panels().intel, () => Boolean(document.querySelector('#intel-body'))).catch(() => false), 'recreate destroyed panel');
             assert.equal((await state()).snapshot.sessionId, sessionId);
-            owner.close();
+            nativePhase='trusted pointer resize';await verifyPointerResize();
+            nativePhase='close owner and retain session';owner.close();
             assert.equal(owner.isDestroyed(), false, 'closing main app with visible overlays keeps the one session owner');
             assert.equal(owner.isVisible(), false);
             const before = (await state()).snapshot.session.timers.timers[0].remainingMs;
@@ -703,11 +766,11 @@ try {
             assert.deepEqual(split.timers.timers.map(({id,expiresAt})=>({id,expiresAt})),deadlines,'Manual session splits preserve all running trigger IDs/deadlines');
             await append(['You slash a synthetic skeleton for 9 points of damage.']);
             await until(async()=>(await state()).snapshot.session.parse.totalDamage===9,'Only newly appended log lines enter the split session');
-            return { ok:true, platform:process.platform, windowBackend:app.commandLine.getSwitchValue('ozone-platform'), windows:ids.length, damage:9, timers:split.timers.timers.length, sharedSession:true, inactiveFocus, screenshots };
+            return { ok:true, platform:process.platform, windowBackend:app.commandLine.getSwitchValue('ozone-platform'), windows:ids.length, damage:9, timers:split.timers.timers.length, sharedSession:true, globalOverlayCycle:true,parseDragGrip:true,parseResizable:true,trustedResizePointer:true,triggersResizeAndSnap:true,physicalDragTested:false,inactiveFocus, screenshots };
         };
         let started = false;
         app.on('browser-window-created', () => { if (!started) { started = true; void inspect().then(result => { console.log('EOZ_NATIVE_OVERLAY_SMOKE=' + JSON.stringify(result)); app.exit(0); }).catch(error => { console.error(error.stack); app.exit(1); }); } });
-        setTimeout(() => { console.error('Native overlay smoke exceeded 60 seconds.'); app.exit(2); }, 60000).unref();
+        setTimeout(() => { console.error(`Native overlay smoke exceeded 60 seconds during ${nativePhase}.`); app.exit(2); }, 60000).unref();
         require(path.join(root, 'desktop/main.cjs'));
     };
     const fixtureVersionParts=pkg.version.split('.');fixtureVersionParts[2]=String(Number(fixtureVersionParts[2])+1);const fixtureUpdateVersion=fixtureVersionParts.join('.');

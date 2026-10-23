@@ -41,6 +41,7 @@ jobs:
       - run: npm run test:main-cache
       - run: npm run test:map-overlay-3d
       - run: npm run test:native-overlays -- --screenshots ci-screenshots
+      - run: npm run test:intel-stability
       - run: npm run test:discovery-notices
       - run: npm run test:appearance -- --screenshots ci-screenshots/appearance
       - run: npm run test:wiki-auth

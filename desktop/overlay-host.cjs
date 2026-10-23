@@ -27,6 +27,27 @@ function clamp(value, minimum, maximum) { return Math.min(maximum, Math.max(mini
 function finite(value, fallback) { return typeof value === 'number' && Number.isFinite(value) ? value : fallback; }
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function panelId(value) { return PANEL_IDS.includes(value) ? value : null; }
+// The main owner resolves mixed preferences once. Hidden takes precedence;
+// otherwise any unlocked known panel makes the next global step Hide.
+function globalOverlayMode(panels = {}) {
+    if (!PANEL_IDS.some(id => panels[id]?.visible === true)) return 'hidden';
+    return PANEL_IDS.some(id => panels[id]?.locked === false) ? 'unlocked' : 'locked';
+}
+const SNAP_DISTANCE=12,SNAP_GAP=6;
+function boundsArea(bounds,displays){let best=null,largest=0;for(const display of displays){const area=display.workArea;if(!area)continue;const overlap=Math.max(0,Math.min(bounds.x+bounds.width,area.x+area.width)-Math.max(bounds.x,area.x))*Math.max(0,Math.min(bounds.y+bounds.height,area.y+area.height)-Math.max(bounds.y,area.y));if(overlap>largest){largest=overlap;best=area;}}return best;}
+// Magnet only near the current Parse rectangle on the same work area. Returning
+// the original bounds avoids a snap that would cross a monitor boundary.
+function snapTriggersBounds(bounds,target,displays,{resizing=false}={}){
+    if(!target)return {...bounds};const area=boundsArea(bounds,displays);if(!area||area!==boundsArea(target,displays))return {...bounds};
+    const next={...bounds},right=target.x+target.width,bottom=target.y+target.height;
+    const horizontal=Math.min(bounds.x+bounds.width,right)>=Math.max(bounds.x,target.x)-SNAP_DISTANCE;
+    const vertical=Math.min(bounds.y+bounds.height,bottom)>=Math.max(bounds.y,target.y)-SNAP_DISTANCE;
+    const nearest=(value,targets)=>targets.map(target=>({target,distance:Math.abs(value-target)})).sort((a,b)=>a.distance-b.distance).find(match=>match.distance<=SNAP_DISTANCE)?.target;
+    const y=horizontal?nearest(bounds.y,[bottom+SNAP_GAP,target.y-bounds.height-SNAP_GAP]):undefined;if(y!==undefined)next.y=y;
+    if(vertical||y!==undefined){const x=nearest(bounds.x,[target.x,right-bounds.width,right+SNAP_GAP,target.x-bounds.width-SNAP_GAP]);if(x!==undefined)next.x=x;}
+    if(resizing&&Math.abs(next.x-target.x)<=SNAP_DISTANCE&&Math.abs(bounds.x+bounds.width-right)<=SNAP_DISTANCE){next.x=target.x;next.width=target.width;}
+    return next.x>=area.x&&next.y>=area.y&&next.x+next.width<=area.x+area.width&&next.y+next.height<=area.y+area.height?next:{...bounds};
+}
 
 function clampBounds(input, displays, fallback = { x:40, y:40, width:380, height:320 }, minimumHeight = 160) {
     const areas = displays.map(display => display.workArea).filter(area => area && area.width > 0 && area.height > 0);
@@ -76,6 +97,7 @@ function normalizePreferences(raw, displays) {
             fontScale:clamp(finite(saved.fontScale, 1), 0.75, 1.75),
             bounds:clampBounds(saved.bounds, displays, fallback, id === 'timers' ? 36 : 160)
         };
+        if(id==='timers')panels[id].manualHeight=saved.manualHeight===true;
     });
     return { schemaVersion:1, appearance:normalizeAppearance(raw?.appearance), panels };
 }
@@ -176,7 +198,7 @@ class OverlayHost {
     }
     panelUrl(id) { return `${this.origin}/${id==='map'?'overlay-map.html':'overlay.html'}?panel=${id}`; }
     getState(id = null) {
-        const common = { appearance:this.preferences.appearance, snapshot:this.snapshot, sessionAvailable:this.sessionAvailable,
+        const common = { globalMode:globalOverlayMode(this.preferences.panels), appearance:this.preferences.appearance, snapshot:this.snapshot, sessionAvailable:this.sessionAvailable,
             lastSnapshotAt:this.snapshotAt, sessionRestartCount:this.sessionRestartCount, recoveryShortcut:RECOVERY_SHORTCUT,
             recoveryShortcutRegistered:this.recoveryShortcutRegistered };
         return clone(id ? { panel:id, preferences:this.preferences.panels[id], ...common } : { panels:this.preferences.panels, ...common });
@@ -214,6 +236,19 @@ class OverlayHost {
         const id = this.overlaySender(event);
         if (!id) throw new Error('Overlay request is unavailable.');
         if (action === 'get-state') return this.getState(id);
+        if(action==='resize'){
+            const prefs=this.preferences.panels[id];
+            if(!prefs.visible||prefs.locked||prefs.passThrough||!['parse','timers'].includes(id))throw new Error('Unlock and show this panel before resizing it.');
+            if(!payload||typeof payload!=='object'||Array.isArray(payload))throw new Error('Invalid overlay size.');
+            const win=this.windows.get(id);if(!win||win.isDestroyed())throw new Error('This overlay is unavailable.');
+            const current=win.getBounds(),delta=Object.hasOwn(payload,'deltaWidth')||Object.hasOwn(payload,'deltaHeight');
+            if(delta&&(!Number.isFinite(payload.deltaWidth)||!Number.isFinite(payload.deltaHeight)||Math.abs(payload.deltaWidth)>4000||Math.abs(payload.deltaHeight)>4000))throw new Error('Invalid overlay size.');
+            const width=delta?current.width+payload.deltaWidth:payload.width,height=delta?current.height+payload.deltaHeight:payload.height;
+            if(!Number.isFinite(width)||!Number.isFinite(height)||!delta&&(width<1||height<1||width>4000||height>4000))throw new Error('Invalid overlay size.');
+            const displays=this.displays();let bounds=clampBounds({...current,width:Math.round(width),height:Math.round(height)},displays,prefs.bounds,id==='timers'?36:160);
+            if(id==='timers'){bounds=this.snapTimers(bounds,true,displays);if(height!==current.height)prefs.manualHeight=true;}
+            prefs.bounds=bounds;this.apply(id);this.scheduleSave();return{ok:true,bounds:clone(bounds)};
+        }
         if (action === 'content-height') {
             if (id !== 'timers' || typeof payload !== 'number' || !Number.isFinite(payload) || payload < 36 || payload > 2400) throw new Error('Invalid timer content height.');
             this.timerContentHeight = Math.min(1200,Math.ceil(payload)); this.fitTimerWindow(); return {ok:true};
@@ -272,14 +307,23 @@ class OverlayHost {
         });
         win.webContents.on('render-process-gone', () => { this.ready.delete(id); this.crashed.add(id); });
         win.on('will-move', event => { if (prefs.locked) event.preventDefault(); });
-        win.on('will-resize', event => { if (prefs.locked) event.preventDefault(); });
-        const saveBounds = () => {
+        // Electron emits will-resize for native user gestures, not setBounds.
+        // Generic resize events also include auto-fit and native DIP rounding.
+        win.on('will-resize', (event,bounds) => {
+            if (prefs.locked) { event.preventDefault();return; }
+            if(id==='timers'&&Number.isFinite(bounds?.height)&&bounds.height!==win.getBounds().height)prefs.manualHeight=true;
+        });
+        const saveBounds = (resizing=false) => {
             if (win.isDestroyed() || this.disposed) return;
-            prefs.bounds = clampBounds(win.getBounds(), this.displays(), prefs.bounds, id === 'timers' ? 36 : 160);
+            const current=win.getBounds(),displays=this.displays();
+            let bounds=clampBounds(current,displays,prefs.bounds,id==='timers'?36:160);
+            if(id==='timers'&&!prefs.locked&&!prefs.passThrough)bounds=this.snapTimers(bounds,resizing,displays);
+            prefs.bounds=bounds;
+            if(Object.keys(bounds).some(key=>current[key]!==bounds[key]))win.setBounds(bounds);
             this.scheduleSave();
         };
-        win.on('move', saveBounds);
-        win.on('resize', saveBounds);
+        win.on('move',()=>saveBounds(false));
+        win.on('resize',()=>saveBounds(true));
         win.on('close', event => {
             if (this.disposed) return;
             event.preventDefault();
@@ -301,10 +345,14 @@ class OverlayHost {
             this.warn('[Eye of Zomm] overlay recovery unavailable:', error?.message);
         });
     }
+    snapTimers(bounds,resizing=false,displays=this.displays()){
+        const parse=this.windows.get('parse');
+        return this.preferences.panels.parse.visible&&parse&&!parse.isDestroyed()?snapTriggersBounds(bounds,parse.getBounds(),displays,{resizing}):bounds;
+    }
 
     async control(action, panel, value) {
         if (this.disposed) throw new Error('Overlays have closed.');
-        const all = ['show-all', 'hide-all', 'unlock-all', 'restore-mouse', 'reset-layout'];
+        const all = ['cycle-all', 'show-all', 'hide-all', 'unlock-all', 'restore-mouse', 'reset-layout'];
         if (action === 'show-main') { this.showMain(); return this.getState(); }
         if (action === 'appearance') {
             if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid appearance settings.');
@@ -312,14 +360,20 @@ class OverlayHost {
             this.timerContentHeight = null; this.fitTimerWindow();
         } else if (all.includes(action)) {
             const defaults = normalizePreferences({}, this.displays());
+            const cycleMode=action==='cycle-all'?globalOverlayMode(this.preferences.panels):null;
             for (const id of PANEL_IDS) {
                 const prefs = this.preferences.panels[id];
+                if (cycleMode) {
+                    prefs.visible=cycleMode!=='unlocked';
+                    if (cycleMode!=='unlocked') prefs.locked=cycleMode==='hidden';
+                    if (cycleMode==='locked') prefs.passThrough=false;
+                }
                 if (action === 'show-all') prefs.visible = true;
                 if (action === 'hide-all') prefs.visible = false;
                 if (action === 'unlock-all') prefs.locked = false;
                 if (action === 'restore-mouse') prefs.passThrough = false;
-                if (action === 'reset-layout') { prefs.bounds = defaults.panels[id].bounds; prefs.locked = false; prefs.passThrough = false; }
-                if (action === 'show-all') this.recoverPanel(id);
+                if (action === 'reset-layout') { prefs.bounds = defaults.panels[id].bounds; prefs.locked = false; prefs.passThrough = false;if(id==='timers')prefs.manualHeight=false; }
+                if (action === 'show-all' || cycleMode && prefs.visible) this.recoverPanel(id);
                 this.apply(id);
             }
         } else {
@@ -372,7 +426,7 @@ class OverlayHost {
         const notificationsHeight = Math.min(4,timers.notifications?.length || 0) * 24 + (timers.matchingStatus ? 22 : 0);
         const discoveryHeight = Math.min(4,this.snapshot?.session?.discovery?.length || 0) * 90;
         const scale = prefs.fontScale * this.preferences.appearance.fontSize / 13;
-        const height = this.timerContentHeight || Math.max(36, Math.ceil(10 + count * (30 * scale + 3) + (swingHeight + notificationsHeight + discoveryHeight) * scale));
+        const height = prefs.manualHeight?prefs.bounds.height:this.timerContentHeight || Math.max(36, Math.ceil(10 + count * (30 * scale + 3) + (swingHeight + notificationsHeight + discoveryHeight) * scale));
         prefs.bounds = clampBounds({ ...prefs.bounds, height }, this.displays(), prefs.bounds, 36);
         this.apply('timers');
     }
@@ -460,4 +514,4 @@ class OverlayHost {
 }
 
 module.exports = { OverlayHost, PANEL_IDS, IPC_MAIN, IPC_OVERLAY, RECOVERY_SHORTCUT,
-    clampBounds, normalizePreferences, sessionCommand };
+    clampBounds, normalizePreferences, sessionCommand, globalOverlayMode, snapTriggersBounds };

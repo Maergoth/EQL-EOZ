@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import asar from '@electron/asar';
 import { packagedArchivePaths, verifyPackagedRuntimeSources, verifyPackagedRuntimeImages } from './packaged-runtime-sources.mjs';
 
@@ -25,6 +27,10 @@ function packagedBytes(relativePath) {
 }
 
 function packagedText(relativePath) { return packagedBytes(relativePath).toString('utf8'); }
+// Validate the physical external tree. A repo-based require() can otherwise
+// climb out of dist/ and silently satisfy missing packaged OCR dependencies.
+const {validateOcrRuntime}=createRequire(import.meta.url)('../desktop/ocr-runtime.cjs');
+const ocrRuntime=validateOcrRuntime(join(dirname(archivePath),'ocr-runtime'));
 
 const packagedPackage = JSON.parse(packagedText('package.json'));
 if (packagedPackage.version !== packageRoot.version) {
@@ -90,4 +96,5 @@ if (bootstrap.npcs.some(npc => !npc.raidInstance && legacyNpcs.get(npcKey(npc))?
 }
 
 console.log(`Packaged app verified as v${packagedPackage.version} with production data and current coordinate, texture, and spatial-candidate code.`);
+console.log(`Physical offline OCR runtime verified: ${ocrRuntime.files} files, ${ocrRuntime.packages} packages, ${ocrRuntime.bytes} bytes; every size/digest and package entry stays inside its runtime.`);
 console.log(`Bundled dataset verified against freshly fetched source: manifest ${bootstrap.meta.manifestVersion}, pack ${bootstrap.meta.version}; ${bootstrap.zones.length} zones, ${bootstrap.npcs.length} NPCs, ${bootstrap.items.length} items.`);

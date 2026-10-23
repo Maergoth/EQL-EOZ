@@ -70,6 +70,7 @@ try {
                     assert(menu,`${id} final menu action remains reachable at global ${size}px × panel ${panelScale}`);
                     await execute(window,()=>document.querySelector('#panel-menu-button').click());
                 }else{
+                    assert.equal((await state()).panels.timers.manualHeight,false,'Font/automatic native resizing must retain Triggers content fitting');
                     try {
                         await until(()=>execute(window,()=>{const content=document.querySelector('#panel-content');return content.scrollHeight<=content.clientHeight+2;}),'Trigger native height follows combined font scale');
                     } catch(error) {

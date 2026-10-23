@@ -1,5 +1,37 @@
 # 0.9.0 calibration and release plan
 
+## Current release scope after owner feedback
+
+The owner explicitly requires Character catalog search/tier preview, reviewed
+base-stat recovery for tiered drops, global overlay lock/unlock/hide, Parse and
+Triggers drag/resize/snapping, 3D player marker/Auto Z, and stable Intel browsing
+in this same 0.9.0. The live planning/ownership guide is
+[CHARACTER_CATALOG_BASE_RECOVERY.md](CHARACTER_CATALOG_BASE_RECOVERY.md).
+
+The first publication from `21903b48` was withdrawn to draft. Its final anonymous
+download/extraction check caught missing external OCR dependencies: the packager
+had pruned the source-root `node_modules`, and the old native check had resolved
+dependencies from the ancestor checkout. This is corrected by a nested copy
+root, a truthful 238-file physical SHA/size manifest check at artifact/startup,
+and a packaged native fixture copied outside repository ancestry. The corrected
+Windows directory build and isolated packaged OCR pass; final expanded-head
+Windows/Linux builds and public extraction remain required. Old downloads,
+source and failure evidence are preserved privately. Reissue only this withdrawn
+0.9.0 draft/tag from the new exact passing source; preserve all older releases.
+
+The acceptance records below describe their stated earlier heads. They do not
+replace checks on the final expanded release head.
+
+The expanded local source suite, dependency audit and fresh catalog relevance
+check pass. Actual native fixtures pass Character search/add/persistence,
+reviewed tier-4 base proposals, Intel viewport/focus stability, global overlay
+cycling and Parse/Triggers resize/snapping, and Map markers/Auto Z. Main-viewer
+manual floor selection also retains full-zone bounds after automatic slicing.
+The final four synthetic walkthrough images are inspected, giving 33 screenshots
+across 29 versions. Exact new PR/head/platform runs and public-download evidence
+are recorded in the final PR; none of the older run IDs below substitutes for
+that verification.
+
 ## Authorization and baseline
 
 The owner now authorizes OCR calibration, the remaining checks on PR11 and

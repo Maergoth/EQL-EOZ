@@ -7,6 +7,7 @@ export function mapBounds(lines) {
     return Number.isFinite(minX) ? {minX,minY,maxX,maxY} : {minX:-500,minY:-500,maxX:500,maxY:500};
 }
 export const knownMapZ = value => (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') && Number.isFinite(Number(value));
+export const loggedMapSliceCenter=(autoZ,current,location)=>autoZ&&knownMapZ(location?.z)?Number(location.z):current;
 // Hate's high ceiling obscures its playable floor in an unfiltered initial
 // view. This is a presentation default, never a change to source/collision data.
 export function defaultMapSliceCenter(zone, viewerZone = '') {
@@ -92,6 +93,7 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
 .native-map-slice{grid-column:1/-1;grid-row:2;display:flex;align-items:center;gap:5px;min-width:0;max-height:0;visibility:hidden;opacity:0;overflow:hidden;pointer-events:none;font-size:calc(11px * var(--font-scale,1));-webkit-app-region:no-drag}
 .native-map-header:is(:hover,:focus-visible,.is-controls-open) .native-map-slice,.native-map-header:has(:focus-visible) .native-map-slice{max-height:max(34px,calc(28px * var(--font-scale)));visibility:visible;opacity:1;overflow:visible;pointer-events:auto;padding:0 0 5px}
 .native-map-slice input[type=range]{flex:1;min-width:40px;accent-color:#d8b75c}.native-map-slice output{font-size:calc(10px * var(--font-scale,1));min-width:72px;color:#d8c895;white-space:nowrap}.native-map-slice label{display:flex;align-items:center;gap:3px;color:#9ba8b8}.native-map-slice input[type=number]{width:46px;padding:2px 3px;font-size:calc(10px * var(--font-scale,1))}
+.native-map-slice button{flex:0 0 auto;font:inherit;padding:2px 4px;white-space:nowrap}.native-map-slice button[aria-pressed=true]{color:#f0d77f;border-color:#c9ae60;background:#4b421f}
 @media(max-width:360px){.native-map-tools{gap:2px}.native-map-tools button{font-size:calc(10px * var(--font-scale,1));padding:1px 2px}.native-map-tools>[data-map-action=mode]{max-width:48px}.native-map-header .native-map-title{font-size:calc(11px * var(--font-scale,1))}}
 .native-map-stage{position:relative;min-height:0;flex:1;overflow:hidden;border:1px solid #ffffff14;border-radius:4px;touch-action:none}.native-map-stage canvas{display:block;width:100%;height:100%;cursor:grab}.native-map-stage canvas:active{cursor:grabbing}
 .native-map-3d-stage{position:absolute;inset:0;min-height:0}.native-map-3d-stage iframe{width:100%;height:100%;border:0}
@@ -114,7 +116,8 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     header.append(slice);
     for(const button of tools.querySelectorAll('button'))if(!button.title)button.title=button.getAttribute('aria-label')||button.textContent;
     const actionStatus=document.createElement('div');actionStatus.className='native-map-action-status';actionStatus.setAttribute('role','status');$('.native-map').append(actionStatus);
-    let data=null,session={},zone='',dataVersion=null,generation=0,disposed=false,follow=true,sliceCenter=null,sliceTolerance=25,zoom=1,center={x:0,y:0},baseScale=1,drag=null,targets=[],mode='map',three=null,threeMode=null,modeSerial=0,visible=true,lastFocus='',pendingFocus=null;
+    const autoZButton=document.createElement('button');autoZButton.type='button';autoZButton.textContent='Auto Z';autoZButton.dataset.mapAutoZ='1';autoZButton.setAttribute('aria-label','Follow logged player elevation automatically');slice.insertBefore(autoZButton,slice.firstChild);
+    let data=null,session={},zone='',dataVersion=null,generation=0,disposed=false,follow=true,autoZ=true,lastKnownPlayerZ=null,sliceCenter=null,sliceTolerance=25,zoom=1,center={x:0,y:0},baseScale=1,drag=null,targets=[],mode='map',three=null,threeMode=null,modeSerial=0,visible=true,lastFocus='',pendingFocus=null;
     const listeners=[],npcButtons=new Map();let headerCloseTimer=null;
     const listen=(node,event,callback,options)=>{node.addEventListener(event,callback,options);listeners.push(()=>node.removeEventListener(event,callback,options));};
     const headerKeyboardFocus=()=>header.matches(':focus-visible')||Boolean(header.querySelector(':focus-visible'));
@@ -160,6 +163,8 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
         title.title=title.textContent||'Map';
         $('[data-map-action="follow"]').setAttribute('aria-pressed',String(follow));
         const map=session.map||{},player=map.location?worldToClientMap(map.location):null,elevations=mapElevationBounds(data?.lines,map.npcs,map.location);
+        if(knownMapZ(map.location?.z))lastKnownPlayerZ=Number(map.location.z);
+        sliceCenter=loggedMapSliceCenter(autoZ,sliceCenter,{z:lastKnownPlayerZ});autoZButton.setAttribute('aria-pressed',String(autoZ));autoZButton.title=autoZ?'Follow the latest known logged player Z; unknown height keeps the current slice.':'Manual Z slice. Enable Auto Z to follow your latest known elevation.';
         if(sliceCenter===null&&(knownMapZ(map.location?.z)||data?.status==='ready'))sliceCenter=knownMapZ(map.location?.z)?Number(map.location.z):(elevations.min+elevations.max)/2;
         const activeZ=activeSlice(),zInput=$('[data-map-z]');zInput.min=String(Math.min(elevations.min,Math.floor(activeZ)));zInput.max=String(Math.max(elevations.max,Math.ceil(activeZ)));zInput.value=String(activeZ);
         const sliceText=`Z ${Number(activeZ.toFixed(1))} ±${sliceTolerance}`;$('[data-map-slice-label]').textContent=sliceText;zInput.setAttribute('aria-valuetext',sliceText);zInput.title='Approximate floor slice; mobs without a known Z stay visible';
@@ -185,11 +190,11 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     }
     async function load(nextZone){const owner=++generation;data=null;draw();try{const result=await bridge.action('session:map-data',{zone:nextZone});if(disposed||owner!==generation)return;data=result;fit();draw();}catch(error){if(disposed||owner!==generation)return;data={status:'error',message:error.message||'Unable to load this map.',lines:[],labels:[]};draw();}}
     function render(next){session=next||getSession?.()||{};const nextZone=session.map?.zone||session.zone||'',nextVersion=session.map?.dataVersion??0;
-        if(nextZone!==zone||nextVersion!==dataVersion){const changedZone=nextZone!==zone;zone=nextZone;dataVersion=nextVersion;data=null;targets=[];pendingFocus=null;if(changedZone){zoom=1;sliceCenter=defaultMapSliceCenter(zone,session.map?.viewerZone);sliceTolerance=25;$('[data-map-tolerance]').value='25';}generation++;release3D();if(zone)void load(zone);}
-        const focus=session.map?.focus;if(focus&&focus.zone===zone&&focus.sequence!==undefined){const key=JSON.stringify([zone,focus.sequence]);if(key!==lastFocus){lastFocus=key;pendingFocus=focus;follow=false;if(knownMapZ(focus.loc?.[2]))sliceCenter=Number(focus.loc[2]);setMode('first');}}
+        if(nextZone!==zone||nextVersion!==dataVersion){const changedZone=nextZone!==zone;zone=nextZone;dataVersion=nextVersion;data=null;targets=[];pendingFocus=null;lastKnownPlayerZ=null;if(changedZone){zoom=1;autoZ=true;sliceCenter=defaultMapSliceCenter(zone,session.map?.viewerZone);sliceTolerance=25;$('[data-map-tolerance]').value='25';}generation++;release3D();if(zone)void load(zone);}
+        const focus=session.map?.focus;if(focus&&focus.zone===zone&&focus.sequence!==undefined){const key=JSON.stringify([zone,focus.sequence]);if(key!==lastFocus){lastFocus=key;pendingFocus=focus;follow=false;autoZ=false;if(knownMapZ(focus.loc?.[2]))sliceCenter=Number(focus.loc[2]);setMode('first');}}
         draw();
     }
-    function reset(){pendingFocus=null;follow=true;sliceCenter=defaultMapSliceCenter(zone,session.map?.viewerZone);sliceTolerance=25;$('[data-map-tolerance]').value='25';fit();setMode('map');}
+    function reset(){pendingFocus=null;follow=true;autoZ=true;sliceCenter=defaultMapSliceCenter(zone,session.map?.viewerZone);sliceTolerance=25;$('[data-map-tolerance]').value='25';fit();setMode('map');}
     listen(tools,'click',event=>{const action=event.target.closest?.('[data-map-action]')?.dataset.mapAction;if(!action)return;event.stopPropagation();
         if(action==='reset')reset();if(action==='follow'){follow=!follow;three?.setFollow?.(follow);}if(action==='zoom-in'||action==='zoom-out'){const factor=action==='zoom-in'?1.4:1/1.4;if(mode==='map')zoom=Math.max(.25,Math.min(40,zoom*factor));else three?.zoomBy?.(factor);}if(action==='mode'){pendingFocus=null;setMode(nextNativeMapMode(mode));}draw();});
     listen(tools,'focusin',event=>{
@@ -198,7 +203,8 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
         reveal();queueMicrotask(reveal);
     });
     listen(root,'click',event=>{const key=event.target.closest?.('[data-map-npc]')?.dataset.mapNpc;if(key)selectNpc(targets.find(target=>mapNpcKey(target.marker)===key)?.marker);});
-    listen($('[data-map-z]'),'input',event=>{sliceCenter=Number(event.target.value);draw();});listen($('[data-map-tolerance]'),'change',event=>{sliceTolerance=Math.max(1,Math.min(250,Number(event.target.value)||25));event.target.value=String(sliceTolerance);draw();});
+    listen(autoZButton,'click',()=>{autoZ=!autoZ;draw();});
+    listen($('[data-map-z]'),'input',event=>{autoZ=false;sliceCenter=Number(event.target.value);draw();});listen($('[data-map-tolerance]'),'change',event=>{sliceTolerance=Math.max(1,Math.min(250,Number(event.target.value)||25));event.target.value=String(sliceTolerance);draw();});
     listen(canvas,'wheel',event=>{event.preventDefault();zoom=Math.max(.25,Math.min(40,zoom*(event.deltaY<0?1.2:1/1.2)));draw();},{passive:false});
     const pointerPoint=event=>{const rect=canvas.getBoundingClientRect();return{x:event.clientX-rect.left,y:event.clientY-rect.top};};
     listen(canvas,'pointerdown',event=>{drag={x:event.clientX,y:event.clientY,center:{...center},moved:false,target:hitMapNpc(pointerPoint(event),targets)};canvas.setPointerCapture?.(event.pointerId);});

@@ -9,7 +9,7 @@ packaged and live-game behavior remains an explicit acceptance item.
 
 Implemented files: `desktop/capture-host.cjs`, `capture-image.cjs`,
 `screen-read-journal.cjs`, `capture-reader.cjs`, `ocr-service.cjs`, `ocr-worker.cjs`,
-`capture-source-preload.cjs`; `app/capture-source.html`, `capture-source.js` and
+`ocr-runtime.cjs`, `capture-source-preload.cjs`; `app/capture-source.html`, `capture-source.js` and
 `screen-read-parser.js`. Existing parser changes are additive `sourceEvidence`
 and `sourceConfidence` fields, preserving its current source attribution/totals.
 
@@ -82,6 +82,16 @@ error and timeout callback is bound to its exact worker; recognition also checks
 that its awaited initialization still belongs to the active worker. A retired
 worker or completed job cannot cancel a replacement job while termination drains.
 
+`ocr-runtime.cjs` exports synchronous `validateOcrRuntime(runtimeRoot)` for the
+artifact gate and packaged OCR startup. It checks every bounded manifest path,
+physical file size/SHA-256, package version and resolved package entry within
+the external resource tree; symlinks, traversal and dependency fallback outside
+that tree fail. The package copies `ocr-runtime/**/*` from `.generated`, keeping
+`node_modules` nested beneath the copy root. Assembly omits only `.gitkeep` and
+`.DS_Store`, which the packager always discards. Packaged native capture copies
+the ASAR and physical OCR tree to an isolated temporary resources directory,
+removes `NODE_PATH`, and runs outside repository ancestry before recognition.
+
 Journal append, read, clear and maintenance share one serialized queue. Expired
 segments include the current idle segment, which can be retired because no write
 handle remains open between operations. Cleanup runs during initialization,
@@ -120,14 +130,15 @@ Local observations:
   camera/mic mediaTypes and audio requests, and normalizes the origin. It also
   accepts the newer dedicated `display-capture` permission. Source startup has
   a bounded timeout; failure no longer waits on a destroyed renderer promise.
-- `prepare-ocr-assets.mjs` assembled 14 resolved packages and 240 size/digest
-  verified files, including notices. OCR dependencies are development/build
-  inputs; packages receive one physical `resources/ocr-runtime` resource tree.
-  Both Windows/Linux source and packaged-ASAR capture paths, wiki-auth and
-  workspace native gates passed at `5b967c5` in CI39874322031 and Windows
-  installer39874315883. Linux used Ubuntu22.04/Xvfb/Openbox, establishing X11
-  behavior; native Wayland remains unverified. The final calibration changes
-  require new exact-head CI/package validation before release.
+- `prepare-ocr-assets.mjs` assembles 14 resolved packages and 238 size/digest
+  verified runtime files, including notices. Public archive verification of the
+  withdrawn 0.9.0 found the whole OCR dependency tree missing; repository-based
+  native checks had resolved developer dependencies instead. After fixing the
+  copy root and excluding two empty `.gitkeep` placeholders, an actual isolated
+  Windows directory build contained all 238 files/65,564,867 bytes. Physical
+  manifest validation and isolated packaged-ASAR persistent capture/OCR,
+  calibration, journal, clipboard and Stop passed. Linux and final-head package
+  checks must rerun; native Wayland remains unverified.
 - Private calibration used the supplied **748×331** composite screenshot at
   1x, 2x and 3x, plus an explicit examine-pane crop at 2x/3x/4x with color,
   inverted grayscale and high contrast under sparse/block segmentation. This is

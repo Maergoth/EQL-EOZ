@@ -113,7 +113,9 @@ export function renderItemTooltip(item = {}) {
 }
 export function renderIntel(intel = {}, {query = '', expanded = new Set(), loading = new Set(), dropCache = new Map(), errors = new Map(), actionKey = '', collapsedSections = new Set()} = {}) {
     const needle = String(query).trim().toLocaleLowerCase();
-    const npcs = (Array.isArray(intel.npcs) ? intel.npcs : []).map((npc,index) => ({npc,index})).filter(({npc}) => !needle || String(npc.name).toLocaleLowerCase().includes(needle));
+    // Distances change as logged positions arrive. Keep the research list in a
+    // stable name order while preserving the source index used by its actions.
+    const npcs = (Array.isArray(intel.npcs) ? intel.npcs : []).map((npc,index) => ({npc,index})).filter(({npc}) => !needle || String(npc.name).toLocaleLowerCase().includes(needle)).sort((a,b)=>String(a.npc.name||'').localeCompare(String(b.npc.name||''))||String(a.npc.id||'').localeCompare(String(b.npc.id||'')));
     return [true,false].map(raid => {
         const sources = npcs.filter(({npc}) => isRaidSource(npc) === raid);
         const section = raid ? 'raid' : 'normal', label = raid ? 'Raid Zone' : 'Normal Zone', closed = collapsedSections.has(intelSectionKey(intel,raid));
@@ -181,6 +183,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     let intelQuery = '', lastIntelFocus = '', lastIntelFocusEvent = '', draftIntelTier = null, intelActionKey = '', activeItemTooltip = null, itemTooltipHideTimer = null, lastParseSession = null;
     const expandedIntel = new Set(), collapsedIntelSections = new Set(), intelLoading = new Map(), intelDropCache = new Map(), intelErrors = new Map();
     const listeners = [];
+    let resizeDrag=null,resizePending=null,resizeBusy=false;
     const listen = (target,name,callback) => { target?.addEventListener(name,callback); listeners.push(() => target?.removeEventListener(name,callback)); };
     const session = () => state.snapshot?.session || {};
     const replace = (element, html) => { if (element && element.innerHTML !== html) element.innerHTML = html; };
@@ -271,6 +274,22 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             if (owner === request && priorNotice === noticeGeneration) report('');
         } catch { if (!disposed && owner === request) report('Action unavailable · open main app.'); }
     }
+    const resizeHandle=$('#overlay-resize-handle'),dragGrip=$('#parse-drag-grip');
+    if(dragGrip){dragGrip.setAttribute('aria-label',`Drag ${PANELS[panel]} to move the unlocked window`);dragGrip.title=`Drag to move ${PANELS[panel]}`;}
+    function finishResize(){const id=resizeDrag?.id;resizeDrag=null;document.body.classList.remove('is-resizing');if(id!==undefined&&resizeHandle?.hasPointerCapture?.(id))resizeHandle.releasePointerCapture(id);}
+    async function flushResize(){
+        if(resizeBusy||disposed)return;resizeBusy=true;
+        try{while(resizePending&&!disposed){const size=resizePending;resizePending=null;await bridge.action('resize',size);}}
+        catch{resizePending=null;finishResize();if(!disposed)report('Resize unavailable. Show and unlock this panel, then retry.');}
+        finally{resizeBusy=false;}
+    }
+    function requestResize(width,height){resizePending={width:Math.max(1,Math.min(4000,Math.round(width))),height:Math.max(1,Math.min(4000,Math.round(height)))};void flushResize();}
+    function requestResizeDelta(deltaWidth,deltaHeight){resizePending={deltaWidth:Math.max(-4000,Math.min(4000,(resizePending?.deltaWidth||0)+deltaWidth)),deltaHeight:Math.max(-4000,Math.min(4000,(resizePending?.deltaHeight||0)+deltaHeight))};void flushResize();}
+    function resizePointer(event){if(!resizeDrag||event.pointerId!==resizeDrag.id)return;requestResize(resizeDrag.width+event.screenX-resizeDrag.x,resizeDrag.height+event.screenY-resizeDrag.y);}
+    listen(resizeHandle,'pointerdown',event=>{if(event.button!==0||state.preferences?.locked||state.preferences?.passThrough||!state.preferences?.visible)return;event.preventDefault();resizeDrag={id:event.pointerId,x:event.screenX,y:event.screenY,width:document.documentElement.clientWidth,height:document.documentElement.clientHeight};resizeHandle.setPointerCapture(event.pointerId);document.body.classList.add('is-resizing');});
+    listen(resizeHandle,'pointermove',resizePointer);
+    listen(resizeHandle,'pointerup',event=>{resizePointer(event);finishResize();});listen(resizeHandle,'pointercancel',finishResize);
+    listen(resizeHandle,'keydown',event=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)||state.preferences?.locked||state.preferences?.passThrough||!state.preferences?.visible)return;event.preventDefault();const step=event.shiftKey?20:5;requestResizeDelta(({ArrowLeft:-step,ArrowRight:step}[event.key]||0),({ArrowUp:-step,ArrowDown:step}[event.key]||0));});
     function renderTimers() {
         const timers = session().timers || {};
         const visible = (timers.timers || []).filter(timer => timer.visible !== false);
@@ -286,6 +305,8 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         document.documentElement.style.setProperty('--panel-opacity', String(Math.min(1, Math.max(.15, number(prefs.backgroundOpacity) || .85))));
         applyAppearance(document,state.appearance,{panelScale:Number(prefs.fontScale) || 1});
         $('#overlay').classList.toggle('is-locked', Boolean(prefs.locked));
+        if(resizeHandle)resizeHandle.disabled=Boolean(prefs.locked||prefs.passThrough||!prefs.visible);
+        if(prefs.locked||prefs.passThrough||!prefs.visible){resizePending=null;finishResize();}
         if (panel !== 'timers') {
             $('#layout-lock').checked = Boolean(prefs.locked); $('#ignore-mouse').checked = Boolean(prefs.passThrough);
             $('#panel-opacity').value = prefs.backgroundOpacity ?? .85; $('#panel-font').value = String(prefs.fontScale ?? 1);
@@ -331,7 +352,16 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
                     shell.dataset.focusSequence = String(intel.focusSequence || '');
                 }
             } else if (!focused) { lastIntelFocus = ''; }
-            replace($('#intel-body'), renderIntel(intel,{query:intelQuery,expanded:expandedIntel,loading:intelLoading,dropCache:intelDropCache,errors:intelErrors,actionKey:intelActionKey,collapsedSections:collapsedIntelSections}));
+            const list=$('#intel-body'),listTop=list.getBoundingClientRect().top,previousScroll=list.scrollTop;
+            const anchor=[...list.querySelectorAll('[data-intel-key]')].find(row=>row.getBoundingClientRect().bottom>listTop+2),anchorKey=anchor?.dataset.intelKey,anchorOffset=anchor?anchor.getBoundingClientRect().top-listTop:0;
+            const active=document.hasFocus()?document.activeElement:null,activeRow=active&&list.contains(active)?active.closest('[data-intel-key]'):null;
+            const activeAction=active?.dataset?.npcAction,activeItem=active?.dataset?.itemName,activeTag=active?.tagName,activeWasName=active?.classList?.contains('npc-name'),activeWasExpand=active?.hasAttribute?.('data-intel-expand'),activeWasRetry=active?.hasAttribute?.('data-intel-retry');
+            replace(list, renderIntel(intel,{query:intelQuery,expanded:expandedIntel,loading:intelLoading,dropCache:intelDropCache,errors:intelErrors,actionKey:intelActionKey,collapsedSections:collapsedIntelSections}));
+            if(!newFocusEvent){
+                const rows=[...list.querySelectorAll('[data-intel-key]')],newAnchor=rows.find(row=>row.dataset.intelKey===anchorKey);
+                if(activeRow&&!active?.isConnected){const row=rows.find(row=>row.dataset.intelKey===activeRow.dataset.intelKey),target=activeAction?[...row?.querySelectorAll('[data-npc-action]')||[]].find(button=>button.dataset.npcAction===activeAction):activeWasName?row?.querySelector('.npc-name'):activeWasExpand?row?.querySelector('[data-intel-expand]'):activeWasRetry?row?.querySelector('[data-intel-retry]'):activeItem?[...row?.querySelectorAll('[data-item-hover]')||[]].find(item=>item.dataset.itemName===activeItem&&item.tagName===activeTag):null;target?.focus({preventScroll:true});}
+                list.scrollTop=newAnchor?list.scrollTop+newAnchor.getBoundingClientRect().top-listTop-anchorOffset:previousScroll;
+            }
             refreshItemTooltip();
             if (freshFocus) {
                 if (newFocusEvent) [...document.querySelectorAll('[data-intel-key]')].find(element => element.dataset.intelKey === key)?.scrollIntoView({block:'start',behavior:'instant'});
@@ -464,6 +494,6 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         }).catch(() => report('Map overlay unavailable · open the main map.'));
     }
     render();
-    return {render(next) {stateGeneration++; state = next || {}; render();},dispose() {disposed = true; hideItemTooltip(); listeners.forEach(remove => remove()); unsubscribe?.(); mapController?.dispose(); discoveryNotices?.dispose(); noticeResizeObserver?.disconnect(); clearInterval(tick);}};
+    return {render(next) {stateGeneration++; state = next || {}; render();},dispose() {disposed = true;resizePending=null;finishResize(); hideItemTooltip(); listeners.forEach(remove => remove()); unsubscribe?.(); mapController?.dispose(); discoveryNotices?.dispose(); noticeResizeObserver?.disconnect(); clearInterval(tick);}};
 }
 if (globalThis.document?.querySelector('#overlay')) mountOverlay();

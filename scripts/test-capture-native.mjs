@@ -1,10 +1,11 @@
-import {mkdtemp,writeFile,rm,mkdir} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join,resolve,dirname} from 'node:path';
+import {mkdtemp,writeFile,rm,mkdir,copyFile,cp} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join,resolve,dirname,relative,isAbsolute,basename} from 'node:path';
 import {fileURLToPath} from 'node:url';import {createRequire} from 'node:module';import {spawn} from 'node:child_process';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),temporary=await mkdtemp(join(tmpdir(),'eoz-native-capture-'));
 const packagedIndex=process.argv.indexOf('--packaged-root'),packagedRoot=packagedIndex>=0?resolve(process.argv[packagedIndex+1]):null;
 async function run({root,temporary,packagedRoot}){
     const {app,BrowserWindow}=require('electron'),electron=require('electron'),http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path');
     app.setPath('userData',path.join(temporary,'profile'));app.disableHardwareAcceleration();await app.whenReady();
+    if(packagedRoot){const {validateOcrRuntime}=require(path.join(packagedRoot,'desktop','ocr-runtime.cjs'));validateOcrRuntime(path.join(path.dirname(packagedRoot),'ocr-runtime'));}
     const sourceRoot=packagedRoot||root,{CaptureHost}=require(path.join(sourceRoot,'desktop','capture-host.cjs'));
     const server=http.createServer(async(request,response)=>{
         const name=request.url==='/'?null:request.url?.slice(1);
@@ -48,8 +49,16 @@ async function run({root,temporary,packagedRoot}){
     app.exit(0);
 }
 try{
-    const entry=join(temporary,'main.cjs');await writeFile(entry,`(${run.toString()})(${JSON.stringify({root,temporary,packagedRoot})}).catch(error=>{console.error(error.stack);require('electron').app.exit(1);});`);
+    let isolatedPackage=packagedRoot;
+    if(packagedRoot){
+        const resources=join(temporary,'isolated-package','resources');await mkdir(resources,{recursive:true});
+        isolatedPackage=join(resources,'app.asar');await copyFile(packagedRoot,isolatedPackage);
+        await cp(join(dirname(packagedRoot),'ocr-runtime'),join(resources,'ocr-runtime'),{recursive:true,errorOnExist:true,force:false});
+        const fromRepo=relative(root,resources);if(!isAbsolute(fromRepo)&&fromRepo!== '..'&&!fromRepo.startsWith(`..${process.platform==='win32'?'\\':'/'}`))throw Error('Packaged OCR fixture must be isolated from repository node_modules.');
+    }
+    const entry=join(temporary,'main.cjs');await writeFile(entry,`(${run.toString()})(${JSON.stringify({root,temporary,packagedRoot:isolatedPackage})}).catch(error=>{console.error(error.stack);require('electron').app.exit(1);});`);
     const electron=createRequire(import.meta.url)('electron'),env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
-    const code=await new Promise((done,reject)=>{const child=spawn(electron,[entry],{env,stdio:'inherit',windowsHide:true});child.once('error',reject);child.once('exit',done);});
+    delete env.NODE_PATH;
+    const code=await new Promise((done,reject)=>{const child=spawn(electron,[entry],{cwd:temporary,env,stdio:'inherit',windowsHide:true});child.once('error',reject);child.once('exit',done);});
     if(code!==0)throw new Error(`Native capture verification failed (${code}).`);
-}finally{await rm(temporary,{recursive:true,force:true});}
+}finally{if(dirname(resolve(temporary))!==resolve(tmpdir())||!basename(temporary).startsWith('eoz-native-capture-'))throw Error('Unsafe capture fixture cleanup path.');await rm(temporary,{recursive:true,force:true});}

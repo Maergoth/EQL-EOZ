@@ -20,6 +20,7 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 .eoz-minimap-controls{display:flex;align-items:center;gap:3px}
 .eoz-minimap-controls button{height:20px;min-width:23px;padding:0 4px;border:1px solid #b591494f;border-radius:3px;background:#15201f;color:#eee6d3;font:600 11px system-ui,sans-serif;cursor:pointer}
 .eoz-minimap-controls button:focus-visible{outline:2px solid #f0d77f;outline-offset:1px}
+.eoz-auto-z[aria-pressed="true"]{border-color:#6cdff5;color:#a7f0ff;background:#16343d}
 /* Eye of Zomm keeps the viewer focused on navigation. Advanced diagnostics
    and display tuning remain in the upstream source but are not exposed here. */
 .eqlzv-source-label,.eqlzv-world-button,.eqlzv-goto-label,.eqlzv-slider-label,
@@ -57,6 +58,7 @@ import { installZoneLoadGuard } from '../zone-load-guard.js';
 import { selectViewerZoneOption } from '../viewer-zone-selection.js';
 import { installMiniMapControls } from '../minimap-controls.js';
 import { installOverlayMode } from './overlay-mode.js';
+import { installViewerPlayerState, knownViewerLocation } from './player-state.js';
 
 const overlayMode=new URLSearchParams(window.location.search).get('overlay')==='1';
 let overlaySlice=null;
@@ -75,6 +77,7 @@ configureViewerMovement(app.fp);
 app.fp?.setFly?.(true);
 window.eqlZoneViewer = app;
 installMiniMapControls(app);
+const playerState=installViewerPlayerState({app,root,externalSlice:overlayMode});
 const viewportFraming = deferHiddenViewportFit(app, () => {
     if (lastSyncedGround) focusTopViewAt(lastSyncedGround);
 });
@@ -526,6 +529,8 @@ const zoneLoadGuard = installZoneLoadGuard(app, {
         loadedZoneIdentity = '';
         lastSyncedLocation = null;
         lastSyncedGround = null;
+        playerState.clear();
+        if(app.renderer)app.renderer.clippingPlanes=[];
         headingTracker.reset();
         clearRareMobs();
         routeGuidanceLayer.hidden = true;
@@ -849,23 +854,25 @@ window.eqlEyeOfZommViewer = {
     },
 
     syncLocation(location, options = {}) {
-        if (!app || !location || !Number.isFinite(Number(location.x)) ||
-            !Number.isFinite(Number(location.y)) || !Number.isFinite(Number(location.z))) {
+        if (!app || !knownViewerLocation(location)) {
             return { ok:false, reason:'no-location' };
         }
         if (!app.fp || !app.perspective || !app.currentBounds || !app.currentZoneRecord) {
             return { ok:false, reason:'load-zone-first' };
         }
+        if(!loadedZoneIdentity||!zoneLoadGuard.isReady(app.currentZoneRecord))return {ok:false,reason:'load-zone-first'};
 
         // Logged locations are world X/Y/Z. Client map files have a separate
         // signed basis and use eqMapToThree instead.
-        const worldLocation = { x:Number(location.x), y:Number(location.y), z:Number(location.z) };
+        const observation=playerState.observe(location);
+        if(!observation.ok)return observation;
+        const worldLocation = observation.world;
         const point = app.eqWorldToThree(worldLocation.x, worldLocation.y, worldLocation.z);
         // /loc Z is authoritative. A large upward ray offset can snap to the
         // ceiling or next floor (Befallen's adjacent floors are ~33 units
         // apart), while findGroundPointAt already permits the six-unit step
         // tolerance configured for player movement.
-        const ground = app.findGroundPointAt(point.x, point.z, point.y) || point;
+        const ground = observation.ground;
         lastSyncedGround = ground.clone();
         const movement = headingTracker.push(worldLocation, Number(options.timestamp) || Date.now());
         const previousForward = app.lastFirstPersonPose?.forward?.clone?.();
@@ -881,37 +888,43 @@ window.eqlEyeOfZommViewer = {
         }
         if (!forward?.lengthSq?.()) forward = ground.clone().set(0, 0, -1);
 
-        const requestedMode = ['first', 'top', 'map'].includes(options.mode) ? options.mode : (app.mapFileVisible ? 'map' : app.mode);
+        const moveCamera=options.moveCamera!==false;
+        const requestedMode = moveCamera&&['first', 'top', 'map'].includes(options.mode) ? options.mode : (app.mapFileVisible ? 'map' : app.mode);
         const resolvedMode = requestedMode === 'map' && !app.mapData?.lines?.length ? 'top' : requestedMode;
-        if (resolvedMode === 'map') {
+        if (moveCamera&&resolvedMode === 'map') {
             if (!app.mapFileVisible) app.setGameMapVisible(true);
-        } else {
+        } else if(moveCamera) {
             if (app.mapFileVisible) app.setGameMapVisible(false);
             if (app.mode !== resolvedMode) app.setMode(resolvedMode === 'top' ? 'top' : 'first');
         }
 
-        app.lastFirstPersonPose = { position:ground.clone(), forward:forward.clone() };
-        if (resolvedMode === 'first') {
+        if(moveCamera)app.lastFirstPersonPose = { position:ground.clone(), forward:forward.clone() };
+        if (moveCamera&&resolvedMode === 'first') {
             app.perspective.position.copy(ground).add({ x:0, y:app.fp.eyeHeight || 6, z:0 });
             app.perspective.up.set(0, 1, 0);
             app.perspective.lookAt(app.perspective.position.clone().add(forward));
             app.fp.activate(app.perspective.position);
             app.captureFirstPersonPose?.();
             app.setMiniMapVisible?.(true);
-        } else {
+        } else if(moveCamera) {
             focusTopViewAt(ground);
         }
         lastSyncedLocation = worldLocation;
         if (typeof app.updateCoordinateHud === 'function') app.updateCoordinateHud(true);
         if (resolvedMode !== 'first' && typeof app.drawMiniMap === 'function') app.drawMiniMap();
         if (typeof app.setStatus === 'function') {
-            app.setStatus(`Synced to in-game map ${formatWorldLocationForGameMap(worldLocation)} · ${playerMapSetLabel(app.mapData?.sourceLabel)}.`);
+            app.setStatus(`Synced to in-game map ${formatWorldLocationForGameMap(worldLocation)} · ${playerMapSetLabel(app.mapData?.sourceLabel)}.${observation.grounded?'':' Player marker uses logged elevation; ground unavailable.'}`);
         }
         app.requestRender?.();
         renderRareMobs();
         const guidance = renderRouteGuidance();
-        return { ok:true, moved:movement.moved, heading:movement.heading, mode:resolvedMode, guidance };
+        return { ok:true, moved:movement.moved, heading:movement.heading, mode:resolvedMode, guidance,grounded:observation.grounded };
     },
+
+    clearPlayerLocation(){
+        lastSyncedLocation=null;lastSyncedGround=null;headingTracker.reset();playerState.clear();app.updateCoordinateHud?.(true);return {ok:true};
+    },
+    setAutoZ(enabled,options={}){return playerState.setAutoZ(enabled,options);},
 
     setRareMobs(records = []) {
         clearRareMobs();
@@ -1084,6 +1097,7 @@ window.eqlEyeOfZommViewer = {
             zone: app?.currentZoneRecord ? (badge ? badge.textContent.trim() : app.currentZoneRecord.id) : '',
             mode: app?.mapFileVisible ? 'map' : (app?.mode || 'top'),
             floors: app?.selectedFloorIndices?.size ? 'filtered' : 'all',
+            playerMarker:playerState.status(),
             textures:{
                 available:Number(app?.parserStats?.textures || 0),
                 materials:Number(app?.loadedMaterials?.length || 0),
@@ -1113,6 +1127,7 @@ if(overlayMode){
 }
 
 window.addEventListener('beforeunload', resetSpatialRouteState, { once:true });
+window.addEventListener('beforeunload',()=>playerState.dispose(),{once:true});
 window.parent?.postMessage({ type:'eoz-viewer-ready' }, window.location.origin);
 </script>
 </body>

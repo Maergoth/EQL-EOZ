@@ -10,6 +10,7 @@
 <body>
 <main id="overlay" class="overlay-shell" aria-label="Eye of Zomm overlay">
     <header id="overlay-header" class="overlay-header">
+        <span class="parse-drag-grip" id="parse-drag-grip" role="img" aria-label="Drag Parse to move the unlocked window" title="Drag to move Parse">⠿</span>
         <h1 id="overlay-title">Eye of Zomm</h1>
         <select id="encounter-scope" aria-label="Encounter selection" hidden></select>
         <span id="encounter-stats" class="encounter-stats" hidden></span>
@@ -29,6 +30,7 @@
     <div id="session-restart" class="restart-note" role="status" hidden>Session restarted · parse rebuilt from log tail; timer deadlines restored.</div>
     <section id="panel-content" class="panel-content" aria-label="Panel content"></section>
     <footer id="overlay-status" role="status" aria-live="polite"></footer>
+    <button type="button" class="overlay-resize-handle" id="overlay-resize-handle" aria-label="Resize panel; drag or use arrow keys" title="Resize: drag this corner, or focus it and use arrow keys"></button>
 </main>
 <div id="intel-item-tooltip" class="intel-item-tooltip" role="tooltip" tabindex="0" aria-label="Item stats; scroll to read, Escape to close" hidden></div>
 <script type="module" src="./overlay.js"></script>

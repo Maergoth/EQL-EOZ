@@ -14,6 +14,11 @@ export const RELEASE_HISTORY = freeze([
       "Include reviewed item-source changes for confirmed NPC loot with a known zone and normal/raid identity. Keep unverified zone /who names Unknown and preserve real character-capture timestamps across reloads.",
       "Build character equipment from separate physical item cards, nullable tiers and upgrade progress, augment evidence and 23 named slots with keyboard/select alternatives. Preserve observed No Equipment and equipped statistics separately from calculated gear sums.",
       "Preview, copy or save a bounded character PNG. Optional uploads target the authenticated user's own talk page after explicit review; partial upload/talk failures remain recoverable.",
+      "Search the cached item catalog in Character, preview tier/progress in green and add distinct copies without fabricating examine observations.",
+      "Recover reviewed base-stat proposals for tiered drops. Choose rounded ambiguities explicitly, omit unsupported values, preserve original evidence and label the wiki inference.",
+      "Cycle all overlays through Locked, Unlocked and Hidden. Use visible Parse/Triggers grips and resize corners; align Triggers to the current resized Parse edges.",
+      "Show the latest logged player marker in both 3D views. Auto Z follows known height; manual slicing and NPC inspection preserve their own floor/camera.",
+      "Keep Intel mob order, scroll position and expanded loot stable during routine updates. A new named consider or kill still reveals its mob once.",
       "Keep game-log evidence authoritative for supported events and treat OCR output as proposals. Validation uses synthetic/offline OCR, native Windows/Linux X11 and loopback-wiki fixtures; production login/write, foreground-game composition and native-Wayland acceptance remain manual."
     ],
     "steps": [
@@ -76,6 +81,46 @@ export const RELEASE_HISTORY = freeze([
         "alt": "Character PNG preview with separately observed No Equipment and equipped values, calculated gear sums and named equipment slots.",
         "caption": "Actual PNG preview generated from synthetic statistics. Clipboard/save were exercised with disposable fixtures; production upload was not tested.",
         "imageSha256": "7e10e0585117048d9948c732eb7ad924bcf47d10da02d7ec6f057b5c38f3024c"
+      },
+      {
+        "title": "Find gear in the cached item catalog",
+        "image": "0.9.0/character-catalog",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Search for item in Character, select a cached wiki match and preview its tier and fractional progress. Changed values appear green. Add to inventory creates a separate physical copy each time; catalog bases stay separate from observed examine values and unknown augment state.",
+        "alt": "Character catalog search with a synthetic ring, tier three and two-eighths progress, adjusted stats in green and Add to inventory.",
+        "caption": "Actual Character interface at 13 px with synthetic catalog records. Search, keyboard selection, distinct copies and persistence were exercised.",
+        "imageSha256": "2af0fd5cb02883f60e50132e72186be42b5ffb3a08e65a0e9c4266201d695496"
+      },
+      {
+        "title": "Review possible bases for tiered drops",
+        "image": "0.9.0/base-recovery",
+        "view": "contribute",
+        "action": "Open Contribute to Wiki",
+        "copy": "Recover base stats from a tiered drop preserves its original observed numbers. Verify tier/progress and that modifiers are excluded, calculate possible values and choose ambiguous bases yourself. Blank and unsupported values stay omitted. Apply the reviewed proposals, verify the stat text and inspect the full wiki preview, which labels the inference. Changed assumptions invalidate the review.",
+        "alt": "Tier-four synthetic drop base recovery showing exact HP and Strength proposals, an ambiguous Armor Class range and omitted Weight and Damage Bonus.",
+        "caption": "Actual review interface at 13 px. Synthetic HP 42 resolves to base 30; rounded AC needs an explicit choice. No production wiki edit is performed.",
+        "imageSha256": "cb67a74250caef0577d8cb0b738be8b2986a8c5f6fed78002c75212207799d64"
+      },
+      {
+        "title": "Arrange every overlay from one control",
+        "image": "0.9.0/overlay-layout",
+        "view": "settings",
+        "action": "Open Settings",
+        "copy": "The header Overlays button cycles all panels through Locked, Unlocked and Hidden. Unlock restores mouse input. Parse and Triggers have visible drag grips and resize corners. Move or resize Triggers near the current Parse edges to align them, even after resizing Parse. Manual Triggers height is saved; Reset positions restores automatic fitting.",
+        "alt": "Unlocked native Parse overlay with Overview, Damage, Healing, Taken and Session tabs, a separate drag grip and a visible resize corner.",
+        "caption": "Actual native Parse window with synthetic combat data. All-panel cycling, trusted resize input and snapping to resized Parse bounds were exercised.",
+        "imageSha256": "e35ef709dce4d44462c3ebba3698ab668494ed7d1607bdf982103ee66fe26aa3"
+      },
+      {
+        "title": "Track your logged position and elevation",
+        "image": "0.9.0/map-autoz",
+        "view": "map",
+        "action": "Open Live Map",
+        "copy": "Top 3D and First Person paint a cyan marker at the latest logged player location, even when camera Follow is off. Auto Z follows known elevation. Manual Z slicing or inspecting a mob leaves Auto Z off until you re-enable it or Reset the overlay. Missing height stays unknown; NPC camera previews never move your logged position.",
+        "alt": "Native Top 3D Map overlay with Auto Z enabled, a cyan logged-player marker and separate synthetic NPC labels.",
+        "caption": "Actual Electron/WebGL overlay on synthetic geometry, not a live game map. Both 3D views and the main viewer were checked for marker, camera and Auto Z behavior.",
+        "imageSha256": "01648c47bbbcafa875299d0832908ffe8d854605053cb29871e31a5181a5994a"
       }
     ]
   },

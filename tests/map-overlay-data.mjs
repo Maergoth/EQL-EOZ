@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {selectMapFamily,parseClientMap,createMapDataLoader} from '../app/map-overlay-data.js';
-import {mapBounds,layoutMapLabels,knownMapZ,mapElevationBounds,mapSliceContainsZ,clipMapSegmentToSlice,mapNpcHitTargets,hitMapNpc,nextNativeMapMode,defaultMapSliceCenter} from '../app/map-overlay.js';
+import {mapBounds,layoutMapLabels,knownMapZ,loggedMapSliceCenter,mapElevationBounds,mapSliceContainsZ,clipMapSegmentToSlice,mapNpcHitTargets,hitMapNpc,nextNativeMapMode,defaultMapSliceCenter} from '../app/map-overlay.js';
 const zone={name:'Mistmoore Castle',aliases:['mistmoore']};
 for(const name of ['Plane of Hate','plane_of_hate','hateplane'])assert.equal(defaultMapSliceCenter(name),120,'Exact Hate identities start on the requested playable slice');
 assert.equal(defaultMapSliceCenter('Alternate display label','hateplane'),120);
@@ -15,6 +15,10 @@ assert.equal(parsed.labels[0].label,'Synthetic Keeper');
 assert.deepEqual(mapBounds(parsed.lines),{minX:-40,minY:-30,maxX:-20,maxY:-10});
 for(const z of [null,undefined,'','  ',false,true,NaN,Infinity]){assert.equal(knownMapZ(z),false);assert.equal(mapSliceContainsZ(z,100,25),true,'Unknown-Z mobs pierce every slice without being assigned floor zero');}
 for(const z of [0,'0',-25,25])assert.equal(knownMapZ(z),true);
+assert.equal(loggedMapSliceCenter(true,120,{z:128}),128,'Auto Z follows an explicit logged elevation');
+assert.equal(loggedMapSliceCenter(false,120,{z:128}),120,'Manual slices survive new player elevations');
+for(const z of [null,undefined,'',false,NaN,Infinity])assert.equal(loggedMapSliceCenter(true,120,{z}),120,'Unknown height preserves the last/manual slice instead of assigning zero');
+assert.equal(loggedMapSliceCenter(true,120,{z:0}),0,'A real logged zero is a valid elevation');
 assert.equal(mapSliceContainsZ(0,100,25),false,'Explicit Z zero is a known floor');
 assert.equal(mapSliceContainsZ(75,100,25),true);assert.equal(mapSliceContainsZ(74,100,25),false);assert.equal(mapSliceContainsZ(130,100,35),true);
 assert.deepEqual(mapElevationBounds([[0,0,-10,0,0,50]],[{loc:[1,2,null]},{loc:[1,2,125]}],{z:-40}),{min:-40,max:125});

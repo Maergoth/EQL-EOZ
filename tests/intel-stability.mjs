@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { renderIntel, intelNpcKey, intelSectionKey } from '../app/overlay.js';
+const npc=(name,distance,raid=false)=>({id:`${name}-${raid}`,name,distance,raidInstance:raid,dropCount:5,drops:Array.from({length:5},(_,i)=>({name:`${name} drop ${i}`,stats:{HP:i+1}}))});
+const intel={zone:'Synthetic Keep',itemTier:4,npcs:[npc('Zeta',2),npc('Alpha',90),npc('Bravo',1,true)]};
+const names=html=>[...html.matchAll(/class="npc-name"[^>]*>([^<]+)</g)].map(match=>match[1]);
+assert.deepEqual(names(renderIntel(intel)),['Bravo','Alpha','Zeta'],'raid remains first; each section uses stable name order');
+const moved={...intel,npcs:[{...intel.npcs[1],distance:1},{...intel.npcs[2],distance:80},{...intel.npcs[0],distance:900}]};
+assert.deepEqual(names(renderIntel(moved)),names(renderIntel(intel)),'distance updates and source ordering cannot shuffle displayed names');
+const expanded=new Set([intelNpcKey(intel.npcs[0],intel)]),collapsedSections=new Set([intelSectionKey(intel,true)]);
+const refreshed=renderIntel(moved,{expanded,collapsedSections});
+assert.match(refreshed,/Raid Zone[^]*?collapsed/);assert.match(refreshed,/Zeta drop 4/);
+assert.match(refreshed,/data-npc-action="wiki" data-npc-index="0"/,'source indices remain attached to the original record after display sorting');
+console.log('Intel stability: distance-independent name order, raid grouping, expanded drops, collapsed section and action identity passed.');

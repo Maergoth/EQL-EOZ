@@ -6,9 +6,9 @@ const locationKey=location=>location?JSON.stringify([location.x,location.y,locat
 // selected-folder ownership and validated route calculation stay in main.
 export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFollowChange=()=>{},onFocusApplied=()=>{},onSelectNpc,document=root?.ownerDocument||globalThis.document}={}){
     let session=getSession()||{},mode='map',frame=null,frameReady=null,loaded='',epoch=0,task=null,dirty=false,disposed=false,follow=true,cancelFrame=null;
-    let appliedMode='',lastLocation='',lastFocus='',lastMarkers='',lastRoute='',lastSlice='',slice=null,focusNotice='';
+    let appliedMode='',lastLocation=null,lastFocus='',lastMarkers='',lastRoute='',lastSlice='',slice=null,focusNotice='';
     const report=message=>{if(!disposed)onStatus(message);};
-    function release(){epoch++;task?.cancel();task=null;cancelFrame?.();cancelFrame=null;loaded='';appliedMode='';lastLocation='';lastFocus='';lastMarkers='';lastRoute='';lastSlice='';focusNotice='';frameReady=null;frame?.remove();frame=null;}
+    function release(){epoch++;task?.cancel();task=null;cancelFrame?.();cancelFrame=null;loaded='';appliedMode='';lastLocation=null;lastFocus='';lastMarkers='';lastRoute='';lastSlice='';focusNotice='';frameReady=null;frame?.remove();frame=null;}
     function ensureFrame(){
         if(frame)return frameReady;
         frame=document.createElement('iframe');frame.title='Native Map 3D explorer';frame.className='native-map-3d-frame';
@@ -50,20 +50,25 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
                 if(!result?.ok)throw Error(result?.message||'No matching local 3D archive was found for this zone.');
                 loaded=key;
             }
-            if(appliedMode!==mode){api.setView(mode);appliedMode=mode;if(follow)lastLocation='';}
+            if(appliedMode!==mode){api.setView(mode);appliedMode=mode;if(follow)lastLocation=null;}
             const map=session.map||{},markers=JSON.stringify(map.npcs||[]),route=JSON.stringify(map.route?.points||[]);
             if(markers!==lastMarkers){api.setRareMobs(map.npcs||[]);lastMarkers=markers;}
             api.setOverlaySelection?.(map.selectedNpcId||'');
             if(route!==lastRoute){api.setOverlayRoute?.(map.route?.points||[]);lastRoute=route;}
             if(slice&&JSON.stringify(slice)!==lastSlice){api.setOverlaySlice?.(slice);lastSlice=JSON.stringify(slice);}
             const focus=map.focus,focusKey=focus?JSON.stringify([focus.sequence,focus.id,focus.zone]):'';
-            if(focusKey&&focusKey!==lastFocus&&focus.zone===(map.zone||session.zone)){
+            const pendingFocus=focusKey&&focusKey!==lastFocus&&focus.zone===(map.zone||session.zone),nextLocation=locationKey(map.location);
+            if(nextLocation!==lastLocation){
+                if(map.location)api.syncLocation(map.location,{mode,timestamp:map.location.at,moveCamera:follow&&!pendingFocus});
+                else api.clearPlayerLocation?.();
+                lastLocation=nextLocation;
+            }
+            const groundNotice=api.status?.()?.playerMarker?.groundBasis==='logged-elevation'?' · player marker uses logged elevation (ground unavailable)':'';
+            if(pendingFocus){
                 const result=api.focusAtLocation?.(focus.loc,{mode:'first',fallbackZ:slice?.center});
-                if(result?.ok){lastFocus=focusKey;follow=false;focusNotice=`${focus.name||'NPC'} · inspection camera${result.heightEstimated?' · height estimated':''}`;onFollowChange(false);onFocusApplied(focus,result);report(focusNotice);}
+                if(result?.ok){lastFocus=focusKey;follow=false;focusNotice=`${focus.name||'NPC'} · inspection camera${result.heightEstimated?' · height estimated':''}`;onFollowChange(false);onFocusApplied(focus,result);report(focusNotice+groundNotice);}
             }else{
-                const nextLocation=locationKey(map.location);
-                if(follow&&map.location&&nextLocation!==lastLocation){api.syncLocation(map.location,{mode,timestamp:map.location.at});lastLocation=nextLocation;}
-                report(focusNotice||(mode==='first'?'First person · click the scene, then use movement keys to explore.':'Top 3D · drag to orbit, use +/− to zoom.'));
+                report((focusNotice||(mode==='first'?'First person · click the scene, then use movement keys to explore.':'Top 3D · drag to orbit, use +/− to zoom.'))+groundNotice);
             }
             api.resize?.();
         }catch(error){if(current())report(error?.message||'Unable to open this 3D zone.');}
@@ -79,10 +84,10 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
     globalThis.addEventListener?.('message',receive);
     return {
         async setMode(next){if(!['map','top','first'].includes(next))throw Error('Unknown Map view.');if(mode!==next)focusNotice='';mode=next;if(next==='map'){release();report('');return;}await synchronize();},
-        render,setFollow(value){const next=!!value;if(next===follow)return;follow=next;if(follow){focusNotice='';lastLocation='';request();}},
+        render,setFollow(value){const next=!!value;if(next===follow)return;follow=next;if(follow){focusNotice='';lastLocation=null;request();}},
         zoomBy(factor){frame?.contentWindow?.eqlEyeOfZommViewer?.overlayZoom?.(factor);},
         setSlice(value){slice=value;const key=JSON.stringify(value),api=frame?.contentWindow?.eqlEyeOfZommViewer;if(loaded&&key!==lastSlice&&api){api.setOverlaySlice?.(value);lastSlice=key;}},
-        reset(){lastLocation='';lastFocus='';focusNotice='';follow=true;onFollowChange(true);frame?.contentWindow?.eqlEyeOfZommViewer?.resetOverlayCamera?.();request();},
+        reset(){lastLocation=null;lastFocus='';focusNotice='';follow=true;onFollowChange(true);frame?.contentWindow?.eqlEyeOfZommViewer?.resetOverlayCamera?.();request();},
         dispose(){if(disposed)return;disposed=true;release();globalThis.removeEventListener?.('message',receive);}
     };
 }

@@ -4,8 +4,8 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.0 adds optional screen reading, reviewed wiki contributions and Character
-snapshots.** See [PR #11](https://github.com/Maergoth/EQL-EOZ/pull/11), the
+**0.9.0 adds optional screen reading, reviewed wiki contributions, Character
+catalog search and snapshots, and clearer overlay controls.** See [PR #11](https://github.com/Maergoth/EQL-EOZ/pull/11), the
 [feature guide](docs/CAPTURE_CONTRIBUTIONS.md) and the
 [release verification plan](docs/RELEASE_090.md) for implementation and check scope.
 
@@ -25,7 +25,7 @@ editable fields; unresolved values remain unknown.
 1. Download the latest Windows `Setup-<version>-x64.exe`, Linux `<version>-x64.AppImage`, or Debian/Ubuntu `<version>-x64.deb` package from [Releases](https://github.com/Maergoth/EQL-EOZ/releases). Both platforms use the same version and data source.
 2. Choose your EverQuest Legends folder on first launch. Enable logging in the game; EoZ follows the newest `eqlog_*.txt` under `Logs`, or a specific file selected in Settings.
 3. Emit `/who` to establish your character's zone, level and classes, and `/loc` to place your position on the map. Later logged locations update it automatically.
-4. Open **Overlays** to arrange Parse, Map, Zone & loot and Triggers. Configure them in **Settings → Native overlays**. Reopen **Settings → About Eye of Zomm → What's new** for the illustrated tour.
+4. The header **Overlays** button cycles all panels through **Locked → Unlocked → Hidden**. Unlock to arrange Parse, Map, Zone & loot and Triggers, or configure each in **Settings → Native overlays**. Reopen **Settings → About Eye of Zomm → What's new** for the illustrated tour.
 
 The Windows installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz://` so EQLWiki can open the app. Beta installers may be unsigned and show a Windows publisher prompt; see [signing status](SIGNING.md). Linux package and compositor details are in the [font/Linux guide](docs/FONTS_LINUX.md).
 
@@ -64,6 +64,15 @@ verified package download and manual installation handoff.
 
 The native Map reads your client text maps and shares the logged position, named destinations and validated route with the main app. Hover the full zone-title row for **Reset**, Follow, zoom and a button cycling **Map → Top → First person** beside its name. A separate grip moves the unlocked window. Its 3D scene loads only when used. Use Z controls to inspect another elevation; monster names and markers share interactive pointer targets. The complete main **Map Explorer** keeps its own views and zoomable Local Map.
 
+Both 3D views mark your latest logged location with a cyan ground ring, even
+when camera Follow is off. **Auto Z** uses the latest known logged elevation;
+moving the Z slider or inspecting a mob switches to manual slicing. Turn Auto Z
+back on, or Reset the overlay, to resume it. Missing height stays unknown. A
+nearby validated floor grounds the marker; otherwise its status identifies the
+logged-elevation fallback.
+
+![Native Top 3D player marker and Auto Z on synthetic geometry](app/assets/whats-new/0.9.0/map-autoz.png)
+
 Routing is an opt-in. A line appears only after collision checks approve it; a guarded Recast/Detour candidate may refine the established route after the same checks. An unreachable or unverified destination remains a marker. Static archives do not reveal live doors or actors. [Route validation](docs/ROUTE_REJECTION_AUDIT.md) records working detours and remaining limits.
 
 ![Native Map with zoom and elevation controls on a synthetic map](app/assets/whats-new/map.png)
@@ -72,7 +81,12 @@ Routing is an opt-in. A line appears only after collision checks approve it; a g
 
 **Zone & loot** separates Normal Zone and Raid Zone sources, with red **Raid Zone** intel shown first. Click a section heading to collapse it. **Item Level Slider** and **My Class** stay anchored above the scrolling list. Hover or keyboard-focus a mob name for Details, Route, Copy /waypoint, Wiki and Map in the same row, without moving the list. Its Map action opens a first-person preview at that source, keeping your logged position unchanged. Use **Show More** for all matching drops. Class filtering retains usable equipment/effects and excludes statless and weight-only quest/junk records. A logged consider or named kill selects and expands its row and section with a mild visual/audio cue, without activating the window.
 
-Hover or focus an item's name or icon for its local stat block, including tier-adjusted values and base comparisons. **Through era** includes items through the chosen era. Activating a located NPC name copies a paste-ready `/waypoint Y X [Z]`; row-level Route actions start navigation when routing is enabled. Plane of Hate starts at Z 120; its slice remains adjustable.
+Hover or focus an item's name or icon for its local stat block, including tier-adjusted values and base comparisons. **Through era** includes items through the chosen era. Activating a located NPC name copies a paste-ready `/waypoint Y X [Z]`; row-level Route actions start navigation when routing is enabled.
+
+Routine log and location updates retain stable mob ordering, the visible row,
+expanded drops and collapsed sections. A new named consider or kill still
+reveals its matching row once. Plane of Hate uses Z 120 only until a known
+logged elevation is available with Auto Z enabled.
 
 ![Raid loot and same-row mob actions from a synthetic wiki pack](app/assets/whats-new/intel.png)
 
@@ -98,6 +112,13 @@ The independent **Parse** window has **Overview / Damage / Healing / Taken / Ses
 ![Timer trigger editor with synthetic match preview](app/assets/whats-new/timers.png)
 
 Unlock an overlay to move/resize it. Locking leaves its tabs and menus interactive; **Ignore mouse** passes clicks through. Recover from Settings, the tray, or **Ctrl+Shift+O** when registered. Layout, opacity and font scale are saved separately for each panel. Closing the main window while overlays are visible keeps their shared session running; use **Quit Eye of Zomm** in the tray to exit.
+
+Unlocked Parse and Triggers have visible drag grips and resize corners. Move or
+resize Triggers near Parse to align their current edges, including after Parse
+is resized. A manual Triggers height stays saved; **Reset positions** restores
+automatic content fitting. Global Unlock restores mouse input on every panel.
+
+![Unlocked native Parse with a separate drag grip and resize corner](app/assets/whats-new/0.9.0/overlay-layout.png)
 
 ### Optional screen reading
 
@@ -131,6 +152,16 @@ publish action. Existing permissions and edit-conflict checks apply; a partial
 result identifies unfinished pages so a retry does not repeat completed edits.
 Nothing publishes merely because a candidate was captured or previewed.
 
+For a tiered drop without a wiki base record, **Recover base stats from a tiered
+drop** keeps the observed numbers and evidence intact. Verify exact tier,
+progress and absence of augments/modifiers, then calculate possible bases.
+Choose among rounded ranges yourself; blank, unsupported and unresolved values
+are omitted. Applying a proposal still requires verifying the outgoing stat
+text. The wiki preview labels the result as an inference. Editing its source,
+assumptions or selected values invalidates that review.
+
+![Reviewed tier-four base proposals with ambiguous and unsupported values](app/assets/whats-new/0.9.0/base-recovery.png)
+
 ![0.9.0 contribution review queue and editable synthetic NPC fields using an isolated loopback wiki account](app/assets/whats-new/0.9.0/contributions.png)
 
 ### Build and share a character snapshot
@@ -142,6 +173,13 @@ progress blank; an explicit zero is different from unknown. Place each physical 
 named slot with drag-and-drop or the slot menu; confirm replacements and slot
 warnings. Identical copies remain distinct. Removing a mistaken card is retained
 through journal replay.
+
+**Search for item** uses the cached wiki catalog. Select an item and preview its
+tier/progress with changed values in green, then **Add to inventory**. Repeated
+adds create distinct copies. Catalog bases stay separate from observed examine
+stats; unknown augment state and unsupported adjustments remain explicit.
+
+![Character catalog search with tier-adjusted stats and separate item copies](app/assets/whats-new/0.9.0/character-catalog.png)
 
 ![0.9.0 Character named equipment slots and reviewed synthetic shield inventory card, with the shield assigned to Secondary](app/assets/whats-new/0.9.0/character.png)
 
