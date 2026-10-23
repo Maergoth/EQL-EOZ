@@ -14,7 +14,7 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
     const server=http.createServer(async(request,response)=>{
         const name=request.url==='/'?null:request.url?.slice(1);
         if(!name){response.end('<!doctype html><title>Eye of Zomm test control</title>');return;}
-        if(!['capture-source.html','capture-source.js'].includes(name)){response.writeHead(404).end();return;}
+        if(!['capture-source.html','capture-source.js','capture-png.worker.js'].includes(name)){response.writeHead(404).end();return;}
         response.setHeader('Content-Type',name.endsWith('.html')?'text/html':'text/javascript');response.end(await fs.readFile(path.join(sourceRoot,'app',name)));
     });
     await new Promise(done=>server.listen(0,'127.0.0.1',done));const origin=`http://127.0.0.1:${server.address().port}`;
@@ -25,15 +25,29 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
     game.showInactive();
     let resolveObservation;const observation=new Promise(done=>{resolveObservation=done;});
     const ocr=new (require(path.join(sourceRoot,'desktop','ocr-service.cjs')).OcrService)({packaged:Boolean(packagedRoot),resourcesPath:packagedRoot?path.dirname(packagedRoot):process.resourcesPath});
-    const recognize=ocr.recognize.bind(ocr),ocrTimes=[],ocrReads=[],records=[],admissions=[],stages=[];let gateNext=false,releaseGate,gateStarted,captureStages=false,frameRate=null,renderGeometry=null;
+    const recognize=ocr.recognize.bind(ocr),ocrTimes=[],ocrReads=[],records=[],admissions=[],submissions=[],stages=[];let gateNext=false,releaseGate,gateStarted,captureStages=false,frameRate=null,renderGeometry=null,lastSubmittedPng=null,lastRejectedPng=null;
     ocr.recognize=async(...args)=>{if(gateNext){gateNext=false;await new Promise(resolve=>{releaseGate=resolve;gateStarted?.();});}const started=Date.now();try{const read=await recognize(...args);if(captureStages){ocrReads.push({layout:args[1]?.layout||'sparse',size:electron.nativeImage.createFromBuffer(args[0]).getSize(),text:read.text?.slice(0,600),words:read.words?.slice(0,12)});if(ocrReads.length>12)ocrReads.shift();}return read;}finally{ocrTimes.push(Date.now()-started);}};
     const host=new CaptureHost({electron,ocr,origin,getMainWindow:()=>main,onObservation:value=>{records.push(value);resolveObservation(value);}});
     // A synthetic two-color strip outside the tooltip acknowledges the pixels
     // that crossed the actual native stream. It is never supplied to OCR as a
     // name/result, and a previous frame's heartbeat cannot satisfy a new stage.
     function pixelStage(png){const image=electron.nativeImage.createFromBuffer(Buffer.from(png)),{width,height}=image.getSize(),pixels=image.toBitmap({scaleFactor:1});for(let y=0;y<Math.min(height,300);y+=2){let stage=0,first=0,second=0,gap=0;for(let x=0;x<Math.min(width,300);x++){const offset=(y*width+x)*4,value=pixels[offset],flat=Math.abs(value-pixels[offset+1])<=2&&Math.abs(value-pixels[offset+2])<=2,next=flat?(Math.abs(value-61)<=2?1:Math.abs(value-109)<=2?2:Math.abs(value-157)<=2?3:0):0;if(!second&&next&&(!stage||next===stage)){stage=next;first++;continue;}if(stage&&first>=16&&flat&&Math.abs(value-(231-[0,61,109,157][stage]))<=2){if(++second>=16)return stage;}else if(stage&&first>=16&&!second&&gap<4){gap++;}else{stage=next;first=next?1:0;second=0;gap=0;}}}return null;}
-    const submitFrame=host.submitFrame.bind(host);host.submitFrame=value=>{const result=submitFrame(value);if(result.accepted)admissions.push({capturedAt:value.capturedAt,admittedAt:Date.now(),generation:host.generation,width:value.width,height:value.height,hash:crypto.createHash('sha256').update(value.bytes).digest('hex'),stage:captureStages?pixelStage(value.bytes):null});return result;};
-    const diagnostics=()=>({status:host.getStatus(),geometry:{native:game.getBounds(),content:game.getContentBounds(),requestedScaleFactor:scaleFactor,renderer:renderGeometry},actualFrameRate:frameRate,stages,cadence:admissions.slice(-20),ocrReads,items:records.filter(record=>record.subject.kind==='item').map(record=>({name:record.subject.name,generation:record.input?.captureGeneration,capturedAt:record.capturedAt,ocrPasses:record.input?.ocrPasses,evidence:record.evidence?.text?.slice(0,1800)})).slice(-8)});
+    const submitFrame=host.submitFrame.bind(host);host.submitFrame=value=>{const result=submitFrame(value),entry={capturedAt:value.capturedAt,admittedAt:Date.now(),generation:host.generation,owner:value.owner,sessionId:value.sessionId,sourceId:value.sourceId,selection:value.selectionKind,visualKey:value.visualKey,sceneOnly:!result.accepted,itemRegion:value.itemRegion?{...value.itemRegion}:null,width:value.width,height:value.height,hash:crypto.createHash('sha256').update(value.bytes).digest('hex'),stage:captureStages?pixelStage(value.bytes):null};submissions.push({...entry,result});if(submissions.length>20)submissions.shift();if(result.accepted||result.sceneAccepted)admissions.push(entry);if(captureStages&&value.bytes.byteLength<=8*1024*1024){lastSubmittedPng=Buffer.from(value.bytes);if(!result.accepted&&!result.sceneAccepted)lastRejectedPng=lastSubmittedPng;}return result;};
+    const diagnostics=()=>({status:host.getStatus(),geometry:{native:game.getBounds(),content:game.getContentBounds(),requestedScaleFactor:scaleFactor,renderer:renderGeometry},actualFrameRate:frameRate,stages,cadence:admissions.slice(-20),submissions,ocrReads,items:records.filter(record=>record.subject.kind==='item').map(record=>({name:record.subject.name,owner:record.owner,sessionId:record.sessionId,sourceId:record.input?.sourceId,generation:record.input?.captureGeneration,capturedAt:record.capturedAt,frameId:record.input?.frameId,selection:record.input?.captureSelection,ocrPasses:record.input?.ocrPasses,evidence:record.evidence?.text?.slice(0,1800)})).slice(-8)});
+    async function saveFailurePixels(){
+        // All pixels belong to this synthetic fixture. Collect only after a
+        // failed assertion so screenshots/probes cannot alter sampling timing.
+        const directory=path.join(root,'ci-screenshots','native-capture-failures'),prefix=`${process.platform}-${packagedRoot?'packaged':'source'}-${process.pid}`;
+        await fs.mkdir(directory,{recursive:true});
+        const bounded=async promise=>{let timer;try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Diagnostic capture timed out.')),2000);})]);}finally{clearTimeout(timer);}};
+        const results=await Promise.allSettled([
+            bounded(game.webContents.capturePage()).then(image=>fs.writeFile(path.join(directory,`${prefix}-game.png`),image.toPNG())),
+            bounded(host.captureWindow?.webContents.executeJavaScript(`(()=>{const element=document.querySelector('video'),probe={at:Date.now(),video:{width:element.videoWidth,height:element.videoHeight,currentTime:element.currentTime,readyState:element.readyState,settings:element.srcObject?.getVideoTracks()[0]?.getSettings()},encoding:typeof encoding==='undefined'?null:encoding,pending:typeof snapshots==='undefined'?[]:snapshots.map(snapshot=>({...snapshot.frame,rawBytes:snapshot.rawBytes})),memory:typeof paneMemory==='undefined'?[]:[...paneMemory].map(([key,value])=>({regionKey:key,at:value.at,visualKey:pixelKey(value.pixels)}))};if(element.readyState<2||!element.videoWidth||!element.videoHeight)return{probe};const scale=Math.min(1,4096/element.videoWidth,2160/element.videoHeight),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(element.videoWidth*scale));canvas.height=Math.max(1,Math.round(element.videoHeight*scale));try{probe.frozenFrame={width:canvas.width,height:canvas.height,capturedAt:Date.now()};canvas.getContext('2d').drawImage(element,0,0,canvas.width,canvas.height);const panes=typeof visualPanes==='function'?visualPanes(canvas):[];probe.currentPanes=panes.map(region=>({region,visualKey:pixelKey(fingerprint(canvas,region))}));return{probe,dataUrl:canvas.toDataURL('image/png')};}finally{canvas.width=canvas.height=1;}})()`)).then(async result=>{if(!result)return;if(result.dataUrl)await fs.writeFile(path.join(directory,`${prefix}-video.png`),Buffer.from(result.dataUrl.split(',')[1],'base64'));console.error('EOZ_NATIVE_SOURCE_FAILURE='+JSON.stringify(result.probe));}),
+            ...(lastSubmittedPng?[fs.writeFile(path.join(directory,`${prefix}-submitted.png`),lastSubmittedPng)]:[]),
+            ...(lastRejectedPng?[fs.writeFile(path.join(directory,`${prefix}-rejected.png`),lastRejectedPng)]:[])
+        ]);
+        console.error('EOZ_NATIVE_FAILURE_PIXELS='+JSON.stringify({directory,prefix,results:results.map(result=>result.status==='fulfilled'?'saved':String(result.reason?.message||result.reason))}));
+    }
     const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),until=async(predicate,label,timeout=20000)=>{const end=Date.now()+timeout;while(Date.now()<end){if(predicate())return;await wait(40);}throw Error(`${label}: ${JSON.stringify(diagnostics())}`);};
     const commit=()=>game.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
     const previousClipboard={text:electron.clipboard.readText(),html:electron.clipboard.readHTML(),rtf:electron.clipboard.readRTF()};
@@ -65,7 +79,7 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         const hoverGeneration=host.generation,names=['Copperleaf Coat +4','Synthetic Needle +3','Synthetic Amber Band +2'];
         frameRate=await host.captureWindow.webContents.executeJavaScript('document.querySelector("video").srcObject.getVideoTracks()[0].getSettings().frameRate');
         await until(()=>admissions.some(frame=>frame.generation===hoverGeneration&&frame.stage===1),'Initial committed tooltip pixels did not cross the native stream',1500);
-        const firstAdmission=admissions.find(frame=>frame.generation===hoverGeneration&&frame.stage===1);stages.push({stage:1,drawAt:firstDrawAt,admittedAt:firstAdmission.admittedAt,capturedAt:firstAdmission.capturedAt,drawToAdmissionMs:firstAdmission.admittedAt-firstDrawAt,hash:firstAdmission.hash});
+        const firstAdmission=admissions.find(frame=>frame.generation===hoverGeneration&&frame.stage===1);stages.push({...firstAdmission,drawAt:firstDrawAt,drawToAdmissionMs:firstAdmission.admittedAt-firstDrawAt});
         for(const stage of [2,3]){
             const drawnAt=await game.webContents.executeJavaScript(`window.drawStage(${JSON.stringify({name:names[stage-1],weapon:stage===2})},${stage})`);await commit();
             stages.at(-1).visibleForMs=drawnAt-stages.at(-1).drawAt;
@@ -74,14 +88,21 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
             // source frame. Retain a strict 500ms changed-pixel capture bound,
             // with a separate bounded wait for its native acknowledgment.
             await until(()=>admissions.some(frame=>frame.generation===hoverGeneration&&frame.stage===stage&&frame.capturedAt>=drawnAt),`Tooltip ${stage} pixels did not reach native admission`,5000);
-            const admitted=admissions.find(frame=>frame.generation===hoverGeneration&&frame.stage===stage&&frame.capturedAt>=drawnAt);stages.push({stage,drawAt:drawnAt,admittedAt:admitted.admittedAt,capturedAt:admitted.capturedAt,drawToAdmissionMs:admitted.admittedAt-drawnAt,hash:admitted.hash});await wait(700);
+            const admitted=admissions.find(frame=>frame.generation===hoverGeneration&&frame.stage===stage&&frame.capturedAt>=drawnAt);stages.push({...admitted,drawAt:drawnAt,drawToAdmissionMs:admitted.admittedAt-drawnAt});await wait(700);
             if(admitted.capturedAt-drawnAt>500)throw Error(`Tooltip ${stage} changed pixels were not sampled within500ms: ${JSON.stringify(diagnostics())}`);
         }
         await until(()=>host.getStatus().queuedFrames>=2,'Brief hover frames were not retained while OCR was held',5000);
-        const releasedAt=Date.now();stages.at(-1).visibleForMs=releasedAt-stages.at(-1).drawAt;releaseGate();releaseGate=null;
-        await until(()=>names.every(name=>records.some(record=>record.subject.name===name&&record.input?.captureGeneration===hoverGeneration)),'Real OCR did not recover all queued hover identities');
-        const hoverRecords=names.map(name=>records.find(record=>record.subject.name===name&&record.input?.captureGeneration===hoverGeneration));
-        for(const record of hoverRecords){if(record.owner!=='character'||record.sessionId!=='native-synthetic'||record.input.sourceId!==source.id||Date.parse(record.capturedAt)>=releasedAt)throw Error('Queued hover evidence lost its original source/session/time provenance.');}
+        // Remove the final tooltip before draining OCR. A later heartbeat must
+        // not substitute for a brief item already acknowledged in the queue.
+        const hiddenAt=await game.webContents.executeJavaScript('(()=>{const at=Date.now(),canvas=document.querySelector("canvas"),context=canvas.getContext("2d");context.fillStyle="#23343d";context.fillRect(0,0,canvas.width,canvas.height);return at;})()');await commit();
+        const releasedAt=Date.now();stages.at(-1).visibleForMs=hiddenAt-stages.at(-1).drawAt;releaseGate();releaseGate=null;
+        // Semantic dedup may keep another admitted PNG of the same visible
+        // item. Require its exact acknowledged bytes/time/context within this
+        // stage's exposure, rather than requiring the first admitted variant.
+        const queuedRecord=(name,stage)=>records.find(record=>record.subject.name===name&&record.owner===stage.owner&&record.sessionId===stage.sessionId&&record.input?.sourceId===stage.sourceId&&record.input?.captureGeneration===stage.generation&&admissions.some(frame=>frame.stage===stage.stage&&frame.owner===stage.owner&&frame.sessionId===stage.sessionId&&frame.sourceId===stage.sourceId&&frame.generation===stage.generation&&frame.capturedAt>=stage.drawAt&&frame.capturedAt<stage.drawAt+stage.visibleForMs&&frame.capturedAt<releasedAt&&frame.hash===record.input?.frameId&&frame.capturedAt===Date.parse(record.capturedAt)));
+        await until(()=>names.every((name,index)=>queuedRecord(name,stages[index])),'Real OCR did not recover all queued hover identities with an exact acknowledged PNG, original timestamp and context inside each visible stage');
+        const hoverRecords=names.map((name,index)=>queuedRecord(name,stages[index]));
+        for(const record of hoverRecords){if(record.owner!=='character'||record.sessionId!=='native-synthetic'||record.input.sourceId!==source.id||Date.parse(record.capturedAt)>=releasedAt)throw Error(`Queued hover evidence lost its original source/session/time provenance: ${JSON.stringify({expected:{owner:'character',sessionId:'native-synthetic',sourceId:source.id,generation:hoverGeneration,capturedBefore:releasedAt},records:hoverRecords.map(item=>({name:item.subject.name,owner:item.owner,sessionId:item.sessionId,sourceId:item.input?.sourceId,generation:item.input?.captureGeneration,capturedAt:Date.parse(item.capturedAt),frameId:item.input?.frameId,selection:item.input?.captureSelection})),...diagnostics()})}`);}
         const cadence=admissions.filter(frame=>frame.generation===hoverGeneration&&frame.capturedAt<releasedAt).map(frame=>frame.capturedAt);
         if(cadence.length<3)throw Error('The actual native stream did not admit three brief tooltip frames.');
         captureStages=false;const devicePixelRatio=await game.webContents.executeJavaScript('devicePixelRatio');
@@ -101,7 +122,8 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         if(host.captureWindow||host.ocr.worker||host.owner)throw new Error('Capture Stop retained a source or OCR worker.');
         const history=await host.journal.read();if(history.records.length<1)throw new Error('Native observation was not journaled.');
         console.log(`Native ${packagedRoot?'packaged ASAR':'source'} persistent capture -> local OCR -> calibration preview/region -> character observation -> private journal -> clipboard -> Stop passed.`);
-    }finally{releaseGate?.();clearTimeout(watchdog);await host.dispose();electron.clipboard.write(previousClipboard);game.destroy();main.destroy();await new Promise(done=>server.close(done));}
+    }catch(error){await saveFailurePixels().catch(captureError=>console.error('Native failure diagnostics:',String(captureError?.message||captureError)));throw error;}
+    finally{releaseGate?.();clearTimeout(watchdog);await host.dispose();electron.clipboard.write(previousClipboard);game.destroy();main.destroy();await new Promise(done=>server.close(done));}
     app.exit(0);
 }
 try{
@@ -115,7 +137,9 @@ try{
     // A Windows runner may expose only 655 CSS pixels after its native frame.
     // The tallest tooltip ends at 650, plus its 1.5px stroke; retain every pixel
     // while omitting the unused eight-pixel scene margin.
-    const hoverHtml=hoverFixtureHtml({x:300,y:20,width:960,height:652}).replace('</script>',`const draw=window.drawFixture;window.drawStage=(options,stage)=>{window.fixtureDrawAt=Date.now();draw({...options,x:300,y:20,width:960,height:652});const c=document.querySelector('canvas').getContext('2d'),gray=[61,109,157][stage-1];c.fillStyle='rgb('+gray+','+gray+','+gray+')';c.fillRect(20,0,20,40);const other=231-gray;c.fillStyle='rgb('+other+','+other+','+other+')';c.fillRect(40,0,20,40);return window.fixtureDrawAt;};window.drawStage({},1);</script>`);
+    // Native capture may defer static-window updates. Supply the small, regular
+    // non-item damage that moving game scenery provides, without changing OCR.
+    const hoverHtml=hoverFixtureHtml({x:300,y:20,width:960,height:652}).replace('</script>',`let damageTick=0;setInterval(()=>{const c=document.querySelector('canvas').getContext('2d');c.fillStyle='rgb('+(80+damageTick++%80)+',35,120)';c.fillRect(120,80,16,16);},125);const draw=window.drawFixture;window.drawStage=(options,stage)=>{window.fixtureDrawAt=Date.now();draw({...options,x:300,y:20,width:960,height:652});const c=document.querySelector('canvas').getContext('2d'),gray=[61,109,157][stage-1];c.fillStyle='rgb('+gray+','+gray+','+gray+')';c.fillRect(20,0,20,40);const other=231-gray;c.fillStyle='rgb('+other+','+other+','+other+')';c.fillRect(40,0,20,40);return window.fixtureDrawAt;};window.drawStage({},1);</script>`);
     const baselineHtml=`<!doctype html><title>EverQuest Synthetic Hover Fixture</title><style>body{margin:0;background:#080e18}canvas{width:720px;height:675px}</style><body><script>const original=(${drawModernOcrFixture.toString()})(document),canvas=document.createElement('canvas');canvas.width=960;canvas.height=900;canvas.getContext('2d').drawImage(original,1600,0,960,900,0,0,960,900);document.body.append(canvas);</script>`;
     const entry=join(temporary,'main.cjs');await writeFile(entry,`(${run.toString()})(${JSON.stringify({root,temporary,packagedRoot:isolatedPackage,hoverHtml,baselineHtml,scaleFactor})}).catch(error=>{console.error(error.stack);require('electron').app.exit(1);});`);
     const electron=createRequire(import.meta.url)('electron'),env={...process.env};delete env.ELECTRON_RUN_AS_NODE;

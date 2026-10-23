@@ -1,4 +1,35 @@
-# Validation report — v0.9.1
+# Validation report — v0.9.3
+
+## 0.9.3 live item recovery
+
+The installed 0.9.2 journal contains actual item observations rejected after
+Re-equip ended, while the walkthrough still displayed running capture. Native
+full-resolution game pixels also reproduce a missed tooltip anchor. Reading
+the same frame's complete tooltip region recovers its item and supported stats
+in about 1.6 seconds versus 6.5 seconds for the failed full-scene read. This
+single-frame comparison does not establish transient capture throughput.
+
+A deterministic transition test also reproduces live-video reads producing one
+frame's fingerprint with the next frame's PNG. The source now freezes once for
+detector geometry, fingerprinting and encoding, following PNUT's coherent-frame
+pattern. The regression and independent cleanup/throttle review pass. Native
+fixtures match original PNG hashes, capture times and context within real tooltip
+exposures, including multiple valid compositor variants; late heartbeats cannot
+substitute for queued items.
+
+A Windows CI trace also retained all three correct frozen tooltip images while
+renderer PNG callbacks took 6.7 and 5.2 seconds and blocked admission. Encoding
+now uses one same-origin browser worker; it receives only immutable pixels and
+an opaque job ID. The source keeps original capture metadata and validates
+context again before submission. Exact-head worker, native and package gates
+are required; the earlier main-thread encoder passes do not certify that change.
+
+Source changes, actual-pixel measurements and acceptance are tracked in
+[LIVE_CAPTURE_RECOVERY.md](docs/LIVE_CAPTURE_RECOVERY.md). Private screenshots,
+OCR text and profile projections are excluded from Git. Exact-head CI,
+packaging and public release verification remain pending until recorded in
+the release PR/private publication ledger. Historical results below retain
+their original scope.
 
 ## 0.9.1 guided Character and overlay layout
 

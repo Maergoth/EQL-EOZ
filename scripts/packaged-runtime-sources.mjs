@@ -27,6 +27,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/character-share.js',
     'app/capture-source.html',
     'app/capture-source.js',
+    'app/capture-png.worker.js',
     'app/screen-read-parser.js',
     'desktop/capture-host.cjs',
     'desktop/screen-read-journal.cjs',

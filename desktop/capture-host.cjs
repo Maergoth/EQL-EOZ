@@ -10,6 +10,7 @@ const { recognizeCaptureImage } = require('./capture-reader.cjs');
 const CHANNEL = 'eye-of-zomm:capture', SOURCE_CHANNEL = 'eye-of-zomm:capture-source';
 const MODES = new Set(['contribution','character']);
 const FRAME_QUEUE_LIMIT=12,FRAME_QUEUE_BYTES=48*1024*1024,FRAME_QUEUE_AGE=15000,OCR_INTERVAL=250,SCREEN_DEDUP_MS=3000;
+const ITEM_QUEUE_AGE=60000;
 const clean = (value, length = 240) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,length);
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const isOwnWindow = name => /^Eye of Zomm|^EQLWiki - Eye of Zomm/i.test(name);
@@ -38,6 +39,8 @@ class CaptureHost {
         this.queuedBytes=0;this.activeFrameHash=null;this.activeFrameGeneration=null;this.overflowFrames=0;this.queueWarning=null;this.ocrStartedAt=0;this.readDelay=null;
         this.frameStatusAt=0;this.frameStatusTimer=null;
         this.lastReadAt=null;this.lastReadItemCount=null;
+        this.priorityReads=0;
+        this.captureDiagnostics={accepted:0,visualCandidates:0,emptyReads:0,completedReads:0,semanticDuplicates:0,rejections:{},sourceDropped:0,sceneReplacements:0,sceneCopies:0,lastEncodeMs:null,lastSourceQueueMs:null,lastTransportMs:null,lastSubmissionMs:null,lastQueueMs:null,lastReadMs:null,lastSelection:null};
         this.processing = null; this.skippedFrames = 0; this.lastObservationAt = null; this.disposed = false;
         this.contributionResume = null; this.hold = false; this.sequence = 0; this.seen = new Map();
         this.region=null;this.referenceSize=null;this.sourceSize=null;this.calibrationWarning=null;
@@ -64,6 +67,7 @@ class CaptureHost {
             contributionPaused:this.owner==='character'&&Boolean(this.contributionResume),error:this.error,
             hasPreview:Boolean(this.lastFrame&&this.lastFrame.sourceId===this.source?.id&&this.phase==='running'),
             sourceSize:this.sourceSize,region:this.region,referenceSize:this.referenceSize,calibrationWarning:this.calibrationWarning,
+            captureDiagnostics:{...this.captureDiagnostics,rejections:{...this.captureDiagnostics.rejections}},
             readWarning:this.readWarning||this.frameWarning||this.queueWarning,resumable:Boolean(this.enabled&&this.owner&&this.source&&['error','paused'].includes(this.phase)) };
     }
     emitStatus() {
@@ -103,11 +107,20 @@ class CaptureHost {
         if (this.processing) await this.processing.catch(()=>{});
     }
     clearPending(){this.pending=[];this.queuedBytes=0;if(this.readDelay){clearTimeout(this.readDelay.timer);this.readDelay.resolve();this.readDelay=null;}}
-    advanceGeneration(at=this.now()){this.generation++;this.generationStartedAt=at;this.lastReadAt=null;this.lastReadItemCount=null;}
+    advanceGeneration(at=this.now()){this.generation++;this.generationStartedAt=at;this.lastReadAt=null;this.lastReadItemCount=null;this.priorityReads=0;}
     recentlySeen(key){return this.seen.has(key)&&this.now()-this.seen.get(key)<SCREEN_DEDUP_MS;}
-    discardQueued(){const frame=this.pending.shift();if(frame)this.queuedBytes-=frame.png.length;return frame;}
-    noteOverflow(){this.skippedFrames++;this.overflowFrames++;this.queueWarning=`Screen reading could not keep every changing frame (${this.overflowFrames} dropped). Hold each item still briefly or narrow the capture area.`;}
-    prunePending(){while(this.pending.length&&this.now()-this.pending[0].capturedAt>FRAME_QUEUE_AGE){this.discardQueued();this.noteOverflow();}}
+    discardQueued(index=0){const [frame]=this.pending.splice(index,1);if(frame)this.queuedBytes-=frame.png.length;return frame;}
+    rejectFrame(reason){this.captureDiagnostics.rejections[reason]=(this.captureDiagnostics.rejections[reason]||0)+1;}
+    noteOverflow(reason='capacity'){this.skippedFrames++;this.overflowFrames++;this.rejectFrame(reason);this.queueWarning=`Screen reading could not keep every changing frame (${this.overflowFrames} dropped). Hold each item still briefly or narrow the capture area.`;}
+    prunePending(){for(let index=this.pending.length-1;index>=0;index--)if(this.now()-this.pending[index].capturedAt>(this.pending[index].priority?ITEM_QUEUE_AGE:FRAME_QUEUE_AGE)){this.discardQueued(index);this.noteOverflow('age');}}
+    startPump(){if(!this.processing)this.processing=new Promise(resolve=>setImmediate(resolve)).then(()=>this.pump()).finally(()=>{this.processing=null;});}
+    queueSceneReference(frame){
+        const old=this.pending.findIndex(value=>value.kind==='scene');if(old>=0){this.discardQueued(old);this.captureDiagnostics.sceneReplacements++;}
+        if(this.pending.length>=FRAME_QUEUE_LIMIT||this.queuedBytes+frame.png.length>FRAME_QUEUE_BYTES){this.rejectFrame('scene-capacity');return false;}
+        // Reuse the same immutable compressed PNG. Count its bytes again
+        // conservatively, so the existing shared memory cap cannot be weakened.
+        this.pending.push({...frame,key:`frame:${frame.hash}`,kind:'scene',priority:false,region:null,referenceSize:null});this.queuedBytes+=frame.png.length;this.captureDiagnostics.sceneCopies++;return true;
+    }
     async start({mode,sourceId,sessionId,region=null,referenceSize=null} = {}) {
         if (!MODES.has(mode) || (sourceId!==undefined && typeof sourceId!=='string') || (sessionId!==undefined && !/^[\w-]{1,120}$/.test(sessionId))) throw new Error('Invalid screen-reading session.');
         if (this.disposed) throw new Error('Screen reading has closed.');
@@ -177,6 +190,11 @@ class CaptureHost {
             capture:this.enabled&&!this.hold&&['selecting','running'].includes(this.phase)?{generation:this.generation,owner:this.owner,sessionId:this.sessionId,sourceId:this.source?.id,region:this.region}:null};
         if (action==='started') { if(!this.enabled||this.phase!=='selecting')return {ok:false};clearTimeout(this.sourceTimer);this.sourceTimer=null;this.phase='running';this.error=null;this.emitStatus();return {ok:true}; }
         if (action==='frame-error') { if(this.enabled&&this.phase==='running'){this.frameWarning='A capture frame was unavailable. Waiting for the selected game window.';this.emitStatus();}return {ok:true}; }
+        if (action==='sample-drop') {
+            if(this.enabled&&this.phase==='running'&&['capacity','age','encode'].includes(value?.reason)&&Number.isInteger(value.count)&&value.count>=1&&value.count<=100){
+                for(let n=0;n<value.count;n++){this.captureDiagnostics.sourceDropped++;this.noteOverflow(`source-${value.reason}`);}this.emitFrameStatus();return {ok:true};
+            }return {ok:false};
+        }
         if (action==='error' || action==='ended') { await this.fail(action==='ended'?'The selected capture source ended. Choose it again.':clean(value,500));return {ok:false}; }
         if (action==='frame') return this.submitFrame(value);
         throw new Error('Unknown capture source action.');
@@ -225,13 +243,22 @@ class CaptureHost {
         }finally{this.hold=false;this.emitStatus();}
     }
     submitFrame(value) {
-        if (this.phase!=='running' || this.hold || !this.owner) return {accepted:false};
-        if(value?.captureGeneration!==this.generation||value?.owner!==this.owner||value?.sessionId!==this.sessionId||value?.sourceId!==this.source?.id)return {accepted:false,stale:true};
+        const submittedAt=Date.now();
+        if (this.phase!=='running' || this.hold || !this.owner) {this.rejectFrame('inactive');return {accepted:false};}
+        if(value?.captureGeneration!==this.generation||value?.owner!==this.owner||value?.sessionId!==this.sessionId||value?.sourceId!==this.source?.id){this.rejectFrame('stale');return {accepted:false,stale:true};}
         if (!value || !Number.isInteger(value.width) || !Number.isInteger(value.height) || value.width<1 || value.height<1 ||
             value.width*value.height>16*1024*1024 || !value.bytes || value.bytes.byteLength>32*1024*1024 ||
             !Number.isFinite(value.capturedAt) || value.capturedAt<this.ownerStartedAt || this.now()-value.capturedAt>30000||value.capturedAt>this.now()+1000) throw new Error('Invalid capture frame.');
         const png = Buffer.from(value.bytes);
         validateCapturePng(png,{width:value.width,height:value.height});
+        const kind=value.selectionKind===undefined?'legacy':value.selectionKind;
+        if(!['legacy','configured','scene','visual-item'].includes(kind))throw new Error('Invalid capture selection.');
+        let automatic=null;
+        if(kind==='visual-item'){
+            if(typeof value.visualKey!=='string'||!/^[a-f0-9]{16}$/.test(value.visualKey))throw new Error('Invalid visual capture identity.');
+            automatic=normalizeCaptureRegion(value.itemRegion,{width:value.width,height:value.height});
+            if(!automatic)throw new Error('Invalid visual capture region.');
+        }
         // Queue compressed PNGs only. Native decode waits until the serial OCR
         // slot, so a brief tooltip cannot create many large decoded images.
         const size={width:value.width,height:value.height};
@@ -245,21 +272,44 @@ class CaptureHost {
         this.lastFrame = {png,at:value.capturedAt,sourceId:this.source?.id};
         const recoveredFrame=Boolean(this.frameWarning);this.frameWarning=null;
         if(sizeChanged||recoveredFrame)this.emitStatus();
-        if(this.now()<this.nextReadAt){this.skippedFrames++;return {accepted:false,retrying:true};}
-        const hash=digest(png);if(this.recentlySeen(`frame:${hash}`)||this.activeFrameHash===hash||this.pending.some(frame=>frame.hash===hash)){this.skippedFrames++;return {accepted:false,duplicate:true};}
+        if(this.now()<this.nextReadAt){this.skippedFrames++;this.rejectFrame('retry');return {accepted:false,retrying:true};}
+        const hash=digest(png),configuredKey=this.region&&typeof value.visualKey==='string'&&/^[a-f0-9]{16}$/.test(value.visualKey)?value.visualKey:null;
+        const key=configuredKey?`roi:${configuredKey}`:automatic&&!this.region?`pane:${value.visualKey}`:`frame:${hash}`;
         this.prunePending();
-        while(this.pending.length>=FRAME_QUEUE_LIMIT||this.queuedBytes+png.length>FRAME_QUEUE_BYTES){this.discardQueued();this.noteOverflow();}
-        const frame = {png,hash,size,capturedAt:value.capturedAt,generation:this.generation,owner:this.owner,sessionId:this.sessionId,sourceId:this.source?.id,
-            region:this.region?{...this.region}:null,referenceSize:this.referenceSize?{...this.referenceSize}:null};
-        this.pending.push(frame);this.queuedBytes+=png.length;
-        if (!this.processing) this.processing = this.pump().finally(()=>{this.processing=null;});
+        const base={png,hash,size,capturedAt:value.capturedAt,generation:this.generation,owner:this.owner,sessionId:this.sessionId,sourceId:this.source?.id};
+        const sharedScene=kind==='visual-item'&&!this.region&&value.sceneFallback===true;
+        if(this.recentlySeen(key)||(this.activeFrameGeneration===this.generation&&this.activeFrameHash===key)||this.pending.some(frame=>frame.key===key)){
+            this.skippedFrames++;this.rejectFrame('duplicate');const sceneAccepted=sharedScene&&this.queueSceneReference(base);if(sceneAccepted){this.startPump();this.emitFrameStatus();}return {accepted:false,duplicate:true,...(sceneAccepted?{sceneAccepted:true}:{})};
+        }
+        // Animated scenery gets one replaceable fallback slot. It cannot evict
+        // an item proposal, and proposals are read before that latest scene.
+        if(kind==='scene'){
+            const old=this.pending.findIndex(frame=>frame.kind==='scene');if(old>=0){this.discardQueued(old);this.captureDiagnostics.sceneReplacements++;}
+            if(this.pending.length>=FRAME_QUEUE_LIMIT||this.queuedBytes+png.length>FRAME_QUEUE_BYTES){this.skippedFrames++;this.rejectFrame('scene-capacity');return {accepted:false,lowPriority:true};}
+        }
+        while(this.pending.length>=FRAME_QUEUE_LIMIT||this.queuedBytes+png.length>FRAME_QUEUE_BYTES){const scene=this.pending.findIndex(frame=>frame.kind==='scene');this.discardQueued(scene<0?0:scene);this.noteOverflow('capacity');}
+        const selection=this.region?{region:{...this.region},referenceSize:{...this.referenceSize}}:automatic;
+        const frame = {...base,key,kind,priority:kind==='visual-item'||kind==='configured',
+            region:selection?.region||null,referenceSize:selection?.referenceSize||null};
+        const scene=this.pending.findIndex(frame=>frame.kind==='scene');this.pending.splice(kind==='scene'||scene<0?this.pending.length:scene,0,frame);this.queuedBytes+=png.length;
+        this.captureDiagnostics.accepted++;if(kind==='visual-item')this.captureDiagnostics.visualCandidates++;
+        const encode=value.sourceTiming?.encodeMs;this.captureDiagnostics.lastEncodeMs=Number.isFinite(encode)&&encode>=0&&encode<=120000?encode:null;
+        const sourceQueue=value.sourceTiming?.sourceQueueMs;this.captureDiagnostics.lastSourceQueueMs=Number.isFinite(sourceQueue)&&sourceQueue>=0&&sourceQueue<=120000?sourceQueue:null;
+        this.captureDiagnostics.lastTransportMs=this.captureDiagnostics.lastEncodeMs===null?null:Math.max(0,this.now()-value.capturedAt-encode-(this.captureDiagnostics.lastSourceQueueMs??0));
+        if(sharedScene)this.queueSceneReference(base);
+        // Acknowledge the bounded compressed frame before native resize/PNG
+        // preparation runs on main. The single serial OCR pump is unchanged.
+        this.startPump();
+        this.captureDiagnostics.lastSubmissionMs=Date.now()-submittedAt;
         this.emitFrameStatus();
         return {accepted:true,queued:this.pending.length};
     }
     async pump() {
         while (this.pending.length && !this.disposed) {
             this.prunePending();if(!this.pending.length)break;
-            const frame = this.discardQueued();this.activeFrameHash=frame.hash;this.activeFrameGeneration=frame.generation;this.emitFrameStatus();
+            const fallback=this.priorityReads>=3?this.pending.findIndex(frame=>frame.kind==='scene'):-1;
+            const frame = this.discardQueued(fallback<0?0:fallback);this.activeFrameHash=frame.key;this.activeFrameGeneration=frame.generation;this.captureDiagnostics.lastQueueMs=Math.max(0,this.now()-frame.capturedAt);this.emitFrameStatus();
+            const readAt=Date.now();
             const isCurrent=()=>frame.generation===this.generation&&!this.disposed&&this.phase==='running'&&!this.hold&&frame.owner===this.owner&&frame.sessionId===this.sessionId&&frame.sourceId===this.source?.id;
             try {
                 const delay=Math.max(0,OCR_INTERVAL-(Date.now()-this.ocrStartedAt));
@@ -273,12 +323,14 @@ class CaptureHost {
                 if(read.warning)this.calibrationWarning=read.warning;
                 const {parseScreenRead} = await this.parseModule;
                 const observations = parseScreenRead({...read.result,owner:frame.owner,sessionId:frame.sessionId,
-                    capturedAt:new Date(frame.capturedAt).toISOString(),input:{...read.input,frameId:frame.hash,captureGeneration:frame.generation,sourceId:frame.sourceId}});
+                    capturedAt:new Date(frame.capturedAt).toISOString(),input:{...read.input,frameId:frame.hash,captureGeneration:frame.generation,sourceId:frame.sourceId,...(frame.kind!=='legacy'?{captureSelection:this.region?'configured':frame.kind}: {})}});
                 for (const observation of observations) await this.saveObservation(observation,frame.generation);
                 if(!isCurrent())continue;
                 this.lastReadAt=this.now();this.lastReadItemCount=observations.filter(observation=>observation.subject?.kind==='item').length;
+                this.priorityReads=frame.priority?this.priorityReads+1:0;
+                this.captureDiagnostics.completedReads++;if(!observations.length)this.captureDiagnostics.emptyReads++;this.captureDiagnostics.lastReadMs=Date.now()-readAt;this.captureDiagnostics.lastSelection=frame.kind;
                 this.readWarning=null;this.readErrors=0;this.nextReadAt=0;
-                this.remember(`frame:${frame.hash}`);
+                this.remember(frame.key);
             } catch (error) {
                 if (frame.generation===this.generation && !this.disposed) {
                     // A timeout or unreadable frame does not revoke the user's
@@ -288,7 +340,7 @@ class CaptureHost {
                     this.readWarning=`Screen reading will retry: ${clean(error.message,380)}`;this.clearPending();this.emitStatus();
                     await this.ocr.stop();
                 }
-            }finally{if(this.activeFrameHash===frame.hash){this.activeFrameHash=null;this.activeFrameGeneration=null;}this.emitFrameStatus();}
+            }finally{if(this.activeFrameHash===frame.key){this.activeFrameHash=null;this.activeFrameGeneration=null;}this.emitFrameStatus();}
         }
     }
     remember(key) { this.seen.set(key,this.now());if(this.seen.size>2000)this.seen.delete(this.seen.keys().next().value); }
@@ -296,7 +348,7 @@ class CaptureHost {
         const values=(observation.fields||[]).map(field=>[field.key,field.value]).sort((a,b)=>a[0].localeCompare(b[0]));
         const semantic = JSON.stringify([observation.owner,observation.sessionId,observation.subject,values,observation.relations||[],
             observation.kind==='game-log'?[observation.input?.logId,observation.input?.cursor,observation.capturedAt]:null]);
-        const key=digest(semantic);if(observation.kind!=='manual'&&(observation.kind==='game-log'?this.seen.has(key):this.recentlySeen(key)))return null;
+        const key=digest(semantic);if(observation.kind!=='manual'&&(observation.kind==='game-log'?this.seen.has(key):this.recentlySeen(key))){this.captureDiagnostics.semanticDuplicates++;return null;}
         if(generation!==this.generation || this.disposed)return null;
         const record=await this.journal.append({...observation,id:crypto.randomUUID(),dedupKey:key});
         if(generation!==this.generation || this.disposed)return null;

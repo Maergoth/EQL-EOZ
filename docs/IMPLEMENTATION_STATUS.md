@@ -8,7 +8,7 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 
 Last updated: 2026-10-23
 
-Code baseline: 0.9.2; tooltip capture follow-up tracked in [TOOLTIP_CAPTURE.md](TOOLTIP_CAPTURE.md)
+Code baseline: 0.9.3; live capture recovery tracked in [LIVE_CAPTURE_RECOVERY.md](LIVE_CAPTURE_RECOVERY.md)
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 

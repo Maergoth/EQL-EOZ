@@ -1,9 +1,10 @@
 export const CHARACTER_WALKTHROUGH_KEY='eql-eye-of-zomm-character-walkthrough-v1';
 export const CHARACTER_WALKTHROUGH_STEPS=Object.freeze(['details','source','unequip','base','reequip','slots','review','complete']);
+export const CHARACTER_ITEM_READ_STEPS=Object.freeze(['unequip','reequip','slots','review']);
 const clone=value=>JSON.parse(JSON.stringify(value)),bounded=(value,max=240)=>String(value??'').trim().slice(0,max);
 const baseDraft=value=>String(value??'').slice(0,12000),MAX_ALIASES=6,MAX_STORED_CHARACTERS=1500000;
 const finiteTime=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0?value:0;
-const ITEM_STEPS=new Set(['unequip','reequip']),MAX_ITEM_WINDOWS=32;
+const ITEM_STEPS=new Set(CHARACTER_ITEM_READ_STEPS),MAX_ITEM_WINDOWS=32;
 const generation=value=>Number.isSafeInteger(value)&&value>=0?value:null;
 function itemIdentity(item={}){
     return {name:bounded(item.name).normalize('NFKC').toLocaleLowerCase(),tier:Number.isInteger(item.tier)?item.tier:null,
@@ -52,15 +53,22 @@ export function createCharacterWalkthrough({storage=globalThis.localStorage,now=
         if(prior?.until===null&&prior.step===state.step&&prior.sourceId===captureContext.sourceId&&prior.generation===captureContext.generation)return;
         closeItemWindow();state.itemReadWindows.push({step:state.step,from:Math.max(state.itemPhaseStartedAt,captureContext.startedAt),until:null,sourceId:captureContext.sourceId,generation:captureContext.generation});state.itemReadWindows=state.itemReadWindows.slice(-MAX_ITEM_WINDOWS);
     }
-    function setStep(step,{itemReadStartedAt}={}){closeItemWindow();state.step=step;state.itemPhaseStartedAt=ITEM_STEPS.has(step)?Math.max(state.startedAt,finiteTime(itemReadStartedAt)||now()):0;openItemWindow();}
+    function setStep(step,{itemReadStartedAt}={}){const boundary=now();closeItemWindow(boundary);state.step=step;state.itemPhaseStartedAt=ITEM_STEPS.has(step)?Math.max(state.startedAt,finiteTime(itemReadStartedAt)||boundary):0;openItemWindow();}
     // Status supplies the trusted source/generation boundary; phase actions
     // supply the other boundary. Neither opening the app nor late OCR extends
-    // an earlier item phase into Base, Slots or Review.
+    // an earlier item phase into Base, source selection or a completed flow.
     function syncCapture(status={},{startedAt}={}){
         const prior=captureContext,sourceId=bounded(status.source?.id,180),nextGeneration=generation(status.generation);
         captureContext=state.active&&status.owner==='character'&&status.sessionId===state.sessionId&&status.phase==='running'&&sourceId&&(!state.sourceId||state.sourceId===sourceId)&&nextGeneration!==null?{sourceId,generation:nextGeneration,startedAt:finiteTime(status.generationStartedAt)||finiteTime(startedAt)||(prior?.sourceId===sourceId&&prior.generation===nextGeneration?prior.startedAt:now())}:null;
         const before=JSON.stringify([state.itemReadTracking,state.itemPhaseStartedAt,state.itemReadWindows]);
-        if(captureContext&&!state.itemReadTracking){state.itemReadTracking=true;if(ITEM_STEPS.has(state.step))state.itemPhaseStartedAt=now();}
+        if(captureContext&&(!state.itemReadTracking||ITEM_STEPS.has(state.step)&&!state.itemPhaseStartedAt)){
+            const last=state.itemReadWindows.at(-1);
+            // Released drafts stopped item admission at Re-equip. Only its
+            // latest, trusted boundary can extend into Slots/Review; starting
+            // from generation time could accidentally admit Base frames.
+            const legacyBoundary=state.itemReadTracking&&['slots','review'].includes(state.step)&&state.baseAccepted&&last?.step==='reequip'&&last.until!==null&&last.until>=state.baseAfterAt&&last.sourceId===captureContext.sourceId&&last.generation===captureContext.generation?last.until:null;
+            state.itemReadTracking=true;if(ITEM_STEPS.has(state.step))state.itemPhaseStartedAt=legacyBoundary??now();
+        }
         if(!captureContext||prior?.sourceId!==captureContext.sourceId||prior.generation!==captureContext.generation)closeItemWindow();openItemWindow();if(before!==JSON.stringify([state.itemReadTracking,state.itemPhaseStartedAt,state.itemReadWindows]))return save();return clone(state);
     }
     function itemWindow(observation){

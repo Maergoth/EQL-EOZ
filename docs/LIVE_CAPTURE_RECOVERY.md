@@ -1,0 +1,343 @@
+# Live Default_Modern capture recovery
+
+## Scope and released baseline
+
+The owner reports that 0.9.2 captured only Executioner's Hood during the
+Character walkthrough. Work starts at released main `c22ffe2` on
+`codex/live-item-capture-recovery`. Fix actual full-window capture and Character
+admission before publishing another release. The existing authorization to
+publish remains; a passing small fixture is not evidence of live reliability.
+
+Read [the prior tooltip plan](TOOLTIP_CAPTURE.md),
+[pipeline map](design/CAPTURE_PIPELINE.md),
+[walkthrough contract](CHARACTER_WALKTHROUGH.md), and
+[release contract](RELEASE_HISTORY.md) when continuing this work.
+
+## Evidence and private context
+
+The installed executable and its ASAR both identify 0.9.2. The actual selected
+game-window source is 3840 x 2088, with Inventory, bags, chat and animated game
+scenery visible. Journal records take approximately 9–11 seconds from capture
+to persistence. Successful item records have `scene`, `item-stats` and
+`character-stats` passes, without an `item-name` pass. The visible Inventory
+stats displace the planned item-name reread in the parser's two-refinement
+budget. Small synthetic hover scenes did not exercise that interaction.
+
+Released 0.9.2 source acquisition admits up to four full PNGs per second into a
+12-frame, 48 MiB, 15-second pending queue with one serial OCR operation. Motion
+outside a tooltip changes the whole-frame fingerprint. Whether this evicted
+specific missed items still requires bounded measurement; do not infer exact
+drop causes from journal silence.
+
+The shadow-only profile projection contains one accepted item candidate and
+one current-session model reference. The three additional item observations
+were captured 1 ms, 9,172 ms and 17,470 ms after the saved Re-equip window
+closed. The released controller rejected all three even with the matching
+session, source and generation. They were not merged into the accepted card or
+suppressed by current-session removal markers. Later private item proposals
+from the explicitly requested tooltip were also rejected while still in Slots.
+This contradicts the intended continuous capture through walkthrough completion.
+Intended items that produced no item proposal remain a separate capture/OCR
+investigation. Negative OCR results and queue losses are not currently journaled.
+
+Item admission now continues through Slots and Review, with original capture
+timestamps and current owner/session/source/generation checks. Adjacent item
+phases share one boundary timestamp. A released Slots/Review draft can extend
+only its latest matching Re-equip boundary after Base acceptance; it cannot
+authorize earlier Base frames or replay without current capture status. Base,
+source selection, canceled and completed walkthroughs retain their strict gates.
+The status explains that missing items can still be hovered here and queued
+earlier reads can finish. Explicit item screenshot imports remain available.
+
+Local Windows acceptance uses the actual renderer workspace with four private
+journal-record projections and the shadow-projected active Slots flow in a
+disposable profile. All four original records reach one recovered card with
+four evidence records; the existing card remains separate. Acquisition is not
+started and the installed profile is untouched. This proves record-to-Character
+recovery, not new live OCR accuracy. A synthetic native regression covers new
+Slots/Review items, same-session remount merging, older-session separation,
+manual-edit preservation, repeated replay, and the unchanged stale/Base guards.
+The reviewed Slots screenshot contains synthetic UI data only, stored separately
+from the private journal/profile projections.
+
+A second private check composes the new automatic path with Character intake:
+the exact observation exported after a saved native PNG passed through canvas
+MediaStream, detector, host and real offline OCR enters the actual Slots
+renderer with the exported trusted context. A fresh synthetic walkthrough was
+already in Slots before that original capture timestamp. One item card and its
+original evidence render without starting acquisition. The record and timestamp
+are unchanged. This is saved-pixels stream acceptance, not a new live gameplay
+action; no private screenshots, player stats or profile writes are part of the
+renderer check.
+
+Recurring reads retain the focused ANY-slot control and its current choice.
+When another ambiguous item arrives during that interaction, its choice is
+deferred until focus leaves the slot controls, then refreshed without needing
+another OCR result. The native regression checks the same DOM control, retained
+focus/value, a real focusout event and the newly available choice after blur.
+
+Private screenshots, profile shadows, OCR words and measurements belong under
+`D:/EQLWiki/.local/validation/eoz-live-capture-recovery/`. Never commit those
+files, player data or game assets. Do not open the user's active LevelDB as a
+database or launch a second app against their profile. A copied profile may be
+decoded privately for minimal flow/model projections. Use synthetic fixtures
+in Git.
+
+## Ownership and next checks
+
+| Owner | Responsibility |
+| --- | --- |
+| capture_pipeline_089 | Parser/reader and their tests: retain item identity refinement with real-shaped Inventory; full-frame and scene-missed-name coverage; preserve conservative evidence |
+| wiki_contribution_089 | Source/host acquisition and tests: bounded handling of animated full-resolution scenes, timing/drop evidence, preserve lifecycle and privacy |
+| character_model_089 | Shadow-profile phase audit, continuous Slots/Review intake, same-session recovery and native walkthrough regression |
+| root | Actual screen evidence, integration, this plan, native end-to-end checks, review and release |
+
+The requested live Thornstinger hover produced repeated item observations in
+the installed 0.9.2 journal, approximately ten seconds after capture. Character
+did not accept them because the user was already in Slots. This is direct
+evidence of an intake cutoff that contradicts the running-capture experience.
+Extend item intake through Slots and Review until completion, retaining the
+strict Base phase, ownership, source, session and generation guards.
+
+Two distinct actual full-resolution frames are retained privately. The first
+includes a desktop notification over part of the inspect footer, and the
+released reader produces no observations from those occluded pixels. A second
+3840 x 2100 PNG came through the actual CaptureHost/getDisplayMedia source in a
+disposable profile, without a notification or gameplay input. Full-scene OCR
+misses the green title and Weight label despite reading the complete footer.
+The released reader takes 6.52 seconds and proposes no item. Selecting the
+complete tooltip in those same pixels produces one usable item in 1.553 seconds
+with its original source dimensions and crop offsets. Supported HP, damage,
+backstab damage, delay, bonus, attributes and resistance survive; weight remains
+unknown. This establishes a real full-scene recognition gap and supports an
+automatic visual region proposal without weakening item anchors.
+
+The tooltip title retains an `rn`/`m` spelling ambiguity. Thirty private bounded
+title reads tested 2x, 3x, 4x, 6x and 8x color, green-mask ordering, binary and
+nearest-pixel variants. None recovered the exact spelling; stronger masks were
+generally worse. No extra OCR passes, dictionary replacement or numeric rules
+are introduced on that evidence. The original observed name remains editable.
+
+The name-budget fix is separately causal: a new mixed Inventory/tooltip pixel
+fixture fails against released 0.9.2 and passes with scene plus two refinements
+from source and assembled OCR. A 4K geometry test preserves crop-coordinate
+mapping and evidence isolation; it does not claim native 4K recognition.
+
+## Acceptance before publication
+
+1. Explain the actual failed item using source pixels, OCR passes and admission
+   results. Distinguish a missing OCR proposal from an ineligible capture phase.
+2. Recover a complete Default_Modern item beside full Inventory at actual game
+   resolution, including its identity and supported visible statistics. Keep
+   uncertain values unknown and preserve original written evidence.
+3. Exercise animated full-resolution background with transient distinct tooltips
+   through the real native stream and serial reader. Measure actual admission,
+   queue wait, completion and loss. A neutral image embedding is insufficient.
+4. Verify a captured eligible item reaches Character inventory with original
+   timestamps/source/session/generation, including delayed phase transitions.
+   Fresh unequipped baseline and stale-session guards remain required.
+5. Run component checks and relevant native/full tests. Record observations and
+   limitations here. Review exact source head and packaged runtime before merge;
+   verify public release assets after publication. Preserve existing releases.
+
+## Progress
+
+- Investigation: installed-version, actual full-resolution source, journal
+  latency, parser name-budget conflict and Slots intake cutoff confirmed.
+- Passed locally: native source acquisition, same-pixel full/cropped comparison,
+  parser budget regression, active Slots/Review intake and private actual-record
+  recovery through the real Character renderer. Spelling remains editable.
+- Passed locally: the same actual 4K native PNG through Chromium canvas stream,
+  automatic visual detection, host ROI and real offline OCR produces one usable
+  item in approximately 1.8 seconds of OCR. This saved-pixel stream is not a new
+  game interaction. Full-photo PNG encoding remains variable; no subsecond
+  capture guarantee is made.
+- Read-only review caught and verified fixes for source-side scene starvation
+  and candidate crowding. Continuing changes can share a due scene reference;
+  least-recent selection rotates up to four proposed panes. Host scheduling
+  gives a waiting scene a turn after three priority reads, within existing
+  compressed-byte/count limits. Diagnostic counters contain no text or pixels.
+- Passed locally: full normal `npm test`, including worker/runtime preparation,
+  and the native window/release-history lifecycle check. Windows parser/reader,
+  Modern and compact-hover pixel checks pass from source and assembled OCR.
+  Linux repeats 24 hover cases across DejaVu/Liberation and both runtimes;
+  genuine scene-title dropout is recovered, with conflicting numbers unknown.
+- Passed locally: actual 978 x 664 native-window and 3840 x 2100 canvas-stream
+  checks recover three exact synthetic items over moving backgrounds while the
+  first OCR call is held ten seconds. B/C have fixed approximately two-second
+  visibility windows; original frame timestamps lie within those windows and
+  match current source/session/generation. No overflow. The 4K canvas test is
+  explicitly distinct from a new live-game action.
+- Passed locally: the exact new automatic saved-pixels stream observation also
+  reaches one item card through the actual Slots renderer in a disposable
+  profile, without changing the record or starting capture in that renderer.
+- An initial bounded live-game probe had no tooltip present and did not exercise
+  item recognition. The coordinated follow-up did: the current actual game
+  stream produced an automatic item observation at 3840 x 2100, approximately
+  1.9 seconds of OCR and 157 ms PNG encoding, with no overflow. The exact live
+  observation then reached one card through the real Slots renderer under its
+  matching trusted context in a disposable profile. The installed profile and
+  game inputs were untouched.
+- The private photo-background stress exposed a separate source busy-gate miss:
+  encoding an earlier full PNG for 2.3 seconds prevented capturing the next
+  fixed two-second tooltip. Do not widen that exposure merely to pass. Decouple
+  bounded raw snapshots from serial encoding, retaining original timestamps and
+  lifecycle guards; rerun the same stress and final source/native checks.
+- Passed after the snapshot fix: the unchanged photographic-background stress
+  retains all three exact synthetic items at true 3840 x 2100. B/C remain visible
+  for approximately two seconds, with original captures 111/163 ms after draw.
+  No source/host overflow. This private fixture uses retained native scenery and
+  synthetic tooltips; it is separate from the live-game acceptance above.
+- Final independent review and focused source/host checks passed. Raw acquisition
+  retains at most two pending snapshots / 64 MiB for 15 seconds, separately from
+  one serial PNG encoder and the bounded compressed queue. Pending duplicate
+  panes keep their first pixels and capture timestamp; changing capture context
+  clears pending snapshots and prevents late posts.
+- Final native and 4K synthetic gates also pass with a deliberately delayed
+  2.5-second second PNG callback. The next tooltip is captured while that encoder
+  is occupied, and survives with its original pixels/time. The final undelayed
+  private photographic-background run captures B/C 70/230 ms into their fixed
+  approximately two-second exposures, with zero source/host drops. The actual
+  live game's successful observation and frame hash are retained privately;
+  that probe's small in-memory image cache did not retain its original PNG.
+- The final normal `npm test` passed after all source/host changes were frozen,
+  including runtime preparation and release/history/source-manifest checks.
+- Final combined review reproduced and fixed a resize-generation dedup edge:
+  an invalidated active OCR key could suppress the first matching pane at the
+  new source size. Active-key dedup now requires the current generation. Its
+  held-old-read regression fails before the guard and passes afterward, keeping
+  current-generation coalescing and stale-result rejection intact.
+- A final local static native-window fixture missed its 500 ms draw-to-capture
+  assertion. A private instrumented run traces 3.228 seconds of unchanged video
+  pixels/currentTime before Windows delivers the redraw; source sampling stays
+  at 125–140 ms, configuration waits at 0–1 ms and candidate detection at 2–4 ms.
+  The new pixels are snapshotted 47 ms after delivery. This is a native static
+  window/compositor limitation, distinct from encoder loss. Both Windows CI
+  jobs passed that fixture on the first PR head. Adding only a 16 x 16 non-item
+  8 Hz animation passes the unchanged 500 ms assertion: stage 2 is captured in
+  316 ms and stage 3 in 50 ms, with all three OCR identities, calibration, fresh
+  baseline and Stop checks passing. The native fixture now models continuously
+  changing game scenery this way; no production workaround is introduced.
+- The full uninstrumented native gate passes after that fixture-only correction
+  on the resize-guard-fixed source: B/C captures 328/193 ms after draw, all
+  three exact identities and original provenance, calibration/clipboard,
+  unchanged fresh baseline, journal and Stop. The strict 500 ms assertion stays.
+- Final-head CI on `279950f` exposed two additional native-fixture failures:
+  Windows reaches the three names but fails the generic queued-record
+  provenance assertion; Linux admits all three pixel stages without overflow
+  but retains three pending visual frames rather than the fixture's exact two.
+  Investigate their original records/native transition variants before changing
+  assertions. Preserve timing, original source/session/generation/timestamps,
+  fixed exposure and bounded queues. The release remains unmerged.
+- The corrected priority fixture reproduces Linux's three native variants and
+  passes by matching retained B/C PNG SHA-256, original timestamps and trusted
+  context to actual stage exposures. Every pending visual variant must map to
+  a marked stage; final named OCR records must map to their original admitted
+  image. Native and 4K stream gates pass on Windows and private WSL Linux with
+  the unchanged two-second exposures, delayed PNG, held OCR and zero drops.
+- The native fixture now hides its final tooltip before releasing OCR and
+  matches each named result's exact PNG hash, original capture time and trusted
+  context to a marked admission during that tooltip's actual exposure. A later
+  heartbeat cannot substitute; legitimate retained variants or scene reads can
+  satisfy this generic stream check, while the priority fixture specifically
+  requires visual-item reads. Bounded mismatch diagnostics preserve the stage
+  ledger and original observations. The stricter native gate passes locally.
+- Subsequent Windows CI on `8970a4b` stops before C admission. The last accepted
+  frame is B; duplicate counters alone cannot identify a C rejection. Source
+  video is 984 x 680 with a 25 px native caption and 984 x 655 client viewport.
+  Synthetic probes at that geometry, including the exact observed CI crop,
+  show distinct A/B/C keys. An observed weapon PNG sometimes carries chest-height
+  ROI metadata. Failure-only diagnostics now retain bounded synthetic game,
+  current-video, submitted/rejected PNGs and key/crop/context ledgers.
+- Owner-requested PNUT comparison uses
+  [current capture.py at 8c25cc0](https://github.com/Maergoth/pnut-mnm/blob/8c25cc0615e767e406418e9263f68a3d0858e52e/mnmparse/capture.py).
+  PNUT copies all crops from one native Windows Graphics Capture frame view,
+  then publishes pixels/frame count/time under one lock. Its nominal native
+  ceiling is also 8 fps. It has no Chromium forced-refresh mechanism to copy;
+  its optional MSS/GDI fallback and latest-only queue are separate policies.
+  Reuse the coherent-frame pattern while retaining portable acquisition and
+  bounded transient-item retention. EoZ currently samples live video separately
+  for detector, fingerprint and final PNG. A deterministic transition probe
+  reproduces a production bug: advancing the video after fingerprinting queues
+  B pixels under A's key, allowing a valid different tooltip to be suppressed.
+  Freeze once before all analysis and enqueue those same pixels. The working
+  frame is bounded/released separately from pending snapshots and the encoder;
+  no backend replacement or platform-specific dependency is needed.
+- The coherent-frame regression, independent lifecycle/memory review and source
+  tests pass. Windows native/4K priority tests retain all exact item images with
+  unchanged timing/queue assertions. Saved actual native 4K pixels still produce
+  a usable automatically cropped item in approximately 1.54 seconds of OCR. The
+  undelayed private photographic-background case retains all three exact names,
+  with B/C captures 39/189 ms into fixed two-second exposures and zero drops.
+  These prove the coherent-frame change; the separate Windows CI C symptom
+  remains subject to the new bounded failing-pixel diagnostics if it recurs.
+- Both Windows jobs on `5bb40e9` pass the previously failing native C transition
+  and all native-priority item checks. Linux passes its complete native and
+  packaging job. The remaining Windows failure is the true 4K canvas-stream
+  priority fixture: first A PNG encoding takes 4.63/6.72 seconds under that
+  runner, versus 46/47 ms of source preparation. Fixed B/C snapshots do not all
+  reach admission within the unchanged post-hide deadline.
+- Two fixture confounds are under causal measurement. Its 4K producer performs
+  eight backing-store width/height resets, approximately 125 million logical
+  fill pixels and 216 text draws per second in the capture renderer itself.
+  This differs from a separate native game producer. Also, slow first encoding
+  lets the five-second A heartbeat become PNG call 2, so the test's artificial
+  delay hits A rather than B. Target the actual immutable B marker instead of
+  the encode ordinal. Keep fixed exposures, queue/memory/provenance constraints
+  and deadlines while measuring partial background updates and serialization.
+- A private same-two-CPU comparison measures the fixture's extra work: keeping
+  8 Hz background changes but repainting the tooltip only on stage changes and
+  avoiding unchanged backing-store resets reduces first A HTML PNG time from
+  929 to 306 ms and C from 644 to 302 ms. Fixed exposures/deadlines pass in both
+  comparisons. Apply that measured fixture correction and target the delay to
+  actual B-marker pixels; no new production encoder is justified by this probe.
+  Pinned Chromium 150 source also has 1,000 ms idle-start and later 5,700 ms
+  completion fallbacks for main-thread PNG encoding. Runner times are consistent
+  with those paths, not proof of their cause. Main-thread OffscreenCanvas shares
+  that policy; its test-only disable-idle flag is not a production workaround.
+- Final fixture presentation uses one reused stage buffer and one persistent
+  live canvas. A complete tooltip and marker are composed offscreen, then
+  presented in one blit; unchanged 8 Hz ticks only repaint scenery. Backing
+  dimensions change only when geometry changes. Independent review/probes
+  confirm those properties and the one-shot delay selected from actual frozen
+  B pixels. Native and 4K Windows gates pass all three exact items, zero drops
+  and unchanged exposure/deadline/queue assertions. The same native/4K gates
+  also pass on private WSL Linux, including exact B-target timing and zero drops.
+- Windows CI on `7c2a3d4` still fails only the 4K pixel-stream fixture. Both real
+  native modes pass; Linux passes. First A encoding is still 4.63/6.74 seconds;
+  one Windows job admits B but no C, the other admits A plus an A heartbeat.
+  There is no overflow. The local fixture corrections are independently useful
+  but do not establish this CI failure's cause. Collect bounded producer/video
+  stage pixels, detector decisions and raw queue/encoder state before another
+  workaround. Do not infer that a missing host admission means missing video,
+  nor treat aggregate duplicate counters as evidence of a particular dropped item.
+- The next fixture-only trace follows producer stage, immutable frozen marker,
+  green-band geometry, detected region/key, pending raw images and PNG invocation,
+  native completion and delayed callback. It keeps the existing deadlines and
+  retains at most three small synthetic stage crops, serialized only on failure.
+  Private-image/background modes do not install pixel diagnostics. Use that
+  timeline to establish the cause before changing acquisition or serialization.
+- The Windows candidate trace on `fb6d1fd` establishes encoding backlog: all
+  three actual frozen markers have valid regions/keys and B/C enter the raw
+  queue with original context. A's native PNG callback takes 6,705 ms, an A
+  heartbeat 2,219 ms, then B 5,242 ms before the deliberate 2,500 ms callback
+  delay. C remains intact in the queue at the deadline; there is no overflow or
+  missing video/detector evidence. Implement one dedicated same-origin PNG
+  worker to avoid renderer idle encoding, preserving all acquisition metadata,
+  source and host bounds and unchanged acceptance deadlines. A private one-shot
+  worker comparison decoded exactly to the same 4K synthetic pixels; it did not
+  reproduce the CI idle stall and is not a throughput or memory guarantee.
+- The worker source/protocol suites and independent lifecycle/memory review
+  pass, including pending bitmap creation across eight context changes, stale
+  replies, transfer/encoding errors and timeout recovery. Full normal `npm test`
+  passes with the new worker and actual-ASAR missing/stale checks. Windows native
+  capture passes exact original image/time/context, fresh baseline and Stop.
+  Windows native and 4K priority gates pass all three exact OCR names, zero
+  drops and unchanged exposure/deadline/queue limits. The 4K worker encodes A
+  in 26 ms and C in 24 ms; B takes 2,544 ms including its deliberate worker-ID
+  reply delay. This local fixture result still requires exact-head CI and
+  packaged platform acceptance.
+- The final coherent-source normal `npm test` and full native capture gate also
+  pass, including exact admitted images, fresh baseline and Stop.
+  Pending: exact-head CI/platform/package
+  checks and publication. No new release is yet claimed.

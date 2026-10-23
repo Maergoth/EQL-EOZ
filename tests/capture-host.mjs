@@ -47,11 +47,11 @@ try{
     await f.host.start({mode:'contribution',sourceId:'window:game',sessionId:'contribution-test'});
     assert.throws(()=>f.host.submitFrame({...f.frame(),bytes:png('forged',20000,20000)}),/megapixels/,'PNG dimensions are checked before native decode');
     assert.throws(()=>f.host.submitFrame({...f.frame(),bytes:png('mismatch',101,40)}),/match/);
-    f.tick();f.host.submitFrame(f.frame('old'));const old=f.host.processing;
+    f.tick();f.host.submitFrame(f.frame('old'));await f.waitForRead();const old=f.host.processing;
     await f.host.start({mode:'character',sourceId:'window:game',sessionId:'character-test'});await old;
     assert.equal(f.observations.length,0,'cancelled contribution OCR cannot enter the character inventory');
     assert.equal(f.host.getStatus().contributionPaused,true);
-    f.tick();f.host.submitFrame(f.frame('first'));f.tick();f.host.submitFrame(f.frame('replace'));f.tick();f.host.submitFrame(f.frame('latest'));
+    f.tick();f.host.submitFrame(f.frame('first'));await f.waitForRead();f.tick();f.host.submitFrame(f.frame('replace'));f.tick();f.host.submitFrame(f.frame('latest'));
     assert.equal(f.host.getStatus().queuedFrames,2,'brief distinct frames survive while the first OCR is busy');
     for(let index=0;index<3;index++){await f.waitForRead();f.resolve();await new Promise(resolve=>setImmediate(resolve));}await f.host.processing;
     assert.equal(f.ocr.calls,4,'one cancelled and all three distinct queued jobs were run');
@@ -89,6 +89,8 @@ assert.equal(f.handlers.size,0,'shutdown unregisters both exact-frame IPC handle
         reading.advance(2100);await readFrame(reading,'retry-success');assert.equal(reading.observations.at(-1).sessionId,'persistent-character');assert.equal(reading.host.readWarning,null);assert.equal(reading.host.readErrors,0);
         await reading.host.handleSource(sourceEvent,'frame-error');assert.equal(reading.host.phase,'running');assert.equal(reading.host.captureWindow,window);assert.match(reading.host.getStatus().readWarning,/frame was unavailable/);
         reading.tick();reading.host.submitFrame(reading.frame('retry-success'));await reading.host.processing;assert.equal(reading.host.getStatus().readWarning,null,'a valid duplicate frame also clears transient source warnings');
+        assert.equal((await reading.host.handleSource(sourceEvent,'sample-drop',{reason:'capacity',count:2})).ok,true);assert.equal(reading.host.getStatus().captureDiagnostics.sourceDropped,2);assert.equal(reading.host.getStatus().overflowFrames,2);assert.match(reading.host.getStatus().queueWarning,/2 dropped/);
+        for(const invalid of [{reason:'private text',count:1},{reason:'capacity',count:101},{reason:'age',count:1.2}])assert.equal((await reading.host.handleSource(sourceEvent,'sample-drop',invalid)).ok,false);assert.equal(reading.host.getStatus().captureDiagnostics.sourceDropped,2,'source diagnostic input cannot add arbitrary text or unbounded counts');
         await reading.host.handleSource(sourceEvent,'ended');assert.equal(reading.host.phase,'error');assert.equal(reading.host.getStatus().resumable,true);assert.equal(reading.host.owner,'character');assert.equal(destroyed,1);assert.equal(reading.host.captureWindow,null);
         assert.deepEqual(await reading.host.handleSource(sourceEvent,'configuration'),{allowed:false,capture:null});assert.equal((await reading.host.handleSource(sourceEvent,'frame',reading.frame('retired'))).accepted,false,'late IPC from a retired owned source stays inert');assert.equal((await reading.host.handleSource(sourceEvent,'started')).ok,false);assert.equal(reading.host.phase,'error','late startup cannot restart a retired source');
         const enumerate=reading.host.electron.desktopCapturer.getSources;reading.host.electron.desktopCapturer.getSources=async()=>[];
@@ -200,7 +202,7 @@ async function readFrame(fixture,id,width=100,height=40){fixture.tick();assert.e
     const queued=fixture(),captured=[];
     try{
         await queued.host.listSources();await queued.host.start({mode:'character',sourceId:'window:game',sessionId:'brief-tooltips'});
-        for(const id of ['amber','beryl','coral']){queued.tick();const frame=queued.frame(id);captured.push(frame.capturedAt);assert.equal(queued.host.submitFrame(frame).accepted,true);}
+        for(const id of ['amber','beryl','coral']){queued.tick();const frame=queued.frame(id);captured.push(frame.capturedAt);assert.equal(queued.host.submitFrame(frame).accepted,true);if(id==='amber')await queued.waitForRead();}
         assert.equal(queued.host.getStatus().queuedFrames,2);assert.equal(queued.host.getStatus().reading,true);
         assert.equal(queued.host.submitFrame(queued.frame('beryl')).duplicate,true,'an already queued PNG does not consume another slot');
         assert.equal(queued.host.submitFrame(queued.frame('amber')).duplicate,true,'an active PNG does not consume another slot');
@@ -243,6 +245,24 @@ for(const change of ['stop','owner','crop','size']){
     }finally{await changed.host.dispose();}
 }
 {
+    const resized=fixture(),pane={selectionKind:'visual-item',visualKey:'0123456789abcdef',itemRegion:{x:0,y:0,width:1,height:1}};
+    try{
+        await resized.host.listSources();await resized.host.start({mode:'character',sourceId:'window:game',sessionId:'resized-pane'});
+        resized.tick();resized.host.submitFrame({...resized.frame('before-resize'),...pane});await resized.waitForRead();
+        const oldGeneration=resized.host.generation;
+        resized.tick();const fresh=resized.frame('after-resize',200,40),admission=resized.host.submitFrame({...fresh,...pane});
+        assert.equal(resized.host.generation,oldGeneration+1);assert.equal(resized.host.activeFrameGeneration,oldGeneration,'the old OCR is still completing when the resized frame arrives');
+        assert.equal(admission.accepted,true,'an invalidated active pane cannot suppress matching pixels from the new source size');
+        assert.equal(resized.host.pending.length,1);assert.equal(resized.host.pending[0].capturedAt,fresh.capturedAt);
+        assert.equal(resized.host.submitFrame({...resized.frame('same-current-pane',200,40),...pane}).duplicate,true,'the same pane still coalesces inside the current generation');
+        resized.resolve('Item: Synthetic Stale Size\nHP 999');await new Promise(resolve=>setImmediate(resolve));await resized.waitForRead();
+        assert.equal(resized.observations.length,0,'the invalidated pre-resize read remains rejected');
+        resized.resolve('Item: Synthetic Resized Pane\nHP 7');await resized.host.processing;
+        assert.equal(resized.observations.length,1);assert.equal(resized.observations[0].subject.name,'Synthetic Resized Pane');
+        assert.equal(resized.observations[0].input.captureGeneration,resized.host.generation);assert.equal(Date.parse(resized.observations[0].capturedAt),fresh.capturedAt);
+    }finally{await resized.host.dispose();}
+}
+{
     const fresh=fixture(),stats='Character Stats\nHP 330/398\nMana 296/296\nSTR 90\nSTA 105';
     try{
         await fresh.host.listSources();await fresh.host.start({mode:'character',sourceId:'window:game'});fresh.tick();fresh.host.submitFrame(fresh.frame('unchanged-empty-inventory'));await fresh.waitForRead();fresh.resolve(stats);await fresh.host.processing;
@@ -255,4 +275,70 @@ for(const change of ['stop','owner','crop','size']){
         assert.throws(()=>fresh.host.submitFrame({...fresh.frame('future'),capturedAt:fresh.frame().capturedAt+2000}),/Invalid capture frame/);
     }finally{await fresh.host.dispose();}
 }
-console.log('Capture host: FIFO brief tooltips, hash coalescing, compressed byte/count/age bounds, visible overflow, fresh unchanged baseline, permanent log dedup, provenance and generation cancellation passed.');
+function visualFrame(f,id,key){return {...f.frame(id),selectionKind:'visual-item',visualKey:key.padStart(16,'0'),itemRegion:{x:.1,y:.1,width:.8,height:.8}};}
+{
+    const moving=fixture(),times=[];
+    try{
+        await moving.host.listSources();await moving.host.start({mode:'character',sourceId:'window:game',sessionId:'moving-world'});
+        const initial=moving.host.submitFrame({...moving.frame('animated-active'),selectionKind:'scene'});
+        assert.equal(initial.accepted,true);assert.equal(moving.ocr.calls,0,'frame admission returns before native preparation or OCR starts');await moving.waitForRead();
+        for(const [index,name]of ['Amber','Beryl','Coral'].entries()){
+            moving.tick();const value=visualFrame(moving,`world-${index}`,String(index+1));times.push(value.capturedAt);assert.equal(moving.host.submitFrame(value).accepted,true);
+            assert.equal(moving.host.submitFrame({...value,bytes:png(`other-background-${index}`)}).duplicate,true,'the same visible pane coalesces despite changed world PNG bytes');
+            for(let n=0;n<20;n++){moving.advance(200);moving.host.submitFrame({...moving.frame(`background-${index}-${n}`),selectionKind:'scene'});}
+        }
+        assert.equal(moving.host.getStatus().queuedFrames,4,'three brief item panes and one latest background survive a slow full-scene read');
+        assert.deepEqual(moving.host.pending.map(frame=>frame.kind),['visual-item','visual-item','visual-item','scene']);
+        assert.equal(moving.host.getStatus().overflowFrames,0,'intentional latest-scene replacement does not falsely report lost candidate items');assert.equal(moving.host.getStatus().captureDiagnostics.sceneReplacements,59);
+        moving.resolve('');await new Promise(resolve=>setImmediate(resolve));
+        for(const name of ['Amber','Beryl','Coral']){await moving.waitForRead();moving.resolve(`Item: Synthetic ${name}\nHP 45`);await new Promise(resolve=>setImmediate(resolve));}
+        await moving.waitForRead();moving.resolve('Character Stats\nHP 330/398\nSTR 90');await moving.host.processing;
+        assert.deepEqual(moving.observations.filter(record=>record.subject.kind==='item').map(record=>record.subject.name),['Synthetic Amber','Synthetic Beryl','Synthetic Coral']);
+        assert.deepEqual(moving.observations.filter(record=>record.subject.kind==='item').map(record=>Date.parse(record.capturedAt)),times);
+        const item=moving.observations[0];assert.equal(item.input.captureSelection,'visual-item');assert.deepEqual(item.input.sourceSize,{width:100,height:40});assert.deepEqual(item.input.region,{x:10,y:4,width:80,height:32});assert.equal(item.sessionId,'moving-world');assert.equal(item.input.sourceId,'window:game');
+        assert.equal(moving.observations.at(-1).subject.kind,'character','periodic full-scene baseline evidence is not starved');
+        assert.equal(moving.ocr.calls,5);assert.equal(moving.host.getStatus().captureDiagnostics.emptyReads,1);assert.doesNotMatch(JSON.stringify(moving.host.getStatus().captureDiagnostics),/Synthetic|Amber|Beryl|Coral|moving-world|window:game/,'aggregate diagnostics contain no OCR text, item identity or player/source identifiers');
+    }finally{await moving.host.dispose();}
+}
+{
+    const guard=fixture();
+    try{
+        await guard.host.listSources();await guard.host.start({mode:'character',sourceId:'window:game'});guard.host.submitFrame(visualFrame(guard,'active','1'));await guard.waitForRead();
+        for(let n=0;n<12;n++){guard.tick();guard.host.submitFrame(visualFrame(guard,`item-${n}`,(n+2).toString(16)));}
+        assert.equal(guard.host.submitFrame({...guard.frame('low-priority-world'),selectionKind:'scene'}).lowPriority,true,'a new world scene cannot evict a queued item');assert.equal(guard.host.getStatus().queuedFrames,12);
+        guard.advance(16000);guard.host.prunePending();assert.equal(guard.host.getStatus().queuedFrames,12,'short item proposals survive a measured 11-second active scene plus serial work');
+        guard.advance(45000);guard.host.prunePending();assert.equal(guard.host.getStatus().queuedFrames,0,'candidate retention remains bounded at60seconds');assert.equal(guard.host.getStatus().captureDiagnostics.rejections.age,12);
+        assert.throws(()=>guard.host.submitFrame({...visualFrame(guard,'bad','1'),itemRegion:{x:.9,y:0,width:.5,height:1}}),/region/);assert.throws(()=>guard.host.submitFrame({...visualFrame(guard,'bad-key','1'),visualKey:'private text'}),/identity/);
+        await guard.host.pause();assert.equal(guard.host.getStatus().queuedBytes,0);assert.equal(guard.observations.length,0);
+    }finally{await guard.host.dispose();}
+}
+{
+    const configured=fixture();
+    try{
+        await configured.host.listSources();await configured.host.start({mode:'character',sourceId:'window:game',region:{x:0,y:0,width:.5,height:1},referenceSize:{width:100,height:40}});
+        configured.host.submitFrame({...configured.frame('world-one'),selectionKind:'configured',visualKey:'0000000000000001'});await configured.waitForRead();
+        assert.equal(configured.host.submitFrame({...configured.frame('world-two'),selectionKind:'configured',visualKey:'0000000000000001'}).duplicate,true,'configured-region pixels coalesce even if the world outside changed');
+        configured.resolve();await configured.host.processing;assert.deepEqual(configured.observations[0].input.region,{x:0,y:0,width:50,height:40});
+    }finally{await configured.host.dispose();}
+}
+{
+    const shared=fixture();
+    try{
+        await shared.host.listSources();await shared.host.start({mode:'character',sourceId:'window:game'});shared.host.submitFrame({...visualFrame(shared,'same-pane','1'),sceneFallback:true});await shared.waitForRead();
+        assert.equal(shared.host.pending.filter(frame=>frame.kind==='scene').length,1);shared.advance(5100);
+        const next={...visualFrame(shared,'new-world-same-pane','1'),sceneFallback:true};assert.equal(shared.host.submitFrame(next).sceneAccepted,true,'an active duplicate item still refreshes fallback without losing any new candidate');
+        const scene=shared.host.pending.find(frame=>frame.kind==='scene');assert.equal(scene.capturedAt,next.capturedAt);assert.equal(scene.region,null);assert.equal(scene.png,shared.host.lastFrame.png,'fallback is a reference to the exact same immutable full PNG');assert.equal(shared.host.queuedBytes,scene.png.length,'replacement accounting remains exact');
+        await shared.host.stop();assert.equal(shared.host.queuedBytes,0);assert.equal(shared.observations.length,0);
+    }finally{await shared.host.dispose();}
+}
+{
+    const canceled=fixture();try{await canceled.host.listSources();await canceled.host.start({mode:'character',sourceId:'window:game'});canceled.host.submitFrame(visualFrame(canceled,'deferred','1'));await canceled.host.stop();assert.equal(canceled.ocr.calls,0,'Stop before the deferred pump starts cannot revive OCR');assert.equal(canceled.host.queuedBytes,0);}finally{await canceled.host.dispose();}
+}
+{
+    const fair=fixture();try{
+        await fair.host.listSources();await fair.host.start({mode:'character',sourceId:'window:game'});fair.host.submitFrame({...visualFrame(fair,'first','1'),sceneFallback:true});await fair.waitForRead();for(let n=2;n<=4;n++){fair.tick();fair.host.submitFrame(visualFrame(fair,`next-${n}`,String(n)));}
+        for(let n=1;n<=3;n++){assert.equal(fair.host.activeFrameHash,`pane:${String(n).padStart(16,'0')}`);fair.resolve(`Item: Synthetic Fair ${n}\nHP ${n}`);await new Promise(resolve=>setImmediate(resolve));await fair.waitForRead();}
+        assert.match(fair.host.activeFrameHash,/^frame:/,'a full-scene job runs after three candidates even when more items remain');fair.resolve('Character Stats\nHP 330/398\nSTR 90');await new Promise(resolve=>setImmediate(resolve));await fair.waitForRead();assert.equal(fair.host.activeFrameHash,'pane:0000000000000004');fair.resolve('Item: Synthetic Fair Four\nHP 4');await fair.host.processing;
+    }finally{await fair.host.dispose();}
+}
+console.log('Capture host: animated-world scene replacement, item-priority ROI/FIFO, bounded candidate retention, frame admission before preprocessing, private aggregate diagnostics and original lifecycle/provenance checks passed.');

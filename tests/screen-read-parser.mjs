@@ -141,6 +141,13 @@ const missingHoverName=hoverWords.filter(word=>word.text!=='Brightneedle +3'),na
 assert.equal(parseScreenRead({text:'Green name omitted by whole-scene OCR',words:missingHoverName}).length,0);
 assert.equal(screenReadRefinementRegions({words:missingHoverName})[0].role,'item-name','Strict non-name anchors permit a bounded pixel reread, not an invented name');
 const recoveredHover=parseScreenRead({text:'Green name omitted by whole-scene OCR',words:missingHoverName,confidence:88,refinements:[nameRefinement]})[0];assert.equal(recoveredHover.subject.name,'Brightneedle +3');assert.equal(recoveredHover.fields.find(field=>field.key==='name').confidence,41,'Uncertain prefix words are retained with their actual uncertainty, never silently truncated');
+const inventoryBesideHover=[word('Inventory',1200,0,100),word('Character',1200,40,100),word('Vitals',1310,40,50),word('Stats',1450,40,70),word('HP',1200,100,30),word('330/398',1260,100,100),word('Mana',1200,130,50),word('296/296',1260,130,100)];
+const mixedMissingName={text:'Full scene with independent Inventory and a compact tooltip whose title was missed',words:[...missingHoverName,...inventoryBesideHover],confidence:88};
+assert.equal(parseScreenRead(mixedMissingName).filter(record=>record.subject.kind==='item').length,0,'A missing title is not invented from unrelated Inventory text');
+assert.equal(parseScreenRead(mixedMissingName).filter(record=>record.subject.kind==='character').length,1,'A real-shaped Inventory pane competes for the same bounded refinement budget');
+assert.deepEqual(screenReadRefinementRegions(mixedMissingName).map(region=>region.role),['item-name','item-stats'],'Visible Inventory must not replace the only opportunity to recover the compact item identity');
+const mixedRecovered=parseScreenRead({...mixedMissingName,refinements:[nameRefinement]}).find(record=>record.subject.kind==='item');assert.equal(mixedRecovered.subject.name,'Brightneedle +3');assert.equal(mixedRecovered.fields.find(field=>field.key==='hp').value,73);assert.doesNotMatch(mixedRecovered.evidence.text,/330\/398|296\/296/,'Character text cannot enter the item evidence');
+assert.deepEqual(screenReadRefinementRegions({words:inventoryBesideHover}).map(region=>region.role),['character-stats'],'A baseline with no item still receives the character refinement');
 // The Class glyph's ink height is not the title's line box. Linux/Windows
 // fallback fonts and native caption offsets must not cut an observed title.
 const shortClassInk=hoverPane(0,27).map(entry=>entry.text==='Brightneedle +3'?{...entry,bbox:{...entry.bbox,y1:entry.bbox.y0+23}}:/^(?:Class|Race):/.test(entry.text)?{...entry,bbox:{...entry.bbox,y1:entry.bbox.y0+14}}:entry);

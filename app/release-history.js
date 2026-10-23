@@ -2,6 +2,29 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
   {
+    "version": "0.9.3",
+    "title": "Keep reading items through Character review",
+    "changes": [
+      "Keep capturing missing items during Confirm slots and Save snapshot, until the walkthrough completes or is cancelled. Retain the fresh No Equipment baseline and source/session guards.",
+      "Recover repeated reads from the current walkthrough as one physical item card, preserving their evidence and manual corrections.",
+      "Automatically locate complete Default Modern tooltip panes, crop and enlarge them for offline OCR, and prioritize their changing pixels over animated scenery. Periodic full-scene reads and manually calibrated areas remain available.",
+      "Keep acquiring brief tooltip snapshots while an earlier screenshot is being encoded. Use one local encoder worker to avoid renderer idle stalls. Detect, fingerprint and read each tooltip from the same frozen frame so transitions cannot hide a different item as a duplicate. Temporary snapshots and queued PNGs stay bounded; one offline OCR worker reads them serially.",
+      "Keep compact tooltip name and stat rereads when Inventory is also visible. Uncertain OCR text and values remain editable."
+    ],
+    "steps": [
+      {
+        "title": "Keep hovering missing items during slot review",
+        "image": "0.9.3/character-slots-live-reading",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Item capture continues through Confirm slots and Save snapshot. Hover over an item missed earlier and keep its complete tooltip visible until its card appears. Earlier queued reads can finish here too. Use Default Modern; review uncertain names and values before saving.",
+        "alt": "Character slot confirmation with active reading guidance and a newly captured synthetic item card.",
+        "caption": "Actual Character component with a disposable synthetic profile and capture API. Newly captured items appear during slot confirmation; no player data or game pixels.",
+        "imageSha256": "3cc3a2625d0e92a027950263cf52291efd555c4118e431fa281e90909eb050be"
+      }
+    ]
+  },
+  {
     "version": "0.9.2",
     "title": "Capture brief item tooltips",
     "changes": [

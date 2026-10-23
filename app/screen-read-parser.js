@@ -212,7 +212,12 @@ export function screenReadRefinementRegions(input={}) {
     }
     if(tables.length)regions.push({role:'item-stats',...(tables.length===1?tables[0]:{tiles:tables,preprocessing:'source-threshold'}),layout:'block',scale:4});
     const character=characterRegion(words,panes);
-    if(character){if(regions.length===2)regions.shift();const base={x:character.x,y:character.y,width:character.right-character.x,height:character.bottom-character.y},components=modernComponentRegions(words,character);regions.push({role:'character-stats',...(components.length?{tiles:[base,...components]}:base),preprocessing:'inverted',layout:components.length?'sparse':'block',scale:3});}
+    // A compact tooltip's green title can be absent from sparse scene OCR.
+    // Keep its anchored identity reread when Inventory is also visible; replacing
+    // it with another character pass makes an otherwise valid item disappear.
+    // An Inventory-only baseline still receives its ordinary refinement.
+    const hoverIdentity=panes.some(pane=>pane.hover)&&regions.some(region=>region.role==='item-name');
+    if(character&&(!hoverIdentity||regions.length<2)){if(regions.length===2)regions.shift();const base={x:character.x,y:character.y,width:character.right-character.x,height:character.bottom-character.y},components=modernComponentRegions(words,character);regions.push({role:'character-stats',...(components.length?{tiles:[base,...components]}:base),preprocessing:'inverted',layout:components.length?'sparse':'block',scale:3});}
     return regions.slice(0,2);
 }
 function characterRegion(words,panes){

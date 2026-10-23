@@ -4,16 +4,20 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.2 reads compact Default Modern item tooltips and catches brief screen
-changes more frequently.** Distinct captured frames wait in a bounded local
-queue while OCR is busy, and valid item reads survive advancing the Character
-walkthrough. Keep each tooltip visible until its card appears; reading progress
-and saturation are shown in the flow. See the
+**0.9.3 keeps reading missing items through Character slot confirmation and
+snapshot review.** Capture ends when you finish or cancel the walkthrough.
+Default Modern tooltip panes are automatically cropped and enlarged for offline
+reading; their changes take priority over animated scenery.
+Keep each complete tooltip visible until its card appears; review uncertain
+names and statistics before saving. See the
+[live capture recovery plan](docs/LIVE_CAPTURE_RECOVERY.md),
 [tooltip capture plan](docs/TOOLTIP_CAPTURE.md) and
 [guided walkthrough](docs/CHARACTER_WALKTHROUGH.md) for implementation and check
 scope. The existing reviewed wiki contribution workflow is retained.
 
-In **Settings → Screen reading**, start an explicitly selected source, then use
+![Character slot confirmation continues reading missing items, shown with synthetic equipment](app/assets/whats-new/0.9.3/character-slots-live-reading.png)
+
+In **Settings → Screen reading**, start an explicitly selected source. Optionally use
 **Calibrate OCR area** to draw around a complete examine or Inventory/stat pane.
 Screen reading currently requires the **Default Modern (`default_modern`)
 game UI skin**. Other skins remain unverified until their layouts are supported.

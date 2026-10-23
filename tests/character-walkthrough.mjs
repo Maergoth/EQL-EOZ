@@ -96,9 +96,22 @@ lateClock=10200;late.acceptBase();late.advance();
 lateClock=10300;late.advance();assert.equal(late.snapshot().step,'slots');
 const reequip={...delayed,capturedAt:new Date(10250).toISOString()};
 assert(late.acceptsItem(reequip),'A Re-equip tooltip can finish after advancing to Slots');
-assert(!late.acceptsItem({...reequip,capturedAt:new Date(10301).toISOString()}),'An item first captured in Slots stays rejected');
+assert(late.acceptsItem({...reequip,capturedAt:new Date(10300).toISOString()}),'Adjacent Re-equip and Slots windows have no timestamp gap');
+lateClock=10301;assert(late.acceptsItem({...reequip,capturedAt:new Date(10301).toISOString()}),'An item first captured in Slots remains eligible');
 late.advance();assert.equal(late.snapshot().step,'review');assert(late.acceptsItem(reequip));
-lateClock=10350;assert(!late.acceptsItem({...reequip,capturedAt:new Date(10325).toISOString()}),'An item first captured in Review stays rejected');
+lateClock=10350;const reviewItem={...reequip,capturedAt:new Date(10325).toISOString()};assert(late.acceptsItem(reviewItem),'An item first captured in Review remains eligible until completion');
+assert(!late.acceptsItem({...reviewItem,capturedAt:new Date(10150).toISOString()}),'Continuing Review capture cannot admit an earlier Base-time item');
+for(const patch of [{owner:'contribution'},{sessionId:'retired'},{input:{...reviewItem.input,sourceId:'window:retired'}},{input:{...reviewItem.input,captureGeneration:3}}])assert(!late.acceptsItem({...reviewItem,...patch}),'Review still requires the current Character owner/session/source/generation');
+const legacySlots={...late.snapshot(),step:'slots',itemPhaseStartedAt:0,itemReadWindows:late.snapshot().itemReadWindows.filter(window=>['unequip','reequip'].includes(window.step))};
+for(const step of ['slots','review']){
+    const legacy=createCharacterWalkthrough({storage:{getItem:()=>JSON.stringify({...legacySlots,step})},now:()=>lateClock});
+    assert(!legacy.acceptsReplayItem(reviewItem),'A saved draft cannot authorize replay before trusted capture status');legacy.syncCapture(lateStatus);
+    assert.equal(legacy.snapshot().itemReadWindows.at(-1).from,10300,'Released Slots/Review drafts extend only the latest trusted Re-equip boundary');
+    assert(legacy.acceptsReplayItem(reviewItem),'A real post-Re-equip record can recover through the still-active legacy flow');
+    assert(!legacy.acceptsReplayItem({...reviewItem,capturedAt:new Date(10150).toISOString()}),'Legacy migration does not expand to the Base phase');
+    legacy.syncCapture({...lateStatus,generation:5,generationStartedAt:10350});assert(!legacy.acceptsReplayItem(reviewItem),'Legacy migration cannot authorize a retired generation');
+}
+const missingBoundary=createCharacterWalkthrough({storage:{getItem:()=>JSON.stringify({...legacySlots,itemReadWindows:[]})},now:()=>lateClock});missingBoundary.syncCapture(lateStatus);assert.equal(missingBoundary.snapshot().itemReadWindows.at(-1).from,lateClock,'Without the trusted prior boundary, an old Slots draft starts fresh');assert(!missingBoundary.acceptsItem(reviewItem));
 late.syncCapture({...lateStatus,generation:5,generationStartedAt:10350});assert(!late.acceptsItem(reequip),'Old crop/source generations cannot enter even with an eligible capture time');
 late.complete();assert(!late.acceptsItem(reequip));assert(!late.acceptsReplayItem(reequip));
 
