@@ -41,6 +41,7 @@ jobs:
       - run: npm run test:main-cache
       - run: npm run test:map-overlay-3d
       - run: npm run test:native-overlays -- --screenshots ci-screenshots
+      - run: npm run test:overlay-resize
       - run: npm run test:intel-stability
       - run: npm run test:discovery-notices
       - run: npm run test:appearance -- --screenshots ci-screenshots/appearance
@@ -49,6 +50,7 @@ jobs:
       - run: npm run test:modern-ocr
       - run: npm run test:capture-calibration -- --screenshots ci-screenshots/capture-calibration
       - run: npm run test:capture-workspace -- --screenshots ci-screenshots/capture-workspace
+      - run: npm run test:character-walkthrough -- --screenshots ci-screenshots/character-walkthrough
       - run: npm run test:system-fonts -- --screenshots ci-screenshots/system-fonts
       - name: Upload synthetic interface captures
         if: always()

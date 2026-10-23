@@ -3,6 +3,7 @@
 const path = require('node:path');
 const {allowMapRequest}=require('./overlay-map-policy.cjs');
 const {normalizeAppearance}=require('./appearance.cjs');
+const {snapOverlayBounds,applyOverlayDock,normalizeOverlayDocks}=require('./overlay-docking.cjs');
 
 const PANEL_IDS = Object.freeze(['parse', 'map', 'intel', 'timers']);
 const PANEL_NAMES = Object.freeze({ parse:'Combat parse', map:'Map & intel', intel:'Zone intel', timers:'Triggers' });
@@ -28,25 +29,28 @@ function finite(value, fallback) { return typeof value === 'number' && Number.is
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function panelId(value) { return PANEL_IDS.includes(value) ? value : null; }
 // The main owner resolves mixed preferences once. Hidden takes precedence;
-// otherwise any unlocked known panel makes the next global step Hide.
+// otherwise any unlocked known panel makes the next global step Lock.
 function globalOverlayMode(panels = {}) {
     if (!PANEL_IDS.some(id => panels[id]?.visible === true)) return 'hidden';
     return PANEL_IDS.some(id => panels[id]?.locked === false) ? 'unlocked' : 'locked';
 }
-const SNAP_DISTANCE=12,SNAP_GAP=6;
 function boundsArea(bounds,displays){let best=null,largest=0;for(const display of displays){const area=display.workArea;if(!area)continue;const overlap=Math.max(0,Math.min(bounds.x+bounds.width,area.x+area.width)-Math.max(bounds.x,area.x))*Math.max(0,Math.min(bounds.y+bounds.height,area.y+area.height)-Math.max(bounds.y,area.y));if(overlap>largest){largest=overlap;best=area;}}return best;}
+const displayKey=area=>area?JSON.stringify([area.x,area.y,area.width,area.height]):null;
+function fittedDocks(panels,relations,{includeHidden=false}={}){
+    const geometry=includeHidden?panels.map(panel=>({...panel,visible:true})):panels;
+    const fitted=normalizeOverlayDocks(geometry,relations);
+    for(const [id,relation]of Object.entries(fitted)){
+        const owner=geometry.find(panel=>panel.id===id),target=geometry.find(panel=>panel.id===relation.targetId);
+        const aligned=applyOverlayDock({...owner,targetBounds:target.bounds,relation,targets:geometry,relations:fitted});
+        if(!aligned||Object.keys(aligned).some(key=>aligned[key]!==owner.bounds[key]))delete fitted[id];
+    }
+    return fitted;
+}
 // Magnet only near the current Parse rectangle on the same work area. Returning
 // the original bounds avoids a snap that would cross a monitor boundary.
 function snapTriggersBounds(bounds,target,displays,{resizing=false}={}){
-    if(!target)return {...bounds};const area=boundsArea(bounds,displays);if(!area||area!==boundsArea(target,displays))return {...bounds};
-    const next={...bounds},right=target.x+target.width,bottom=target.y+target.height;
-    const horizontal=Math.min(bounds.x+bounds.width,right)>=Math.max(bounds.x,target.x)-SNAP_DISTANCE;
-    const vertical=Math.min(bounds.y+bounds.height,bottom)>=Math.max(bounds.y,target.y)-SNAP_DISTANCE;
-    const nearest=(value,targets)=>targets.map(target=>({target,distance:Math.abs(value-target)})).sort((a,b)=>a.distance-b.distance).find(match=>match.distance<=SNAP_DISTANCE)?.target;
-    const y=horizontal?nearest(bounds.y,[bottom+SNAP_GAP,target.y-bounds.height-SNAP_GAP]):undefined;if(y!==undefined)next.y=y;
-    if(vertical||y!==undefined){const x=nearest(bounds.x,[target.x,right-bounds.width,right+SNAP_GAP,target.x-bounds.width-SNAP_GAP]);if(x!==undefined)next.x=x;}
-    if(resizing&&Math.abs(next.x-target.x)<=SNAP_DISTANCE&&Math.abs(bounds.x+bounds.width-right)<=SNAP_DISTANCE){next.x=target.x;next.width=target.width;}
-    return next.x>=area.x&&next.y>=area.y&&next.x+next.width<=area.x+area.width&&next.y+next.height<=area.y+area.height?next:{...bounds};
+    if(!target)return {...bounds};const area=boundsArea(bounds,displays);
+    return snapOverlayBounds({id:'timers',bounds,displayId:displayKey(area),workArea:area,targets:[{id:'parse',bounds:target,visible:true,displayId:displayKey(boundsArea(target,displays))}]}).bounds;
 }
 
 function clampBounds(input, displays, fallback = { x:40, y:40, width:380, height:320 }, minimumHeight = 160) {
@@ -99,6 +103,9 @@ function normalizePreferences(raw, displays) {
         };
         if(id==='timers')panels[id].manualHeight=saved.manualHeight===true;
     });
+    const geometry=PANEL_IDS.map(id=>{const workArea=boundsArea(panels[id].bounds,displays);return{id,bounds:panels[id].bounds,visible:panels[id].visible,displayId:displayKey(workArea),workArea};});
+    const docks=fittedDocks(geometry,Object.fromEntries(PANEL_IDS.flatMap(id=>raw?.panels?.[id]?.dock?[[id,raw.panels[id].dock]]:[])),{includeHidden:!geometry.some(panel=>panel.visible)});
+    for(const [id,dock]of Object.entries(docks))panels[id].dock=dock;
     return { schemaVersion:1, appearance:normalizeAppearance(raw?.appearance), panels };
 }
 
@@ -155,12 +162,15 @@ class OverlayHost {
         this.saveTimer = null;
         this.tray = null;
         this.recoveryShortcutRegistered = false;
+        this.dockingSync=false;
+        this.docksSuspended=false;
         this.onDisplaysChanged = () => this.restoreBounds();
     }
 
     displays() { return this.electron.screen.getAllDisplays(); }
     async initialize() {
         this.preferences = normalizePreferences(await this.readPreferences(), this.displays());
+        this.docksSuspended=!this.hasVisiblePanels()&&PANEL_IDS.some(id=>this.preferences.panels[id].dock);
         this.electron.ipcMain.handle(IPC_MAIN, (event, action, value) => this.handleMainRequest(event, action, value));
         this.electron.ipcMain.handle(IPC_OVERLAY, (event, action, payload) => this.handleOverlayRequest(event, action, payload));
         for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) this.electron.screen.on(event, this.onDisplaysChanged);
@@ -238,16 +248,18 @@ class OverlayHost {
         if (action === 'get-state') return this.getState(id);
         if(action==='resize'){
             const prefs=this.preferences.panels[id];
-            if(!prefs.visible||prefs.locked||prefs.passThrough||!['parse','timers'].includes(id))throw new Error('Unlock and show this panel before resizing it.');
+            if(!prefs.visible||prefs.locked||prefs.passThrough)throw new Error('Unlock and show this panel before resizing it.');
             if(!payload||typeof payload!=='object'||Array.isArray(payload))throw new Error('Invalid overlay size.');
+            const edge=payload.edge??'se';if(!['n','ne','e','se','s','sw','w','nw'].includes(edge))throw new Error('Invalid resize edge.');
             const win=this.windows.get(id);if(!win||win.isDestroyed())throw new Error('This overlay is unavailable.');
             const current=win.getBounds(),delta=Object.hasOwn(payload,'deltaWidth')||Object.hasOwn(payload,'deltaHeight');
             if(delta&&(!Number.isFinite(payload.deltaWidth)||!Number.isFinite(payload.deltaHeight)||Math.abs(payload.deltaWidth)>4000||Math.abs(payload.deltaHeight)>4000))throw new Error('Invalid overlay size.');
             const width=delta?current.width+payload.deltaWidth:payload.width,height=delta?current.height+payload.deltaHeight:payload.height;
             if(!Number.isFinite(width)||!Number.isFinite(height)||!delta&&(width<1||height<1||width>4000||height>4000))throw new Error('Invalid overlay size.');
             const displays=this.displays();let bounds=clampBounds({...current,width:Math.round(width),height:Math.round(height)},displays,prefs.bounds,id==='timers'?36:160);
-            if(id==='timers'){bounds=this.snapTimers(bounds,true,displays);if(height!==current.height)prefs.manualHeight=true;}
-            prefs.bounds=bounds;this.apply(id);this.scheduleSave();return{ok:true,bounds:clone(bounds)};
+            bounds=clampBounds({...bounds,x:edge.includes('w')?current.x+current.width-bounds.width:current.x,y:edge.includes('n')?current.y+current.height-bounds.height:current.y},displays,prefs.bounds,id==='timers'?36:160);
+            if(id==='timers'&&height!==current.height)prefs.manualHeight=true;
+            this.updateDocking(id,bounds);this.scheduleSave();return{ok:true,bounds:clone(prefs.bounds)};
         }
         if (action === 'content-height') {
             if (id !== 'timers' || typeof payload !== 'number' || !Number.isFinite(payload) || payload < 36 || payload > 2400) throw new Error('Invalid timer content height.');
@@ -284,7 +296,9 @@ class OverlayHost {
             title:`Eye of Zomm — ${PANEL_NAMES[id]}`, frame:false, transparent:true,
             backgroundColor:'#00000000', autoHideMenuBar:true, show:false,
             skipTaskbar:true, alwaysOnTop:true, hasShadow:false,
-            resizable:!prefs.locked, movable:!prefs.locked, focusable:!prefs.passThrough,
+            // Transparent windows cannot rely on platform resize borders.
+            // Explicit renderer hit regions resize through authenticated IPC.
+            thickFrame:false,resizable:false, movable:!prefs.locked, focusable:!prefs.passThrough,
             maximizable:false, minimizable:false, fullscreenable:false,
             webPreferences:{ preload:path.join(__dirname, 'overlay-preload.cjs'), sandbox:true,
                 contextIsolation:true, nodeIntegration:false, webSecurity:true, backgroundThrottling:false,
@@ -314,12 +328,10 @@ class OverlayHost {
             if(id==='timers'&&Number.isFinite(bounds?.height)&&bounds.height!==win.getBounds().height)prefs.manualHeight=true;
         });
         const saveBounds = (resizing=false) => {
-            if (win.isDestroyed() || this.disposed) return;
+            if (win.isDestroyed() || this.disposed || this.dockingSync || this.docksSuspended) return;
             const current=win.getBounds(),displays=this.displays();
             let bounds=clampBounds(current,displays,prefs.bounds,id==='timers'?36:160);
-            if(id==='timers'&&!prefs.locked&&!prefs.passThrough)bounds=this.snapTimers(bounds,resizing,displays);
-            prefs.bounds=bounds;
-            if(Object.keys(bounds).some(key=>current[key]!==bounds[key]))win.setBounds(bounds);
+            this.updateDocking(id,bounds,{snap:!prefs.locked&&!prefs.passThrough});
             this.scheduleSave();
         };
         win.on('move',()=>saveBounds(false));
@@ -349,6 +361,31 @@ class OverlayHost {
         const parse=this.windows.get('parse');
         return this.preferences.panels.parse.visible&&parse&&!parse.isDestroyed()?snapTriggersBounds(bounds,parse.getBounds(),displays,{resizing}):bounds;
     }
+    dockingPanels(){const displays=this.displays();return PANEL_IDS.map(id=>{const prefs=this.preferences.panels[id],workArea=boundsArea(prefs.bounds,displays);return{id,bounds:clone(prefs.bounds),visible:prefs.visible,displayId:displayKey(workArea),workArea};});}
+    pruneDocks({includeHidden=false}={}){const panels=this.dockingPanels(),relations=fittedDocks(panels,Object.fromEntries(PANEL_IDS.flatMap(id=>this.preferences.panels[id].dock?[[id,this.preferences.panels[id].dock]]:[])),{includeHidden});for(const id of PANEL_IDS){if(relations[id])this.preferences.panels[id].dock=relations[id];else delete this.preferences.panels[id].dock;}return relations;}
+    updateDocking(id,bounds,{snap=true,maintain=false}={}){
+        if(this.dockingSync||this.docksSuspended)return;
+        const original=this.dockingPanels(),panels=original.map(panel=>({...panel,bounds:clone(panel.bounds)})),owner=panels.find(panel=>panel.id===id);
+        owner.bounds=clone(bounds);owner.workArea=boundsArea(bounds,this.displays());owner.displayId=displayKey(owner.workArea);
+        const relations=normalizeOverlayDocks(panels,Object.fromEntries(PANEL_IDS.flatMap(panel=>this.preferences.panels[panel].dock?[[panel,this.preferences.panels[panel].dock]]:[])));
+        const descendants=parent=>{const result=new Set();for(let n=0;n<PANEL_IDS.length;n++)for(const [child,relation]of Object.entries(relations))if(relation.targetId===parent||result.has(relation.targetId))result.add(child);return result;};
+        const moving=new Set([id,...descendants(id)]),targets=()=>panels.filter(panel=>!moving.has(panel.id));
+        if(maintain&&relations[id]){const target=panels.find(panel=>panel.id===relations[id].targetId),aligned=applyOverlayDock({...owner,targetBounds:target?.bounds,relation:relations[id],targets:targets(),relations});if(aligned)owner.bounds=aligned;else delete relations[id];}
+        else if(snap&&owner.visible){const result=snapOverlayBounds({...owner,targets:targets(),relations});owner.bounds=result.bounds;if(result.relation)relations[id]=result.relation;else delete relations[id];}
+        const queue=[id],visited=new Set();let valid=true;
+        while(queue.length&&valid){const parent=queue.shift();if(visited.has(parent))continue;visited.add(parent);for(const childId of PANEL_IDS.filter(child=>relations[child]?.targetId===parent)){
+            const child=panels.find(panel=>panel.id===childId),target=panels.find(panel=>panel.id===parent),next=applyOverlayDock({...child,targetBounds:target.bounds,relation:relations[childId],targets:panels.filter(panel=>!moving.has(panel.id)||panel.id===parent),relations});
+            if(!next){valid=false;break;}child.bounds=next;queue.push(childId);
+        }}
+        // Validate the completed group together; stale intermediate rectangles
+        // must not make one dependent collide with a sibling which also moves.
+        if(valid)for(const panel of panels.filter(panel=>moving.has(panel.id)&&relations[panel.id])){const target=panels.find(item=>item.id===relations[panel.id].targetId);if(!applyOverlayDock({...panel,targetBounds:target.bounds,relation:relations[panel.id],targets:panels,relations})){valid=false;break;}}
+        this.dockingSync=true;
+        try{
+            if(valid)for(const panel of panels){const prefs=this.preferences.panels[panel.id];prefs.bounds=panel.bounds;if(relations[panel.id])prefs.dock=relations[panel.id];else delete prefs.dock;}
+            for(const panel of panels)this.apply(panel.id);
+        }finally{this.dockingSync=false;}
+    }
 
     async control(action, panel, value) {
         if (this.disposed) throw new Error('Overlays have closed.');
@@ -361,18 +398,21 @@ class OverlayHost {
         } else if (all.includes(action)) {
             const defaults = normalizePreferences({}, this.displays());
             const cycleMode=action==='cycle-all'?globalOverlayMode(this.preferences.panels):null;
+            if(action==='hide-all'||cycleMode==='locked')this.docksSuspended=true;
+            if(action==='show-all'||cycleMode==='hidden')this.docksSuspended=false;
+            if(action==='reset-layout')this.docksSuspended=false;
             for (const id of PANEL_IDS) {
                 const prefs = this.preferences.panels[id];
                 if (cycleMode) {
-                    prefs.visible=cycleMode!=='unlocked';
-                    if (cycleMode!=='unlocked') prefs.locked=cycleMode==='hidden';
-                    if (cycleMode==='locked') prefs.passThrough=false;
+                    prefs.visible=cycleMode!=='locked';
+                    if (cycleMode!=='locked') prefs.locked=cycleMode==='unlocked';
+                    if (cycleMode==='hidden') prefs.passThrough=false;
                 }
                 if (action === 'show-all') prefs.visible = true;
                 if (action === 'hide-all') prefs.visible = false;
                 if (action === 'unlock-all') prefs.locked = false;
                 if (action === 'restore-mouse') prefs.passThrough = false;
-                if (action === 'reset-layout') { prefs.bounds = defaults.panels[id].bounds; prefs.locked = false; prefs.passThrough = false;if(id==='timers')prefs.manualHeight=false; }
+                if (action === 'reset-layout') { prefs.bounds = defaults.panels[id].bounds; prefs.locked = false; prefs.passThrough = false;delete prefs.dock;if(id==='timers')prefs.manualHeight=false; }
                 if (action === 'show-all' || cycleMode && prefs.visible) this.recoverPanel(id);
                 this.apply(id);
             }
@@ -380,6 +420,7 @@ class OverlayHost {
             const id = panelId(panel);
             if (!id) throw new Error('Unknown overlay panel.');
             const prefs = this.preferences.panels[id];
+            if(['show','hide','toggle'].includes(action))this.docksSuspended=false;
             if (action === 'show') prefs.visible = true;
             else if (action === 'hide') prefs.visible = false;
             else if (action === 'toggle') prefs.visible = !prefs.visible;
@@ -394,6 +435,7 @@ class OverlayHost {
             if (prefs.visible && (action === 'show' || action === 'toggle')) this.recoverPanel(id);
             this.apply(id);
         }
+        this.pruneDocks({includeHidden:this.docksSuspended});
         this.broadcast();
         await this.save();
         return this.getState();
@@ -406,20 +448,20 @@ class OverlayHost {
         if (!win || win.isDestroyed()) return;
         // Layout lock affects native movement and resizing only. Tab/menu mouse
         // interaction stays available until click-through is explicitly enabled.
-        win.setResizable(!prefs.locked);
+        win.setResizable(false);
         win.setMovable(!prefs.locked);
         win.setFocusable(!prefs.passThrough);
         if (this.platform === 'linux' && prefs.passThrough && win.isFocused?.()) win.blur?.();
         win.setIgnoreMouseEvents(prefs.passThrough, { forward:true });
         const current = win.getBounds();
-        if (Object.keys(prefs.bounds).some(key => current[key] !== prefs.bounds[key])) win.setBounds(prefs.bounds);
+        if (Object.keys(prefs.bounds).some(key => current[key] !== prefs.bounds[key])) {const wasSync=this.dockingSync;this.dockingSync=true;try{win.setBounds(prefs.bounds);}finally{this.dockingSync=wasSync;}}
         if (!prefs.visible) win.hide();
         else if (this.ready.has(id)) win.showInactive();
     }
 
     fitTimerWindow() {
         const prefs = this.preferences?.panels.timers;
-        if (!prefs) return;
+        if (!prefs || this.docksSuspended) return;
         const timers = this.snapshot?.session?.timers || {};
         const count = Math.min(8, (timers.timers || []).filter(timer => timer.visible !== false).length);
         const swingHeight = timers.swing?.enabled === false ? 0 : 22;
@@ -427,8 +469,8 @@ class OverlayHost {
         const discoveryHeight = Math.min(4,this.snapshot?.session?.discovery?.length || 0) * 90;
         const scale = prefs.fontScale * this.preferences.appearance.fontSize / 13;
         const height = prefs.manualHeight?prefs.bounds.height:this.timerContentHeight || Math.max(36, Math.ceil(10 + count * (30 * scale + 3) + (swingHeight + notificationsHeight + discoveryHeight) * scale));
-        prefs.bounds = clampBounds({ ...prefs.bounds, height }, this.displays(), prefs.bounds, 36);
-        this.apply('timers');
+        const bounds=clampBounds({ ...prefs.bounds, height }, this.displays(), prefs.bounds, 36);
+        this.updateDocking('timers',bounds,{snap:false,maintain:true});
     }
 
     hasVisiblePanels() { return Boolean(this.preferences && PANEL_IDS.some(id => this.preferences.panels[id].visible)); }
@@ -447,6 +489,7 @@ class OverlayHost {
             prefs.bounds = clampBounds(prefs.bounds, this.displays(), prefs.bounds, id === 'timers' ? 36 : 160);
             this.apply(id);
         }
+        this.pruneDocks({includeHidden:this.docksSuspended});
         this.broadcast();
         this.scheduleSave();
     }

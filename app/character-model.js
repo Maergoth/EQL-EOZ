@@ -3,8 +3,12 @@ import { scaleItemStat } from './item-scaling.js';
 // Local, versioned data only. This module has no DOM, capture, network or wiki
 // write dependency. One candidate represents one physical copy, not a title.
 export const CHARACTER_STORAGE_KEY = 'eql-eye-of-zomm-character-v1';
-export const CHARACTER_LIMITS = Object.freeze({ candidates:120, evidence:6, stats:48, augments:8, removedObservations:1000, removedInstances:100, storageBytes:1500000, iconBytes:24000 });
-export const CHARACTER_STAT_KEYS = Object.freeze(['AC','HP','MP','END','ATK','STR','STA','AGI','DEX','WIS','INT','CHA','SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE','HP_REGEN','MANA_REGEN','END_REGEN','HASTE']);
+export const CHARACTER_LIMITS = Object.freeze({ candidates:120, evidence:6, stats:48, augments:8, observationRefs:6000, removedObservations:1000, removedInstances:100, storageBytes:1500000, iconBytes:24000, rawStatBlock:8192, rawStatLines:60 });
+export const CHARACTER_STAT_KEYS = Object.freeze(['AC','AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','HP','MP','END','ATK','ATK_OFFENSE','ATK_ACCURACY','STR','STA','AGI','DEX','WIS','INT','CHA','SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE','HP_REGEN','MANA_REGEN','END_REGEN','HASTE']);
+const STAT_LABELS=Object.freeze({MP:'Mana',END:'Endurance',ATK:'Attack',AC_MITIGATION:'Mitigation AC',AC_MITIGATION_SOFTCAP:'AC softcap',AC_EVASION:'Evasion AC',
+    ATK_OFFENSE:'Offense',ATK_ACCURACY:'Accuracy',SV_MAGIC:'Magic resist',SV_FIRE:'Fire resist',SV_COLD:'Cold resist',SV_POISON:'Poison resist',SV_DISEASE:'Disease resist',
+    SV_CORRUPTION:'Void resist',ATTACK_SPEED:'Attack speed %',DMG_BONUS:'Damage bonus',HP_REGEN:'HP regen',MANA_REGEN:'Mana regen',END_REGEN:'End. regen'});
+export const characterStatLabel=key=>STAT_LABELS[key] || String(key||'').replace(/_/g,' ');
 export const CHARACTER_SLOTS = Object.freeze([
     ['charm','Charm','CHARM'],['ear1','Left ear','EAR'],['head','Head','HEAD'],['face','Face','FACE'],['ear2','Right ear','EAR'],
     ['neck','Neck','NECK'],['shoulders','Shoulders','SHOULDERS'],['arms','Arms','ARMS'],['back','Back','BACK'],
@@ -20,11 +24,14 @@ const finite = value => typeof value === 'number' && Number.isFinite(value) && M
 const numeric = value => finite(value) ? value : typeof value === 'string' && /^[-+]?\d+(?:\.\d+)?$/.test(value.trim()) && finite(Number(value)) ? Number(value) : null;
 // Dates use milliseconds since the epoch, independently of bounded stat values.
 const atTime = value => Number.isSafeInteger(value) && value >= 0 && value <= 8.64e15 ? value : null;
+const journalSequence = value => Number.isSafeInteger(value) && value > 0 ? value : null;
 const list = value => Array.isArray(value) ? value : [];
 const has = (object,key) => Object.prototype.hasOwnProperty.call(object || {},key);
 const fullTier = value => Number.isInteger(value) && value >= 0 && value <= 10 ? value : null;
 const tierFraction = (value,tier) => tier === null || numeric(value) === null ? null : Math.max(0,Math.min(2 ** tier - 1,Math.floor(numeric(value))));
 const keyFor = value => clean(value,32).toUpperCase().replace(/[ -]+/g,'_');
+const rawStatBlock = value => String(value ?? '').replace(/\r\n?/g,'\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,' ').split('\n').slice(0,CHARACTER_LIMITS.rawStatLines).join('\n').trim().slice(0,CHARACTER_LIMITS.rawStatBlock);
+const EDITABLE_CAPTURE_FIELDS=new Set(['slots','tier','fraction','rawStatBlock','level']);
 
 export function normalizeCharacterStats(value) {
     const result = {};
@@ -40,7 +47,7 @@ export function characterSlotKinds(value) {
     const values = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,|;]/) : [];
     return [...new Set(values.slice(0,30).map(slot => clean(slot,40).toUpperCase().replace(/_/g,' '))
         .map(slot => ({EARS:'EAR',WRISTS:'WRIST',FINGERS:'FINGER',RANGED:'RANGE',POWERSOURCE:'POWER SOURCE'}[slot] || SLOT_BY_ID.get(slot.toLowerCase())?.kind || slot))
-        .filter(slot => SLOT_KINDS.has(slot)))];
+        .filter(slot => slot === 'ANY' || SLOT_KINDS.has(slot)))];
 }
 
 // Raster data only; a remote URL, HTML/SVG or an arbitrarily large data URL is
@@ -56,7 +63,8 @@ function evidenceRecord(value={}) {
         region:clean(typeof value.region === 'string' ? value.region : value.region?.name,100), parserVersion:clean(value.parserVersion || value.parser?.version,50) };
 }
 
-const OBSERVATION_STATS = Object.freeze({ac:'AC',hp:'HP',mana:'MP',endurance:'END',str:'STR',sta:'STA',agi:'AGI',dex:'DEX',wis:'WIS',int:'INT',cha:'CHA',
+const OBSERVATION_STATS = Object.freeze({ac:'AC',acMitigation:'AC_MITIGATION',acMitigationSoftcap:'AC_MITIGATION_SOFTCAP',acEvasion:'AC_EVASION',
+    attackOffense:'ATK_OFFENSE',attackAccuracy:'ATK_ACCURACY',hp:'HP',mana:'MP',endurance:'END',str:'STR',sta:'STA',agi:'AGI',dex:'DEX',wis:'WIS',int:'INT',cha:'CHA',
     resistPoison:'SV_POISON',resistMagic:'SV_MAGIC',resistDisease:'SV_DISEASE',resistFire:'SV_FIRE',resistCold:'SV_COLD',resistCorruption:'SV_CORRUPTION',
     weight:'WT',damage:'DMG',damageBonus:'DMG_BONUS',delay:'DELAY',hpCurrent:'HP_CURRENT',hpMaximum:'HP_MAXIMUM',manaCurrent:'MP_CURRENT',manaMaximum:'MP_MAXIMUM',
     enduranceCurrent:'END_CURRENT',enduranceMaximum:'END_MAXIMUM',attack:'ATK',attackMelee:'ATK_MELEE',attackRanged:'ATK_RANGED',attackSpeed:'ATTACK_SPEED',haste:'HASTE',hpRegen:'HP_REGEN',manaRegen:'MANA_REGEN',enduranceRegen:'END_REGEN'});
@@ -70,12 +78,15 @@ export function characterObservationInput(observation={}) {
     const fields=Object.fromEntries(observation.fields.slice(0,100).filter(field=>typeof field?.key==='string').map(field=>[field.key,field.value]));
     const stats={};
     for (const [key,target] of Object.entries(OBSERVATION_STATS)) if(has(fields,key)) stats[target]=fields[key];
-    return {name:fields.name || observation.subject?.name,tier:fields.tier,fraction:fields.fraction,slots:fields.slots,stats,
+    const block=fields.rawStatBlock ?? fields.statBlockText ?? (has(fields,'statLines')?list(fields.statLines).join('\n'):undefined);
+    return {name:fields.name || observation.subject?.name,tier:fields.tier,fraction:fields.fraction,slots:fields.slots,stats,...(block!==undefined?{rawStatBlock:block}:{}),
         level:fields.requiredLevel,augments:list(fields.augmentNames).map(name=>({name})),augmentStatus:'unknown',statsComplete:false};
 }
 function metadata(value={}) {
+    const aaCount=numeric(value.aaCount);
     return { name:clean(value.name,120), server:clean(value.server,100), level:numeric(value.level), race:clean(value.race,80),
-        classes:list(value.classes).slice(0,3).map(value => clean(value,40)), sessionName:clean(value.sessionName,120) };
+        classes:[...new Set(list(value.classes).slice(0,3).map(value => clean(value,40)).filter(Boolean))],
+        aaCount:Number.isInteger(aaCount) && aaCount >= 0 ? aaCount : null, sessionName:clean(value.sessionName,120) };
 }
 function augmentRecord(value={}) {
     return {name:clean(value.name), id:clean(value.id,120), stats:normalizeCharacterStats(value.stats), statsComplete:value.statsComplete === true};
@@ -87,11 +98,13 @@ function normalizeCandidate(value={}) {
         iconId:clean(value.iconId,120), icon:safeCharacterIcon(value.icon), slots:characterSlotKinds(value.slots), tier,
         fraction:tierFraction(value.fraction,tier),
         observedStats:normalizeCharacterStats(value.observedStats), baseStats:normalizeCharacterStats(value.baseStats),
+        editedStatKeys:[...new Set(list(value.editedStatKeys).map(keyFor).filter(key=>/^[A-Z][A-Z0-9_]{0,31}$/.test(key)))].slice(-CHARACTER_LIMITS.stats*2),
+        editedFields:[...new Set(list(value.editedFields).filter(key=>EDITABLE_CAPTURE_FIELDS.has(key)))],
         unscaledStatKeys:[...new Set(list(value.unscaledStatKeys).slice(0,CHARACTER_LIMITS.stats).map(keyFor).filter(key=>/^[A-Z][A-Z0-9_]{0,31}$/.test(key)))],
         observedStatsComplete:value.observedStatsComplete === true, baseStatsComplete:value.baseStatsComplete === true,
         augments:list(value.augments).slice(0,CHARACTER_LIMITS.augments).map(augmentRecord),
         augmentStatus:['none','included','excluded','unknown'].includes(value.augmentStatus) ? value.augmentStatus : 'unknown',
-        level:numeric(value.level), notes:clean(value.notes,600), evidence:list(value.evidence).slice(-CHARACTER_LIMITS.evidence).map(evidenceRecord),
+        level:numeric(value.level), notes:clean(value.notes,600), rawStatBlock:rawStatBlock(value.rawStatBlock ?? value.statBlockText ?? list(value.statLines).join('\n')),evidence:list(value.evidence).slice(-CHARACTER_LIMITS.evidence).map(evidenceRecord),
         createdAt:atTime(value.createdAt), updatedAt:atTime(value.updatedAt), seenCount:Math.max(1,Math.min(100000,Math.floor(numeric(value.seenCount)||1))) };
 }
 function statSnapshot(value) {
@@ -100,7 +113,7 @@ function statSnapshot(value) {
         notes:clean(value.notes,600), evidence:evidenceRecord(value.evidence || value), confirmed:value.confirmed === true};
 }
 function emptyState() {
-    return {schemaVersion:1, sequence:0, metadata:metadata(), candidates:[], equipment:{}, statSnapshots:{base:null,equipped:null}, removedObservations:[],removedInstances:[],updatedAt:null};
+    return {schemaVersion:1, sequence:0, metadata:metadata(), candidates:[], equipment:{}, statSnapshots:{base:null,equipped:null}, observationRefs:[],observationFloor:0,removedObservations:[],removedInstances:[],updatedAt:null};
 }
 function normalizeState(value) {
     const result = emptyState();
@@ -118,6 +131,14 @@ function normalizeState(value) {
         if (seen.has(id) && !assigned.has(id)) { result.equipment[slot.id]=id; assigned.add(id); }
     }
     result.statSnapshots = {base:statSnapshot(value.statSnapshots?.base),equipped:statSnapshot(value.statSnapshots?.equipped)};
+    result.observationFloor=journalSequence(value.observationFloor)||0;
+    const references=new Map();
+    for(const record of list(value.observationRefs)) {
+        const observationId=clean(record?.observationId,180),sessionId=clean(record?.sessionId,180),candidateId=clean(record?.candidateId,100),sequence=journalSequence(record?.sequence);
+        if(observationId)references.set(JSON.stringify([sessionId,observationId]),{observationId,sessionId,candidateId:seen.has(candidateId)?candidateId:'',sequence});
+    }
+    result.observationRefs=[...references.values()];
+    for(const record of result.observationRefs.splice(0,Math.max(0,result.observationRefs.length-CHARACTER_LIMITS.observationRefs)))result.observationFloor=Math.max(result.observationFloor,record.sequence||0);
     result.removedObservations=list(value.removedObservations).slice(-CHARACTER_LIMITS.removedObservations).map(record=>({observationId:clean(record?.observationId,180),sessionId:clean(record?.sessionId,180)})).filter(record=>record.observationId);
     result.removedInstances=list(value.removedInstances).slice(-CHARACTER_LIMITS.removedInstances).map(record=>({instanceKey:clean(record?.instanceKey,200),variant:normalizeCandidate(record?.variant),at:atTime(record?.at)})).filter(record=>record.instanceKey&&record.at!==null);
     result.updatedAt=atTime(value.updatedAt); return result;
@@ -159,8 +180,62 @@ export function characterSlotCompatibility(candidate, slotId) {
     if (!slot) return {compatible:false,unknown:false,warning:'Unknown equipment slot.'};
     const kinds = characterSlotKinds(candidate?.slots);
     if (!kinds.length) return {compatible:false,unknown:true,warning:'Compatible slots are unknown; confirm the placement.'};
-    const compatible = kinds.includes(slot.kind);
+    const compatible = kinds.includes('ANY') || kinds.includes(slot.kind);
     return {compatible,unknown:false,warning:compatible ? '' : `${clean(candidate?.name) || 'Item'} is not listed for ${slot.label}.`};
+}
+
+/** Auto-placement never displaces a card or decides between meaningful kinds.
+ * Paired ears/wrists/fingers use the first free canonical slot. ANY is reviewed
+ * manually, even if the observation lists an additional narrower kind. */
+export function characterAutoAssignment(snapshot,candidateId) {
+    const state=normalizeState(snapshot),candidate=state.candidates.find(item=>item.id===candidateId);
+    if(!candidate)return {ok:false,assigned:false,slot:null,reason:'missing',choices:[]};
+    const existing=CHARACTER_SLOTS.find(slot=>state.equipment[slot.id]===candidateId);
+    if(existing)return {ok:true,assigned:true,slot:existing.id,reason:'already-assigned',choices:[existing.id]};
+    const kinds=candidate.slots,choices=CHARACTER_SLOTS.filter(slot=>kinds.includes('ANY')||kinds.includes(slot.kind)).map(slot=>slot.id);
+    if(!kinds.length)return {ok:true,assigned:false,slot:null,reason:'unknown-slots',choices};
+    if(kinds.includes('ANY'))return {ok:true,assigned:false,slot:null,reason:'any-slot',choices};
+    if(kinds.length!==1)return {ok:true,assigned:false,slot:null,reason:'multiple-slot-kinds',choices};
+    const slot=choices.find(slot=>!state.equipment[slot]);
+    return {ok:true,assigned:Boolean(slot),slot:slot||null,reason:slot?'available':'occupied',choices};
+}
+
+const ADDITIVE_ESTIMATE_KEYS=new Set(['HP','MP','END','STR','STA','AGI','DEX','WIS','INT','CHA',
+    'SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE','SV_CORRUPTION','HP_REGEN','MANA_REGEN','END_REGEN']);
+const RESOURCE_GEAR_KEYS=Object.freeze({HP_MAXIMUM:'HP',MP_MAXIMUM:'MP',END_MAXIMUM:'END'});
+const FORMULA_COMPONENT_KEYS=new Set(['AC','AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','ATK','ATK_OFFENSE','ATK_ACCURACY','ATK_MELEE','ATK_RANGED','HASTE','ATTACK_SPEED']);
+
+// These estimates intentionally have a smaller claim than a client stat
+// calculator. A No Equipment observation supplies the baseline, not the server
+// rules, AA ranks, skill values, worn effects, softcaps or resource multipliers.
+function equippedEstimates(base,derived,assignedCount) {
+    const baseline=base?.stats||{},keys=[...new Set([...Object.keys(derived),...Object.keys(baseline)])],computed={};
+    for(const key of keys) {
+        const gearKey=RESOURCE_GEAR_KEYS[key]||key,gear=derived[gearKey]||{value:0,complete:assignedCount===0,unknownCandidates:[]};
+        const baseValue=has(baseline,key)?baseline[key]:null,record={value:null,complete:false,method:'unknown',baseKey:key,baseValue,baseConfirmed:base?.confirmed===true,
+            gearKey,gearValue:gear.value,unknownCandidates:[...gear.unknownCandidates],caveats:[]};
+        if(baseValue===null)record.caveats.push('No Equipment baseline is unknown.');
+        if(!gear.complete)record.caveats.push('Some assigned item values or augment inclusion are unknown.');
+        if(assignedCount===0 && baseValue!==null) {
+            record.value=baseValue;record.complete=true;record.method='observed-baseline';
+        } else if(ADDITIVE_ESTIMATE_KEYS.has(key)||has(RESOURCE_GEAR_KEYS,key)) {
+            record.method='base-plus-gear';
+            if(baseValue!==null)record.value=baseValue+gear.value;
+            record.complete=baseValue!==null&&gear.complete;
+            record.caveats.push('Additive estimate; caps, buffs, worn effects and server modifiers are not applied.');
+            if(['HP','MP','END'].includes(gearKey))record.caveats.push('Attribute-derived resource changes and percentage AA bonuses are not calculated.');
+            if(key==='AGI')record.caveats.push('Encumbrance changes are not calculated.');
+        } else if(/_CURRENT$/.test(key)) {
+            record.method='current-resource-unknown';record.gearKey=null;record.gearValue=null;
+            record.caveats.push('Current resources cannot be predicted from equipment.');
+        } else {
+            record.method=FORMULA_COMPONENT_KEYS.has(key)?'formula-unknown':'unsupported';
+            if(['AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','ATK_OFFENSE','ATK_ACCURACY'].includes(key)) {record.gearKey=null;record.gearValue=null;}
+            record.caveats.push(FORMULA_COMPONENT_KEYS.has(key)?'Client component formula, stacking, skills or cap context is unavailable; gear is not added to this component.':'No equipped-total formula is supported for this field.');
+        }
+        computed[key]=record;
+    }
+    return computed;
 }
 
 export function characterTotals(snapshot) {
@@ -178,7 +253,8 @@ export function characterTotals(snapshot) {
         }
         derived[key]={value,complete:unknown.length===0,unknownCandidates:unknown};
     }
-    return {base:clone(state.statSnapshots.base),equipped:clone(state.statSnapshots.equipped),derived,assignedCount:assigned.length,
+    return {base:clone(state.statSnapshots.base),equipped:clone(state.statSnapshots.equipped),derived,
+        computed:equippedEstimates(state.statSnapshots.base,derived,assigned.length),assignedCount:assigned.length,
         emptySlots:CHARACTER_SLOTS.filter(slot=>!state.equipment[slot.id]).map(slot=>slot.id),
         warnings:gear.flatMap(item=>item.warnings.map(message=>({candidateId:item.candidateId,slot:item.slot,message})))};
 }
@@ -195,11 +271,21 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     const timestamp = () => atTime(now());
     const nextId = () => { let id; do { id=`character-${++state.sequence}`; } while (state.candidates.some(candidate=>candidate.id===id)); return id; };
     const protectedIds = () => new Set(Object.values(state.equipment));
+    const expireReference = () => {const record=state.observationRefs.shift();if(record)state.observationFloor=Math.max(state.observationFloor,record.sequence||0);return record;};
     const trim = () => {
         const protectedSet=protectedIds();
+        while(state.observationRefs.length>CHARACTER_LIMITS.observationRefs)expireReference();
         while (state.candidates.length>CHARACTER_LIMITS.candidates || JSON.stringify(state).length>CHARACTER_LIMITS.storageBytes) {
+            // ID-only history yields to inventory under storage pressure. A
+            // monotonic journal floor expires those old replay records without
+            // guessing a physical identity from names, tiers or timestamps.
+            if(state.candidates.length<=CHARACTER_LIMITS.candidates&&state.observationRefs.length){
+                const excess=JSON.stringify(state).length-CHARACTER_LIMITS.storageBytes;let released=0;
+                while(state.observationRefs.length&&released<excess){const record=expireReference();released+=JSON.stringify(record).length+1;}
+                continue;
+            }
             const index=state.candidates.findIndex(candidate=>!protectedSet.has(candidate.id));
-            if (index>=0) {state.candidates.splice(index,1);continue;}
+            if (index>=0) {rememberRemoval(state.candidates[index]);state.candidates.splice(index,1);continue;}
             // The assigned array itself is small and remains intact. Under an
             // extreme protected-only payload, expire oldest evidence and cached
             // pixels (the exact icon ID can resolve again from the local pack).
@@ -218,8 +304,17 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         catch { if (!warned) { warned=true;warn('Character changes remain in memory because local storage could not save them.'); } return false; }
     };
     const get = id => state.candidates.find(candidate=>candidate.id===id);
+    const observationReference = evidence => evidence.observationId ? state.observationRefs.find(record=>record.observationId===evidence.observationId&&record.sessionId===evidence.sessionId) : null;
+    const expiredObservation = observation => {const sequence=journalSequence(observation.sequence);return sequence!==null&&sequence<=state.observationFloor;};
+    const rememberObservation = (candidateId,observation,evidence=evidenceRecord(observation)) => {
+        if(!evidence.observationId)return;
+        const existing=observationReference(evidence);
+        if(existing){if(existing.sequence===null)existing.sequence=journalSequence(observation.sequence);return;}
+        state.observationRefs.push({observationId:evidence.observationId,sessionId:evidence.sessionId,candidateId,sequence:journalSequence(observation.sequence)});
+    };
     const variantKey = source => JSON.stringify([fullTier(source.tier),tierFraction(source.fraction,fullTier(source.tier)),list(source.augments).map(augment=>[clean(augment.name),clean(augment.id)])]);
     const rememberRemoval = candidate => {
+        for(const reference of state.observationRefs)if(reference.candidateId===candidate.id)reference.candidateId='';
         for(const evidence of candidate.evidence) if(evidence.observationId && !state.removedObservations.some(record=>record.observationId===evidence.observationId&&record.sessionId===evidence.sessionId)) state.removedObservations.push({observationId:evidence.observationId,sessionId:evidence.sessionId});
         state.removedObservations=state.removedObservations.slice(-CHARACTER_LIMITS.removedObservations);
         if(candidate.instanceKey) {
@@ -236,6 +331,13 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     function intake(observation={},options={}) {
         const source=characterObservationInput(observation);
         const wiki=options.wikiItem || {}, evidence=evidenceRecord(observation);
+        const reference=observationReference(evidence);
+        if(reference) {
+            const prior=get(reference.candidateId);
+            if(!prior)return {ok:true,ignored:true,deduplicated:true,candidate:null};
+            return result(prior,{deduplicated:true});
+        }
+        if(expiredObservation(observation))return {ok:true,ignored:true,deduplicated:true,candidate:null};
         const instance=clean(source.instanceKey || observation.instanceKey,160);
         const instanceKey=instance ? clean(`${clean(observation.sessionId,80)}|${instance}`,200) : '';
         const variant=variantKey(source);
@@ -246,6 +348,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             const already=prior.evidence.some(record=>record.observationId && record.observationId===evidence.observationId && record.sessionId===evidence.sessionId);
             if (!already) prior.evidence=[...prior.evidence,evidence].slice(-CHARACTER_LIMITS.evidence);
             prior.seenCount=Math.min(100000,prior.seenCount+1); prior.updatedAt=timestamp();
+            rememberObservation(prior.id,observation,evidence);
             return result(prior,{deduplicated:true});
         }
         const candidate=normalizeCandidate({id:nextId(),instanceKey,name:source.name || wiki.name,wikiTitle:source.wikiTitle || wiki.wikiTitle || wiki.name,
@@ -254,15 +357,62 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             observedStatsComplete:source.statsComplete || source.observedStatsComplete,baseStats:wiki.stats || source.baseStats,
             unscaledStatKeys:source.unscaledStatKeys,
             baseStatsComplete:options.wikiItem ? true : source.baseStatsComplete,augments:source.augments,augmentStatus:source.augmentStatus,
-            level:source.level,notes:source.notes,evidence:[evidence],createdAt:timestamp(),updatedAt:timestamp()});
+            level:source.level,notes:source.notes,rawStatBlock:source.rawStatBlock ?? source.statBlockText ?? list(source.statLines).join('\n'),evidence:[evidence],createdAt:timestamp(),updatedAt:timestamp()});
         if (!candidate.name) return {ok:false,error:'An item name is required.'};
-        state.candidates.push(candidate); return result(candidate,{deduplicated:false});
+        state.candidates.push(candidate);
+        rememberObservation(candidate.id,observation,evidence);
+        const assignment=options.autoAssign===true ? autoAssign(candidate.id) : undefined;
+        return result(candidate,{deduplicated:false,...(assignment?{assignment}:{})});
     }
     function updateCandidate(id,patch={}) {
         const current=get(id); if (!current) return {ok:false,error:'Item card no longer exists.'};
-        const next=normalizeCandidate({...current,...patch,id:current.id,instanceKey:current.instanceKey,createdAt:current.createdAt,evidence:current.evidence,updatedAt:timestamp()});
+        const editedStatKeys=has(patch,'observedStats')?[...current.editedStatKeys,...Object.keys(current.observedStats),...Object.keys(normalizeCharacterStats(patch.observedStats))]:current.editedStatKeys;
+        const editedFields=[...current.editedFields,...Object.keys(patch).filter(key=>EDITABLE_CAPTURE_FIELDS.has(key))];
+        if(has(patch,'tier')||has(patch,'fraction'))editedFields.push('tier','fraction');
+        const next=normalizeCandidate({...current,...patch,editedStatKeys,editedFields,id:current.id,instanceKey:current.instanceKey,createdAt:current.createdAt,evidence:current.evidence,updatedAt:timestamp()});
         if (!next.name) return {ok:false,error:'An item name is required.'};
         state.candidates[state.candidates.indexOf(current)]=next; return result(next);
+    }
+    /** Explicit same-copy recapture for the guided flow, never general replay or
+     * title-based identity matching. New observed keys can fill gaps, including
+     * null conflict clears; deliberate edits/removals remain protected. */
+    function mergeObservation(id,observation={},options={}) {
+        const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
+        const evidence=evidenceRecord(observation),reference=observationReference(evidence);
+        if(reference&&reference.candidateId!==id)return reference.candidateId?{ok:false,error:'This observation already belongs to a different item copy.'}:{ok:true,ignored:true,deduplicated:true,candidate:null};
+        if(!reference&&expiredObservation(observation))return {ok:true,ignored:true,deduplicated:true,candidate:null};
+        const source=characterObservationInput(observation),incoming=normalizeCharacterStats(source.observedStats||source.stats),protectedKeys=new Set(current.editedStatKeys);
+        const captured=current.evidence.some(record=>record.observationId&&(record.parserVersion||record.source&&record.source!=='manual'));
+        if(!captured)for(const key of Object.keys(current.observedStats))protectedKeys.add(key);
+        const observedStats={...current.observedStats},mergedStatKeys=[],preservedStatKeys=[];
+        for(const [key,value]of Object.entries(incoming)) {
+            if(protectedKeys.has(key)){preservedStatKeys.push(key);continue;}
+            observedStats[key]=value;mergedStatKeys.push(key);
+        }
+        const patch={observedStats},editedFields=new Set(current.editedFields);
+        const slots=characterSlotKinds(source.slots);
+        if(slots.length&&!editedFields.has('slots'))patch.slots=slots;
+        const tier=fullTier(source.tier);
+        if(tier!==null&&!editedFields.has('tier')) {
+            patch.tier=tier;
+            if(tier!==current.tier&&!editedFields.has('fraction'))patch.fraction=null;
+        }
+        const effectiveTier=patch.tier??current.tier;
+        if(source.fraction!==undefined&&!editedFields.has('fraction')&&(tier===null||tier===effectiveTier))patch.fraction=source.fraction;
+        if(source.rawStatBlock!==undefined&&!editedFields.has('rawStatBlock'))patch.rawStatBlock=source.rawStatBlock;
+        if(numeric(source.level)!==null&&!editedFields.has('level'))patch.level=source.level;
+        const wiki=options.wikiItem;
+        if(wiki&&typeof wiki==='object') {
+            if(!Object.keys(current.baseStats).length){patch.baseStats=wiki.stats;patch.baseStatsComplete=wiki.statsComplete!==false&&Object.keys(normalizeCharacterStats(wiki.stats)).length>0;}
+            if(!current.wikiTitle){patch.wikiTitle=wiki.wikiTitle||wiki.name;if(current.wikiMatch==='unmatched')patch.wikiMatch='suggested';}
+            if(!current.iconId)patch.iconId=wiki.iconId;
+        }
+        if(!current.icon&&safeCharacterIcon(options.icon))patch.icon=options.icon;
+        const duplicate=Boolean(reference)||evidence.observationId&&current.evidence.some(record=>record.observationId===evidence.observationId&&record.sessionId===evidence.sessionId);
+        const next=normalizeCandidate({...current,...patch,editedStatKeys:[...protectedKeys],evidence:duplicate?current.evidence:[...current.evidence,evidence],seenCount:current.seenCount+(duplicate?0:1),updatedAt:timestamp()});
+        state.candidates[state.candidates.indexOf(current)]=next;
+        rememberObservation(id,observation,evidence);
+        return result(next,{mergedStatKeys,preservedStatKeys});
     }
     function assign(id,slotId,{replace=false,allowIncompatible=false}={}) {
         const candidate=get(id); if (!candidate) return {ok:false,error:'Item card no longer exists.'};
@@ -275,7 +425,13 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         state.equipment[slotId]=id;
         return {ok:true,replaced:previous && previous!==id ? previous : null,warning:compatibility.warning,saved:save()};
     }
-    return {intake,updateCandidate,assign,
+    function autoAssign(id) {
+        const decision=characterAutoAssignment(state,id);
+        if(!decision.assigned || decision.reason==='already-assigned')return decision;
+        const outcome=assign(id,decision.slot);
+        return outcome.ok ? {...decision,saved:outcome.saved} : {...decision,ok:false,assigned:false,slot:null,error:outcome.error};
+    }
+    return {intake,updateCandidate,mergeObservation,assign,autoAssign,
         snapshot:()=>clone(state), totals:()=>characterTotals(state),
         duplicateCandidate(id) { const source=get(id);if(!source)return {ok:false,error:'Item card no longer exists.'};
             const candidate=normalizeCandidate({...source,id:nextId(),instanceKey:'',evidence:[],seenCount:1,createdAt:timestamp(),updatedAt:timestamp()});
@@ -286,9 +442,10 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             return {ok:true,saved:save()}; },
         unassign(slotId) { if(!SLOT_BY_ID.has(slotId))return {ok:false,error:'Unknown equipment slot.'};delete state.equipment[slotId];return {ok:true,saved:save()}; },
         setMetadata(patch) { state.metadata=metadata({...state.metadata,...patch});return {ok:true,saved:save()}; },
+        beginSnapshot(patch={}) {state.metadata=metadata({...state.metadata,...patch});state.equipment={};state.statSnapshots.base=null;return {ok:true,saved:save()};},
         setStatSnapshot(kind,value) { if(!['base','equipped'].includes(kind))return {ok:false,error:'Stat snapshot must be base or equipped.'};
             state.statSnapshots[kind]=statSnapshot(value);return {ok:true,saved:save()}; },
-        reset() { for(const candidate of state.candidates)rememberRemoval(candidate);const {removedObservations,removedInstances}=state;state={...emptyState(),removedObservations,removedInstances};return {ok:true,saved:save()}; }
+        reset() { for(const candidate of state.candidates)rememberRemoval(candidate);const {removedObservations,removedInstances,observationRefs,observationFloor}=state;state={...emptyState(),removedObservations,removedInstances,observationRefs,observationFloor};return {ok:true,saved:save()}; }
     };
 }
 
@@ -300,10 +457,10 @@ export function characterShareSummary(snapshot) {
     return {schemaVersion:1,kind:'eoz-character-snapshot',metadata:clone(state.metadata),updatedAt:state.updatedAt,
         stats:{base:state.statSnapshots.base ? {stats:state.statSnapshots.base.stats,confirmed:state.statSnapshots.base.confirmed} : null,
             equipped:state.statSnapshots.equipped ? {stats:state.statSnapshots.equipped.stats,confirmed:state.statSnapshots.equipped.confirmed} : null,
-            derived:totals.derived},
+            derived:totals.derived,computed:totals.computed},
         equipment:CHARACTER_SLOTS.map(slot=>{const item=byId.get(state.equipment[slot.id]);return {slot:slot.id,label:slot.label,item:item ? {
             name:item.name,wikiTitle:item.wikiTitle,wikiMatch:item.wikiMatch,iconId:item.iconId,tier:item.tier,fraction:item.fraction,level:item.level,
             slots:item.slots,observedStats:item.observedStats,baseStats:item.baseStats,...characterItemStats(item),
             augments:clone(item.augments),augmentStatus:item.augmentStatus,slotWarning:characterSlotCompatibility(item,slot.id).warning} : null};}),
-        caveat:'Base and equipped values are separate observations. Derived item sums are partial where marked and do not predict equipped totals, caps, buffs or effects.'};
+        caveat:'Equipped estimates add No Equipment + gear; caps, buffs, worn effects and attribute-derived resource changes are omitted. AC/ATK components need unavailable formulas. Prior equipped captures stay separate.'};
 }

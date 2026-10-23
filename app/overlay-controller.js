@@ -13,7 +13,7 @@ export function overlayControllerPresentation(state = {}) {
 export function overlayGlobalPresentation(state = {}) {
     const supported=state.supported!==false&&Boolean(state.panels)&&['locked','unlocked','hidden'].includes(state.globalMode);
     if(!supported)return{supported:false,label:'Overlays',title:'Native overlay controls are available in the desktop app.',mode:null};
-    const mode=state.globalMode,label={locked:'Locked',unlocked:'Unlocked',hidden:'Hidden'}[mode],next={locked:'show and unlock all overlays',unlocked:'hide all overlays',hidden:'show and lock all overlays'}[mode];
+    const mode=state.globalMode,label={locked:'Locked',unlocked:'Unlocked',hidden:'Hidden'}[mode],next={locked:'hide all overlays',unlocked:'lock all overlays',hidden:'show and unlock all overlays'}[mode];
     return{supported:true,mode,label:`Overlays: ${label}`,title:`All overlays: ${label}. Click to ${next}. Unlocking also restores mouse input for layout editing.`};
 }
 export function mountOverlayController({ document = globalThis.document, root = document?.getElementById('overlay-controller'), button = document?.getElementById('open-native-overlays'), api = globalThis.eyeOfZommOverlays, setInterval = globalThis.setInterval, clearInterval = globalThis.clearInterval } = {}) {

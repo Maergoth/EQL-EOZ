@@ -7,8 +7,8 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 [release history](RELEASE_HISTORY.md) and [validation](../VALIDATION.md).
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.9.0, extending released 0.8.9
-Last updated: 2026-10-22
+Baseline: 0.9.1, extending released 0.9.0
+Last updated: 2026-10-23
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
 
@@ -17,8 +17,9 @@ and Linux packages to the same codebase. Combat, map and trigger data remain
 log-driven; optional 0.9.0 screen reading supplements reviewed contributions
 and Character capture. Distinguish X11 CI behavior from native Wayland and
 foreground-game acceptance. See [the feature execution plan](CAPTURE_CONTRIBUTIONS.md).
-The owner has authorized 0.9.0 publication; final changed-head checks and public
-artifact verification are tracked in [the release plan](RELEASE_090.md).
+The owner authorizes the guided Character, resize, touching-dock and corrected
+overlay-cycle follow-up. Its flow and release gates are tracked in
+[the walkthrough plan](CHARACTER_WALKTHROUGH.md).
 
 The current Intel/session follow-up is indexed in
 [OVERLAY_MAP_WORKSPACE.md](OVERLAY_MAP_WORKSPACE.md). Triggers retains the

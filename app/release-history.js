@@ -2,6 +2,82 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
   {
+    "version": "0.9.1",
+    "title": "Guided character capture and touching overlays",
+    "changes": [
+      "Build a Character snapshot through one saved walkthrough: details and AA count, inline source setup, unequip/examine, fresh No Equipment review, re-equip, ANY-slot confirmation and preview/save.",
+      "Automatically place obvious equipment, keep physical copies distinct and remove inventory cards with their top-right X. Defer ambiguous tier/copy matches and retain catalog search and offline imports.",
+      "Calculate equipped estimates from the reviewed baseline and gear without a second equipped-stat capture. Keep mitigation AC, softcap, evasion AC, offense and accuracy separate; unavailable server formulas stay unknown.",
+      "Keep written item text for correction, parse explicit Haste percentages and preserve manual edits against later OCR. Use Default Modern for calibrated screen reading.",
+      "Recover transient reads without ending the Character session. A lost source offers Resume or Choose game window and returns to the same phase. Successful snapshot completion or explicit Cancel ends the flow.",
+      "Use clear custom resize edges/corners on all four overlays. Dock touching windows with shared width above/below or shared height left/right; saved chains follow movement/resizing and detach when dragged away.",
+      "Cycle all overlays through Unlocked → Locked → Hidden → Unlocked, retaining suspended groups while globally hidden and restoring mouse input on return.",
+      "Ship one Windows/Linux version and verified wiki bootstrap. Synthetic native checks do not establish foreground game composition, all skins, production wiki writes or native Wayland."
+    ],
+    "steps": [
+      {
+        "title": "Start one guided Character capture",
+        "image": "0.9.1/character-inline-source",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Enter character name, server, class combination, level and AA count. Choose the game window inside the walkthrough and press Start reading. Use Default Modern (default_modern). Remove ANY-slot items first, then examine equipment as you unequip it. Obvious slots fill automatically; Second copy creates another physical card and the top-right X removes a mistaken one.",
+        "alt": "Character walkthrough with seven progress steps, inline synthetic game-window selection and Start reading.",
+        "caption": "Actual Character component at 13 px and 1024 CSS px using a disposable synthetic capture API. No game or player pixels.",
+        "imageSha256": "71f751f9798c64eee059a46dcef8065ef3bac23f5b76479adb2df3383adc073a"
+      },
+      {
+        "title": "Review one fresh No Equipment baseline",
+        "image": "0.9.1/character-base-stat-review",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Confirm every equipment slot is empty, then read Inventory/Stats. Only readings captured after that step can become the baseline. Review mitigation AC, AC softcap, evasion AC, offense and accuracy as separate values. Correct unread values in the one text block; later OCR will not overwrite your edits. Continue to re-equip ordinary items first and ANY items last.",
+        "alt": "No Equipment review at 20 px with separately labeled AC and attack components and one continue action.",
+        "caption": "Actual guided baseline stage at 20 px with synthetic values. Dirty edits, fresh-frame/session guards and remount persistence were checked.",
+        "imageSha256": "053df95221bc6a6d4b39c9167d62f9433270455dc7feed6234a15e136f70ded1"
+      },
+      {
+        "title": "Keep the written item block editable",
+        "image": "0.9.1/character-item-stat-review",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "The item editor retains bounded pane text, including lines the parser does not understand. Correct an explicit numeric stat such as Haste: 16% and Save item to reparse it. Conflicting values stay unknown; a named effect alone cannot invent Haste. Advanced parsed values, augment inclusion, wiki match and catalog bases remain available without routine walkthrough checkboxes.",
+        "alt": "Written synthetic item text with explicit Haste percentage, retained unknown inscription and one Save item action.",
+        "caption": "Actual item editor with synthetic evidence. The fixture corrects Haste, saves it and confirms a subsequent read cannot overwrite the correction.",
+        "imageSha256": "1669749326bd2a347d247c8c48a4fe30bb28deb02785abd2d633910f810cdea1"
+      },
+      {
+        "title": "Confirm slots and save the snapshot",
+        "image": "0.9.1/character-walkthrough-review",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Confirm ANY and ambiguous placements together, then preview the character. Reading continues through source recovery and canceled saves. Successfully copying or saving the snapshot ends Character capture once; Cancel walkthrough is also explicit. Catalog search, offline item screenshots and manual corrections remain in Equipment and captured items.",
+        "alt": "Final guided snapshot step with completed progress markers and a synthetic ANY item assigned to Charm.",
+        "caption": "Actual final guided stage with synthetic equipment. Canceled Save, successful Save/Copy and repeated export completion were exercised with fake share APIs.",
+        "imageSha256": "86219311c0341832b74473b8e174e8ddcc1985ead57b532e2306b0b8b2e9b46f"
+      },
+      {
+        "title": "See equipped estimates as gear changes",
+        "image": "0.9.1/character-equipped-estimates",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "No Equipment, assigned gear and equipped estimates have separate columns. Removing or moving an item recalculates additive values immediately. Partial readings carry an asterisk. AC/ATK component conversion, caps, buffs and exact Haste stacking depend on unavailable server context, so unsupported totals remain Unknown and each row explains its limits on hover. A second equipped-stat capture is unnecessary.",
+        "alt": "Calculated stat table with No Equipment, Gear and Equipped estimate columns and distinct unknown AC and attack conversions.",
+        "caption": "Actual calculated table with synthetic values. The fixture verifies gear removal, HP/STR updates and honest unknown formula components.",
+        "imageSha256": "fe924d25ef5c5b1a1870323673666173e31452d363140d2f41caabc9113bb94b"
+      },
+      {
+        "title": "Resize and dock every unlocked overlay",
+        "image": "0.9.1/overlay-resize",
+        "view": "settings",
+        "action": "Open Settings",
+        "copy": "Every unlocked panel has axis and diagonal resize edges, plus a visible corner grip. Move a panel to touch another: above/below share width, left/right share height. Saved follower chains move and resize together; drag away to detach. The header cycles Unlocked → Locked → Hidden → Unlocked. Global Hidden suspends the group; hiding one panel detaches affected links.",
+        "alt": "Actual unlocked Parse overlay with synthetic combat totals, separate drag grip and visible bottom-right resize corner.",
+        "caption": "Actual native Windows overlay with a disposable synthetic session. All 32 edge/corner inputs, client hit tests, touching docks and the corrected cycle were exercised separately.",
+        "imageSha256": "48a3fc4efcb42bafc82a19b37daa89a9d163e2d7c97b1f4dfa7cf34d6cf4f678"
+      }
+    ]
+  },
+  {
     "version": "0.9.0",
     "title": "Reviewed wiki contributions and character snapshots",
     "changes": [

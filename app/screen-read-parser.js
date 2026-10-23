@@ -1,5 +1,5 @@
 // OCR proposals only: never scale an item, infer drop sources or publish a fact.
-export const SCREEN_READ_PARSER_VERSION = 4;
+export const SCREEN_READ_PARSER_VERSION = 5;
 const clean = value => String(value ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim();
 const number = value => Number(String(value).replace(/,/g,''));
 const statNames = {
@@ -8,8 +8,8 @@ const statNames = {
     Intelligence:'int', INT:'int', Charisma:'cha', CHA:'cha', Weight:'weight', Damage:'damage', DMG:'damage', Delay:'delay',
     'SV Poison':'resistPoison', 'SV Magic':'resistMagic', 'SV Disease':'resistDisease', 'SV Fire':'resistFire',
     'SV Cold':'resistCold', 'SV Corruption':'resistCorruption', 'SV Void':'resistCorruption',
-    'HP Regen':'hpRegen', 'Mana Regen':'manaRegen', 'End Regen':'enduranceRegen', 'Attack Speed':'attackSpeed',
-    'Required Level':'requiredLevel', 'Recommended Level':'recommendedLevel', 'Base Dmg':'damage','Dmg Bon':'damageBonus',Attack:'attack',
+    'HP Regen':'hpRegen', 'Mana Regen':'manaRegen', 'End Regen':'enduranceRegen', 'Endurance Regen':'enduranceRegen', 'Attack Speed':'attackSpeed', Haste:'haste', Range:'range',
+    'Required Level':'requiredLevel', 'Recommended Level':'recommendedLevel', 'Base Dmg':'damage','Dmg Bon':'damageBonus','Damage Bonus':'damageBonus',Attack:'attack',
     'SV. Poison':'resistPoison','SV. Magic':'resistMagic','SV. Disease':'resistDisease','SV. Fire':'resistFire','SV. Cold':'resistCold','SV. Void':'resistCorruption'
 };
 const escaped = value => value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
@@ -75,6 +75,20 @@ function itemRegions(words) {
     return regions;
 }
 function wordsInPane(words,pane){return words.filter(word=>word.bbox&&word.bbox.x0>=pane.x&&word.bbox.x1<=pane.right&&word.bbox.y0>=pane.y&&word.bbox.y0<pane.bottom&&word.bbox.y1-word.bbox.y0<=pane.font*2.2);}
+function itemStatBlock(text,name=''){
+    const lines=String(text).split(/\r?\n/).map(clean).filter(Boolean),start=lines.findIndex(line=>nameWithoutChrome(line)!==name&&(/^(?:No (?:Trade|Drop)|Class\s*:|Race\s*:|Slot\s*:|Tier\s*\d|Size\s*:|AC\b|HP\b)/i.test(line)||Object.keys(statNames).some(label=>new RegExp(`(?:^|[ \\t|])${escaped(label)}[ \\t]*[:=;]?[ \\t]*(?:%[ \\t]*)?[+-]?[\\d,]+`,'i').test(line))));
+    if(start<0)return '';
+    const content=lines.slice(start),done=content.findIndex(line=>/^Done$/i.test(line)),stop=content.findIndex(line=>/^\[|^(?:You (?:say|tell|have (?:slain|entered)|hit|slash)|Your Location|OOC\b|Auction\b)/i.test(line));
+    const end=Math.min(done<0?content.length:done,stop<0?content.length:stop),bounded=content.slice(0,end);
+    // Without an observed closing button, stop at the last recognizable item
+    // row. Unknown intervening lines remain editable evidence; below-pane chat
+    // and world labels never become part of a supposedly complete stat block.
+    let last=bounded.length-1;
+    if(done<0){last=bounded.findLastIndex(line=>/^(?:No (?:Trade|Drop)|Class\s*:|Race\s*:|Slot\s*:|Tier\b|Size\b|Modified\b|(?:Click|Worn|Focus|Proc) Effect\s*:|(?:\w+ )?Exaltation\s*:|Cast Time\s*:|Cooldown\s*:|Required Level\b|Recommended Level\b)/i.test(line)||Object.keys(statNames).some(name=>new RegExp(`(?:^|[ \\t|])${escaped(name)}[ \\t]*[:=;]?[ \\t]*(?:%[ \\t]*)?[+-]?[\\d,]+`,'i').test(line)));}
+    const result=[];let length=0;
+    for(const line of bounded.slice(0,last+1).slice(0,60)){const value=line.slice(0,512);if(length+value.length+1>8192)break;result.push(value);length+=value.length+1;}
+    return result.join('\n');
+}
 function nameWithoutChrome(text){let name=clean(text).replace(/^(?:Item(?: Name)?|Name)\s*:\s*/i,'').replace(/\s*\((?:Augmented|Modified)[^)]*\).*$/i,'');const tier=name.match(/^(.+?\+\d+)\b/);return tier?tier[1]:name;}
 function paneName(words,pane){
     if(pane.name)return {name:pane.name,title:''};
@@ -87,23 +101,53 @@ function paneName(words,pane){
         if(/[a-z]{3}/i.test(value)&&! /^(?:Lore|No Trade|No Trace|No Drop|Class|Race|Tier|Description)\b/i.test(value))return {name:nameWithoutChrome(value),title};}
     return {name:title?nameWithoutChrome(title):'',title};
 }
+function modernCharacterComponents(text,confidence){
+    const entries=[],integer='([+-]?[\\d,]+)',valid=value=>value!==undefined&&!/^[-+]?0\d/.test(value)&&Number.isSafeInteger(number(value));
+    // Default Modern XML: AC = Mitigation / Mitigation Softcap | Evasion;
+    // Attack = Offense | Accuracy. OCR may read a vertical divider as a slash.
+    // These are independent components, never resource maxima or melee/ranged.
+    const ac=text.match(new RegExp(`^AC[ \\t]*[:=;]?[ \\t]*${integer}(?:[ \\t]*/[ \\t]*${integer})?(?:[ \\t]*[|/][ \\t]*${integer})?(?=$|[ \\t])`,'im'));
+    if(ac&&/[\/|]/.test(ac[0]))for(const [index,key]of [[1,'acMitigation'],[2,'acMitigationSoftcap'],[3,'acEvasion']])if(valid(ac[index]))entries.push(field(key,ac[0],number(ac[index]),confidence));
+    const attack=text.match(new RegExp(`^(?:Attack|ATK)[ \\t]*[:=;]?[ \\t]*${integer}(?:[ \\t]*[|/][ \\t]*${integer})?(?=$|[ \\t])`,'im'));
+    if(attack&&/[\/|]/.test(attack[0]))for(const [index,key]of [[1,'attackOffense'],[2,'attackAccuracy']])if(valid(attack[index]))entries.push(field(key,attack[0],number(attack[index]),confidence));
+    return entries;
+}
 function stats(text, confidence, { character = false, modern = false } = {}) {
     text=text.replace(/\bSV\.(?=[a-z])/gi,'SV. ');
-    const fields = [];
+    const fields = character&&modern?modernCharacterComponents(text,confidence):[];
     // Long labels first avoid parsing an item's HP Regen as HP.
     for (const [label,key] of Object.entries(statNames).sort((a,b)=>b[0].length-a[0].length)) {
-        const regex = new RegExp(`(?:^|[ \\t|])${escaped(label)}[ \\t]*[:=;]?[ \\t]*${key==='attackSpeed'?'(?:%[ \\t]*)?':''}([+-]?[\\d,]+(?:\\.\\d+)?)[ \\t]*(?:\\/[ \\t]*([\\d,]+))?(?=$|[ \\t%|+])`,'im');
+        const percent=key==='attackSpeed'||key==='haste';
+        const regex = new RegExp(`(?:^|[ \\t|])${escaped(label)}[ \\t]*[:=;]?[ \\t]*${percent?'(?:%[ \\t]*)?':''}([+-]?[\\d,]+(?:\\.\\d+)?)[ \\t]*(?:\\/[ \\t]*([\\d,]+))?(?=$|[ \\t%|+])`,'im');
         const match = text.match(regex);
-        if (!match || (label==='HP' && /HP\s+Regen/i.test(match[0])) || /^[-+]?0\d/.test(match[1]) || key!=='attackSpeed'&&text.slice(match.index+match[0].length).startsWith('%')) continue;
+        if (!match || (label==='HP' && /HP\s+Regen/i.test(match[0])) || /^[-+]?0\d/.test(match[1]) || !percent&&text.slice(match.index+match[0].length).startsWith('%')) continue;
+        if(key==='haste'&&/^(?:Click|Worn|Focus|Proc) Effect\s*:/i.test(text.slice(0,match.index).split('\n').at(-1).trim()))continue;
         // Modern attributes/resources are displayed as explicit pairs. A lone
         // "1510" may be a lost slash/current value, not a four-digit attribute.
-        if(character&&modern&&(['str','sta','int','wis','agi','dex','cha','hp','mana','endurance','resistPoison','resistMagic','resistDisease','resistFire','resistCold','resistCorruption'].includes(key)&&match[2]===undefined||key==='attack'))continue;
+        if(character&&modern&&(['str','sta','int','wis','agi','dex','cha','hp','mana','endurance','resistPoison','resistMagic','resistDisease','resistFire','resistCold','resistCorruption'].includes(key)&&match[2]===undefined||['attack','ac'].includes(key)))continue;
         if (character && ['hp','mana','endurance'].includes(key) && match[2] !== undefined) {
             fields.push(field(`${key}Current`,match[0],number(match[1]),confidence));
             fields.push(field(`${key}Maximum`,match[0],number(match[2]),confidence));
         } else fields.push(field(key,match[0],number(match[1]),confidence));
     }
     const seen = new Set(); return fields.filter(entry => { if (seen.has(entry.key) || !Number.isFinite(entry.value)) return false; seen.add(entry.key); return true; });
+}
+// An explicit editor/reparse entry point. This reads observed written numbers
+// only, never a catalog, item tier multiplier, effect rank or guessed digit.
+export function parseItemStatBlock(text){
+    const rawText=typeof text==='string'?text:'',lines=rawText.split(/\r?\n/),warnings=[];
+    if(typeof text!=='string'||rawText.length>8192||lines.length>60)return {fields:[],conflicts:[],warnings:['Item stat text must contain at most 8,192 characters and 60 lines.']};
+    const values=new Map(),boundary=new RegExp(`(?=\\b(?:${Object.keys(statNames).sort((a,b)=>b.length-a.length).map(escaped).join('|')})[ \\t]*[:=;]?[ \\t]*(?:%[ \\t]*)?[+-]?[\\d,]+)`,'gi');
+    for(const line of lines){
+        if(/^(?:Click|Worn|Focus|Proc) Effect\s*:|^(?:\w+ )?Exaltation\s*:|^Item(?: Name)?\s*:/i.test(clean(line)))continue;
+        for(const part of line.split(boundary))for(const entry of stats(part,0)){
+            const previous=values.get(entry.key)||[];previous.push(entry);values.set(entry.key,previous);
+        }
+    }
+    const fields=[],conflicts=[];
+    for(const [key,entries]of values){if(new Set(entries.map(entry=>entry.value)).size>1)conflicts.push(key);else fields.push(entries[0]);}
+    if(conflicts.length)warnings.push(`Conflicting written values remain unknown: ${conflicts.join(', ')}.`);
+    return {fields,conflicts,warnings};
 }
 function itemName(lines) {
     const labeled = lines.find(line => /^(?:Item(?: Name)?|Name)\s*:/i.test(line));
@@ -129,7 +173,7 @@ export function screenReadRefinementRegions(input={}) {
     }
     if(tables.length)regions.push({role:'item-stats',...(tables.length===1?tables[0]:{tiles:tables,preprocessing:'source-threshold'}),layout:'block',scale:4});
     const character=characterRegion(words,panes);
-    if(character){if(regions.length===2)regions.shift();regions.push({role:'character-stats',x:character.x,y:character.y,width:character.right-character.x,height:character.bottom-character.y,preprocessing:'inverted',layout:'block',scale:3});}
+    if(character){if(regions.length===2)regions.shift();const base={x:character.x,y:character.y,width:character.right-character.x,height:character.bottom-character.y},components=modernComponentRegions(words,character);regions.push({role:'character-stats',...(components.length?{tiles:[base,...components]}:base),preprocessing:'inverted',layout:components.length?'sparse':'block',scale:3});}
     return regions.slice(0,2);
 }
 function characterRegion(words,panes){
@@ -139,6 +183,29 @@ function characterRegion(words,panes){
     const font=Math.max(3,vitals.bbox.y1-vitals.bbox.y0),heading=available.find(word=>/^Stats$/i.test(clean(word.text))&&word.bbox.x0>vitals.bbox.x0&&Math.abs(word.bbox.y0-vitals.bbox.y0)<font);
     if(!heading)return null;
     return {x:Math.max(0,vitals.bbox.x0-font*.5),y:Math.max(0,vitals.bbox.y0-font*.5),right:heading.bbox.x0+font*24,bottom:vitals.bbox.y0+font*25,font};
+}
+function modernComponentRegions(words,character){
+    const rows=wordRows(words.filter(word=>word.bbox&&word.bbox.x0>=character.x&&word.bbox.x1<=character.right&&word.bbox.y0>=character.y&&word.bbox.y1<=character.bottom&&word.bbox.y1-word.bbox.y0<=character.font*1.8));
+    const ac=rows.find(row=>/^AC\b/i.test(row.words.map(word=>word.text).join(' '))),fraction=ac?.words.find(word=>/^\d+\/\d+$/.test(clean(word.text)));
+    const divider=ac?.words.find(word=>/^[|\[\]Il](?:\d|$)/.test(clean(word.text)))||ac?.words.find(word=>fraction&&word.bbox.x0>fraction.bbox.x1&&/^1\d+$/.test(clean(word.text))&&Number(word.confidence)<50);
+    const attack=rows.find(row=>distance(label(row.words[0]?.text),'attack')<=1&&!row.words.some(word=>/^Speed$/i.test(clean(word.text))));
+    if(!divider||!attack)return [];
+    const after=attack.words.slice(1),nextLabel=after.findIndex(word=>/[a-z]/i.test(clean(word.text)));
+    const numeric=after.slice(0,nextLabel<0?after.length:nextLabel).filter(word=>/^[\d,\/|]+$/.test(clean(word.text))),font=Math.max(3,attack.words[0].bbox.y1-attack.words[0].bbox.y0),cut=divider.bbox.x0;
+    if(!numeric.length||numeric.some(word=>/[\/|]/.test(clean(word.text)))||cut-numeric[0].bbox.x0<font*1.2||Math.max(...numeric.map(word=>word.bbox.x1))-cut<font*1.2)return [];
+    const y=Math.min(...numeric.map(word=>word.bbox.y0))-font*.3,height=Math.max(...numeric.map(word=>word.bbox.y1))-y+font*.3,left=numeric[0].bbox.x0-font*.3,right=Math.max(...numeric.map(word=>word.bbox.x1))+font*.3;
+    // The same observed AC/Attack divider column is fixed by Default Modern's
+    // XML. Crop pixels on either side; never split the digits in OCR text.
+    return [{component:'attackOffense',x:left,y,width:cut-font*.15-left,height},
+        {component:'attackAccuracy',x:cut+font*.35,y,width:right-cut-font*.35,height},
+        ...(/^1\d+$/.test(clean(divider.text))?[{component:'acEvasion',x:cut+font*.35,y:divider.bbox.y0-font*.3,width:divider.bbox.x1-cut,height:divider.bbox.y1-divider.bbox.y0+font*.6}]:[])].filter(tile=>tile.width>=4&&tile.height>=4);
+}
+function refinedCharacterComponents(words,confidence){
+    const fields=[];
+    for(const key of ['attackOffense','attackAccuracy','acEvasion']){const selected=words.filter(word=>word.component===key&&clean(word.text));
+        if(selected.length!==1||!/^\d[\d,]*$/.test(clean(selected[0].text))||/^0\d/.test(clean(selected[0].text))||Number(selected[0].confidence)<85)continue;
+        fields.push(field(key,`Observed ${key} column OCR: ${selected[0].text}`,number(selected[0].text),Math.min(confidence,Number(selected[0].confidence))));}
+    return fields;
 }
 function refinedWords(input,baseWords){
     const words=baseWords.map(word=>({...word}));
@@ -172,14 +239,17 @@ function tableStats(text,words,confidence,options={}){
     return entries.filter(entry=>!rows.some(row=>row.words.some(word=>/^[+-]?\d(?:\.\d+)?$/.test(clean(word.text))&&Number(word.confidence)<85&&number(word.text)===entry.value)&&stats(row.words.map(value=>value.text).join(' '),confidence,options).some(value=>value.key===entry.key)));
 }
 function numericDisagreements(base,read,options={}){
-    const conflicts=new Set(),numeric=value=>clean(value).match(/^([+-]?[\d,]+(?:\.\d+)?)(?:\/(\d+))?(?:%|\+)?$/);
+    const conflicts=new Set(),numeric=value=>{const text=clean(value);return /^[+-]?[\d,]+(?:\.\d+)?(?:[\/|][+-]?[\d,]+(?:\.\d+)?)*(?:%|\+)?$/.test(text)?text.replace(/[%+]$/,'').split(/[\/|]/):null;};
     // Compare the same observed numeric box even when the second pass cannot
     // read its label ("HP Regen 1" versus "HP R ... 11"). Do not reconstruct a
     // label or pick the larger/confident value: both remain evidence, unknown.
     for(const row of wordRows(base)){const text=row.words.map(word=>word.text).join(' ');
-        for(const entry of stats(text,0,options)){const start=text.indexOf(entry.raw);if(start<0)continue;let offset=0;
-            for(const word of row.words){const at=offset;offset+=String(word.text).length+1;const parts=numeric(word.text),component=entry.key.endsWith('Maximum')?2:1;
-                if(!parts||at<start||at>=start+entry.raw.length||parts[component]===undefined||number(parts[component])!==entry.value)continue;
+        for(const entry of stats(text,0,options)){const start=text.indexOf(entry.raw);if(start<0)continue;let offset=0,numericOffset=0;
+            const wanted=entry.key.endsWith('Maximum')||['acMitigationSoftcap','attackAccuracy'].includes(entry.key)?1:entry.key==='acEvasion'?(/\/[ \t]*[\d,]+[ \t]*[|/]/.test(entry.raw)?2:1):0;
+            for(const word of row.words){const at=offset;offset+=String(word.text).length+1;const parts=numeric(word.text);
+                if(!parts||at<start||at>=start+entry.raw.length)continue;
+                const component=wanted-numericOffset;numericOffset+=parts.length;
+                if(parts[component]===undefined||number(parts[component])!==entry.value)continue;
                 const box=word.bbox,height=Math.max(1,box.y1-box.y0),center=(box.x0+box.x1)/2;
                 const candidate=read.find(other=>other?.bbox&&Number(other.confidence)>=50&&numeric(other.text)&&
                     Math.abs(other.bbox.y0-box.y0)<Math.max(3,height*.55)&&center>=other.bbox.x0-height*.4&&center<=other.bbox.x1+height*.4);
@@ -203,7 +273,9 @@ export function parseScreenRead(input = {}) {
     const itemText=region?wordLines(wordsInPane(words,region)):raw,identity=region?paneName(words,region):{name:itemName(raw.split(/\r?\n/).map(clean)),title:''};
     const lines=itemText.split(/\r?\n/).map(clean).filter(Boolean),name=identity.name.slice(0,240);
     if (name && name.length > 2) {
-        const fields = [field('name',name,name,confidence), ...stats(itemText,confidence)];
+        const rawStatBlock=itemStatBlock(itemText,name);
+        const parsedStats=parseItemStatBlock(rawStatBlock);
+        const fields = [field('name',name,name,confidence), ...parsedStats.fields.map(entry=>({...entry,confidence}))];
         // Region OCR sees a compact two-column examine stat table more clearly
         // than a whole scene. Punctuation after a label is OCR evidence, not a
         // decimal repair in the value; missing numeric punctuation stays absent.
@@ -212,7 +284,11 @@ export function parseScreenRead(input = {}) {
             const aligned=alignedTableWords(region?wordsInPane(baseWords,region):baseWords,selected);
             return {...pass,words:aligned,rawText:wordLines(selected)||String(pass.text||''),text:aligned.length?wordLines(aligned):panes.length<=1&&!pass.tiles?.length?String(pass.text||''):''};
         }).filter(pass=>pass.text);
-        const statPasses=relevantPasses.filter(pass=>pass.role==='item-stats'),conflicts=new Set();
+        const statPasses=relevantPasses.filter(pass=>pass.role==='item-stats'),conflicts=new Set(parsedStats.conflicts);
+        // Keep baseline and independently read refinements as written evidence,
+        // not outgoing wiki stats. A later explicit reparse can surface conflicts.
+        const rawBlocks=[rawStatBlock,...statPasses.map(pass=>clean(pass.rawText))].filter(Boolean),retainedText=rawBlocks.join('\n\nAdditional observed stat OCR:\n').split('\n').slice(0,60).join('\n').slice(0,8192);
+        if(retainedText)fields.push(field('rawStatBlock',retainedText,retainedText,confidence));
         for(const pass of statPasses)for(const key of numericDisagreements(region?wordsInPane(baseWords,region):baseWords,pass.words||[])){conflicts.add(key);const index=fields.findIndex(entry=>entry.key===key);if(index>=0)fields.splice(index,1);}
         for(const pass of statPasses)for(const entry of tableStats(pass.text.replace(/\b(AC|HP|Weight)\.(?=[ \t])/g,'$1'),pass.words||[],Math.min(confidence,Number(pass.confidence)||0))){
             const existing=fields.findIndex(value=>value.key===entry.key);if(existing<0&&!conflicts.has(entry.key))fields.push(entry);else if(existing>=0&&fields[existing].value!==entry.value){conflicts.add(entry.key);fields.splice(existing,1);}
@@ -235,21 +311,21 @@ export function parseScreenRead(input = {}) {
         if (/\bNo Trade\b|\bNo Drop\b/i.test(itemText)) fields.push(field('noTrade','No Trade',true,confidence));
         const initialPane=initialPanes[paneIndex],initialName=initialPane?paneName(baseWords,initialPane).name:itemName(raw.split(/\r?\n/).map(clean));
         observations.push({ ...metadata, parser:{name:'item-examine',version:SCREEN_READ_PARSER_VERSION},
-            subject:{kind:'item',name}, fields, evidence:{text:[...fields.map(entry=>entry.raw),...(initialName&&initialName!==name?[`Initial item name OCR: ${initialName}`]:[]),...relevantPasses.map(pass=>`${pass.role} region OCR:\n${clean(pass.rawText).slice(0,3000)}`),...(conflicts.size?[`Conflicting OCR values left unknown: ${[...conflicts].join(', ')}`]:[])].join('\n').slice(0,16384),imageId:null} });
+            subject:{kind:'item',name}, fields, evidence:{text:[...(retainedText?[`Observed item stat block:\n${retainedText}`]:[]),...fields.filter(entry=>entry.key!=='rawStatBlock').map(entry=>entry.raw),...(initialName&&initialName!==name?[`Initial item name OCR: ${initialName}`]:[]),...relevantPasses.map(pass=>`${pass.role} region OCR:\n${clean(pass.rawText).slice(0,3000)}`),...(conflicts.size?[`Conflicting OCR values left unknown: ${[...conflicts].join(', ')}`]:[])].join('\n').slice(0,16384),imageId:null} });
     }
     }
     // A visible inventory/stat heading is required; item-only panes cannot become
     // an authoritative character total. Geometry excludes the examine region.
-    const character=characterRegion(words,panes),characterWords=character?words.filter(word=>word.bbox&&word.bbox.x0>=character.x&&word.bbox.x1<=character.right&&word.bbox.y0>=character.y&&word.bbox.y1<=character.bottom):[],characterText=character?wordLines(characterWords):words.length?wordLines(words.filter(word=>!panes.some(pane=>wordsInPane([word],pane).length))):raw;
+    const character=characterRegion(words,panes),characterWords=character?words.filter(word=>word.bbox&&word.bbox.x0>=character.x&&word.bbox.x1<=character.right&&word.bbox.y0>=character.y&&word.bbox.y1<=character.bottom&&word.bbox.y1-word.bbox.y0<=character.font*1.8):[],characterText=character?wordLines(characterWords):words.length?wordLines(words.filter(word=>!panes.some(pane=>wordsInPane([word],pane).length))):raw;
     if (character||/\bInventory\b|^Character Stats\b/im.test(characterText)) {
         const fields = stats(characterText,confidence,{character:true,modern:!!character}),conflicts=new Set(),evidence=[characterText];
-        for(const pass of (Array.isArray(input.refinements)?input.refinements:[]).slice(0,2).filter(pass=>pass.role==='character-stats')){const mapped=alignedTableWords(characterWords,pass.words||[]),text=wordLines(mapped)||String(pass.text||'');evidence.push(wordLines(pass.words||[])||String(pass.text||''));
-            for(const key of numericDisagreements(characterWords,pass.words||[],{character:true,modern:!!character})){conflicts.add(key);const index=fields.findIndex(entry=>entry.key===key);if(index>=0)fields.splice(index,1);}
-            for(const entry of stats(text,Math.min(confidence,Number(pass.confidence)||0),{character:true,modern:!!character})){
+        for(const pass of (Array.isArray(input.refinements)?input.refinements:[]).slice(0,2).filter(pass=>pass.role==='character-stats')){const ordinary=(pass.words||[]).filter(word=>!word.component&&(!character||word.bbox&&word.bbox.y1-word.bbox.y0<=character.font*1.8)),mapped=alignedTableWords(characterWords,ordinary),text=wordLines(mapped)||String(pass.text||'');evidence.push(wordLines(pass.words||[])||String(pass.text||''));
+            for(const key of numericDisagreements(characterWords,ordinary,{character:true,modern:!!character})){conflicts.add(key);const index=fields.findIndex(entry=>entry.key===key);if(index>=0)fields.splice(index,1);}
+            for(const entry of [...stats(text,Math.min(confidence,Number(pass.confidence)||0),{character:true,modern:!!character}),...refinedCharacterComponents(pass.words||[],confidence)]){
                 if(entry.key.startsWith('resist')&&(pass.words||[]).some(word=>String(word.text).includes(`${entry.value}/`)&&Number(word.confidence)<95))continue;
                 const existing=fields.findIndex(value=>value.key===entry.key);if(existing<0&&!conflicts.has(entry.key))fields.push(entry);else if(existing>=0&&fields[existing].value!==entry.value){conflicts.add(entry.key);fields.splice(existing,1);}}
         }
-        if (fields.filter(entry=>['hpCurrent','hpMaximum','manaCurrent','manaMaximum','ac','str','sta','agi','dex','wis','int','cha'].includes(entry.key)).length>=3) {
+        if (fields.filter(entry=>['hpCurrent','hpMaximum','manaCurrent','manaMaximum','ac','acMitigation','acMitigationSoftcap','acEvasion','attackOffense','attackAccuracy','str','sta','agi','dex','wis','int','cha'].includes(entry.key)).length>=3) {
             observations.push({ ...metadata, parser:{name:'character-stats',version:SCREEN_READ_PARSER_VERSION},
                 subject:{kind:'character',name:clean(input.character).slice(0,80)},fields,
                 evidence:{text:[...fields.map(entry=>entry.raw),...evidence,...(conflicts.size?[`Conflicting OCR values left unknown: ${[...conflicts].join(', ')}`]:[])].join('\n').slice(0,16384),imageId:null} });

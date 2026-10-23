@@ -19,6 +19,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/contribution-queue.js',
     'app/contribution-model.js',
     'app/character-model.js',
+    'app/character-walkthrough.js',
     'app/character-catalog.js',
     'app/item-base-recovery.js',
     'app/item-base-review.js',
@@ -97,6 +98,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'desktop/preload.cjs',
     'desktop/app-updater.cjs',
     'desktop/overlay-host.cjs',
+    'desktop/overlay-docking.cjs',
     'desktop/overlay-map-policy.cjs',
     'desktop/overlay-preload.cjs'
 ]);

@@ -40,6 +40,7 @@ jobs:
             npm run test:main-cache
             npm run test:map-overlay-3d
             npm run test:native-overlays -- --screenshots ci-screenshots/linux
+            npm run test:overlay-resize
             npm run test:intel-stability
             npm run test:discovery-notices
             npm run test:appearance -- --screenshots ci-screenshots/linux-appearance
@@ -48,6 +49,7 @@ jobs:
             npm run test:modern-ocr
             npm run test:capture-calibration -- --screenshots ci-screenshots/linux-capture-calibration
             npm run test:capture-workspace -- --screenshots ci-screenshots/linux-capture-workspace
+            npm run test:character-walkthrough -- --screenshots ci-screenshots/linux-character-walkthrough
             npm run test:system-fonts -- --screenshots ci-screenshots/linux-system-fonts
           '
       - name: Fetch production bootstrap data

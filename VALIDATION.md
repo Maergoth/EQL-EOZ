@@ -1,4 +1,24 @@
-# Validation report — v0.9.0
+# Validation report — v0.9.1
+
+## 0.9.1 guided Character and overlay layout
+
+The owner authorizes publishing the completed walkthrough, resizing, touching
+docks and **Unlocked → Locked → Hidden** cycle. The active source map and gates
+are in [CHARACTER_WALKTHROUGH.md](docs/CHARACTER_WALKTHROUGH.md). Every platform
+must pass on the final changed head; exact CI/public-download results belong to
+the release PR and private publication ledger. Earlier records below describe
+their stated historical heads.
+
+Local synthetic native checks exercise the complete guided flow at 1024px and
+13/20px fonts, stage-scoped base reads, separate AC/ATK components, raw Haste
+correction, durable manual edits and removal, ANY-slot review, source replacement,
+and copy/save completion versus cancellation. Source capture tests retain the
+Character session across transient failures and allow explicit lost-source
+recovery. Actual Windows native checks resize all 32 panel edge/corner targets,
+verify client hit tests, touching shared dimensions, resize following and cycle.
+The full source suite, exact-ASAR contracts and physical 238-file OCR manifest
+also pass locally. These fixtures do not establish live-client totals, all UI
+skins, foreground-game compositing, production wiki writes or native Wayland.
 
 ## 0.9.0 feature observations and release scope
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';import {EventEmitter} from 'node:events';import {createRequire} from 'node:module';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';
-const {CaptureHost}=createRequire(import.meta.url)('../desktop/capture-host.cjs');
+const {CaptureHost,preferredCaptureSource}=createRequire(import.meta.url)('../desktop/capture-host.cjs');
 const {captureOcrScale}=createRequire(import.meta.url)('../desktop/capture-image.cjs');
 assert.equal(captureOcrScale({width:748,height:331}),3,'small game text is enlarged without a multi-pass backlog');
 assert.equal(captureOcrScale({width:1280,height:720}),2);
@@ -11,6 +11,9 @@ assert.equal(captureOcrScale({width:900,height:8192}),1,'tall PNGs cannot exceed
 assert.equal(captureOcrScale({width:1500,height:2500}),2);
 assert.equal(captureOcrScale({width:1500,height:3000}),1);
 const origin='http://127.0.0.1:53147';
+assert.equal(preferredCaptureSource([{id:'screen:1',name:'EverQuest'},{id:'window:wiki',name:'EverQuest - Mozilla Firefox'}]),null,'a display or browser title is never an automatic game recommendation');
+assert.equal(preferredCaptureSource([{id:'window:game',name:'EverQuest'},{id:'window:launcher',name:'EverQuest LaunchPad'}]),'window:game');
+assert.equal(preferredCaptureSource([{id:'window:game',name:'EverQuest Legends'},{id:'window:other',name:'EverQuest (Synthetic)'}]),null,'multiple game windows require a choice');
 function png(id='one',width=100,height=40){const header=Buffer.alloc(33);Buffer.from([137,80,78,71,13,10,26,10]).copy(header);header.writeUInt32BE(13,8);header.write('IHDR',12,'ascii');header.writeUInt32BE(width,16);header.writeUInt32BE(height,20);return Buffer.concat([header,Buffer.from(id)]);}
 function fixture(){
     let now=1000,ocrPending=null;const observations=[],copies=[],handlers=new Map(),crops=[],submitted=[];
@@ -28,7 +31,8 @@ function fixture(){
     const host=new CaptureHost({electron,origin,getMainWindow:()=>main,journal,ocr,now:()=>now,onObservation:value=>observations.push(value)});
     host.startSource=async()=>{host.phase='running';host.emitStatus();};
     return {host,main,event:{sender:contents,senderFrame:contents.mainFrame},journal,ocr,observations,copies,handlers,crops,submitted,
-        tick(){now+=100;},frame(id='one',width=100,height=40){return {bytes:png(id,width,height),width,height,capturedAt:now};},
+        tick(){now+=100;},advance(ms){now+=ms;},frame(id='one',width=100,height=40){return {bytes:png(id,width,height),width,height,capturedAt:now};},
+        reject(error=Error('Transient synthetic OCR timeout.')){const pending=ocrPending;ocrPending=null;pending.reject(error);},
         resolve(){const pending=ocrPending;ocrPending=null;pending.resolve({text:'Item: Synthetic Blade\nAC 12\nHP 45',confidence:85,words:[]});},
         async waitForRead(){for(let attempt=0;attempt<200;attempt++){if(ocrPending)return;await new Promise(resolve=>setTimeout(resolve,10));}throw Error('Synthetic read did not start.');}};
 }
@@ -72,6 +76,36 @@ try{
     await assert.rejects(f.host.handleSource(f.event,'frame',f.frame()),/unavailable/);
 }finally{await f.host.dispose();}
 assert.equal(f.handlers.size,0,'shutdown unregisters both exact-frame IPC handlers');
+{
+    const reading=fixture();let destroyed=0;
+    try{
+        await reading.host.listSources();await reading.host.start({mode:'character',sourceId:'window:game',sessionId:'persistent-character'});
+        const contents=new EventEmitter();contents.mainFrame={url:`${origin}/capture-source.html`};
+        const window={webContents:contents,isDestroyed:()=>false,destroy(){destroyed++;}};
+        reading.host.captureWindow=window;const sourceEvent={sender:contents,senderFrame:contents.mainFrame};
+        reading.tick();reading.host.submitFrame(reading.frame('timeout'));await reading.waitForRead();reading.reject();await reading.host.processing;
+        assert.equal(reading.host.phase,'running');assert.equal(reading.host.owner,'character');assert.equal(reading.host.sessionId,'persistent-character');assert.equal(destroyed,0);assert.match(reading.host.getStatus().readWarning,/retry/);
+        assert.equal(reading.host.submitFrame(reading.frame('backoff')).retrying,true,'transient read failures use bounded retry backoff');
+        reading.advance(2100);await readFrame(reading,'retry-success');assert.equal(reading.observations.at(-1).sessionId,'persistent-character');assert.equal(reading.host.readWarning,null);assert.equal(reading.host.readErrors,0);
+        await reading.host.handleSource(sourceEvent,'frame-error');assert.equal(reading.host.phase,'running');assert.equal(reading.host.captureWindow,window);assert.match(reading.host.getStatus().readWarning,/frame was unavailable/);
+        reading.tick();reading.host.submitFrame(reading.frame('retry-success'));await reading.host.processing;assert.equal(reading.host.getStatus().readWarning,null,'a valid duplicate frame also clears transient source warnings');
+        await reading.host.handleSource(sourceEvent,'ended');assert.equal(reading.host.phase,'error');assert.equal(reading.host.getStatus().resumable,true);assert.equal(reading.host.owner,'character');assert.equal(destroyed,1);assert.equal(reading.host.captureWindow,null);
+        const enumerate=reading.host.electron.desktopCapturer.getSources;reading.host.electron.desktopCapturer.getSources=async()=>[];
+        await reading.host.resume();assert.equal(reading.host.phase,'error');assert.equal(reading.host.owner,'character');assert.match(reading.host.error,/no longer available/,'missing sources remain explicitly resumable without starting a replacement');
+        reading.host.electron.desktopCapturer.getSources=enumerate;
+        await reading.host.resume();assert.equal(reading.host.phase,'running');assert.equal(reading.host.sessionId,'persistent-character','explicit recovery preserves the walkthrough session');
+        await reading.host.stop({mode:'character'});assert.equal(reading.host.owner,null);assert.equal(reading.host.getStatus().resumable,false);await assert.rejects(reading.host.resume(),/Choose/);
+    }finally{await reading.host.dispose();}
+}
+{
+    const reading=fixture();let release;
+    try{
+        await reading.host.listSources();await reading.host.start({mode:'character',sourceId:'window:game'});await reading.host.pause();
+        reading.host.electron.desktopCapturer.getSources=()=>new Promise(resolve=>{release=resolve;});
+        const resuming=reading.host.resume();await reading.host.stop();release([{id:'window:game',name:'EverQuest'}]);await resuming;
+        assert.equal(reading.host.enabled,false);assert.equal(reading.host.owner,null);assert.equal(reading.host.phase,'disabled','source enumeration cannot restart after explicit Stop');
+    }finally{await reading.host.dispose();}
+}
 const imported=fixture(),temporary=await mkdtemp(join(tmpdir(),'eoz-capture-import-'));
 try{
     const target=join(temporary,'synthetic.png');await writeFile(target,png());

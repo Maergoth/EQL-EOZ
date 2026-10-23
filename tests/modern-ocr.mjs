@@ -20,12 +20,13 @@ async function verify({root,profile,diagnostics}){
             assert.equal(items.length,2,`Two independent item panes; actual OCR text: ${read.result.text}`);
             const byName=new Map(items.map(item=>[item.subject.name,item]));
             const boots=byName.get('Synthetic Ember Boots +3'),blade=byName.get('Synthetic Quartz Blade +6');assert.ok(boots&&blade,`Actual item names: ${JSON.stringify([...byName.keys()])}`);
-            const b=fields(boots),w=fields(blade);assert.equal(b.ac,31);assert.equal(b.hp,147);assert.deepEqual(b.slots,['Feet']);assert.equal(b.tier,3);assert.equal(b.fraction,5);assert.equal(b.fractionMaximum,8);
+            const b=fields(boots),w=fields(blade);assert.equal(b.ac,31);assert.equal(b.hp,147);assert.deepEqual(b.slots,['Feet']);assert.equal(b.tier,3);assert.equal(b.fraction,5);assert.equal(b.fractionMaximum,8);assert.equal(b.haste,23);assert.match(b.rawStatBlock,/Haste/);
             assert.equal(w.ac,29);assert.equal(w.hp,83);assert.deepEqual(w.slots,['Primary']);assert.equal(w.tier,6);assert.equal(w.fraction,18);assert.equal(w.fractionMaximum,64);assert.equal(w.damage,13);assert.equal(w.damageBonus,17);assert.equal(w.delay,31);assert.equal(w.attackSpeed,18);
             assert.equal(b.modified,undefined);assert.equal(w.modified,undefined,'An unchecked Modified label is not an observed state');
             assert.ok(character,'Inventory on the right is independent of examine panes');const c=fields(character);
             for(const [key,value]of Object.entries({hpCurrent:337,hpMaximum:901,manaCurrent:225,manaMaximum:703,enduranceCurrent:119,enduranceMaximum:509,str:111,sta:112,agi:113,dex:114,wis:115,int:116,cha:117,resistPoison:31,resistMagic:32,resistDisease:33,resistFire:34,resistCold:35,resistCorruption:36}))assert.equal(c[key],value,`Modern character field ${key}`);
             assert.equal(c.attack,undefined,'The bare Attack pair is not an inferred total');assert.equal(c.attackMelee,undefined);assert.equal(c.attackRanged,undefined);
+            for(const [key,value]of Object.entries({acMitigation:61,acMitigationSoftcap:43,acEvasion:127,attackOffense:46,attackAccuracy:107}))assert.equal(c[key],value,`Actual pixel component ${key}`);
             assert.ok(c.hpRegen===undefined||c.hpRegen===11,'A regen digit must match its pixels or remain unknown');
             assert.equal(w.str,undefined,'Inventory/other-item Strength cannot bleed into the weapon');assert.equal(b.hpCurrent,undefined,'Inventory resource labels cannot bleed into item values');
             assert(records.length<=4&&records.every(record=>record.fields.length<=100&&record.evidence.text.length<=16384));assert(read.input.ocrPasses.length<=3,'Bounded scene plus refinement passes');

@@ -4,10 +4,12 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.0 adds optional screen reading, reviewed wiki contributions, Character
-catalog search and snapshots, and clearer overlay controls.** See [PR #11](https://github.com/Maergoth/EQL-EOZ/pull/11), the
-[feature guide](docs/CAPTURE_CONTRIBUTIONS.md) and the
-[release verification plan](docs/RELEASE_090.md) for implementation and check scope.
+**0.9.1 adds a guided Character walkthrough, editable item text and touching
+overlay docks.** Enter character details and AA count, select the game window
+inside the flow, unequip and read items, review your No Equipment baseline,
+re-equip, confirm ANY slots and save. See the
+[walkthrough/release plan](docs/CHARACTER_WALKTHROUGH.md) for implementation and
+check scope. The existing reviewed wiki contribution workflow is retained.
 
 In **Settings → Screen reading**, start an explicitly selected source, then use
 **Calibrate OCR area** to draw around a complete examine or Inventory/stat pane.
@@ -25,7 +27,7 @@ editable fields; unresolved values remain unknown.
 1. Download the latest Windows `Setup-<version>-x64.exe`, Linux `<version>-x64.AppImage`, or Debian/Ubuntu `<version>-x64.deb` package from [Releases](https://github.com/Maergoth/EQL-EOZ/releases). Both platforms use the same version and data source.
 2. Choose your EverQuest Legends folder on first launch. Enable logging in the game; EoZ follows the newest `eqlog_*.txt` under `Logs`, or a specific file selected in Settings.
 3. Emit `/who` to establish your character's zone, level and classes, and `/loc` to place your position on the map. Later logged locations update it automatically.
-4. The header **Overlays** button cycles all panels through **Locked → Unlocked → Hidden**. Unlock to arrange Parse, Map, Zone & loot and Triggers, or configure each in **Settings → Native overlays**. Reopen **Settings → About Eye of Zomm → What's new** for the illustrated tour.
+4. The header **Overlays** button cycles all panels through **Unlocked → Locked → Hidden → Unlocked**. Unlock to arrange Parse, Map, Zone & loot and Triggers, or configure each in **Settings → Native overlays**. Reopen **Settings → About Eye of Zomm → What's new** for the illustrated tour.
 
 The Windows installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz://` so EQLWiki can open the app. Beta installers may be unsigned and show a Windows publisher prompt; see [signing status](SIGNING.md). Linux package and compositor details are in the [font/Linux guide](docs/FONTS_LINUX.md).
 
@@ -37,7 +39,7 @@ On Linux, make the AppImage executable and launch it, or install the deb using y
 
 ## A look around
 
-The capture, contribution and Character images below show the actual **0.9.0 Electron interface with synthetic records and a loopback-only wiki**. Font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+The Character walkthrough images show the actual **0.9.1 component with synthetic records and capture/share APIs**. Capture and contribution images show 0.9.0 with a loopback-only wiki; font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 
@@ -113,12 +115,14 @@ The independent **Parse** window has **Overview / Damage / Healing / Taken / Ses
 
 Unlock an overlay to move/resize it. Locking leaves its tabs and menus interactive; **Ignore mouse** passes clicks through. Recover from Settings, the tray, or **Ctrl+Shift+O** when registered. Layout, opacity and font scale are saved separately for each panel. Closing the main window while overlays are visible keeps their shared session running; use **Quit Eye of Zomm** in the tray to exit.
 
-Unlocked Parse and Triggers have visible drag grips and resize corners. Move or
-resize Triggers near Parse to align their current edges, including after Parse
-is resized. A manual Triggers height stays saved; **Reset positions** restores
+Every unlocked overlay has clear axis/diagonal resize edges and a visible corner.
+Move any panel until it touches another: above/below share width, left/right
+share height. Saved dock chains follow target movement and resizing. Drag away
+to detach. Global Hidden suspends the group until it is shown again; hiding one
+panel detaches its relations. A manual Triggers height stays saved; **Reset positions** restores
 automatic content fitting. Global Unlock restores mouse input on every panel.
 
-![Unlocked native Parse with a separate drag grip and resize corner](app/assets/whats-new/0.9.0/overlay-layout.png)
+![0.9.1 unlocked native Parse with separate drag and resize grips](app/assets/whats-new/0.9.1/overlay-resize.png)
 
 ### Optional screen reading
 
@@ -166,13 +170,21 @@ assumptions or selected values invalidates that review.
 
 ### Build and share a character snapshot
 
-In **Character**, start a named capture session and examine equipment manually,
-import an examine screenshot, or add cards yourself. Review item names, wiki
-matches, tiers, upgrade progress, base/observed values and augments. Leave unread
-progress blank; an explicit zero is different from unknown. Place each physical copy in a
-named slot with drag-and-drop or the slot menu; confirm replacements and slot
-warnings. Identical copies remain distinct. Removing a mistaken card is retained
-through journal replay.
+In **Character**, enter name, server, classes, level and AA count, then start the
+walkthrough. Select the game window inline; Default Modern is the calibrated
+skin. Remove ANY-slot equipment first and examine items while unequipping.
+Obvious slots fill automatically. Keep each item visible until its card appears;
+use Second copy for two physically identical items. Each inventory card has a
+top-right × to remove it. Read an item screenshot and manual cards remain in
+Equipment and captured items.
+
+![Character walkthrough with inline source selection](app/assets/whats-new/0.9.1/character-inline-source.png)
+
+After confirming all equipment is off, review one fresh **No Equipment** block.
+Mitigation AC, AC softcap, evasion AC, offense and accuracy are separate values.
+Manual corrections survive later OCR reads. Re-equip ordinary items first and
+ANY items last, examine anything missed, then confirm ambiguous slots together.
+Source loss offers Resume or Choose game window without losing the current step.
 
 **Search for item** uses the cached wiki catalog. Select an item and preview its
 tier/progress with changed values in green, then **Add to inventory**. Repeated
@@ -181,29 +193,33 @@ stats; unknown augment state and unsupported adjustments remain explicit.
 
 ![Character catalog search with tier-adjusted stats and separate item copies](app/assets/whats-new/0.9.0/character-catalog.png)
 
-![0.9.0 Character named equipment slots and reviewed synthetic shield inventory card, with the shield assigned to Secondary](app/assets/whats-new/0.9.0/character.png)
+![Guided snapshot review and synthetic equipment layout](app/assets/whats-new/0.9.1/character-walkthrough-review.png)
 
 Augments retain their own names and observed statistics. State whether the
 examine block already includes them so their values are not added twice.
-Capture **No Equipment** and **Equipped** statistics separately. These observed
-blocks remain distinct from calculated item sums; unknowns stay unknown, and
-buffs, caps or worn effects are not inferred from base-plus-gear arithmetic.
+Equipped estimates update from the reviewed baseline and assigned gear; a second
+equipped-stat capture is unnecessary. Additive estimates exclude caps and buffs.
+AC/ATK component conversions and exact Haste stacking remain unknown where the
+server formula is unavailable. The written item block retains unparsed text;
+correct an explicit Haste percentage and Save item to reparse it.
 
-![Editable synthetic augment evidence and completeness controls](app/assets/whats-new/0.9.0/augments.png)
+![Written item text with editable Haste and retained unparsed content](app/assets/whats-new/0.9.1/character-item-stat-review.png)
 
-Use **Preview share image**, review the entire PNG, then copy or save it locally.
-The image contains assigned gear, observed values, calculated sums and
+Use **Preview and save snapshot**, review the entire PNG, then copy or save it locally.
+Successful copy/save completes the walkthrough and ends Character reading;
+canceling Save keeps reading. Explicit Cancel walkthrough is always available.
+The image contains assigned gear, base values, calculated estimates and
 uncertainty; raw OCR evidence and unassigned inventory are excluded. Optional
 authenticated upload requires an additional confirmation and targets only your
 own user talk page. Upload and talk-page results are reported separately.
 
-![Actual 0.9.0 character PNG preview with independent observed and calculated stat columns](app/assets/whats-new/0.9.0/share-preview.png)
+![Calculated equipped estimates with separate AC and attack components](app/assets/whats-new/0.9.1/character-equipped-estimates.png)
 
 These captures and local checks use synthetic records. The combined UI fixture
 exercises real local OCR import, disposable PNG save/clipboard handling and
 guarded writes to a loopback wiki. It does not establish live-game OCR accuracy,
 production login/edit/upload acceptance, foreground game composition or native
-Wayland behavior. The [release verification plan](docs/RELEASE_090.md) records
+Wayland behavior. The [current release plan](docs/CHARACTER_WALKTHROUGH.md) records
 the checked platforms and remaining manual acceptance limits.
 
 ## Your files stay local
@@ -288,6 +304,7 @@ Tests with synthetic content do not establish live route quality, physical overl
 | [Window/map follow-up](docs/WINDOW_MAP_POLISH.md) | Current window, map and tour changes |
 | [0.9.0 capture/contribution status](docs/CAPTURE_CONTRIBUTIONS.md) | Feature scope, ownership and acceptance contracts |
 | [0.9.0 release verification](docs/RELEASE_090.md) | Authorized release checks, platform evidence and publication ledger |
+| [Guided Character and overlay release](docs/CHARACTER_WALKTHROUGH.md) | Current flow, component ownership, native acceptance and 0.9.1 publication gates |
 | [Capture pipeline](docs/design/CAPTURE_PIPELINE.md), [wiki contribution contract](docs/design/WIKI_CONTRIBUTIONS.md) and [character/share contract](docs/design/CHARACTER_CAPTURE.md) | Local observation, reviewed write and independent stat/equipment semantics |
 | [Map validation](docs/MAP_VALIDATION.md) and [destination-only audit](docs/ROUTE_REJECTION_AUDIT.md) | Real local-archive observations and limits |
 | [Navigation architecture](docs/NAVMESH_EVALUATION.md) | Guarded worker routing and independent collision validation |
