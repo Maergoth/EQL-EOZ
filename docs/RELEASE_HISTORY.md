@@ -41,6 +41,12 @@ existing isolated Character component fixture with synthetic observations and
 capture APIs; the real native stream/OCR test is separate. The archive now has
 40 images across 31 browsable versions. Every older image remains intact.
 
+Version 0.9.3 adds an actual synthetic Character capture showing item intake
+continuing during Confirm slots, its active-reading guidance and the new item
+card. The disposable native component fixture exercises new live reads and
+imports through Slots/Review separately from private actual-game diagnostics.
+The archive now has 41 images across 32 browsable versions.
+
 Each PNG is stored under `app/assets/whats-new/<version>/` and has a reviewed
 SHA-256 in its step. Files were extracted as binary Git objects, without image
 regeneration or re-encoding. Original top-level images remain available to the

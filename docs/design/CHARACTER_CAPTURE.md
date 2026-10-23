@@ -6,13 +6,19 @@ OCR, authentication, clipboard/save and own-talk submission belong to their
 separate services. These modules never open a source, read game memory, submit a
 wiki edit, load remote artwork or interpret an item's text as markup.
 
-The 0.9.2 intake layer in `app/character-walkthrough.js` retains at most 32
+The 0.9.3 intake layer in `app/character-walkthrough.js` retains at most 32
 item-reading windows with phase start/end, selected source and capture
 generation. `syncCapture(status)` binds them to the explicitly started source;
 `acceptsItem` uses the original frame timestamp so an earlier eligible item can
-finish after Next. A frame taken during Base/Slots cannot become an item merely
-because OCR completes later. Replay respects the saved tracked windows, while
-already accepted model cards stay available. Explicit screenshot imports use
+finish after Next. New item frames remain eligible in Unequip, Re-equip, Slots
+and Review until completion or cancellation. A frame taken during Base, Details
+or source selection cannot become an item merely because OCR completes later.
+Adjacent eligible phases share one timestamp boundary. Replay respects the saved
+tracked windows and current trusted source/generation; already accepted model
+cards stay available. A released Slots/Review draft may extend its latest closed
+Re-equip boundary only after Base acceptance and with the same trusted source
+and generation. Without that boundary it starts a fresh window, never one from
+the beginning of the generation. Explicit screenshot imports use
 their initiating action's eligibility; completion/cancellation invalidates that
 token. No Equipment still requires its own new timestamp and sequence after
 confirmation. A manual file has no trustworthy capture time, so its import must
@@ -20,7 +26,8 @@ also have been initiated in that same Base phase, after its cutoff, with matchin
 session/source context and the exact import generation. A pending Re-equip file
 cannot become a fresh baseline after Back; its eligible item records can still
 complete. Unreviewed proposals clear when their context expires; manual edits
-remain available. See [the capture follow-up](../TOOLTIP_CAPTURE.md) for evidence.
+remain available. See [the live recovery follow-up](../LIVE_CAPTURE_RECOVERY.md)
+and [the prior capture follow-up](../TOOLTIP_CAPTURE.md) for evidence.
 
 ## UI contract
 
@@ -58,7 +65,7 @@ Pass `storage:null` for an isolated fixture. Reads and snapshots are copies.
 | `snapshot()` | Version-1 JSON state: metadata, candidates, equipment, statSnapshots and updatedAt. Keep this local. |
 | `intake(observation, {wikiItem?, icon?})` | Returns `{ok,candidate,deduplicated,saved}`. A removed replay returns `{ok:true,ignored:true,deduplicated:true,candidate:null}`. Accepts `observation.item` or capture parser field-array proposals. |
 | `updateCandidate(id, patch)` | Edits reviewed fields, without replacing the physical-copy ID or evidence. |
-| `mergeObservation(id, observation, {wikiItem?,icon?})` | Explicit same-copy recapture selected by the walkthrough, not name matching or general journal replay. Returns candidate plus `mergedStatKeys`/`preservedStatKeys`; appends bounded evidence, merges only new unedited observed fields, and preserves the exact card/assignment. |
+| `mergeObservation(id, observation, {wikiItem?,icon?})` | Explicit same-copy recapture selected by the walkthrough, including active same-session recovery. Other-session replay uses exact observation IDs. Returns candidate plus `mergedStatKeys`/`preservedStatKeys`; appends bounded evidence, merges only new unedited observed fields, and preserves the exact card/assignment. |
 | `duplicateCandidate(id)` | Explicitly creates another physical copy with its own ID and no claimed capture evidence. |
 | `removeCandidate(id)` | Removes a card and its assignment. |
 | `assign(id, slotId, {replace?,allowIncompatible?})` | Moves the same copy between slots. Occupied/incompatible/unknown slots return `needsConfirmation:true` until the caller explicitly enables the relevant override. |
@@ -227,7 +234,11 @@ observed numbers. Cards without prior capture evidence preserve old manual stat
 values conservatively across recapture/restart. Edit tracking starts with edits
 made under this contract; earlier captured cards do not encode which old values
 were manually changed. This method is explicitly selected by the walkthrough for
-an already established copy. Ordinary intake/replay semantics are unchanged.
+an already established copy. Active same-session journal recovery uses the same
+unique identity, ignore and ambiguity checks before selecting it, preventing
+periodic rereads from creating several copies. Exact observation references
+remain idempotent, deliberate edits stay protected, and older-session replay
+does not infer physical identity from a matching name.
 
 ## Bounds and persistence
 

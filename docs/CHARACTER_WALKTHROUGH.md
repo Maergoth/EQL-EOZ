@@ -79,9 +79,11 @@ capture starts outside an explicit user-started walkthrough.
    repeated evidence cannot create duplicate physical copies or displace gear.
 6. **Resolve slots**: confirm ANY and ambiguous assignments in one place, with
    explicit empty choices. Ordinary compatible assignment needs no checkbox.
+   Missing item tooltips can still be captured here without going Back.
 7. **Review/save**: calculated equipped values update from reviewed base and
    assigned gear; label estimates and unresolved formula/context components
-   honestly. No required equipped-stat capture. Preview then copy/save snapshot;
+   honestly. Missing items remain readable here too; ANY placement stays manual.
+   No required equipped-stat capture. Preview then copy/save snapshot;
    successful completion ends Character capture. Cancel remains available.
 
 Temporary OCR errors, empty scenes, page navigation, calibration and resizing
@@ -89,6 +91,17 @@ must not silently complete or stop this flow. A genuinely lost capture source
 must be visibly resumable; do not bypass operating-system capture permissions or
 restart after explicit user cancellation. Contribution capture remains paused
 while Character owns the source.
+
+The 0.9.3 follow-up keeps new item admission active in Unequip, Re-equip, Slots
+and Review. Capture-time windows exclude Base, Details and source selection;
+fresh No Equipment timestamp/sequence and explicit manual-import guards are
+unchanged. Live and recovered items require the active session and confirmed
+current source/generation. Completion and cancellation close those windows.
+Released Slots/Review drafts can recover their latest matching Re-equip boundary
+after Base acceptance, never the earlier Base interval. Active same-session
+journal rereads merge through the walkthrough's existing unique-copy identity
+rules, retain bounded evidence and preserve manual corrections; older sessions
+keep exact-observation replay behavior.
 
 ## Acceptance gates
 

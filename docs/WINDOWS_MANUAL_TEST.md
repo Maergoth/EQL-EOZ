@@ -1,8 +1,21 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.2-x64.exe`.
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.3-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.2` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the tooltip capture plan](TOOLTIP_CAPTURE.md).
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.3` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
+
+## 0.9.3 live item recovery
+
+1. In Default Modern, hover complete item tooltips during Unequip, Re-equip,
+   Confirm slots and Save snapshot. Newly observed items must reach inventory
+   in all four stages. Repeated reads update one card; explicit physical copies
+   and removed cards retain their existing behavior.
+2. Restore an unfinished older Slots draft and resume its trusted source.
+   Current-session eligible reads can recover without duplicating cards or
+   promoting an earlier Base frame into an item/baseline.
+3. At the game's actual resolution, retain an explicit private source frame and
+   compare full-scene versus tooltip-region OCR. Record name/stat uncertainty,
+   acquisition latency, queue behavior and any missed brief tooltip separately.
 
 ## 0.9.2 compact item tooltips
 

@@ -1,10 +1,13 @@
 // Synthetic Modern-style hover surface. No game assets, pixels or player data.
 // The self-contained function can be injected into an isolated native fixture.
-export function drawHoverFixture(canvas,{name='Copperleaf Coat +4',weapon=false,examine=false,footer=true,x=850,y=180,width=1920,height=1080}={}){
+export function drawHoverFixture(canvas,{name='Copperleaf Coat +4',weapon=false,examine=false,footer=true,characterStats=false,x=850,y=180,width=1920,height=1080}={}){
     canvas.width=width;canvas.height=height;
     const c=canvas.getContext('2d');c.fillStyle='#23343d';c.fillRect(0,0,width,height);
-    c.fillStyle='#15232c';c.fillRect(20,30,470,650);c.fillStyle='#9ca9af';c.font='20px sans-serif';c.fillText('Inventory',45,65);c.fillText('Synthetic player equipment',45,105);
-    for(let row=0;row<4;row++)for(let col=0;col<5;col++){c.strokeStyle='#55616a';c.strokeRect(45+col*75,150+row*90,60,65);}
+    c.fillStyle='#15232c';c.fillRect(20,30,characterStats?650:470,650);c.fillStyle='#9ca9af';c.font='20px sans-serif';c.fillText('Inventory',45,65);
+    if(characterStats){c.fillStyle='#ddd';c.font='24px Arial, sans-serif';c.fillText('Character Vitals',45,110);c.font='20px Arial, sans-serif';c.fillText('Stats',350,110);
+        for(const [name,value,top]of [['HP','330/398',160],['Mana','296/296',190],['End','151/200',220]]){c.fillText(name,45,top);c.fillText(value,150,top);}
+        for(const [name,value,top]of [['Strength','143/511',160],['Stamina','125/511',190]]){c.fillText(name,350,top);c.fillText(value,500,top);}
+    }else{c.fillText('Synthetic player equipment',45,105);for(let row=0;row<4;row++)for(let col=0;col<5;col++){c.strokeStyle='#55616a';c.strokeRect(45+col*75,150+row*90,60,65);}}
     c.fillStyle='#0f1b25';c.fillRect(25,height-165,700,140);c.fillStyle='#c6d2d9';c.font='18px sans-serif';c.fillText('Synthetic chat: HP 9999 STR 888 AC 777',45,height-125);c.fillText('Class: WAR Race: ALL are unrelated chat words.',45,height-90);
     if(examine){c.fillStyle='#111';c.fillRect(25,40,560,700);c.fillStyle='#ddd';c.font='20px Arial, sans-serif';for(const [line,top]of [['Synthetic River Shoes +2',70],['Description',110],['Synthetic River Shoes +2',155],['Class: ALL',190],['Race: ALL',220],['Feet',250],['Tier 2 1/4',280],['Size: SMALL AC: 15',330],['HP: 61',360],['Strength: 6',400],['Done',710]])c.fillText(line,line==='Description'?220:110,top);}
     const h=weapon?630:500;c.fillStyle='#111';c.fillRect(x,y,560,h);c.strokeStyle='#070707';c.lineWidth=3;c.strokeRect(x,y,560,h);

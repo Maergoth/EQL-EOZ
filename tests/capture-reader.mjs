@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';import {createRequire} from 'node:module';
-import {screenReadRefinementRegions} from '../app/screen-read-parser.js';
+import {screenReadRefinementRegions,parseScreenRead} from '../app/screen-read-parser.js';
 const require=createRequire(import.meta.url),{normalizeCaptureRegion,prepareCaptureImage}=require('../desktop/capture-image.cjs'),{recognizeCaptureImage}=require('../desktop/capture-reader.cjs');
 const operations=[];
 class Image{
@@ -53,4 +53,20 @@ assert.equal(calls,2,'column crops share the existing character refinement, with
 assert.equal(componentRead.input.ocrPasses[1].componentPreprocessing,'local-otsu');
 assert.deepEqual(componentRead.result.refinements[0].words.map(value=>value.component),['attackOffense','attackAccuracy'],'only independently cropped pixel columns carry component provenance');
 assert(componentRead.result.refinements[0].words.every(value=>value.bbox.x1<400),'right-side attribute values cannot enter a numeric component crop');
+const hoverBesideInventory={text:'Synthetic 3840 by 2088 scene with an absent tooltip title',confidence:88,words:[...componentScene.words,
+    word('Lore Equipped, No Trade',2300,475,300,20),word('Class:',2300,500,55,20),word('ROG',2365,500,40,20),word('Race:',2300,525,55,20),word('ALL',2365,525,40,20),word('Primary',2300,550,80,20),
+    word('Size:',2220,600,50,20),word('SMALL',2330,600,70,20),word('HP:',2450,600,40,20),word('73',2550,600,30,20),word('Weight',2220,625,70,20),word('14',2350,625,30,20),word('Strength:',2220,675,100,20),word('21',2350,675,30,20),word('Hold RMB or ALT+LMB to inspect or upgrade item',2220,860,520,20)]};
+assert.equal(parseScreenRead(hoverBesideInventory).filter(record=>record.subject.kind==='item').length,0);
+calls=0;operations.length=0;
+const fullFrameMixed=await recognizeCaptureImage({image:new Image(3840,2088),nativeImage,ocr:{async recognize(_png,settings){
+    calls++;if(calls===1)return hoverBesideInventory;
+    const crop=operations.filter(value=>value.crop).at(-1).crop,bitmap=operations.filter(value=>value.bitmap).at(-1).bitmap,scale=bitmap.width/crop.width;
+    const mapped=(text,x,y,w,h=20)=>word(text,(x-crop.x)*scale,(y-crop.y)*scale,w*scale,h*scale,96);
+    if(calls===2){assert.equal(settings.layout,'line');return {text:'Synthetic Recovered Needle +3',confidence:96,words:[mapped('Synthetic',2300,450,100),mapped('Recovered',2410,450,100),mapped('Needle',2520,450,65),mapped('+3',2595,450,25)]};}
+    assert.equal(settings.layout,'block');return {text:'HP: 75',confidence:96,words:[mapped('HP:',2450,600,40),mapped('75',2550,600,30)]};
+}}});
+assert.equal(calls,3,'A full-size mixed frame preserves the existing scene plus two refinements budget');assert.deepEqual(fullFrameMixed.input.sourceSize,{width:3840,height:2088});assert.equal(fullFrameMixed.input.scale,1);
+assert.deepEqual(fullFrameMixed.input.ocrPasses.map(pass=>pass.role),['scene','item-name','item-stats'],'Inventory cannot consume the tooltip identity pass');
+const mixedItem=parseScreenRead({...fullFrameMixed.result,input:fullFrameMixed.input}).find(record=>record.subject.kind==='item');assert(mixedItem);assert.equal(mixedItem.subject.name,'Synthetic Recovered Needle +3');
+assert.equal(mixedItem.fields.some(field=>field.key==='hp'),false,'Preserving identity does not choose between conflicting numeric readings');assert.match(mixedItem.evidence.text,/HP: 73/);assert.match(mixedItem.evidence.text,/HP: 75/);assert.match(mixedItem.evidence.text,/Conflicting OCR values left unknown: hp/);assert.doesNotMatch(mixedItem.evidence.text,/3591840|143\/511/,'Inventory evidence stays separate from the recovered item');
 console.log('Capture reader: normalized region bounds/resize reset, single-pass negatives, bounded mapped refinements and cancellation passed.');

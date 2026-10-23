@@ -1,4 +1,20 @@
-# Validation report — v0.9.1
+# Validation report — v0.9.3
+
+## 0.9.3 live item recovery
+
+The installed 0.9.2 journal contains actual item observations rejected after
+Re-equip ended, while the walkthrough still displayed running capture. Native
+full-resolution game pixels also reproduce a missed tooltip anchor. Reading
+the same frame's complete tooltip region recovers its item and supported stats
+in about 1.6 seconds versus 6.5 seconds for the failed full-scene read. This
+single-frame comparison does not establish transient capture throughput.
+
+Source changes, actual-pixel measurements and acceptance are tracked in
+[LIVE_CAPTURE_RECOVERY.md](docs/LIVE_CAPTURE_RECOVERY.md). Private screenshots,
+OCR text and profile projections are excluded from Git. Exact-head CI,
+packaging and public release verification remain pending until recorded in
+the release PR/private publication ledger. Historical results below retain
+their original scope.
 
 ## 0.9.1 guided Character and overlay layout
 

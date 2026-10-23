@@ -46,6 +46,7 @@ jobs:
             npm run test:appearance -- --screenshots ci-screenshots/linux-appearance
             npm run test:wiki-auth
             npm run test:capture-native
+            npm run test:capture-priority
             npm run test:modern-ocr
             npm run test:hover-ocr
             npm run test:capture-calibration -- --screenshots ci-screenshots/linux-capture-calibration

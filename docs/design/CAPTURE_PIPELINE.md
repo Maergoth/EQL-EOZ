@@ -1,8 +1,9 @@
 # Capture and observation pipeline
 
-Status: 0.9.2 brief-tooltip follow-up, 2026-10-23. Owner: `capture_pipeline_089`.
+Status: 0.9.3 live capture recovery, 2026-10-23. Owner: `capture_pipeline_089`.
 Parent plan: [Capture, wiki contributions and character snapshots](../CAPTURE_CONTRIBUTIONS.md).
-Current acceptance and ownership: [brief item tooltip capture](../TOOLTIP_CAPTURE.md).
+Current acceptance and ownership: [live capture recovery](../LIVE_CAPTURE_RECOVERY.md).
+Prior evidence: [brief item tooltip capture](../TOOLTIP_CAPTURE.md).
 The design contract follows the implementation ledger below. Unmeasured platform,
 packaged and live-game behavior remains an explicit acceptance item.
 
@@ -459,27 +460,69 @@ and rejects new work immediately.
 
 ## OCR processing and evidence
 
-The 0.9.2 source requests an 8 fps window/display stream and compares a 256x144
-thumbnail every 125 ms. It encodes changed full PNGs no more often than every
-250 ms, with a 750 ms unchanged-frame heartbeat. Only one encode/IPC can be
-active. A calibrated area's normalized rectangle drives the comparison; full
-frame remains the default. These are requested upper bounds, not a guarantee
-that a minimized source or compositor supplies every frame. See the official
+The 0.9.3 source requests an 8 fps window/display stream and samples every
+125 ms, encoding at most once every 250 ms with one encode/IPC active. Without
+a user-selected area, a bounded visual scan proposes up to four Default Modern
+tooltip rectangles from a green title, dark frame and white metadata rows.
+This is a crop proposal only; the ordinary OCR/parser must still establish all
+item anchors, identity and statistics. A 256x144 pane-local fingerprint ignores
+animated scenery. At most eight recent pane fingerprints are held in memory;
+an unchanged pane refreshes after five seconds. Least-recent selection prevents
+one continuously changing candidate from excluding the others. The source retains truthful
+full-frame PNGs for preview and provenance; the host crops before enlarging and
+reading the candidate. Configured areas take precedence and retain their
+750 ms unchanged heartbeat. Periodic full-scene fallback covers white names,
+examine panes, Inventory and contribution evidence: normally 1.5 seconds, or
+five seconds while a visual tooltip is present. A due scene can share that
+candidate's already encoded full PNG, preserving the tooltip admission rather
+than substituting a scene-only frame. These are upper sampling bounds,
+not a guarantee that a minimized source or compositor supplies every frame.
+See the official
 [Electron acquisition example](https://www.electronjs.org/docs/latest/api/desktop-capturer/).
 
+Acquisition continues while PNG encoding awaits. Before the single encoder,
+the source retains at most two raw canvas snapshots and 64 MiB of pending pixel
+bytes, plus its one active encoding canvas. Items precede one replaceable scene;
+queued duplicate pane pixels coalesce. Each snapshot carries its original
+capture time and immutable context. Source changes, null configuration,
+source-size/ROI/generation changes and disposal release pending canvases;
+post-encode configuration checks prevent late delivery. Raw snapshots expire
+after 15 seconds, within the host's 30-second
+incoming-frame boundary. Capacity, age and encode losses feed the existing
+visible warning and a no-text source-drop aggregate. Raw pixels remain in
+memory only; there is no continuous image recording.
+
 The host processes one offline OCR job at a time, with at least 250 ms between
-scene starts. Its FIFO retains at most 12 distinct compressed PNGs and 48 MiB,
-dropping queued frames older than 15 seconds. Native image decode waits until
-the serial read slot. Exact duplicates are coalesced while active/queued.
+scene starts. Its queue retains at most 12 compressed PNGs and 48 MiB. Item and
+configured-area proposals precede one replaceable, latest-only fallback scene.
+Fallback cannot evict an item proposal. After three completed priority reads,
+a waiting scene gets a turn so baseline evidence cannot starve. Candidate frames expire after 60 seconds;
+ordinary scenes after 15 seconds. Capacity eviction removes fallback first,
+then the oldest candidate. Native image decode waits until the serial read
+slot. Submission acknowledges before the deferred serial OCR pump performs
+native preparation. Pane visual keys coalesce repeated pixels even when the
+full PNG changes outside that area; full-scene hashes remain exact.
 Completed screen hashes and OCR semantic duplicates expire after three seconds,
 allowing unchanged Inventory pixels to produce fresh baseline evidence after a
 walkthrough transition. Game-log identity/cursor deduplication does not expire
 with this screen-specific window. Repeated items merge into their existing
 physical card under the existing Character rules.
-Overflow removes the oldest queued frame and updates a visible warning/count;
+Overflow updates a visible warning/count;
 busy game backgrounds can still exceed throughput. The player should keep each
 complete item tooltip visible until its editable card appears. Queued pixels
 are ephemeral and never become a continuous image/video recording.
+
+Status includes bounded in-memory aggregate acceptance, empty-read, duplicate,
+age/capacity/retry/stale rejection and scene-replacement counters, plus last
+encode/source-queue/transport/submission/queue/read durations and the selection kind. These
+contain no OCR text, player/item names, source labels or pixels. They are not
+telemetry or an automatic recording/export. Strict source/session/generation,
+dimension and normalized-region validation remains at the IPC boundary.
+
+For valid compact tooltips, the two refinement slots retain item-name and
+item-stat passes when Inventory is visible. Inventory-only baseline scenes still
+receive the character refinement. Scene plus two refinements remains the bound;
+name/number uncertainty and conflicting-value handling are unchanged.
 
 Before drawing, source configuration supplies the current owner, source,
 session and generation; the timestamp precedes PNG encoding. Main rechecks all

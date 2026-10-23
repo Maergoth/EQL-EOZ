@@ -58,6 +58,8 @@ jobs:
         run: npm run test:wiki-auth
       - name: Test persistent source capture and local OCR
         run: npm run test:capture-native
+      - name: Test tooltip priority with moving scenes and full-resolution pixel streams
+        run: npm run test:capture-priority
       - name: Test Default Modern pane geometry through real offline OCR
         run: npm run test:modern-ocr
       - name: Test compact hover tooltips and mixed panes through real offline OCR

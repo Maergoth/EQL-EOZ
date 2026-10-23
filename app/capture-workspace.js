@@ -1,6 +1,6 @@
 import { createContributionQueue } from './contribution-queue.js';
 import { CHARACTER_SLOTS, createCharacterModel, characterObservationInput, characterItemStats, characterSlotCompatibility, characterStatLabel } from './character-model.js';
-import { createCharacterWalkthrough, CHARACTER_WALKTHROUGH_STEPS } from './character-walkthrough.js';
+import { createCharacterWalkthrough, CHARACTER_WALKTHROUGH_STEPS, CHARACTER_ITEM_READ_STEPS } from './character-walkthrough.js';
 import { parseItemStatBlock } from './screen-read-parser.js';
 import { renderCharacterShare } from './character-share.js';
 import { mountCharacterCatalog } from './character-catalog.js';
@@ -58,7 +58,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     const $=(selector,base=root)=>base.querySelector(selector),unsubscribers=[];
     let itemBaseUi=null;
     let disposed=false,busy=false,publishing=false,selectedId=queue.snapshot()[0]?.id||'',selectedCard='',captureState={phase:'disabled'},sources=[],optIn=false,account=null,plan=null,matches=null,lastStats=null,shareImage=null,uploadId=null,dragId='',cursor=0;
-    let walkthroughStageKey='',walkthroughEpoch=0,baseProposalId='',walkthroughMessage='',sourceStart=null,characterRefreshPending=false,sourceListEpoch=0,manualItemRead=null,lastStatsManualRead=null;
+    let walkthroughStageKey='',walkthroughEpoch=0,baseProposalId='',walkthroughMessage='',sourceStart=null,characterRefreshPending=false,walkthroughSlotsPending=false,sourceListEpoch=0,manualItemRead=null,lastStatsManualRead=null;
     let profileSeeded=Boolean(character.snapshot().metadata.name),wikiLoaded=false,reviewEpoch=0,offlineCharacterSessionId='';
     let areaProfiles=[],areaPreview=null,areaDraft=null,areaEpoch=0,areaOpening=false,areaSaving=false,areaDrag=null;
     try{const raw=storage?.getItem(OCR_AREA_STORAGE_KEY);if(raw&&raw.length<=24000){const parsed=JSON.parse(raw);if(Array.isArray(parsed))areaProfiles=parsed.slice(-MAX_OCR_AREAS).filter(value=>typeof value?.key==='string'&&value.key.length<=1000&&validAreaProfile(value)).map(value=>({key:value.key,region:normalizeOcrArea(value.region),referenceSize:frameSize(value.referenceSize)}));}}catch{/* A damaged optional calibration must not block ordinary capture. */}
@@ -162,7 +162,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     async function importScreenshot(mode){
         if(!capture)throw Error('Screenshot reading requires the desktop app.');
         const flow=walkthrough.snapshot(),sessionId=mode==='character'?(flow.active?flow.sessionId:captureState.characterSessionId||(captureState.owner==='character'&&captureState.sessionId)||(offlineCharacterSessionId||=globalThis.crypto.randomUUID())):undefined;
-        const token=mode==='character'?{sessionId,at:Date.now(),epoch:walkthroughEpoch,eligible:!flow.active||['unequip','reequip'].includes(flow.step),inactive:!flow.active,baseEligible:flow.active&&flow.step==='base',baseAfterAt:flow.baseAfterAt,captureGeneration:captureState.generation,captureSourceId:captureState.source?.id||null,captureSessionId:captureState.sessionId||''}:null;if(token)manualItemRead=token;
+        const token=mode==='character'?{sessionId,at:Date.now(),epoch:walkthroughEpoch,eligible:!flow.active||CHARACTER_ITEM_READ_STEPS.includes(flow.step),inactive:!flow.active,baseEligible:flow.active&&flow.step==='base',baseAfterAt:flow.baseAfterAt,captureGeneration:captureState.generation,captureSourceId:captureState.source?.id||null,captureSessionId:captureState.sessionId||''}:null;if(token)manualItemRead=token;
         try{const result=await capture.importImage({mode,...(sessionId?{sessionId}:{})});if(result.cancelled)return;
             if(mode==='character'&&!$('[data-character-editor]',characterRoot).contains(document.activeElement))renderCharacter();
             if(result.message)notify(result.message,{tone:result.records?.length?'success':'warning'});
@@ -204,9 +204,10 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             $('[data-walkthrough-base-age]',characterRoot).textContent=flow.baseDirty?'Your edits are retained. New readings will not overwrite them.':proposal?'Fresh No Equipment reading. Edit a value if needed; ? keeps it unknown.':'Waiting for a reading taken after you confirmed every item is off. You can also enter the values yourself.';
         }
         if(['unequip','reequip'].includes(flow.step)){$('[data-walkthrough-count]',characterRoot).textContent=`${flow.items.length} item cards captured · ${character.totals().assignedCount} slots assigned`;const queued=Math.max(0,Number(captureState.queuedFrames)||0),running=captureState.owner==='character'&&captureState.sessionId===flow.sessionId&&captureState.phase==='running';$('[data-walkthrough-reading]',characterRoot).textContent=!running?'Screen reading is paused. Resume capture to read item tooltips.':captureState.reading?`Reading a captured frame${queued?` · ${queued} waiting`:''}. Wait for each item card before moving on.`:queued?`${queued} captured frames waiting to be read. Wait for each item card before moving on.`:captureState.lastReadAt&&captureState.lastReadItemCount===0?'The last frame had no readable item tooltip. Hover over an item and keep its complete tooltip visible.':'Waiting for a readable item tooltip. Keep it visible until its card appears.';}
-        if(flow.step==='slots')renderWalkthroughSlots();
+        if(flow.step==='slots')renderWalkthroughSlots();else walkthroughSlotsPending=false;
         const ownerMatches=captureState.owner==='character'&&captureState.sessionId===flow.sessionId;
-        const status=!flow.active?'':ownerMatches?[captureState.phase==='running'?'Reading continues':`Capture ${captureState.phase}`,captureState.readWarning||captureState.error||''].filter(Boolean).join(' · '):'Capture is not running for this walkthrough. Select the game window to resume.';
+        const readingStatus=['slots','review'].includes(flow.step)?'Reading continues. You can still hover over missing items here. Keep each tooltip visible until its card appears; earlier queued reads can finish too.':'Reading continues';
+        const status=!flow.active?'':ownerMatches?[captureState.phase==='running'?readingStatus:`Capture ${captureState.phase}`,captureState.readWarning||captureState.error||''].filter(Boolean).join(' · '):'Capture is not running for this walkthrough. Select the game window to resume.';
         const statusHost=$('[data-walkthrough-status]',characterRoot);statusHost.textContent=[walkthroughMessage,status].filter(Boolean).join(' · ');
         if(flow.active&&flow.step!=='details'&&flow.step!=='source'&&(!ownerMatches||captureState.phase!=='running'))statusHost.insertAdjacentHTML('beforeend',' <button class="secondary-button" data-walkthrough-resume>Resume capture</button> <button class="text-button" data-walkthrough-source>Choose game window</button>');
         $('[data-walkthrough-back]',characterRoot).hidden=!flow.active||flow.step==='details';
@@ -216,7 +217,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function renderWalkthroughSlots(){const flow=walkthrough.snapshot(),snapshot=character.snapshot(),host=$('[data-walkthrough-slot-choices]',characterRoot);if(!host)return;
         const cards=flow.items.map(item=>snapshot.candidates.find(c=>c.id===item.id)).filter(Boolean),pending=cards.filter(c=>c.slots.includes('ANY')||!Object.values(snapshot.equipment).includes(c.id));
         const html=pending.map(card=>{const assigned=Object.entries(snapshot.equipment).find(([,id])=>id===card.id)?.[0],value=flow.slotChoices[card.id]||assigned||'';return `<label>${escape(card.name)}<select data-walkthrough-slot="${escape(card.id)}"><option value="">Choose a slot</option>${CHARACTER_SLOTS.filter(slot=>characterSlotCompatibility(card,slot.id).compatible||!card.slots.length).map(slot=>`<option value="${slot.id}" ${value===slot.id?'selected':''}>${escape(slot.label)}${snapshot.equipment[slot.id]&&snapshot.equipment[slot.id]!==card.id?' · occupied':''}</option>`).join('')}<option value="__skip__" ${value==='__skip__'?'selected':''}>Leave in inventory</option></select></label>`;}).join('')||'<p>Every captured item has an obvious slot. Review the equipment layout, then continue.</p>';
-        if(host.innerHTML!==html&&!host.contains(document.activeElement))host.innerHTML=html;
+        if(host.innerHTML!==html){if(host.contains(document.activeElement)){walkthroughSlotsPending=true;return;}host.innerHTML=html;}walkthroughSlotsPending=false;
     }
     async function finishWalkthrough(flowAtSave,epochAtSave){const current=walkthrough.snapshot();if(!flowAtSave?.active||flowAtSave.step!=='review'||!current.active||current.sessionId!==flowAtSave.sessionId||walkthroughEpoch!==epochAtSave)return;await stopCapture('character');const after=walkthrough.snapshot();if(after.active&&after.step==='review'&&after.sessionId===flowAtSave.sessionId&&walkthroughEpoch===epochAtSave){walkthrough.complete();walkthroughEpoch++;sourceStart=null;walkthroughMessage='Snapshot saved. Character reading has ended.';renderWalkthrough(true);}}
     function seedProfile(){if(profileSeeded)return;const profile=getProfile();if(profile.character||profile.name){character.setMetadata({name:profile.character||profile.name,classes:profile.classes||[],level:profile.level||null});profileSeeded=true;}}
@@ -262,17 +263,17 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function intake(observation,{replaying=false}={}){
         if(disposed||!observation)return;cursor=Math.max(cursor,Number(observation.sequence)||0);
         if(observation.owner==='character'&&observation.subject?.kind==='item'){
-            const flow=walkthrough.snapshot(),adapted=characterObservationInput(observation);
+            const flow=walkthrough.snapshot(),adapted=characterObservationInput(observation),currentFlow=flow.active&&flow.sessionId===observation.sessionId;
             const manualRead=observation.kind==='manual'&&manualItemRead?.epoch===walkthroughEpoch&&manualItemRead.sessionId===observation.sessionId?manualItemRead:null;
             if(replaying&&(!walkthrough.acceptsReplayItem(observation)||flow.active&&flow.sessionId===observation.sessionId&&walkthrough.ignores(adapted)))return;
             if(!replaying&&(flow.active?(!walkthrough.acceptsItem(observation,{manualRead})||walkthrough.ignores(adapted)):!(manualRead?.eligible&&manualRead.inactive)))return;
-            if(flow.active&&!replaying&&walkthrough.ambiguousItem(adapted)){walkthroughMessage=`Read ${adapted.name}, but more than one captured copy or tier could match. Review its existing cards; this uncertain read did not replace either one.`;renderWalkthrough();return;}
+            if(currentFlow&&walkthrough.ambiguousItem(adapted)){walkthroughMessage=`Read ${adapted.name}, but more than one captured copy or tier could match. Review its existing cards; this uncertain read did not replace either one.`;renderWalkthrough();return;}
             const pack=getPack(),baseName=String(adapted.name||'').replace(/\s*\+\d+(?:\s*\([^)]*\))?$/,'').trim();
             const item=pack.items?.find(item=>[item.name,item.wikiTitle].some(name=>String(name).toLowerCase()===baseName.toLowerCase()));
-            const prior=flow.active&&!replaying?walkthrough.findItem(adapted):null,options={wikiItem:item,icon:item?pack.icons?.[item.iconId]:null};
+            const prior=currentFlow?walkthrough.findItem(adapted):null,options={wikiItem:item,icon:item?pack.icons?.[item.iconId]:null};
             const result=prior&&character.snapshot().candidates.some(c=>c.id===prior)?character.mergeObservation(prior,observation,options):character.intake(observation,options);
             if(result.ok&&result.candidate){
-                if(flow.active&&!replaying){walkthrough.rememberItem(result.candidate);const assignment=character.autoAssign(result.candidate.id);walkthroughMessage=`Read ${result.candidate.name}${assignment.assigned?` → ${CHARACTER_SLOTS.find(s=>s.id===assignment.slot)?.label||assignment.slot}`:assignment.reason==='already-assigned'?' · updated':' · choose its slot at the confirmation step'}.`;}
+                if(currentFlow){walkthrough.rememberItem(result.candidate);const assignment=character.autoAssign(result.candidate.id);walkthroughMessage=`Read ${result.candidate.name}${assignment.assigned?` → ${CHARACTER_SLOTS.find(s=>s.id===assignment.slot)?.label||assignment.slot}`:assignment.reason==='already-assigned'?' · updated':' · choose its slot at the confirmation step'}.`;}
                 shareImage=null;
                 const preserveEditor=$('[data-character-editor]',characterRoot).contains(document.activeElement);if(!preserveEditor&&!result.deduplicated)selectedCard=result.candidate.id;
                 renderCharacter({preserveEditor,preserveSlots:$('[data-character-slots]',characterRoot).contains(document.activeElement),preserveStats:$('[data-character-stats]',characterRoot).contains(document.activeElement)});
@@ -327,7 +328,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         }else if(event.target.matches('[data-walkthrough-base]')){event.preventDefault();void act(async()=>{const stats=parseEditedStats(event.target.querySelector('[data-walkthrough-base-values]').value);if(!Object.values(stats).some(Number.isFinite))throw Error('Read or enter your No Equipment values before continuing.');character.setStatSnapshot('base',{stats,confirmed:true,evidence:lastStats,at:Date.now()});walkthrough.acceptBase();walkthrough.advance();lastStats=null;baseProposalId='';shareImage=null;walkthroughMessage='Base values saved. Reading continues while you re-equip.';renderCharacter();});}
     });
     listen(characterRoot,'input',event=>{if(event.target.matches('[data-walkthrough-base-values]'))walkthrough.editBase(event.target.value);});
-    listen(characterRoot,'focusout',()=>queueMicrotask(()=>{if(disposed||!characterRefreshPending)return;const protectedFocus=['[data-character-editor]','[data-character-slots]','[data-character-stats]'].some(selector=>$(selector,characterRoot).contains(document.activeElement));if(!protectedFocus)renderCharacter();}));
+    listen(characterRoot,'focusout',()=>queueMicrotask(()=>{if(disposed||!characterRefreshPending&&!walkthroughSlotsPending)return;const protectedFocus=['[data-character-editor]','[data-character-slots]','[data-character-stats]','[data-walkthrough-slot-choices]'].some(selector=>$(selector,characterRoot)?.contains(document.activeElement));if(!protectedFocus)renderCharacter();}));
     listen(characterRoot,'change',event=>{if(event.target.matches('[data-walkthrough-source-select]'))walkthrough.source(event.target.value);if(event.target.matches('[data-walkthrough-slot]'))walkthrough.chooseSlot(event.target.dataset.walkthroughSlot,event.target.value);});
     listen(characterRoot,'click',event=>{const button=event.target.closest('button');if(!button||publishing)return;
         if(button.matches('[data-character-stop]')){walkthroughEpoch++;sourceListEpoch++;sourceStart=null;walkthrough.cancel();walkthroughMessage='Walkthrough canceled. Your captured items remain saved.';void stopCapture('character').catch(error=>warning(error.message));renderWalkthrough(true);}

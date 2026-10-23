@@ -1,5 +1,10 @@
 # Eye of Zomm contributor handoff
 
+The **0.9.3 follow-up** addresses real 4K capture and items rejected during
+Slots/Review while reading remained active. [The recovery plan](LIVE_CAPTURE_RECOVERY.md)
+records actual source evidence, private diagnostics, ownership and acceptance.
+Keep older release media and private player data separate from synthetic tests.
+
 The **0.9.2 follow-up** addresses brief Default Modern hover tooltips, sampling
 and bounded OCR queuing, and item results that complete after advancing the
 Character walkthrough. [The current plan](TOOLTIP_CAPTURE.md) records exact
