@@ -17,6 +17,7 @@ import { createWikiDiscovery } from './wiki-discovery.js';
 import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
 import { mountWhatsNew } from './whats-new.js';
 import { FONT_PRESETS, DEFAULT_APPEARANCE, normalizeAppearance, applyAppearance, inheritViewerAppearance } from './appearance.js';
+import { mountCaptureWorkspace } from './capture-workspace.js';
 import { mountSystemFontSettings } from './system-font-settings.js';
 import { isItemStatModified } from './item-stat-presentation.js';
 
@@ -32,6 +33,7 @@ let normalizedZoneKeys = new Map();
 let bridgeInfo = null;
 let logOffset = 0;
 let partialLine = '';
+let observedLogCursor = 0;
 let viewerReady = false;
 let pollTimer = null;
 let packRefreshTimer = null;
@@ -99,7 +101,7 @@ settings.routingEnabled = legacyOverlayPrefs.routingEnabled ?? legacyOverlayPref
 for (const key of Object.keys(settings)) if (key.startsWith('minimal') || key === 'considerMyClassOnly') delete settings[key];
 if (!['first', 'top', 'map'].includes(settings.mapMode)) settings.mapMode = 'first';
 if (!['recommended', 'name'].includes(settings.itemSort)) settings.itemSort = 'recommended';
-if (!['overview', 'map', 'npcs', 'items', 'drops', 'combat', 'timers', 'settings'].includes(settings.lastView)) settings.lastView = 'overview';
+if (!['overview', 'map', 'npcs', 'items', 'drops', 'combat', 'timers', 'contribute', 'character', 'settings'].includes(settings.lastView)) settings.lastView = 'overview';
 let itemZoneFilterExplicit = Boolean(settings.itemZoneFilterExplicit || settings.itemCurrentZoneOnly === false);
 settings.appearance = normalizeAppearance(settings.appearance);
 applyAppearance(document,settings.appearance);
@@ -570,6 +572,8 @@ function consumeText(text, allowTransientUi = true) {
         if (!listedTarget) wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt});
         overlaySession.consume(event, { zone:parser.zone, character:parser.character, live:allowTransientUi && freshTimerEvent,
             text:line, at:parser.currentLineAt, logId:bridgeInfo?.logPath || 'current-log' });
+        captureWorkspace.consumeLog(event,{zone:parser.zone,live:allowTransientUi&&freshTimerEvent,
+            logId:bridgeInfo?.logPath||'current-log',at:parser.currentLineAt,cursor:++observedLogCursor});
     }
     overlaySession.flush();
     if (zoneChanged) {
@@ -1541,6 +1545,7 @@ function renderAll() {
     renderMapReadiness(s);
     renderMapRoutePlanner(s);
     syncRareMobsToViewer(false);
+    captureWorkspace.refresh();
 }
 
 function setView(view, options = {}) {
@@ -1554,6 +1559,7 @@ function setView(view, options = {}) {
     }
     const s = state();
     renderViewPanel(view, s, effectiveProfile(s));
+    captureWorkspace.refresh();
     renderMapReadiness(s);
     renderMapRoutePlanner(s);
     if (view === 'map' && options.sync !== false) setTimeout(() => syncZoneToViewer(false), 100);
@@ -2326,7 +2332,9 @@ const appUpdatesUi = mountAppUpdates({
     }
 });
 const whatsNew = mountWhatsNew({ button:$('#open-whats-new'), navigate:view => setView(view),getVersion:()=>bridgeInfo?.version });
-window.addEventListener('pagehide', () => { whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
+const captureWorkspace = mountCaptureWorkspace({getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
+    getAppearance:()=>settings.appearance,notify:showNotice});
+window.addEventListener('pagehide', () => { captureWorkspace.dispose();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

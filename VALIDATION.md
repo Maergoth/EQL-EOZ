@@ -1,4 +1,51 @@
-# Validation report — v0.8.9
+# Validation report — v0.9.0
+
+## 0.9.0 feature observations and release scope
+
+The owner authorizes completing PR11 and publishing 0.9.0. Final changed-head
+CI/package checks and public asset verification are pending in
+[the release plan](docs/RELEASE_090.md); the earlier runs below establish their
+recorded baseline only.
+
+[CI 39874322031](https://github.com/Maergoth/EQL-EOZ/actions/runs/39874322031)
+passed the source, Windows native and Linux native/package jobs for feature head
+`5b967c5` through PR merge `61fbaa8` against main `6937d35`.
+[Windows installer 39874315883](https://github.com/Maergoth/EQL-EOZ/actions/runs/39874315883)
+passed on that feature head. The Linux job used Ubuntu 22.04, Xvfb and Openbox;
+its shipped-executable smoke explicitly recorded `installed:false` and
+`waylandTested:false`. Both platforms passed exact-ASAR and packaged local OCR
+checks. This does not establish an installed-player upgrade or native Wayland.
+
+The combined source suite passed after merging 0.8.9 into the feature branch.
+Native font/cache/map-loot regressions also passed against the combined app.
+The [shared plan](docs/CAPTURE_CONTRIBUTIONS.md) links the implementation ledgers
+for capture, wiki contribution and Character components. Actual isolated native
+fixtures exercised local OCR and capture ownership, offline PNG import, current
+blueprint review, hardened login cookies, guarded multi-page partial retry across
+renderer restart, editable gear/augments, separate base/equipped values and PNG
+clipboard/save. Loopback wiki writes used only synthetic state.
+
+Final calibration of the supplied small private examine image yields observed
+`Boots of the Long Road +10`, AC14, HP15, tier10 and size. Bounded item-name/stat
+row follow-up reads preserve the original name alternative and raw text. Weight
+loses its decimal and remains unknown; full character totals remain unverified.
+Four existing combat/world screenshots yielded zero item/character proposals.
+The optional current-frame calibration dialog has mouse/keyboard, saved-owner,
+resize/reset and preview-cleanup checks, with actual native crop OCR exercised.
+The history includes 29 versions/29 images and six current-version captures.
+Details are in the release plan. This does not certify arbitrary
+game skins/resolutions. Production login/2FA/CAPTCHA, live wiki contributions,
+Linux portal/Wayland capture and installed upgrades remain manual acceptance.
+
+An independent Character audit reproduced real epoch timestamps being rejected
+by the stat-value bound. The correction retains capture/stat times and stable-
+instance removal cutoffs across reload. Real-2026 replay/removal regressions,
+share-host checks, the main/preload workspace fixture and deterministic canvas
+exports passed locally after that correction. The inspected exports remain
+1800 × 4032 / 366,581 bytes and 1800 × 4224 / 578,154 bytes. Linux CI Character
+editor/share captures were also inspected. See the
+[component audit](docs/design/CHARACTER_CAPTURE.md#090-platform-and-character-acceptance-audit)
+for exact scope. Final-head remote checks must include this and later fixes.
 
 ## 0.8.9 pre-release observations
 

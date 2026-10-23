@@ -8,12 +8,14 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 
 Last updated: 2026-10-22
 
-Code baseline: 0.8.9
+Code baseline: 0.9.0; final release verification tracked in [RELEASE_090.md](RELEASE_090.md)
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
 | Vision area | Status | Evidence | Next condition |
 |---|---|---|---|
+| Optional capture and wiki contributions | Implemented; Windows/Linux X11 source/native baseline passed | Local OCR/journal, log-first candidates, current Help blueprints, hardened wiki login, reviewed multi-page changes and persisted partial retry; [execution plan](CAPTURE_CONTRIBUTIONS.md) | Final changed-head CI/package checks; real game skins, production CAPTCHA/2FA and native Wayland remain manual |
+| Character snapshots | Implemented; isolated workspace/share validation passed | Editable gear/augments, accessible slot assignment, distinct observed base/equipped values, offline screenshot import, bounded PNG copy/save, guarded own-talk upload and real-date replay-removal regression | Final changed-head checks; preserve review of capture accuracy and real-client totals |
 | Font preferences | Implemented; native Windows/Linux CI passed | Shared main/overlay family and bounded base size, retained panel multipliers, process persistence/reset, canvas labels and compact Trigger sizing; [evidence](../VALIDATION.md) | Retain physical DPI/compositor acceptance |
 | Linux desktop | Implemented; Ubuntu 22.04/X11 package/runtime CI passed | Same source/version, AppImage/deb, actual packaged binary/log/panels smoke, selected-folder paths and verified package handoff | Native Wayland, other desktops and complete installed upgrades remain manual acceptance |
 | 0.6 usable loop | Implemented | Folder/log/zone/`/loc` readiness, persistent mode/destination, relevant item defaults, live tier details, non-modal recovery; `npm test` | Retain all [Windows/manual gates](WINDOWS_MANUAL_TEST.md) |
@@ -33,6 +35,12 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 | Native map modes and Intel workspace | Implemented in 0.8.5; CI and physical acceptance tracked separately | Collapsing Reset/Follow/zoom/view header; exact label hit targets; lazy overlay Top/First viewer; camera-only mob preview; pinned shared tier/class controls; [source map](OVERLAY_MAP_WORKSPACE.md) | GitHub Windows gates, physical pointer-lock/focus and live archive acceptance |
 
 ## Current highest-priority task
+
+Complete the authorized 0.9.0 capture/contribution/Character release using
+[RELEASE_090.md](RELEASE_090.md). Revalidate the final changed head, then verify
+the unified Windows/Linux publication. Screen reading defaults off; existing
+combat/map/trigger functionality continues to use logs. Preserve all existing
+map acceptance requirements and explicit wiki review boundaries.
 
 Review the [0.8.1 integration audit](INTEGRATION_AUDIT.md) and
 [rendered map validation](MAP_VALIDATION.md). The local-archive pass now covers

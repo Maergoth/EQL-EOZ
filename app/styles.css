@@ -11,6 +11,18 @@ html,body{margin:0;height:100%;min-height:0;background:
  radial-gradient(circle at 72% 0%,rgba(68,92,124,.18),transparent 32%),
  linear-gradient(180deg,#0a0d14,#06090e 58%,#05070b);color:var(--text)}
 button,input,select{font:inherit}
+textarea{font:inherit}
+.map-loot-pane[hidden]{display:none}
+.map-loot-pane{flex:0 1 390px;min-width:270px;min-height:0;padding:0;overflow:auto;overscroll-behavior:contain}
+.map-loot-heading{display:flex;justify-content:space-between;align-items:start;gap:10px;padding:14px 14px 8px}
+.map-loot-heading h2{font-size:calc(20px * var(--ui-font-scale,1));margin:0;overflow-wrap:anywhere}
+.map-loot-heading p{margin:5px 0}.map-loot-heading .text-button{flex-shrink:0}
+.map-loot-controls{position:sticky;top:0;z-index:3;background:#101722;padding:10px 14px;border-bottom:1px solid var(--line)}
+.map-loot-controls label{display:flex;align-items:center;gap:8px;font-size:calc(11px * var(--ui-font-scale,1))}
+.map-loot-controls input{min-width:45px;flex:1;accent-color:var(--gold)}.map-loot-controls output{min-width:3.5em}
+.map-loot-controls .card-actions{margin-top:8px}.map-loot-items{display:grid;gap:10px;padding:12px}
+.map-loot-item h3{white-space:normal;overflow-wrap:anywhere}.map-loot-item .pill-row{margin-top:9px}.map-loot-item .stats{margin-bottom:12px}
+@media(max-width:1000px){.map-workspace:has(.map-loot-pane:not([hidden])){flex-direction:column;overflow:auto}.map-workspace:has(.map-loot-pane:not([hidden])) .viewer-frame-wrap{flex:0 0 45vh;min-height:220px}.map-loot-pane{flex:0 0 auto;width:100%;min-width:0;max-height:60vh}}
 body{font-size:calc(16px * var(--ui-font-scale,1))}code,pre{font-family:var(--ui-code-family,monospace)}
 button,a{touch-action:manipulation}
 .appearance-size{display:flex;align-items:center;gap:8px;min-width:0}.appearance-size input{width:min(180px,30vw);min-width:50px;accent-color:var(--gold)}.appearance-size output{min-width:3.5em;white-space:nowrap;text-align:right}.settings-grid select{min-width:0;max-width:65%}

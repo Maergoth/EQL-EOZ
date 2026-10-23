@@ -204,14 +204,17 @@ export class EQLogParser {
             .replace(/'s corpse(?:\s+(?:and|to)\b.*)?$/i, '')
             .replace(/\s+(?:and|to)\b.*$/i, '')
             .trim();
+        let sourceEvidence = { kind:source ? 'explicit-corpse':'unknown' };
 
         if (!source && this.lastKill && at - this.lastKill.at <= Math.max(60, this.encounterGapSeconds * 2) * 1000) {
             source = this.lastKill.name;
+            sourceEvidence = { kind:'recent-kill', timeGapMs:at-this.lastKill.at, sourceAt:this.lastKill.at };
         }
         if (!source) {
             const encounter = this.encounters[this.encounters.length - 1];
             if (encounter && at - encounter.lastAt <= this.encounterGapSeconds * 1000) {
                 source = encounter.firstTarget;
+                sourceEvidence = { kind:'encounter-target', timeGapMs:at-encounter.lastAt, sourceAt:encounter.lastAt };
             }
         }
         if (!item || isCurrencyLoot(item)) return null;
@@ -225,6 +228,8 @@ export class EQLogParser {
             item,
             quantity: parsedItem.quantity,
             source: source || 'Unknown',
+            sourceEvidence,
+            sourceConfidence:sourceEvidence.kind === 'explicit-corpse' ? 1 : sourceEvidence.kind === 'unknown' ? 0 : 0.25,
             zone: this.zone,
             sourceKey,
             lootKey

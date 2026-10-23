@@ -27,6 +27,38 @@ const subscribe = (channel, callback) => {
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
 };
+contextBridge.exposeInMainWorld('eyeOfZommCapture', {
+    status:()=>ipcRenderer.invoke('eye-of-zomm:capture','status'),
+    sources:()=>ipcRenderer.invoke('eye-of-zomm:capture','sources'),
+    start:value=>ipcRenderer.invoke('eye-of-zomm:capture','start',value),
+    stop:value=>ipcRenderer.invoke('eye-of-zomm:capture','stop',value),
+    pause:()=>ipcRenderer.invoke('eye-of-zomm:capture','pause'),
+    resume:()=>ipcRenderer.invoke('eye-of-zomm:capture','resume'),
+    read:value=>ipcRenderer.invoke('eye-of-zomm:capture','read',value),
+    observeLog:value=>ipcRenderer.invoke('eye-of-zomm:capture','observe-log',value),
+    importImage:value=>ipcRenderer.invoke('eye-of-zomm:capture','import-image',value),
+    preview:()=>ipcRenderer.invoke('eye-of-zomm:capture','preview'),
+    setRegion:value=>ipcRenderer.invoke('eye-of-zomm:capture','set-region',value),
+    onStatus:callback=>subscribe('eye-of-zomm:capture-status',callback),
+    onObservation:callback=>subscribe('eye-of-zomm:capture-observation',callback)
+});
+contextBridge.exposeInMainWorld('eyeOfZommWiki', {
+    status:()=>ipcRenderer.invoke('eye-of-zomm:wiki','status'),
+    login:()=>ipcRenderer.invoke('eye-of-zomm:wiki','login'),
+    logout:()=>ipcRenderer.invoke('eye-of-zomm:wiki','logout'),
+    matches:value=>ipcRenderer.invoke('eye-of-zomm:wiki','matches',value),
+    blueprints:()=>ipcRenderer.invoke('eye-of-zomm:wiki','blueprints'),
+    preparePlan:value=>ipcRenderer.invoke('eye-of-zomm:wiki','prepare-plan',value),
+    submitPlan:value=>ipcRenderer.invoke('eye-of-zomm:wiki','submit-plan',value),
+    getPlan:value=>ipcRenderer.invoke('eye-of-zomm:wiki','get-plan',value),
+    uploadCharacter:value=>ipcRenderer.invoke('eye-of-zomm:wiki','upload-character',value),
+    onStatus:callback=>subscribe('eye-of-zomm:wiki-state',callback)
+});
+contextBridge.exposeInMainWorld('eyeOfZommShare', {
+    copyText:value=>ipcRenderer.invoke('eye-of-zomm:share','copy-text',value),
+    copyPng:value=>ipcRenderer.invoke('eye-of-zomm:share','copy-png',value),
+    savePng:value=>ipcRenderer.invoke('eye-of-zomm:share','save-png',value)
+});
 contextBridge.exposeInMainWorld('eyeOfZommDiscovery',{
     show:value=>ipcRenderer.invoke('eye-of-zomm:discovery','show',value),
     action:(action,value)=>ipcRenderer.invoke('eye-of-zomm:discovery',action,value),

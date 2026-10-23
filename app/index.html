@@ -6,6 +6,7 @@
 <title>EQLWiki - Eye of Zomm</title>
 <link rel="stylesheet" href="./styles.css">
 <link rel="stylesheet" href="./whats-new.css">
+<link rel="stylesheet" href="./capture-workspace.css">
 </head>
 <body>
 <div class="app-shell">
@@ -45,6 +46,8 @@
         <button class="nav-button" data-view="drops"><span>▣</span>Drops</button>
         <button class="nav-button" data-view="combat"><span>⚔</span>Combat</button>
         <button class="nav-button" data-view="timers"><span>◷</span>Triggers</button>
+        <button class="nav-button" data-view="contribute"><span>✎</span>Contribute to Wiki</button>
+        <button class="nav-button" data-view="character"><span>♙</span>Character</button>
         <button class="nav-button" data-view="settings"><span>⚙</span>Settings</button>
     </aside>
 
@@ -237,6 +240,8 @@
             <div id="wiki-discovery-notices" aria-label="Wiki discoveries"></div>
         </section>
 
+        <section class="view" data-view-panel="contribute"><div id="contribution-workspace"></div></section>
+        <section class="view" data-view-panel="character"><div id="character-workspace"></div></section>
         <section class="view" data-view-panel="settings">
             <div class="section-heading">
                 <div>
@@ -258,6 +263,7 @@
                     <p id="settings-appearance-status" class="settings-helper" role="status" aria-live="polite"></p>
                 </article>
                 <div id="overlay-controller" class="panel"></div>
+                <article id="capture-settings" class="panel"></article>
                 <article class="panel">
                     <h2>EverQuest folder</h2>
                     <div class="setting-line"><span>Game folder</span><code id="settings-eq-root">—</code></div>

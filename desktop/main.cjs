@@ -15,6 +15,9 @@ const { AppUpdater, isReleaseNotesUrl, launchSilentNsisInstaller } = require('./
 const { OverlayHost } = require('./overlay-host.cjs');
 const { safeMapFile } = require('./overlay-map-policy.cjs');
 const { DiscoveryHost } = require('./discovery-host.cjs');
+const { CaptureHost } = require('./capture-host.cjs');
+const { WikiHost } = require('./wiki-host.cjs');
+const { ShareHost } = require('./share-host.cjs');
 const { installLocalFontPermissions } = require('./font-permissions.cjs');
 const { normalizeWindowPlacement, WindowPlacement } = require('./window-placement.cjs');
 const {
@@ -45,6 +48,9 @@ let port = DEFAULT_PORT;
 let appUpdater = null;
 let overlayHost = null;
 let discoveryHost = null;
+let captureHost = null;
+let wikiHost = null;
+let shareHost = null;
 let quitting = false;
 let sessionNeedsReload = false;
 let windowPlacement = null;
@@ -809,9 +815,9 @@ function createWindow(config = {}, savedPlacement = {}) {
     });
     const unavailable = () => { sessionNeedsReload = true; overlayHost?.markSessionUnavailable(); };
     windowRef.webContents.on('render-process-gone', unavailable);
-    windowRef.webContents.on('render-process-gone', () => discoveryHost?.clear());
+    windowRef.webContents.on('render-process-gone', () => {discoveryHost?.clear();void captureHost?.stop().catch(()=>{});});
     windowRef.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-        if (isMainFrame && !isInPlace) discoveryHost?.clear();
+        if (isMainFrame && !isInPlace) {discoveryHost?.clear();void captureHost?.stop().catch(()=>{});}
     });
     windowRef.webContents.on('unresponsive', unavailable);
     windowRef.webContents.on('responsive', () => { sessionNeedsReload = false; });
@@ -849,8 +855,12 @@ async function bootstrap() {
         await electron.session.defaultSession.clearCache();
         config=await updateConfig({frontendCacheVersion:APP_VERSION});
     }
+    captureHost = new CaptureHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
+    wikiHost = new WikiHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
+        stateDir:path.join(userDataDir(),'wiki-contributions'),version:APP_VERSION});
+    shareHost = new ShareHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
-        isTimerPanel:event=>overlayHost.overlaySender(event)==='timers'});
+        isTimerPanel:event=>overlayHost.overlaySender(event)==='timers',captureScreenshot:value=>captureHost.captureScreenshot(value)});
     createWindow(config,await readJson(windowPlacementPath(),{}));
     // Metadata checks are quiet. Application downloads require an explicit
     // request or the saved opt-in; a staged installer never runs on startup.
@@ -928,7 +938,9 @@ app.on('before-quit', event => {
     stopDataPackRefresh();
     overlayHost?.dispose();
     discoveryHost?.dispose();
+    wikiHost?.dispose();
+    shareHost?.dispose();
     appUpdater?.shutdown();
     try { server?.close(); } catch {}
-    quitFlush=Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue]).finally(()=>{quitReady=true;app.quit();});
+    quitFlush=Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain]).finally(()=>{quitReady=true;app.quit();});
 });
