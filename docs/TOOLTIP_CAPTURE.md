@@ -168,3 +168,39 @@ same PNG in Base produces its own reviewed record. The host fixture verifies
 identical image bytes within three seconds yield increasing sequence/time and
 import generation without enabling or taking over continuous capture. Live OCR
 still uses its three-second dedup; log cursor dedup remains unchanged.
+
+At `8cc4f4e`, the full Windows installer workflow passed source/native gates and
+the isolated packaged-ASAR capture/OCR checks. Linux recovered all three exact
+transient names and its fresh baseline, then stopped at the new compact framed
+armor fixture's AC expectation (`undefined`, expected 27); its underlying OCR
+needs inspection before changing that assertion. Another Windows native run
+showed roughly one second between frame timestamp and IPC admission. The fixture
+now separates those measurements: changed stage pixels must be captured within
+500 ms of drawing, while their native acknowledgment has a bounded five-second
+wait. It still requires all three exact names, queue retention and original
+provenance. That tests acquisition more strictly without treating transport
+latency as an uncaptured frame. Bounded per-case synthetic hover diagnostics are
+now emitted on failure. No release has been published from these runs.
+
+An isolated local Linux Electron 43.8.3 run under WSLg, with privately extracted
+runtime libraries and no global installation, recovered all ten source/assembled
+fixture identities. Its default font produced scene STR `7211` at confidence 31
+versus focused STR `21` at confidence 89. The parser deliberately leaves that
+conflict unknown and retains both written observations; choosing a confident
+value silently would change the existing safety contract. Numeric pixel checks
+therefore retain exact assertions for every emitted value and allow at most one
+missing expected numeric field only when it is explicitly marked conflicting
+and independent retained stat blocks contain distinct values including the
+expected value. Unexplained missing values, wrong emitted values, additional
+missing stats, wrong identities or duplicate panes still fail. No production
+parsing rule is relaxed by this platform-sensitive test correction.
+With private per-process Liberation Sans font configuration, the exact CI AC
+case is reproduced: compact armor scene AC `21` at confidence 41 and focused AC
+`27` at confidence 95 occupy the same numeric box; AC remains unknown while STR
+is correctly read. Both source and assembled runtimes retain that conflict.
+The unchanged repository hover gate now passes under both isolated Linux font
+environments: ten DejaVu and ten Liberation cases, each covering source and
+assembled OCR. All ten Windows cases also pass with every expected numeric field
+retained. Guard-negative probes reject wrong emitted values, unexplained missing
+fields, a claimed conflict without distinct written numbers, and more than one
+missing expected numeric field. Final exact-head CI/package checks remain required.

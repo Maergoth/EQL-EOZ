@@ -69,8 +69,13 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         for(const stage of [2,3]){
             const drawnAt=await game.webContents.executeJavaScript(`window.drawStage(${JSON.stringify({name:names[stage-1],weapon:stage===2})},${stage})`);await commit();
             stages.at(-1).visibleForMs=drawnAt-stages.at(-1).drawAt;
-            await until(()=>admissions.some(frame=>frame.generation===hoverGeneration&&frame.stage===stage&&frame.capturedAt>=drawnAt&&frame.admittedAt-drawnAt<=1500),`Tooltip ${stage} pixels did not reach native admission within1500ms`,1500);
+            // The frame's timestamp measures sampling. IPC/PNG delivery on a
+            // busy runner may arrive later and must not masquerade as a missed
+            // source frame. Retain a strict 500ms changed-pixel capture bound,
+            // with a separate bounded wait for its native acknowledgment.
+            await until(()=>admissions.some(frame=>frame.generation===hoverGeneration&&frame.stage===stage&&frame.capturedAt>=drawnAt),`Tooltip ${stage} pixels did not reach native admission`,5000);
             const admitted=admissions.find(frame=>frame.generation===hoverGeneration&&frame.stage===stage&&frame.capturedAt>=drawnAt);stages.push({stage,drawAt:drawnAt,admittedAt:admitted.admittedAt,capturedAt:admitted.capturedAt,drawToAdmissionMs:admitted.admittedAt-drawnAt,hash:admitted.hash});await wait(700);
+            if(admitted.capturedAt-drawnAt>500)throw Error(`Tooltip ${stage} changed pixels were not sampled within500ms: ${JSON.stringify(diagnostics())}`);
         }
         await until(()=>host.getStatus().queuedFrames>=2,'Brief hover frames were not retained while OCR was held',5000);
         const releasedAt=Date.now();stages.at(-1).visibleForMs=releasedAt-stages.at(-1).drawAt;releaseGate();releaseGate=null;
@@ -80,7 +85,7 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         const cadence=admissions.filter(frame=>frame.generation===hoverGeneration&&frame.capturedAt<releasedAt).map(frame=>frame.capturedAt);
         if(cadence.length<3)throw Error('The actual native stream did not admit three brief tooltip frames.');
         captureStages=false;const devicePixelRatio=await game.webContents.executeJavaScript('devicePixelRatio');
-        console.log('EOZ_TRANSIENT_CAPTURE='+JSON.stringify({ok:true,tooltips:3,realWindowStream:true,offlineOcr:true,heldFirstRead:true,queuedBeforeRelease:cadence.length,originalCaptureTime:true,ownerAndGeneration:true,requestedFrameRate:8,actualFrameRate:frameRate,requestedScaleFactor:scaleFactor,devicePixelRatio,stages,maximumChangedTooltipDrawToAdmissionMs:1500,maximumPngRate:4,maximumQueuedFrames:12,maximumQueuedBytes:48*1024*1024,ocrCalls:ocrTimes.length,ocrMeanMs:Math.round(ocrTimes.reduce((sum,value)=>sum+value,0)/ocrTimes.length),ocrMaxMs:Math.max(...ocrTimes)}));
+        console.log('EOZ_TRANSIENT_CAPTURE='+JSON.stringify({ok:true,tooltips:3,realWindowStream:true,offlineOcr:true,heldFirstRead:true,queuedBeforeRelease:cadence.length,originalCaptureTime:true,ownerAndGeneration:true,requestedFrameRate:8,actualFrameRate:frameRate,requestedScaleFactor:scaleFactor,devicePixelRatio,stages,maximumChangedTooltipDrawToCaptureMs:500,nativeAcknowledgmentTimeoutMs:5000,maximumPngRate:4,maximumQueuedFrames:12,maximumQueuedBytes:48*1024*1024,ocrCalls:ocrTimes.length,ocrMeanMs:Math.round(ocrTimes.reduce((sum,value)=>sum+value,0)/ocrTimes.length),ocrMaxMs:Math.max(...ocrTimes)}));
         await host.pause();await game.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(baselineHtml));await commit();
         await host.resume();const baselineGeneration=host.generation;
         await until(()=>records.some(record=>record.subject.kind==='character'&&record.input?.captureGeneration===baselineGeneration),'Initial NoEquipment stat frame was not recognized');const phaseCutoff=Date.now();
