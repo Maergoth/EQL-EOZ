@@ -40,6 +40,12 @@ alphanumeric/underscore/hyphen contract as Start. Imports reserve the one OCR
 worker, cancel any stale live job, and release the hold afterward while retaining
 the existing capture owner/source. A failed or cancelled import cannot leak an
 old result into the new review session.
+Manual observations carry `input.captureGeneration` for that exact import. The
+Character workspace separately checks the initiating phase/context before using
+such a file as a No Equipment proposal; its completion timestamp cannot prove
+that an older image was captured after a phase change. Explicit manual imports
+are not suppressed by live-screen semantic dedup; selecting the same PNG again
+returns a new review record with its own sequence, time and import generation.
 
 `preview` is an explicit exact-main-window action against the current running
 source's last captured frame; it does not select or capture another display.

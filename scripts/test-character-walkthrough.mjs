@@ -67,7 +67,7 @@ async function run({root,temporary,screenshots}){
             let statusListener=()=>{},observationListener=()=>{},sequence=0,firstFrameAt=0;
             let state={enabled:false,phase:'disabled',owner:null,source:null,sessionId:'',hasPreview:false,generation:0,generationStartedAt:0};
             const source={id:'window:synthetic-game',name:'EverQuest · Synthetic Fixture',label:'EverQuest · Synthetic Fixture',type:'window',recommended:true};
-            const starts=[],stops=[],resumes=[],notices=[],saveCalls=[],copyCalls=[],reads=[],sourcesCalls=[];
+            const starts=[],stops=[],resumes=[],notices=[],saveCalls=[],copyCalls=[],reads=[],sourcesCalls=[],imports=[];
             const emit=patch=>{state={...state,...patch};statusListener(state);};
             const model=()=>JSON.parse(localStorage.getItem('eql-eye-of-zomm-character-v1'));
             const flow=()=>JSON.parse(localStorage.getItem('eql-eye-of-zomm-character-walkthrough-v1'))||{step:'details',active:false};
@@ -78,12 +78,13 @@ async function run({root,temporary,screenshots}){
             const api={status:async()=>{const snapshot=structuredClone(state);if(fixture.deferStatus)return new Promise(resolve=>{fixture.releaseStatus=()=>{fixture.deferStatus=false;fixture.releaseStatus=null;resolve(snapshot);};});return snapshot;},sources:async()=>{sourcesCalls.push(true);return[{id:'screen:fixture',name:'Synthetic display',type:'screen'},source];},
                 onStatus:fn=>{statusListener=fn;return()=>{statusListener=()=>{};};},onObservation:fn=>{observationListener=fn;return()=>{observationListener=()=>{};};},
                 read:async value=>{reads.push(value);const records=(fixture.replayRecords||[]).filter(record=>record.sequence>(value.afterSequence||0));return{records,lastSequence:Math.max(sequence,...records.map(record=>record.sequence))};},
+                importImage:async value=>{imports.push(value);const generation=state.generation+1;emit({generation,generationStartedAt:Date.now()});return new Promise(resolve=>{fixture.pendingImport={finish(entries){const records=entries.map(({kind,values})=>observe(kind,values,{kind:'manual',sessionId:value.sessionId,input:{sourceId:null,captureGeneration:generation}}));fixture.pendingImport=null;resolve({records,message:'Synthetic screenshot read.'});}};});},
                 start:async value=>{starts.push(value);firstFrameAt=Date.now();await new Promise(done=>setTimeout(done,25));emit({enabled:true,phase:'running',owner:value.mode,sessionId:value.sessionId,source,characterSessionId:value.sessionId,contributionPaused:true,resumable:false,hasPreview:false,generation:state.generation+1,generationStartedAt:firstFrameAt});return state;},
                 stop:async value=>{stops.push(value);emit({enabled:false,phase:'disabled',owner:null,sessionId:'',source:null,hasPreview:false,resumable:false});return state;},
                 resume:async()=>{resumes.push(true);emit({phase:'running',resumable:false,error:null,readWarning:null,generation:state.generation+1,generationStartedAt:Date.now()});return state;}};
             const share={savePng:async value=>{saveCalls.push({png:value.startsWith('data:image/png;base64,'),length:value.length});return{ok:fixture.saveSucceeds};},copyPng:async value=>{copyCalls.push({png:value.startsWith('data:image/png;base64,'),length:value.length});return{ok:true};}};
             const mount=()=>mountCaptureWorkspace({capture:api,wiki:null,share,notify:value=>notices.push(value),getPack:()=>({items:[],icons:{}})});
-            window.fixture={source,starts,stops,resumes,notices,saveCalls,copyCalls,reads,sourcesCalls,emit,observe,model,flow,mount,saveSucceeds:false,get state(){return state;},get firstFrameAt(){return firstFrameAt;}};
+            window.fixture={source,starts,stops,resumes,notices,saveCalls,copyCalls,reads,sourcesCalls,imports,emit,observe,model,flow,mount,saveSucceeds:false,get state(){return state;},get firstFrameAt(){return firstFrameAt;}};
             fixture.workspace=mount();
         });
         await until(()=>execute(()=>fixture.reads.length===1),'empty local journal replay');
@@ -164,6 +165,22 @@ async function run({root,temporary,screenshots}){
         await snapshot('character-base-stat-review.png',{font:20});
         await execute(()=>document.querySelector('[data-walkthrough-base]').requestSubmit());await step('reequip');
         assert.equal((await model()).statSnapshots.base.stats.HP,605);
+        // The file picker/OCR invocation, not its completion timestamp, decides
+        // whether a manual Inventory image belongs to this Base phase.
+        const seenBeforeImport=(await model()).candidates.find(card=>card.id===bootsId).seenCount;
+        await click('[data-walkthrough-stage] [data-character-import]');await until(()=>execute(()=>Boolean(fixture.pendingImport)),'pending manual import from Re-equip');
+        await click('[data-walkthrough-back]');await step('base');
+        await execute(boots=>fixture.pendingImport.finish([{kind:'character',values:{hp:9999,str:999}},{kind:'item',values:boots}]),boots);
+        await until(()=>execute(()=>!fixture.pendingImport),'late Re-equip file read completed');
+        assert.equal(await execute(()=>document.querySelector('[data-walkthrough-base-values]').value),'','A Re-equip Inventory import completing after Back cannot populate fresh Base values');
+        assert((await model()).candidates.find(card=>card.id===bootsId).seenCount>seenBeforeImport,'The same delayed import may still update an eligible item card');
+        assert.equal((await model()).statSnapshots.base.stats.HP,605,'A stale manual read does not overwrite the accepted baseline');
+        const manualBaseValues={hp:605,mana:240,endurance:410,str:75,acMitigation:61,acMitigationSoftcap:43,acEvasion:127,attackOffense:46,attackAccuracy:107};
+        const readManualBase=async()=>{await click('[data-walkthrough-stage] [data-character-import]');await until(()=>execute(()=>Boolean(fixture.pendingImport)),'manual import initiated in Base');await execute(values=>fixture.pendingImport.finish([{kind:'character',values}]),manualBaseValues);await until(()=>execute(()=>/HP: 605/.test(document.querySelector('[data-walkthrough-base-values]').value)),'legitimate Base import accepted');};
+        await readManualBase();assert.match(await execute(()=>document.querySelector('[data-walkthrough-base-age]').textContent),/Fresh No Equipment/);
+        await execute(()=>fixture.emit({generation:fixture.state.generation+1,generationStartedAt:Date.now()}));
+        assert.equal(await execute(()=>document.querySelector('[data-walkthrough-base-values]').value),'','A later capture-generation change clears an unreviewed manual proposal');
+        await readManualBase();await execute(()=>document.querySelector('[data-walkthrough-base]').requestSubmit());await step('reequip');
         const originalCount=(await model()).candidates.length;
         await observe('item',boots);
         current=await model();assert.equal(current.candidates.length,originalCount,'Re-equipped same physical item merges into its card');

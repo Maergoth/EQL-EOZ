@@ -4,7 +4,7 @@
 
 - Recognize compact Default Modern hover tooltips as well as full examine panes, including single-word item names, bare equipment slots and separate stat columns.
 - Sample screen changes more frequently and retain a bounded queue of distinct frames while the offline OCR worker is busy. Keep temporary pixels in memory and report queue saturation.
-- Retain an item captured during unequip/re-equip if OCR completes after advancing the walkthrough. Keep No Equipment baseline freshness and source/session guards.
+- Retain an item captured during unequip/re-equip if OCR completes after advancing the walkthrough. Keep No Equipment baseline freshness and source/session guards; an earlier manual import cannot become a fresh baseline after navigating Back.
 - Show reading progress in the walkthrough; wait for the item card before moving to the next item when the reader is catching up.
 
 ## 0.9.1 - Guided character capture and touching overlays

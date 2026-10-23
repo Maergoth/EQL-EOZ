@@ -141,6 +141,22 @@ const missingHoverName=hoverWords.filter(word=>word.text!=='Brightneedle +3'),na
 assert.equal(parseScreenRead({text:'Green name omitted by whole-scene OCR',words:missingHoverName}).length,0);
 assert.equal(screenReadRefinementRegions({words:missingHoverName})[0].role,'item-name','Strict non-name anchors permit a bounded pixel reread, not an invented name');
 const recoveredHover=parseScreenRead({text:'Green name omitted by whole-scene OCR',words:missingHoverName,confidence:88,refinements:[nameRefinement]})[0];assert.equal(recoveredHover.subject.name,'Brightneedle +3');assert.equal(recoveredHover.fields.find(field=>field.key==='name').confidence,41,'Uncertain prefix words are retained with their actual uncertainty, never silently truncated');
+// The Class glyph's ink height is not the title's line box. Linux/Windows
+// fallback fonts and native caption offsets must not cut an observed title.
+const shortClassInk=hoverPane(0,27).map(entry=>entry.text==='Brightneedle +3'?{...entry,bbox:{...entry.bbox,y1:entry.bbox.y0+23}}:/^(?:Class|Race):/.test(entry.text)?{...entry,bbox:{...entry.bbox,y1:entry.bbox.y0+14}}:entry);
+const completeNameBox=shortClassInk.find(entry=>entry.text==='Brightneedle +3').bbox,inkCrop=screenReadRefinementRegions({words:shortClassInk}).find(region=>region.role==='item-name');
+assert(inkCrop);assert(inkCrop.y<=completeNameBox.y0&&inkCrop.y+inkCrop.height>=completeNameBox.y1,'Observed name row must fit completely even when Class has shorter ink height');
+assert(inkCrop.y+inkCrop.height<shortClassInk.find(entry=>entry.text.startsWith('Lore')).bbox.y0,'Name reread excludes the following Lore row');
+const missedInkCrop=screenReadRefinementRegions({words:shortClassInk.filter(entry=>entry.text!=='Brightneedle +3')}).find(region=>region.role==='item-name');
+assert(missedInkCrop.y<=completeNameBox.y0&&missedInkCrop.y+missedInkCrop.height>=completeNameBox.y1,'Missing green name fallback uses observed row spacing and Lore boundary, not Class ink height alone');
+assert(missedInkCrop.y+missedInkCrop.height<shortClassInk.find(entry=>entry.text.startsWith('Lore')).bbox.y0);
+for(const metadata of ['No Trade',null]){
+ const variant=shortClassInk.flatMap(entry=>entry.text.startsWith('Lore')?(metadata?[{...entry,text:metadata}]:[]):[entry]);
+ for(const omitName of [false,true]){const crop=screenReadRefinementRegions({words:variant.filter(entry=>!omitName||entry.text!=='Brightneedle +3')}).find(region=>region.role==='item-name');
+  assert(crop&&crop.y<=completeNameBox.y0&&crop.y+crop.height>=completeNameBox.y1,'No Trade-only and absent metadata retain the complete observed/name-line bounds');
+  if(metadata)assert(crop.y+crop.height<variant.find(entry=>entry.text===metadata).bbox.y0);
+ }
+}
 const mixedHover=parseScreenRead({text:'Independent examine and hover scene',words:[...modernPane(0,0,'Synthetic Separate Boots +2','Feet',2,31,62),...hoverPane(900,0),word('Inventory',2000,10,100),word('HP',2000,900),word('9999',2100,900),word('STR',2000,930),word('888',2100,930)]});assert.equal(mixedHover.length,2);assert.equal(mixedHover[1].subject.name,'Brightneedle +3');assert.equal(mixedHover[1].fields.find(field=>field.key==='hp').value,73);assert.doesNotMatch(mixedHover[1].evidence.text,/Separate Boots|9999|888/);
 assert.deepEqual(parseItemStatBlock('Base Dmg: 18 Backstab Dmg: 9\nCombat Effect: Rampage (Req Level 45) HP 99').fields.map(field=>[field.key,field.value]),[['damage',18],['backstabDamage',9]]);
 assert.equal(parseScreenRead({text:'Inventory and unrelated numbers',words:[word('Inventory',10,10,100),word('HP 9999 STR 888 AC 777',20,300,300)]}).length,0,'Unrelated Inventory/chat without Modern stat-pane geometry cannot create a Character baseline');

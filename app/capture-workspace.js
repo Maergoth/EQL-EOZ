@@ -58,7 +58,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     const $=(selector,base=root)=>base.querySelector(selector),unsubscribers=[];
     let itemBaseUi=null;
     let disposed=false,busy=false,publishing=false,selectedId=queue.snapshot()[0]?.id||'',selectedCard='',captureState={phase:'disabled'},sources=[],optIn=false,account=null,plan=null,matches=null,lastStats=null,shareImage=null,uploadId=null,dragId='',cursor=0;
-    let walkthroughStageKey='',walkthroughEpoch=0,baseProposalId='',walkthroughMessage='',sourceStart=null,characterRefreshPending=false,sourceListEpoch=0,manualItemRead=null;
+    let walkthroughStageKey='',walkthroughEpoch=0,baseProposalId='',walkthroughMessage='',sourceStart=null,characterRefreshPending=false,sourceListEpoch=0,manualItemRead=null,lastStatsManualRead=null;
     let profileSeeded=Boolean(character.snapshot().metadata.name),wikiLoaded=false,reviewEpoch=0,offlineCharacterSessionId='';
     let areaProfiles=[],areaPreview=null,areaDraft=null,areaEpoch=0,areaOpening=false,areaSaving=false,areaDrag=null;
     try{const raw=storage?.getItem(OCR_AREA_STORAGE_KEY);if(raw&&raw.length<=24000){const parsed=JSON.parse(raw);if(Array.isArray(parsed))areaProfiles=parsed.slice(-MAX_OCR_AREAS).filter(value=>typeof value?.key==='string'&&value.key.length<=1000&&validAreaProfile(value)).map(value=>({key:value.key,region:normalizeOcrArea(value.region),referenceSize:frameSize(value.referenceSize)}));}}catch{/* A damaged optional calibration must not block ordinary capture. */}
@@ -162,13 +162,21 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     async function importScreenshot(mode){
         if(!capture)throw Error('Screenshot reading requires the desktop app.');
         const flow=walkthrough.snapshot(),sessionId=mode==='character'?(flow.active?flow.sessionId:captureState.characterSessionId||(captureState.owner==='character'&&captureState.sessionId)||(offlineCharacterSessionId||=globalThis.crypto.randomUUID())):undefined;
-        const token=mode==='character'?{sessionId,at:Date.now(),epoch:walkthroughEpoch,eligible:!flow.active||['unequip','reequip'].includes(flow.step),inactive:!flow.active}:null;if(token)manualItemRead=token;
+        const token=mode==='character'?{sessionId,at:Date.now(),epoch:walkthroughEpoch,eligible:!flow.active||['unequip','reequip'].includes(flow.step),inactive:!flow.active,baseEligible:flow.active&&flow.step==='base',baseAfterAt:flow.baseAfterAt,captureGeneration:captureState.generation,captureSourceId:captureState.source?.id||null,captureSessionId:captureState.sessionId||''}:null;if(token)manualItemRead=token;
         try{const result=await capture.importImage({mode,...(sessionId?{sessionId}:{})});if(result.cancelled)return;
             if(mode==='character'&&!$('[data-character-editor]',characterRoot).contains(document.activeElement))renderCharacter();
             if(result.message)notify(result.message,{tone:result.records?.length?'success':'warning'});
         }finally{if(manualItemRead===token)manualItemRead=null;}
     }
     const stepLabels={details:'Details',source:'Game window',unequip:'Unequip',base:'Base stats',reequip:'Re-equip',slots:'Confirm slots',review:'Save snapshot',complete:'Saved'};
+    function acceptsBaseRead(observation,token=lastStatsManualRead){
+        if(!walkthrough.acceptsBase(observation))return false;
+        if(observation.kind!=='manual')return true;
+        const flow=walkthrough.snapshot(),generation=token?.captureGeneration;
+        // A file has no trustworthy capture time. The host stamps completion,
+        // so only an import explicitly begun in this same Base phase may fill it.
+        return Boolean(token?.baseEligible&&token.epoch===walkthroughEpoch&&token.sessionId===flow.sessionId&&token.at>=flow.baseAfterAt&&token.baseAfterAt===flow.baseAfterAt&&Number.isSafeInteger(generation)&&generation>=0&&observation.input?.captureGeneration===generation+1&&[generation,generation+1].includes(captureState.generation)&&token.captureSourceId===(captureState.source?.id||null)&&token.captureSessionId===(captureState.sessionId||''));
+    }
     function captureOptions(){return `<details class="walkthrough-options"><summary>Capture options</summary><div class="capture-actions"><button class="secondary-button" type="button" data-walkthrough-calibrate>Adjust OCR area</button><button class="secondary-button" type="button" data-character-import>Read an examine screenshot</button><button class="text-button" type="button" data-walkthrough-source>Change game window</button></div></details>`;}
     function renderWalkthrough(force=false){
         const flow=walkthrough.snapshot(),snapshot=character.snapshot(),host=$('[data-walkthrough-stage]',characterRoot),key=JSON.stringify([flow.step,flow.active,flow.sessionId]);
@@ -189,9 +197,10 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             select.value=sources.some(s=>s.id===previous)?previous:sources.find(s=>s.recommended===true)?.id||'';
         }
         if(flow.step==='base'){
-            const area=$('[data-walkthrough-base-values]',characterRoot),proposal=lastStats&&walkthrough.acceptsBase(lastStats)?lastStats:null;
+            const area=$('[data-walkthrough-base-values]',characterRoot),proposal=lastStats&&acceptsBaseRead(lastStats)?lastStats:null;
             if(flow.baseDirty){if(area.value!==flow.baseDraft)area.value=flow.baseDraft;}
             else if(proposal&&proposal.id!==baseProposalId&&document.activeElement!==area){area.value=Object.entries(characterObservationInput(proposal).stats).map(([k,v])=>`${characterStatLabel(k)}: ${v??'?'}`).join('\n');baseProposalId=proposal.id;}
+            else if(!proposal&&baseProposalId){area.value='';baseProposalId='';}
             $('[data-walkthrough-base-age]',characterRoot).textContent=flow.baseDirty?'Your edits are retained. New readings will not overwrite them.':proposal?'Fresh No Equipment reading. Edit a value if needed; ? keeps it unknown.':'Waiting for a reading taken after you confirmed every item is off. You can also enter the values yourself.';
         }
         if(['unequip','reequip'].includes(flow.step)){$('[data-walkthrough-count]',characterRoot).textContent=`${flow.items.length} item cards captured · ${character.totals().assignedCount} slots assigned`;const queued=Math.max(0,Number(captureState.queuedFrames)||0),running=captureState.owner==='character'&&captureState.sessionId===flow.sessionId&&captureState.phase==='running';$('[data-walkthrough-reading]',characterRoot).textContent=!running?'Screen reading is paused. Resume capture to read item tooltips.':captureState.reading?`Reading a captured frame${queued?` · ${queued} waiting`:''}. Wait for each item card before moving on.`:queued?`${queued} captured frames waiting to be read. Wait for each item card before moving on.`:captureState.lastReadAt&&captureState.lastReadItemCount===0?'The last frame had no readable item tooltip. Hover over an item and keep its complete tooltip visible.':'Waiting for a readable item tooltip. Keep it visible until its card appears.';}
@@ -270,7 +279,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
                 if(!replaying&&!result.deduplicated)notify(`Captured ${result.candidate.name}.`,{tone:'success'});
             }else if(!result.ok&&result.error&&!replaying)warning(result.error);
         }else if(observation.owner==='character'&&observation.subject?.kind==='character'){
-            if(walkthrough.snapshot().active){if(!replaying&&walkthrough.acceptsBase(observation)){lastStats=observation;renderWalkthrough();}}
+            if(walkthrough.snapshot().active){const token=manualItemRead?.epoch===walkthroughEpoch&&manualItemRead.sessionId===observation.sessionId?manualItemRead:null;if(!replaying&&acceptsBaseRead(observation,token)){lastStats=observation;lastStatsManualRead=observation.kind==='manual'?token:null;renderWalkthrough();}}
             else if(!replaying){lastStats=observation;renderStatProposal();}
         }else{const candidate=queue.consume(observation);if(candidate){if(!selectedId)selectedId=candidate.id;renderQueue();if(!root.contains(document.activeElement))renderCandidate();}}
     }

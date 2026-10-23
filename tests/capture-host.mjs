@@ -115,7 +115,12 @@ try{
     await imported.waitForRead();imported.resolve();
     const result=await pending;
     assert.equal(result.records[0].owner,'character');assert.equal(result.records[0].sessionId,'offline-character');
+    assert.equal(result.records[0].input.captureGeneration,imported.host.generation,'a manual result carries the exact import generation for phase-invocation review');assert.equal(result.records[0].input.sourceId,null,'an imported PNG never claims a live source');
     assert.equal(imported.host.enabled,false,'an offline Character screenshot never enables persistent capture');
+    imported.tick();const repeated=imported.host.importImage({mode:'character',sessionId:'offline-character'});await imported.waitForRead();imported.resolve();const repeatedResult=await repeated;
+    assert.equal(repeatedResult.records.length,1,'an explicit second review of the same PNG is not suppressed by live-screen TTL dedup');assert.equal(repeatedResult.records[0].input.frameId,result.records[0].input.frameId);
+    assert.ok(repeatedResult.records[0].sequence>result.records[0].sequence);assert.ok(Date.parse(repeatedResult.records[0].capturedAt)>Date.parse(result.records[0].capturedAt));assert.ok(Date.parse(repeatedResult.records[0].capturedAt)-Date.parse(result.records[0].capturedAt)<3000);
+    assert.ok(repeatedResult.records[0].input.captureGeneration>result.records[0].input.captureGeneration);assert.equal(repeatedResult.records[0].sessionId,'offline-character');assert.equal(repeatedResult.records[0].kind,'manual');assert.equal(imported.host.enabled,false);assert.equal(imported.host.owner,null,'explicit offline reviews never take over the persistent capture owner');
     await imported.host.listSources();await imported.host.start({mode:'contribution',sourceId:'window:game'});
     imported.tick();imported.host.submitFrame(imported.frame('discard-on-import'));
     const running=imported.host.processing;
@@ -125,7 +130,7 @@ try{
     await running;await imported.waitForRead();imported.resolve();
     assert.equal((await review).records[0].owner,'character');assert.equal(imported.host.owner,'contribution');
     assert.equal(imported.host.phase,'running');assert.equal(imported.host.hold,false,'a manual review releases its exclusive worker hold');
-    assert.equal(imported.observations.length,2,'cancelled live OCR cannot leak into the manual character review');
+    assert.equal(imported.observations.length,3,'only three explicit manual reviews emit; cancelled live OCR cannot leak into the manual character review');
 }finally{await imported.host.dispose();await rm(temporary,{recursive:true,force:true});}
 async function readFrame(fixture,id,width=100,height=40){fixture.tick();assert.equal(fixture.host.submitFrame(fixture.frame(id,width,height)).accepted,true);await fixture.waitForRead();fixture.resolve();await fixture.host.processing;}
 {

@@ -15,7 +15,12 @@ because OCR completes later. Replay respects the saved tracked windows, while
 already accepted model cards stay available. Explicit screenshot imports use
 their initiating action's eligibility; completion/cancellation invalidates that
 token. No Equipment still requires its own new timestamp and sequence after
-confirmation. See [the capture follow-up](../TOOLTIP_CAPTURE.md) for evidence.
+confirmation. A manual file has no trustworthy capture time, so its import must
+also have been initiated in that same Base phase, after its cutoff, with matching
+session/source context and the exact import generation. A pending Re-equip file
+cannot become a fresh baseline after Back; its eligible item records can still
+complete. Unreviewed proposals clear when their context expires; manual edits
+remain available. See [the capture follow-up](../TOOLTIP_CAPTURE.md) for evidence.
 
 ## UI contract
 

@@ -48,9 +48,16 @@ function hoverItemRegions(words){
         // title/Description tab is absent in these actual hover surfaces.
         const footer=rows.find(row=>row.y>race.bbox.y0&&row.y<race.bbox.y0+font*45&&/^Hold\b.*\b(?:RMB|ALT\+LMB)\b.*\b(?:inspect|upgrade)\b.*\bitem\b/i.test(row.words.map(word=>word.text).join(' ')));
         if(!slot||!footer||!nearby.some(word=>/^Weight[:.]?$/i.test(clean(word.text)))||!nearby.some(word=>/^Size[:.]?$/i.test(clean(word.text))))continue;
-        const candidates=rows.filter(row=>row.y<classWord.bbox.y0-font*.5&&row.y>classWord.bbox.y0-font*5).map(row=>({row,text:row.words.filter(word=>word.bbox.x0>=classWord.bbox.x0-font*.5).map(word=>word.text).join(' ')}));
+        const candidates=rows.filter(row=>row.y<classWord.bbox.y0-font*.5&&row.y>classWord.bbox.y0-font*5).map(row=>{const selected=row.words.filter(word=>word.bbox.x0>=classWord.bbox.x0-font*.5);return {row,words:selected,text:selected.map(word=>word.text).join(' ')};});
         const name=candidates.find(candidate=>/[a-z]{3}/i.test(candidate.text)&&! /^(?:Lore(?:[ \t]+(?:Equipped|No)|$)|No (?:Trade|Drop)|Class\b|Race\b|Tier\b)/i.test(candidate.text));
-        const step=race.bbox.y0-classWord.bbox.y0,nameBand={x:Math.max(left,classWord.bbox.x0-font*.4),y:Math.max(0,classWord.bbox.y0-step*2-font*.4),width:boundary-classWord.bbox.x0+font*.4,height:font*1.8};
+        const step=race.bbox.y0-classWord.bbox.y0,nameTop=name?Math.min(...name.words.map(word=>word.bbox.y0)):classWord.bbox.y0-step*2,
+            nameBottom=name?Math.max(...name.words.map(word=>word.bbox.y1)):classWord.bbox.y0-step,
+            metadata=candidates.find(candidate=>candidate.row.y>nameTop&&/^(?:Lore(?:[ \t]+(?:Equipped|No)|$)|No (?:Trade|Drop))/i.test(candidate.text)),
+            bandTop=Math.max(0,nameTop-font*.4),bandBottom=Math.max(name?nameBottom:bandTop+4,Math.min(nameBottom+font*.4,metadata?metadata.row.y-Math.max(1,font*.1):classWord.bbox.y0-step-font*.1)),
+            nameBand={x:Math.max(left,classWord.bbox.x0-font*.4),y:bandTop,width:boundary-classWord.bbox.x0+font*.4,height:Math.max(4,bandBottom-bandTop)};
+        // Class/Race ink heights vary with the platform font and sparse OCR.
+        // An observed title row must fit completely; when green text was missed,
+        // its independently observed Lore/No Trade row bounds the reread below.
         regions.push({x:left,y:Math.max(0,name?.row.y??nameBand.y),right:boundary,bottom:footer.y,font,name:name?nameWithoutChrome(name.text):'',hover:true,classWord,nameBand});
         if(regions.length===4)break;
     }

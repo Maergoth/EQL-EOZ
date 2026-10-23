@@ -296,7 +296,7 @@ class CaptureHost {
         const values=(observation.fields||[]).map(field=>[field.key,field.value]).sort((a,b)=>a[0].localeCompare(b[0]));
         const semantic = JSON.stringify([observation.owner,observation.sessionId,observation.subject,values,observation.relations||[],
             observation.kind==='game-log'?[observation.input?.logId,observation.input?.cursor,observation.capturedAt]:null]);
-        const key=digest(semantic);if(observation.kind==='game-log'?this.seen.has(key):this.recentlySeen(key))return null;
+        const key=digest(semantic);if(observation.kind!=='manual'&&(observation.kind==='game-log'?this.seen.has(key):this.recentlySeen(key)))return null;
         if(generation!==this.generation || this.disposed)return null;
         const record=await this.journal.append({...observation,id:crypto.randomUUID(),dedupKey:key});
         if(generation!==this.generation || this.disposed)return null;
@@ -346,7 +346,7 @@ class CaptureHost {
             const {parseScreenRead}=await this.parseModule;
             const records=[];
             for(const observation of parseScreenRead({...read.result,kind:'manual',owner,sessionId:reviewSession,
-                capturedAt:new Date(this.now()).toISOString(),input:{...read.input,frameId:digest(png),sourceId:null}})){
+                capturedAt:new Date(this.now()).toISOString(),input:{...read.input,frameId:digest(png),sourceId:null,captureGeneration:generation}})){
                 const record=await this.saveObservation(observation,generation);if(record)records.push(record);
             }
             return {records,message:records.length?'Screenshot read. Review the proposed fields.':'No item examine or character stat block was recognized. Try a larger, clearer screenshot.'};

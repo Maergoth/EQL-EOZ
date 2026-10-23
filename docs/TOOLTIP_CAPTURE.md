@@ -61,7 +61,9 @@ to [the pipeline map](design/CAPTURE_PIPELINE.md), [Character walkthrough](CHARA
 Private baseline measurement on 2026-10-23 reproduced zero item proposals from
 both supplied crops: 558x502 in 726 ms and 553x639 in 709 ms. Final measurements
 produce one item from each crop and its private neutral 1920x1080 embedding,
-using three bounded passes in 868-1156 ms. The armor identity and several useful
+using three bounded passes in 868-1156 ms. After the title-crop correction below,
+the supplied armor/weapon crops still yield one item each in 973/1099 ms.
+The armor identity and several useful
 armor/weapon statistics are recovered. One weapon letter pair remains an OCR
 spelling error; ambiguous decimal weights stay unknown and unsupported Accuracy
 stays in the written text. No catalog values replace observed evidence. Neutral
@@ -77,9 +79,10 @@ live 4K throughput. No private image or output enters a fixture or release.
   original Modern pixels and legacy explicit Character Stats pixels with source
   and assembled runtimes. Inventory/chat alone does not establish character
   stats. Four retained private real negative reparses produce no observations.
-- Passed: native Windows window stream reports 8 fps; while the first real OCR
-  call is held, three compact tooltips appear 700 ms apart and all three are
-  later recovered with their original source/session/generation/timestamps.
+- Passed locally: native Windows window stream reports 8 fps; while the first
+  real OCR call is held, three compact tooltips cross the native stream. Changed
+  tooltips remain visible at least 700 ms after admission; all three are later
+  recovered with their original source/session/generation/timestamps.
 - Passed: deterministic FIFO/count/48 MiB/15-second bounds, duplicate
   coalescing, visible overflow, exclusive-import/area holds and stale
   encode/queue/result rejection on lifecycle changes. Unchanged-screen dedup
@@ -127,3 +130,41 @@ queued-frame and fresh unchanged baseline assertions remain intact. Logs report
 actual admission and visibility durations; they do not claim every stage lasted
 exactly 700 ms. Test-only Chromium scale overrides leave OS display settings
 unchanged. Neither failed remote run produced a release package.
+
+The `c08fb09` Linux run admitted all three distinct marked frames within its
+deadline, retained them without overflow and completed each read, but truncated
+their item names. This exposed a production name-crop weakness: the crop used
+Class/Race glyph height even when the actual item-name row was observed. Title
+and metadata glyph metrics need not match. The accompanying Windows runs stopped
+at a fixture viewport guard: the runner has 655 content pixels, while the scene
+included ten unused pixels after the tallest tooltip. The fixture now retains
+the entire tooltip including its border in a 652-pixel canvas, with the same
+font size and item coordinates. Bounded synthetic-only OCR pass/word diagnostics
+are included on failure; exact names and native provenance remain required.
+These failed runs are diagnostic evidence, not capture/package acceptance.
+
+The corrected name band includes the actual observed title boxes. When scene
+OCR misses the green title, observed row spacing and the following Lore/No Trade
+boundary constrain its reread. A geometry regression fails against the previous
+head and passes after the correction, including short metadata glyphs, caption
+offsets and absent Lore. All three native-size item names also pass real offline
+OCR in a 1000x760 synthetic frame with a 27-pixel caption offset, using source and
+assembled runtimes. Native Windows checks at Chromium DPR 1 and 1.5 retain all
+three exact names, original provenance, queue counts and fresh unchanged baseline
+assertions. The Linux native gate remains required; synthetic geometry alone
+does not establish the precise cause of that platform's earlier failure.
+
+Pre-release review found a separate manual-import baseline race: imported files
+receive a completion timestamp, so a file started during Re-equip could finish
+after Back and appear fresh for Base. The workspace now checks that a baseline
+import began in the same Base phase after its cutoff, with unchanged session,
+source and exact import-generation context. The native walkthrough fixture holds
+that read, navigates Back and delivers mixed item/character records: the valid
+item still merges, the stale baseline stays blank, and accepted base values stay
+unchanged. A newly initiated Base import works; a subsequent generation change
+clears only an unreviewed proposal, retaining the user's edited values.
+Explicit imports bypass live-screen semantic dedup so immediately rereading the
+same PNG in Base produces its own reviewed record. The host fixture verifies
+identical image bytes within three seconds yield increasing sequence/time and
+import generation without enabling or taking over continuous capture. Live OCR
+still uses its three-second dedup; log cursor dedup remains unchanged.
