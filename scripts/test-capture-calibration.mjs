@@ -65,7 +65,19 @@ async function run({root,temporary,screenshots}){
         await until(()=>execute(()=>Math.abs(Number(document.querySelector('[data-area-percent="width"]').value)-46)<1),'native pointer rectangle including the pane heading');
         await execute(()=>{document.querySelector('[data-area-status]').textContent='Synthetic preview · drag or adjust percentages before saving';document.documentElement.style.setProperty('--ui-font-scale',String(20/13));});
         if(screenshots){await fs.mkdir(screenshots,{recursive:true});for(const font of [20,13]){await execute(font=>{document.documentElement.style.setProperty('--ui-font-scale',String(font/13));document.querySelector('.ocr-area-dialog').scrollTop=0;},font);window.showInactive();await execute(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));await fs.writeFile(path.join(screenshots,font===13?'ocr-area-calibration.png':'ocr-area-calibration-20px.png'),(await window.capturePage()).toPNG());window.hide();}}
-        await click('[data-area-save]');await closed();assert.equal(await execute(()=>fixture.calls.length),2);
+        // Hold decode during a same-task Save/reopen. Chromium's actual queued
+        // close event must arrive while the new preview is opening, then leave
+        // that new operation intact. No sleeps or longer timeouts mask the race.
+        await execute(()=>{const image=document.querySelector('[data-area-image]');fixture.originalDecode=image.decode.bind(image);image.decode=()=>new Promise(resolve=>fixture.releaseReopenDecode=resolve);fixture.reopenCloseSeen=false;document.querySelector('.ocr-area-dialog').addEventListener('close',()=>{fixture.reopenCloseSeen=true;},{once:true});});
+        await execute(async()=>{document.querySelector('[data-area-save]').click();await Promise.resolve();document.querySelector('[data-capture-calibrate]').click();});
+        await until(()=>execute(()=>Boolean(fixture.releaseReopenDecode)&&fixture.reopenCloseSeen),'native queued close during fresh preview decode');
+        assert.equal(await execute(()=>document.querySelector('[data-area-image]').hasAttribute('src')),true,'The previous queued close must not clear a fresh preview while decoding');
+        await execute(()=>{document.querySelector('[data-area-image]').decode=fixture.originalDecode;fixture.releaseReopenDecode();delete fixture.releaseReopenDecode;});
+        await until(()=>execute(()=>document.querySelector('.ocr-area-dialog').open),'fresh preview survives the previous close event');
+        assert.equal(await execute(()=>fixture.calls.length),2);
+        await execute(()=>document.querySelector('.ocr-area-dialog').dispatchEvent(new Event('close')));
+        assert.equal(await execute(()=>document.querySelector('.ocr-area-dialog').open&&document.querySelector('[data-area-image]').hasAttribute('src')),true,'A previous close notification cannot close the fresh modal');
+        await click('[data-area-cancel]');await closed();
         await open();await click('[data-area-full]');await closed();assert.equal(await execute(()=>fixture.calls.at(-1).region),null);
         assert.equal(await execute(()=>JSON.parse(localStorage.getItem('eql-eye-of-zomm-ocr-areas-v1')).length),1,'Full frame clears only the active owner preference');
         await open();const before=await execute(()=>fixture.calls.length);await click('[data-area-cancel]');await closed();assert.equal(await execute(()=>fixture.calls.length),before);assert.equal(await execute(()=>document.querySelector('[data-area-image]').hasAttribute('src')),false);
@@ -73,6 +85,7 @@ async function run({root,temporary,screenshots}){
         assert.equal(await execute(()=>JSON.parse(localStorage.getItem('eql-eye-of-zomm-ocr-areas-v1')).length),0,'Resize warnings discard the obsolete source profile');
         await execute(()=>{fixture.workspace.dispose();localStorage.setItem('eql-eye-of-zomm-ocr-areas-v1',JSON.stringify([{key:JSON.stringify([fixture.source.label,fixture.source.type,'contribution']),region:{x:0,y:0,width:.001,height:.001},referenceSize:{width:1600,height:900}}]));fixture.workspace=fixture.mount();});await click('[data-capture-sources]');await click('[data-capture-start]');await until(()=>execute(()=>fixture.starts.length===3),'corrupt profile start');assert.equal(await execute(()=>Boolean(fixture.starts[2].region)),false,'A too-small cached area cannot prevent a normal full-frame start');
         await execute(()=>fixture.emit({owner:'contribution',sessionId:'changed',sourceSize:{width:1600,height:900}}));await open();window.webContents.sendInputEvent({type:'keyDown',keyCode:'Escape'});window.webContents.sendInputEvent({type:'keyUp',keyCode:'Escape'});await closed();
+        for(let cycle=0;cycle<8;cycle++){await open();await click('[data-area-save]');await closed();}
         await execute(()=>{fixture.originalSetRegion=fixture.api.setRegion;fixture.originalPreview=fixture.api.preview;});
         for(const change of ['stop','source']){
             await execute(change=>{fixture.emit({enabled:true,phase:'running',hasPreview:true,source:fixture.source,owner:'contribution',sessionId:`pending-${change}`,sourceSize:{width:1600,height:900},region:null,calibrationWarning:null});fixture.api.setRegion=()=>{const stale={...fixture.state};return new Promise(resolve=>fixture.releaseSave=()=>resolve(stale));};},change);
@@ -93,7 +106,7 @@ async function run({root,temporary,screenshots}){
         await execute(()=>{fixture.api.preview=()=>new Promise(resolve=>fixture.releasePreview=resolve);});await click('[data-capture-calibrate]');await until(()=>execute(()=>Boolean(fixture.releasePreview)),'delayed preview');
         await execute(()=>{fixture.workspace.dispose();fixture.releasePreview({dataUrl:'data:image/png;base64,AAAA',sourceSize:{width:1,height:1}});});
         assert.equal(await execute(()=>document.querySelector('.ocr-area-dialog')),null,'Dispose cannot restore an asynchronous preview');
-        console.log('OCR area calibration: native modal/pointer and percent controls, bounded proportional preview, source/owner persistence, full frame, invalid rectangle, source resize, pending Save/preview Stop/source races, Escape/Cancel and dispose privacy passed.');
+        console.log('OCR area calibration: native modal/pointer and percent controls, queued-close reopening and rapid Save cycles, bounded proportional preview, source/owner persistence, full frame, invalid rectangle, source resize, pending Save/preview Stop/source races, Escape/Cancel and dispose privacy passed.');
     }finally{window.destroy();await new Promise(done=>server.close(done));app.quit();}
 }
 try{

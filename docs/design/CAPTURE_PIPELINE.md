@@ -53,6 +53,10 @@ with a visible warning. Settings persists at most 12 optional area profiles by
 source label/type and owner, with reference dimensions; it does not enable
 capture on restart. Include the examine/Inventory heading in a selected area
 so the parser can identify the pane; isolated numbers cannot establish its type.
+Closing the area dialog clears its preview immediately. A delayed close event
+from an earlier dialog cannot invalidate a newer opening/open preview; Escape
+uses the same synchronous cleanup. Deterministic regressions cover both queued
+event delivery orders and immediate reopen cycles.
 
 `capture-image.cjs` exports pure `normalizeCaptureRegion(region,referenceSize)`
 and `prepareCaptureImage({image,region,referenceSize})`. The latter returns

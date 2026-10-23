@@ -149,6 +149,11 @@ and private `D:/EQLWiki/.local/validation/eoz-character-090-acceptance` evidence
 ## Final verification
 
 The full source suite and dependency audit pass locally after these changes.
+PR11 was merged after exact-head CI/installer checks passed. Its first unified
+release attempt exposed a timing bug when reopening calibration immediately after
+Save: a queued close event could invalidate the new preview. Publication was
+blocked. The follow-up keeps stale close events from affecting an opening/open
+preview and adds deterministic coverage before retrying 0.9.0 publication.
 Final independent review also corrected duplicate item-source zone headings:
 sequential NPC additions now reuse the unique existing block, with LF/CRLF,
 protected-comment, preservation and idempotence regressions.

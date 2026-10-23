@@ -185,7 +185,10 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     listen($('[data-capture-opt-in]',settingsRoot),'change',event=>{optIn=event.target.checked;$('.capture-settings-controls',settingsRoot).hidden=!optIn;if(!optIn)void stopCapture().catch(error=>warning(error.message));});
     listen($('[data-capture-sources]',settingsRoot),'click',()=>void act(chooseSources));listen($('[data-capture-start]',settingsRoot),'click',()=>void act(()=>start('contribution')));listen($('[data-capture-stop]',settingsRoot),'click',()=>void stopCapture().catch(error=>warning(error.message)));listen($('[data-capture-pause]',settingsRoot),'click',()=>void act(async()=>{captureState=await (captureState.phase==='paused'?capture.resume():capture.pause());renderCapture();}));listen($('[data-capture-import]',settingsRoot),'click',()=>void act(()=>importScreenshot('contribution')));
     listen($('[data-capture-calibrate]',settingsRoot),'click',()=>void openArea());
-    listen(areaDialog,'close',closeArea);listen(areaDialog,'cancel',event=>{if(areaSaving)event.preventDefault();});
+    // A close event is queued by Chromium. It can belong to the previous modal
+    // after the user has already opened a new preview or a new modal.
+    listen(areaDialog,'close',()=>{if(!areaDialog.open&&!areaOpening)closeArea();});
+    listen(areaDialog,'cancel',event=>{event.preventDefault();if(!areaSaving)closeArea();});
     listen(areaDialog.querySelector('[data-area-cancel]'),'click',closeArea);
     listen(areaDialog.querySelector('[data-area-form]'),'submit',event=>{event.preventDefault();void saveArea();});
     listen(areaDialog.querySelector('[data-area-full]'),'click',()=>void saveArea(true));
