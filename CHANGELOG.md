@@ -6,7 +6,7 @@
 - Place obvious equipment automatically, retain separate physical copies, defer uncertain tier/copy matches and add a top-right inventory remove button. Catalog search and offline screenshot imports remain available.
 - Compute equipped estimates from the reviewed baseline and assigned gear, without requiring an equipped-stat capture. Label mitigation AC, AC softcap, evasion AC, offense and accuracy separately; unsupported server conversions stay unknown.
 - Retain the bounded written item stat block for correction and reparse explicit Haste percentages. Preserve manual corrections when later observations arrive.
-- Keep Character capture active across empty scenes and transient OCR failures. A lost source offers Resume or Choose game window and returns to the same walkthrough phase. Only successful snapshot completion or explicit cancellation ends the flow.
+- Keep Character capture active across empty scenes and transient OCR failures. A lost source offers Resume or Choose game window and returns to the same walkthrough phase. Only successful snapshot completion or explicit cancellation ends the flow. Canceling slow source discovery leaves local preview/sharing usable and ignores late source results.
 - Replace unsupported native transparent-window resizing with eight clear resize hit regions on all four overlays. Preserve opposite-edge anchors and hide handles when locked.
 - Dock any visible overlay to another with touching edges: above/below share width, left/right share height. Follow target movement and resizing through saved dock chains, and drag away to detach.
 - Cycle all overlays through **Unlocked → Locked → Hidden → Unlocked**. Preserve suspended groups while globally hidden and restore mouse input on return.

@@ -773,9 +773,15 @@ try {
             nativePhase='close owner and retain session';owner.close();
             assert.equal(owner.isDestroyed(), false, 'closing main app with visible overlays keeps the one session owner');
             assert.equal(owner.isVisible(), false);
-            const before = (await state()).snapshot.session.timers.timers[0].remainingMs;
+            const beforeAppend=(await state()).snapshot.session;
+            const before=beforeAppend.timers.timers[0].remainingMs;
+            const priorPulse=beforeAppend.timers.timers.find(timer=>timer.label==='Pulse Keeper');
+            assert(priorPulse,'The first shared-log regex trigger exists before its replacement.');
             await append(['You slash a synthetic skeleton for 10 points of damage.', 'SYNTHETIC PULSE Keeper 90']);
-            await until(async () => (await state()).snapshot.session.parse.totalDamage === 140, 'hidden owner continues log parsing');
+            // Damage parsing and the isolated regex worker finish separately.
+            // Wait for this appended pulse too, so no pending trigger replaces
+            // a timer between the split baseline and its preservation check.
+            await until(async()=>{const session=(await state()).snapshot.session,pulse=session.timers.timers.find(timer=>timer.label==='Pulse Keeper');return session.parse.totalDamage===140&&pulse&&pulse.id!==priorPulse.id&&pulse.expiresAt>priorPulse.expiresAt;},'hidden owner applies both appended damage and the replacement regex trigger');
             const after = await state();
             assert.equal(after.snapshot.sessionId, sessionId);
             assert.equal(after.snapshot.session.timers.timers.filter(timer => timer.label === 'Pulse Keeper').length, 1, 'repeated regex trigger replaces instead of duplicating');

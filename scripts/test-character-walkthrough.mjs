@@ -34,7 +34,11 @@ async function run({root,temporary,screenshots}){
     }catch{res.writeHead(404).end();}});
     await new Promise(done=>server.listen(0,'127.0.0.1',done));
     const origin=`http://127.0.0.1:${server.address().port}`;
-    const window=new BrowserWindow({show:false,useContentSize:true,width:1024,height:900,webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true,backgroundThrottling:false}});
+    // This serves the Character component, not the normal main-window chrome.
+    // A framed 1024px content request needs a wider outer window; Windows clamps
+    // that outer window to a 1024px CI display and silently shrinks the content.
+    // A frameless fixture preserves the real supported 1024px content contract.
+    const window=new BrowserWindow({show:false,frame:false,useContentSize:true,width:1024,height:900,webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true,backgroundThrottling:false}});
     window.webContents.on('console-message',(_event,...args)=>{const text=args.map(value=>typeof value==='string'?value:JSON.stringify(value)).join(' ');if(errors.length<20)errors.push(text.slice(0,600));});
     window.webContents.on('render-process-gone',(_event,details)=>errors.push(`renderer: ${details.reason}`));
     window.webContents.on('did-fail-load',(_event,code,description,url)=>errors.push(`load ${code}: ${description} ${url}`));

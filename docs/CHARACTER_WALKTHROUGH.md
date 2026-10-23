@@ -154,3 +154,8 @@ previous release before resetting bounds; bounded pointer/bounds diagnostics
 cover any platform mismatch. Local native acceptance includes DPR 1 with a
 1024×700 work area and the default DPR 1.5. The calibration fixture uses the
 current recommended-source contract and the actual guided Character start.
+The real workspace fixture also holds OS source enumeration across Cancel and
+requires PNG Preview/Copy to remain usable before releasing it. Discovery is a
+nonblocking read with its own generation; canceled or superseded responses
+cannot refill source choices. Wiki writes and explicit capture starts retain
+their existing action guards.
