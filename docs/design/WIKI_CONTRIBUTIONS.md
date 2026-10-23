@@ -372,6 +372,9 @@ item structure produces a warning and a manual fallback. Multiple source blocks
 for the same zone also require manual selection. At most ten related pages fit
 one review; remaining work is explicitly reported. Every included existing-item
 change has its own full before/after acknowledgment and base revision guard.
+Adding a second or third NPC to an item's existing zone reuses its unique zone
+heading. LF/CRLF regressions preserve unrelated zones, notes, comments and
+separators, ignore commented source links and verify idempotent repeated edits.
 Synthetic HTTP tests passed NPC creation followed by an item-source failure,
 client restart and retry without recreating the NPC. The actual native workspace
 showed both reviewed NPC and item diffs before any publish action.

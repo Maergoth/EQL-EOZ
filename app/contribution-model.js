@@ -168,19 +168,26 @@ export function patchContributionRelationship(source, { role, itemTitle, npcTitl
     if (fields.length>1) throw new Error('The existing page has duplicate template fields; use the wiki source editor.');
     const targetTitle=contributionTitle(role==='npc-loot'?itemTitle:npcTitle), current=fields[0]?.value || '';
     const escaped=targetTitle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/ /g,'[ _]');
-    let scope=current;
+    let scope=current,zoneBlock=null;
     if(role==='item-source'){
-        if(/^={1,6}[ \t]*[^=\r\n]*\b(?:raid|normal)[ \t]+(?:instance|zone)\b[^=\r\n]*={1,6}[ \t]*$/im.test(current))throw new Error('Choose the correct existing normal/raid source section in the wiki source editor.');
-        const headings=[...current.matchAll(/^[ \t]*\[\[([^\]|]+)(?:\|[^\]]*)?\]\][ \t]*\r?$/gm)],zoneKey=contributionNameKey(zoneTitle),zone=headings.findIndex(heading=>contributionNameKey(heading[1])===zoneKey);
+        let outline=current;for(const [start,end]of protectedRanges(current).reverse())outline=outline.slice(0,start)+outline.slice(start,end).replace(/[^\r\n]/g,' ')+outline.slice(end);
+        if(/^={1,6}[ \t]*[^=\r\n]*\b(?:raid|normal)[ \t]+(?:instance|zone)\b[^=\r\n]*={1,6}[ \t]*$/im.test(outline))throw new Error('Choose the correct existing normal/raid source section in the wiki source editor.');
+        const headings=[...outline.matchAll(/^[ \t]*\[\[([^\]|]+)(?:\|[^\]]*)?\]\][ \t]*\r?$/gm)],zoneKey=contributionNameKey(zoneTitle),zone=headings.findIndex(heading=>contributionNameKey(heading[1])===zoneKey);
         if(headings.filter(heading=>contributionNameKey(heading[1])===zoneKey).length>1)throw new Error('The item has multiple source sections for this zone; choose the verified instance in the wiki source editor.');
-        scope=zone<0?'':current.slice(headings[zone].index,headings[zone+1]?.index??current.length);
+        if(zone>=0){zoneBlock={start:headings[zone].index,end:headings[zone+1]?.index??current.length};scope=outline.slice(headings[zone].index+headings[zone][0].length,zoneBlock.end);}
+        else scope='';
     }
     const already=role==='npc-loot'?new RegExp(`\\{\\{\\s*:\\s*${escaped}\\s*(?:[}|])`,'i').test(scope):new RegExp(`\\[\\[\\s*${escaped}\\s*(?:[\\]|])`,'i').test(scope);
     let text=source;
     if(!already){
         const addition=role==='npc-loot'?`<ul><li>{{:${targetTitle}}}</li></ul>`:`${link(zoneTitle)}\n* ${link(targetTitle)}`;
         const empty=/^\s*(?:(?:\*\s*)?None|<ul>\s*<li>\s*(?:\{\{:\s*)?None(?:\}\})?\s*<\/li>\s*<\/ul>)?\s*$/i.test(current);
-        const value=`\n${empty?'':current.trim()+'\n\n'}${addition}\n\n`,field=fields[0];
+        let value;
+        if(zoneBlock){
+            const block=current.slice(zoneBlock.start,zoneBlock.end),trailing=block.match(/[ \t\r\n]*$/)[0],position=zoneBlock.end-trailing.length,eol=block.includes('\r\n')?'\r\n':'\n';
+            value=current.slice(0,position)+`${eol}* ${link(targetTitle)}`+(trailing||eol)+current.slice(zoneBlock.end);
+        }else value=`\n${empty?'':current.trim()+'\n\n'}${addition}\n\n`;
+        const field=fields[0];
         text=field?source.slice(0,field.valueStart)+value+source.slice(field.end):source.slice(0,template.end-2)+`| ${parameter} = ${value}`+source.slice(template.end-2);
     }
     if (zoneTitle) {

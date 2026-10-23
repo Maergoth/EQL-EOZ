@@ -149,6 +149,9 @@ and private `D:/EQLWiki/.local/validation/eoz-character-090-acceptance` evidence
 ## Final verification
 
 The full source suite and dependency audit pass locally after these changes.
+Final independent review also corrected duplicate item-source zone headings:
+sequential NPC additions now reuse the unique existing block, with LF/CRLF,
+protected-comment, preservation and idempotence regressions.
 Actual Windows native capture now exercises the current-frame thumbnail,
 calibrated crop OCR and crop provenance, Full frame, clipboard and Stop. The
 native calibration component exercises mouse/keyboard selection, bounded saved
