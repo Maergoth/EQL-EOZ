@@ -40,7 +40,9 @@
     "test:capture-native": "node scripts/test-capture-native.mjs",
     "test:capture-workspace": "node scripts/test-capture-workspace.mjs",
     "pretest:capture": "node scripts/prepare-ocr-assets.mjs",
-    "test:capture-calibration": "node scripts/test-capture-calibration.mjs"
+    "test:capture-calibration": "node scripts/test-capture-calibration.mjs",
+    "pretest:modern-ocr": "node scripts/prepare-ocr-assets.mjs",
+    "test:modern-ocr": "node tests/modern-ocr.mjs"
   },
   "devDependencies": {
     "electron": "43.8.3",

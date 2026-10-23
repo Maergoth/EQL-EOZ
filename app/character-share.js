@@ -3,7 +3,7 @@ import { CHARACTER_SLOTS, characterShareSummary, safeCharacterIcon } from './cha
 
 export const CHARACTER_SHARE_LIMITS = Object.freeze({width:1800,minHeight:2400,maxHeight:8192,maxPixels:15000000,maxBytes:12000000,maxIconDimension:256});
 const COLORS = Object.freeze({background:'#070b12',panel:'#0e141e',line:'#66582d',gold:'#d8b75c',heading:'#f0d77f',text:'#e9edf3',muted:'#9ba8b8',warning:'#e6c84c'});
-const labels = {MP:'Mana',END:'Endurance',ATK:'Attack',SV_MAGIC:'Magic resist',SV_FIRE:'Fire resist',SV_COLD:'Cold resist',SV_POISON:'Poison resist',SV_DISEASE:'Disease resist',HP_REGEN:'HP regen',MANA_REGEN:'Mana regen',END_REGEN:'End. regen'};
+const labels = {MP:'Mana',END:'Endurance',ATK:'Attack',SV_MAGIC:'Magic resist',SV_FIRE:'Fire resist',SV_COLD:'Cold resist',SV_POISON:'Poison resist',SV_DISEASE:'Disease resist',SV_CORRUPTION:'Void resist',ATTACK_SPEED:'Attack speed %',DMG_BONUS:'Damage bonus',HP_REGEN:'HP regen',MANA_REGEN:'Mana regen',END_REGEN:'End. regen'};
 const label = key => labels[key] || key.replace(/_/g,' ');
 const format = value => value === null || value === undefined ? '?' : Number.isInteger(value) ? String(value) : String(Math.round(value*1000)/1000);
 const entries = stats => Object.entries(stats || {});
@@ -142,7 +142,7 @@ export async function renderCharacterShare(snapshot,{document=globalThis.documen
             // region. Refuse instead of producing a clipped/overlapping image.
             if(nameRows.length>2) throw new Error('An item title is too long for the share card. Review the extracted name before exporting.');
             lines(nameRows,x+81,y+41,{color:COLORS.heading,bold:true});
-            const details=[item.tier===null ? 'Tier ?' : `Tier ${item.tier}${item.fraction ? ` +${item.fraction}/${2**item.tier}` : ''}`,item.level===null ? '' : `Req. level ${item.level}`,
+            const details=[item.tier===null ? 'Tier ?' : `Tier ${item.tier}${item.fraction===null ? ' · progress ?' : item.fraction ? ` +${item.fraction}/${2**item.tier}` : ''}`,item.level===null ? '' : `Req. level ${item.level}`,
                 item.wikiMatch==='confirmed' ? 'Wiki match reviewed' : item.wikiTitle ? 'Wiki match suggested' : 'Wiki match unknown'];
             text(details.filter(Boolean).join('  ·  '),x+81,y+99,{color:COLORS.muted,scale:.8});
             const augments=item.augments.length ? `Augments: ${item.augments.map(augment=>augment.name || '?').join(', ')} (${item.augmentStatus})` : `Augments: ${item.augmentStatus==='none' ? 'none confirmed' : item.augmentStatus}`;

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';import {createRequire} from 'node:module';
+import {screenReadRefinementRegions} from '../app/screen-read-parser.js';
 const require=createRequire(import.meta.url),{normalizeCaptureRegion,prepareCaptureImage}=require('../desktop/capture-image.cjs'),{recognizeCaptureImage}=require('../desktop/capture-reader.cjs');
 const operations=[];
 class Image{
@@ -8,7 +9,7 @@ class Image{
     resize(size){operations.push({resize:size});return new Image(size.width,size.height);}
     toPNG(){return Buffer.from('synthetic-image-data');}toBitmap(){return Buffer.alloc(this.width*this.height*4);}
 }
-const nativeImage={createFromBitmap:(_bytes,size)=>new Image(size.width,size.height)},image=new Image();
+const nativeImage={createFromBitmap:(_bytes,size)=>{operations.push({bitmap:{width:size.width,height:size.height}});return new Image(size.width,size.height);}},image=new Image();
 assert.equal(normalizeCaptureRegion(null,null),null);
 assert.throws(()=>normalizeCaptureRegion({x:0,y:0,width:1,height:1},null),/preview/);
 for(const region of [{x:-.1,y:0,width:1,height:1},{x:0,y:0,width:NaN,height:1},{x:.5,y:0,width:1,height:1},{x:0,y:0,width:.01,height:1}])assert.throws(()=>normalizeCaptureRegion(region,image.getSize()));
@@ -26,4 +27,17 @@ let current=true;calls=0;
 const stopped=await recognizeCaptureImage({image,nativeImage,isCurrent:()=>current,ocr:{async recognize(){calls++;if(calls===2)current=false;return scene;}}});
 assert.equal(calls,2);assert.equal(stopped.cancelled,true);assert.deepEqual(stopped.result.words,[],'a stopped refinement cannot deliver an earlier scene proposal');
 current=false;calls=0;assert.equal((await recognizeCaptureImage({image,isCurrent:()=>current,ocr:{async recognize(){calls++;}}})).cancelled,true);assert.equal(calls,0,'a stale job cannot initialize an OCR worker');
+const pane=(x,y,name)=>[word(name,x+100,y+20,250,20),word('Description',x+250,y+60,110,20),word(name,x+80,y+110,250,20),
+    word('Class:',x+80,y+160,50,20),word('ALL',x+145,y+160,40,20),word('Race:',x+80,y+190,50,20),word('ALL',x+145,y+190,40,20),
+    word('AC:',x+280,y+300,40,20),word('19',x+400,y+300,30,20),word('Strength:',x+20,y+380,100,20),word('17',x+180,y+380,30,20),word('Modified',x+50,y+450,90,20)];
+const atlasScene={text:'Synthetic Modern independent panes',confidence:88,words:[...pane(0,0,'Synthetic River Shoes +2'),...pane(800,0,'Synthetic Quartz Maul +5'),...pane(0,700,'Synthetic Glass Ring +3')]};
+const proposals=screenReadRefinementRegions(atlasScene);assert.equal(proposals[0].tiles.length,3);
+calls=0;operations.length=0;let firstAtlasTileHeight;
+const atlas=await recognizeCaptureImage({image:new Image(1500,1000),nativeImage,ocr:{async recognize(){calls++;if(calls===1)return atlasScene;
+    const tile=proposals[0].tiles[0],top=Math.floor(tile.y/2),bottom=Math.ceil((tile.y+tile.height)/2);firstAtlasTileHeight=(bottom-top)*4;
+    return {text:'Synthetic atlas rows',confidence:94,words:[word('17',10,10,20,15,96),word('23',10,firstAtlasTileHeight+16+10,20,15,96)]};
+}}});
+assert.equal(calls,2,'three item regions share one bounded OCR atlas pass');assert.equal(atlas.result.refinements[0].tiles.length,3);
+assert(atlas.result.refinements[0].words[0].bbox.x0<500);assert(atlas.result.refinements[0].words[1].bbox.x0>800,'second atlas tile maps back to its own item, not the first pane');
+for(const operation of operations.filter(value=>value.bitmap))assert(operation.bitmap.width*operation.bitmap.height<=4*1024*1024,'the stat atlas bitmap has a fixed pixel budget');
 console.log('Capture reader: normalized region bounds/resize reset, single-pass negatives, bounded mapped refinements and cancellation passed.');

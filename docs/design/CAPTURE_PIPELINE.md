@@ -53,6 +53,10 @@ with a visible warning. Settings persists at most 12 optional area profiles by
 source label/type and owner, with reference dimensions; it does not enable
 capture on restart. Include the examine/Inventory heading in a selected area
 so the parser can identify the pane; isolated numbers cannot establish its type.
+Closing the area dialog clears its preview immediately. A delayed close event
+from an earlier dialog cannot invalidate a newer opening/open preview; Escape
+uses the same synchronous cleanup. Deterministic regressions cover both queued
+event delivery orders and immediate reopen cycles.
 
 `capture-image.cjs` exports pure `normalizeCaptureRegion(region,referenceSize)`
 and `prepareCaptureImage({image,region,referenceSize})`. The latter returns
@@ -60,8 +64,14 @@ and `prepareCaptureImage({image,region,referenceSize})`. The latter returns
 stays within 16 megapixels and 8192 pixels on either axis. `capture-reader.cjs`
 exports `recognizeCaptureImage({ocr,image,region?,referenceSize?,nativeImage,
 isCurrent}) -> {result,input,warning,cancelled?}`. The result retains scene
-text/word geometry and at most two anchored name/stat row refinements; input
-records each region, scale, preprocessing/layout and confidence. Every awaited
+text/word geometry and at most two anchored refinements; input records each
+region (or atlas `tiles`), scale, preprocessing/layout and confidence. A name
+refinement is limited to 1MP output; item-stat/Inventory refinements to 4MP and
+4096 pixels per axis. A stat atlas contains at most four source tiles, each at
+most 1MP, stacked with separators in one bounded recognition call; mapped word
+coordinates return to the selected source frame. The baseline remains within
+16MP/8192. Each recognition result keeps at most 2,000 words and 16KiB text.
+Every awaited
 recognition is guarded by `isCurrent()` before and after, preventing Stop or a
 new import/source from reviving stale OCR. Mock results without word boxes
 remain a single pass.
@@ -125,17 +135,22 @@ Local observations:
   was 28/52/54; these values are engine estimates, not measured accuracy.
 - The initial sparse color pass now enlarges sources narrower than 1000 pixels
   by 3x and normal-resolution captures by 2x whenever the final 16MP/8192 limits
-  permit it; 4K falls back to 1x. At most two small item rows are refined: a
-  green-name mask (ordinary color for white text) and an inverted stat table,
-  each limited to 1MP output. These regions are derived from detected pane/word
-  coordinates, not hardcoded item names, stats or screen positions.
+  permit it; 4K falls back to 1x. At most two regions/atlases are refined: an
+  optional green-name row (ordinary color for white text), observed item tables
+  and an independently detected Inventory table. Modern attribute rows use an
+  original-pixel maxRGB threshold before enlargement; ordinary compact tables
+  and Inventory use inverted maxRGB. Thresholding is confined to the detected
+  attribute table because it can damage small white weapon/weight digits.
+  These regions come from pane/word coordinates, never item names, numeric truth
+  or hardcoded screen positions. Output limits are 1MP for names and 4MP for
+  stat/Inventory atlases, with at most four original tiles of at most 1MP each.
 - The production reader now produces **`Boots of the Long Road +10`, AC14,
   HP15, tier10, Size SMALL** from the supplied tiny composite in approximately
-  2.3 seconds and three bounded passes. Higher-confidence aligned row words
+  2.5 seconds and three bounded passes on the final rerun. Higher-confidence aligned row words
   replace only their nearest corresponding scene word, retaining the initial
   `Leng` spelling and both raw row reads as evidence. The final name combines
   observed words across those reads; no wiki catalog value supplies OCR truth.
-  The private report is `D:\EQLWiki\.local\validation\eoz-090-reader.json`.
+  The private report is `D:\EQLWiki\.local\validation\eoz-090-reader-final.json`.
 - AC 14 is grounded in aligned same-row word geometry. Two parser defects found
   during calibration are fixed: whitespace cannot cross rows to consume an
   unrelated number, and tall noisy glyphs cannot shift a small digit to the next
@@ -150,13 +165,53 @@ Local observations:
   untouched and no private images/text reports enter Git.
 - All four actual 2560×1369 combat/world screenshots from the player's directory
   were measured as negative controls: **zero item/character proposals each**,
-  one scene pass each, approximately 3.9/5.2/6.2/8.2 seconds. Visible player bars,
+  one scene pass each, approximately 3.9/5.2/6.2/8.4 seconds. Visible player bars,
   target names and a discipline tooltip did not become examined items or totals.
-  Private reports: `eoz-090-negative-{0..3}.json` under the same ignored validation
-  directory. These are actual game images; they do not establish accuracy for
-  larger item/Inventory panes that were not present.
+  Private reports: `eoz-090-negative-final-{0..3}.json` under the same ignored
+  validation directory. These controls contain no item/Inventory panes.
+- A newly supplied **3840×2088** real Modern (`default_modern`) frame contains
+  three examine panes plus Inventory on the right. Its baseline initially
+  produced no proposals. Centered Description tabs had cropped away name
+  prefixes; the parser also assumed one examine pane and Inventory on its left.
+  Parser v4 instead derives independent bounds from Description/Class/Race,
+  uses visible title/body names, excludes giant icon glyphs, and detects the
+  Inventory headings independently. Nothing assumes that Inventory is left of
+  the items. Each item's evidence contains only its own mapped refinement words;
+  another item or Character refinement cannot enter its contribution evidence.
+- The final private real-frame measurement returns exactly three item proposals
+  and one Character proposal in approximately **7.6 seconds / three passes**.
+  The separate examine regions take approximately **1.0/1.3/1.1 seconds**, each
+  with three passes, and produce their exact observed names, tier and compatible
+  Feet/Primary/Fingers slots. The selected ring region recovers all seven
+  attributes; full-frame reading retains only two confident attributes for that
+  item and leaves the other five unknown. The weapon's selected pane recovers
+  explicit tier progress, damage/delay/bonus and weight. Whole-frame progress is
+  omitted when its numerator is malformed. The Inventory region takes about
+  **2.7 seconds / two passes**, recovers all seven visible attributes and resource
+  pairs, and leaves a conflicting resource maximum and resist value unknown. The full frame
+  reads all seven attributes and all six resource current/maximum fields.
+  Player identity/stat numbers and image pixels remain private in
+  `D:\EQLWiki\.local\validation\eoz-090-live-measure-v4.json`.
+- These measurements cover **three real items and their slots in the current
+  Default Modern skin only**. They do not establish every item, slot, UI
+  scale or game skin. Other canonical slot labels/aliases have synthetic
+  coverage; a multiword Power Source remains one slot. Small weight decimals
+  and some full-frame attributes are still unknown. An effect name still has an
+  observed OCR spelling error and requires ordinary review/search; the parser
+  never substitutes a wiki title or missing digits. Modern's always-visible
+  `Modified` checkbox label is not a checked-state fact; an explicitly observed
+  `(Augmented)`/`(Modified)` title can remain a proposal. Near-empty augment labels
+  are ignored. Numeric conflicts stay unknown with both reads in scoped raw
+  evidence. Modern character attributes/resists require observed slash pairs;
+  malformed slash-loss integers and ambiguous Attack component pairs are not
+  promoted to totals. Low-confidence single-digit refinement values are omitted.
+  Numeric disagreements also invalidate an already parsed field when a second
+  pass fragments its label: the synthetic `HP Regen 1` / `HP R ... 11` case now
+  stays unknown instead of retaining the first truncated digit. Both mapped
+  reads remain evidence; no label reconstruction chooses a numeric value.
 - After the calibration changes, `npm run test:capture` passed again (including
-  synthetic cross-row/height/missing-tab/nearest-word regressions, bounded scaling,
+  synthetic three-pane/right-Inventory/slot/progress/evidence-isolation,
+  conflict/unchecked-label, cross-row/height/missing-tab/nearest-word regressions, bounded scaling,
   normalized region/reset/mapped refinements, cancellation, offline Character
   import and live/import worker arbitration). Separate actual OCR of large
   synthetic item/character fixtures still passes with the new reader, preserving
@@ -165,7 +220,7 @@ Local observations:
   seconds. No installed profile, live wiki or user clipboard content was used
   as a fixture.
 
-The owner authorizes publication of 0.9.0 after the final PR11 checks. Remaining
+The owner authorizes publication of 0.9.0 after the final follow-up PR checks. Remaining
 release work is the root-owned calibration UI acceptance, final changed-head
 Windows/Linux package checks and publication. Broader skin/resolution accuracy,
 native Wayland and actual production wiki login/writes remain explicit limits.

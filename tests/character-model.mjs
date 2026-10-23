@@ -16,6 +16,40 @@ assert.deepEqual(adapted.stats,{HP:999,MP_MAXIMUM:650});
 assert.equal(adapted.augments[0].name,'Synthetic Ruby');
 assert.equal(adapted.augmentStatus,'unknown');
 
+// Synthetic default_modern producer/consumer contract, never live player data.
+const proposal=(id,kind,values)=>({id,owner:'character',sessionId:'synthetic-modern',subject:{kind,name:kind==='item'?'Synthetic Modern piece +6':''},fields:Object.entries(values).map(([key,value])=>({key,value,raw:String(value)}))});
+const modernStorage=memory(),modernModel=createCharacterModel({storage:modernStorage});
+for(const [index,slot,label]of [[0,'feet','Feet'],[1,'primary','Primary'],[2,'finger1','Fingers']]){
+    const observed=proposal(`modern-${index}`,'item',{tier:6,fraction:18,fractionMaximum:64,slots:[label],requiredLevel:20,hp:23,damage:9,damageBonus:4,delay:24,attack:77,attackSpeed:12}),originalFields=structuredClone(observed.fields);
+    const input=characterObservationInput(observed);assert.equal(input.fraction,18);assert.equal(input.stats.ATK,77);assert.equal(input.stats.ATTACK_SPEED,12);assert.equal(input.stats.HASTE,undefined,'Observed Attack Speed is not inferred to be Haste');
+    const card=modernModel.intake(observed,{wikiItem:{name:'Synthetic Modern piece',slots:[label],stats:{HP:100}}}).candidate;
+    assert.equal(card.fraction,18);assert.equal(card.observedStats.HP,23,'Known catalog values do not rescale observed examine stats');
+    assert.equal(card.observedStats.DMG_BONUS,4);assert.equal(card.observedStats.DMG,9,'Damage Bonus is not added to observed damage or rescaled');assert.equal(card.observedStats.DELAY,24);
+    assert.deepEqual(observed.fields,originalFields,'Adapter intake never rewrites original observed fields');
+    assert.equal(modernModel.assign(card.id,slot).ok,true,`${label} observations fit the named slot`);
+    assert.equal(modernModel.updateCandidate(card.id,{augmentStatus:'none',observedStatsComplete:true}).ok,true);
+}
+const modernStatValues={hpCurrent:20,hpMaximum:100,manaCurrent:12,manaMaximum:40,enduranceCurrent:3,enduranceMaximum:50,str:9,sta:10,agi:11,dex:12,wis:13,int:14,cha:15,resistMagic:16,resistPoison:17,resistDisease:18,resistFire:19,resistCold:21,resistCorruption:22,attack:77};
+const modernStats=characterObservationInput(proposal('modern-stats','character',modernStatValues)).stats;
+assert.deepEqual(modernStats,{STR:9,STA:10,AGI:11,DEX:12,WIS:13,INT:14,CHA:15,SV_POISON:17,SV_MAGIC:16,SV_DISEASE:18,SV_FIRE:19,SV_COLD:21,SV_CORRUPTION:22,HP_CURRENT:20,HP_MAXIMUM:100,MP_CURRENT:12,MP_MAXIMUM:40,END_CURRENT:3,END_MAXIMUM:50,ATK:77});
+assert.equal(modernStats.HP,undefined,'Resource maximum does not replace an independently observed HP total');
+modernModel.setStatSnapshot('base',{stats:modernStats,confirmed:true});
+modernModel.setStatSnapshot('equipped',{stats:{...modernStats,HP_MAXIMUM:250},confirmed:true});
+const modernRestored=createCharacterModel({storage:modernStorage}),modernSummary=characterShareSummary(modernRestored.snapshot());
+assert.equal(modernSummary.stats.base.stats.HP_MAXIMUM,100);assert.equal(modernSummary.stats.equipped.stats.HP_MAXIMUM,250);
+assert.equal(modernSummary.stats.derived.HP.value,69,'Derived gear sums remain separate from observed current/maximum values');
+for(const slot of ['feet','primary','finger1']){const entry=modernSummary.equipment.find(entry=>entry.slot===slot);assert.equal(entry.item.fraction,18);assert.equal(entry.item.stats.ATK,77);assert.equal(entry.item.stats.ATTACK_SPEED,12);assert.equal(entry.item.stats.DMG_BONUS,4);assert.equal(entry.item.stats.DMG,9);assert.equal(entry.item.stats.DELAY,24);assert.equal(entry.item.stats.HP,23);}
+assert(characterShareLayout(modernRestored.snapshot()).height<=CHARACTER_SHARE_LIMITS.maxHeight,'Modern keys remain within the complete share layout');
+assert.equal(characterObservationInput(proposal('legacy-tier','item',{tier:10})).fraction,undefined,'A tier alone never invents fractional progress');
+const progressStorage=memory(),progressModel=createCharacterModel({storage:progressStorage});
+const unknownProgress=progressModel.intake({id:'unread-progress',sessionId:'synthetic',item:{name:'Synthetic Progress',instanceKey:'same-copy',tier:6,baseStats:{HP:100},baseStatsComplete:true,augmentStatus:'none'}}).candidate;
+const zeroProgress=progressModel.intake({id:'explicit-zero-progress',sessionId:'synthetic',item:{name:'Synthetic Progress',instanceKey:'same-copy',tier:6,fraction:0,baseStats:{HP:100},baseStatsComplete:true,augmentStatus:'none'}}).candidate;
+assert.equal(unknownProgress.fraction,null);assert.equal(zeroProgress.fraction,0);assert.notEqual(unknownProgress.id,zeroProgress.id,'Unread progress and explicit zero are distinct variants');
+assert.equal(characterItemStats(unknownProgress).stats.HP,null,'Unknown progress cannot certify a catalog-scaled equipped value');assert.equal(characterItemStats(unknownProgress).complete,false);assert.equal(characterItemStats(zeroProgress).stats.HP,160);
+progressModel.updateCandidate(unknownProgress.id,{observedStats:{HP:23},observedStatsComplete:true});assert.equal(characterItemStats(progressModel.snapshot().candidates[0]).stats.HP,23,'Observed stats remain usable with unread progress');
+progressModel.assign(unknownProgress.id,'head',{allowIncompatible:true});progressModel.assign(zeroProgress.id,'face',{allowIncompatible:true});
+const progressRestored=createCharacterModel({storage:progressStorage}),progressSummary=characterShareSummary(progressRestored.snapshot());assert.equal(progressSummary.equipment.find(entry=>entry.slot==='head').item.fraction,null);assert.equal(progressSummary.equipment.find(entry=>entry.slot==='face').item.fraction,0);
+
 const first=model.intake(item());assert(first.ok);
 assert.equal(model.intake(item()).deduplicated,true,'same observation replay is idempotent');
 const copy=model.intake({...item(),id:'second-physical-copy'}).candidate;
@@ -86,7 +120,7 @@ model.setStatSnapshot('equipped',null);assert.equal(model.totals().equipped,null
 assert.equal(model.setStatSnapshot('invented',{}).ok,false);
 
 const catalog={name:'Catalog Blade',wikiTitle:'Catalog Blade',iconId:'42',slots:['PRIMARY'],stats:{HP:100,STR:5,DMG:10,RANGE:20}};
-const scaled=model.intake({id:'catalog',item:{name:'Catalog Blade',tier:2,augmentStatus:'none'}},{wikiItem:catalog}).candidate;
+const scaled=model.intake({id:'catalog',item:{name:'Catalog Blade',tier:2,fraction:0,augmentStatus:'none'}},{wikiItem:catalog}).candidate;
 assert.deepEqual(characterItemStats(scaled).stats,{HP:120,STR:7,DMG:12,RANGE:40});
 const observed=model.intake({id:'observed',item:{name:'Catalog Blade',tier:10,stats:{HP:999},statsComplete:true,augmentStatus:'included',augments:[{name:'Ruby',stats:{HP:50},statsComplete:true}]}},{wikiItem:catalog}).candidate;
 assert.equal(characterItemStats(observed).stats.HP,999,'examine stats are not rescaled or augmented twice');
@@ -139,7 +173,7 @@ export function createCharacterDemo() {
     const icon='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAATklEQVR4nGNgGAWjgObg6saw//gwTQwl2zJcGjkEpLFikiwixlBi5LBaQo5riVFHtAWkBN3gtIDiIKJ5JNMlmRJj0YDkarIMHQWjgCQAAOw009RU8GzvAAAAAElFTkSuQmCC';
     for(const [index,slot] of CHARACTER_SLOTS.entries()) {
         if(index===22) continue;
-        const candidate=demo.intake(item(`Synthetic ${slot.label} piece`,{slots:[slot.kind],tier:index%5,stats:{AC:12,HP:30,STR:2,STA:2,DEX:1,SV_MAGIC:4},statsComplete:index!==3,augmentStatus:index===3 ? 'unknown' : 'none',icon,iconId:`synthetic-${index}`,wikiTitle:`Synthetic ${slot.label} piece`,wikiMatch:'confirmed',level:45})).candidate;
+        const candidate=demo.intake(item(`Synthetic ${slot.label} piece`,{slots:[slot.kind],tier:index%5,fraction:0,stats:{AC:12,HP:30,STR:2,STA:2,DEX:1,SV_MAGIC:4},statsComplete:index!==3,augmentStatus:index===3 ? 'unknown' : 'none',icon,iconId:`synthetic-${index}`,wikiTitle:`Synthetic ${slot.label} piece`,wikiMatch:'confirmed',level:45})).candidate;
         demo.assign(candidate.id,slot.id);
     }
     return demo.snapshot();
@@ -154,7 +188,7 @@ if(process.argv.includes('--render-demo')) {
     const temporary=await mkdtemp(join(tmpdir(),'eoz-character-share-'));
     const outputIndex=process.argv.indexOf('--output'),output=outputIndex<0 ? join(temporary,'screenshots') : resolve(process.argv[outputIndex+1]);
     await mkdir(output,{recursive:true});
-    const fixture=async({root,output,snapshot,profile})=>{
+    const fixture=async({root,output,snapshot,modernSnapshot,progressSnapshot,profile})=>{
         const {app,BrowserWindow}=require('electron'),http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
         app.setPath('userData',profile);await app.whenReady();
         const server=http.createServer(async(req,res)=>{try {const requested=new URL(req.url,'http://fixture').pathname;
@@ -175,10 +209,16 @@ if(process.argv.includes('--render-demo')) {
                 await fs.writeFile(path.join(output,`${name}.json`),JSON.stringify({...result,dataUrl:undefined},null,2));
                 console.log(`Rendered ${name}: ${result.width}x${result.height}, ${result.size} bytes, deterministic PNG`);
             }
+            const modern=await window.webContents.executeJavaScript(`(async()=>{const {renderCharacterShare}=await import('/app/character-share.js');const draw=CanvasRenderingContext2D.prototype.fillText,text=[];CanvasRenderingContext2D.prototype.fillText=function(value,...args){text.push(String(value));return draw.call(this,value,...args);};try{const result=await renderCharacterShare(${JSON.stringify(modernSnapshot)});await renderCharacterShare(${JSON.stringify(progressSnapshot)});return {dataUrl:result.dataUrl,text,width:result.width,height:result.height,size:result.blob.size};}finally{CanvasRenderingContext2D.prototype.fillText=draw;}})()`);
+            for(const value of ['Tier 6 +18/64','HP CURRENT','HP MAXIMUM','MP CURRENT','MP MAXIMUM','END CURRENT','END MAXIMUM','HP 23','DMG 9','Damage bonus 4','DELAY 24','Attack 77','Attack speed % 12','Void resist'])assert.ok(modern.text.some(text=>text.includes(value)),`Modern share visibly draws ${value}`);
+            assert.equal(modern.text.some(text=>text.includes('HASTE 12')),false,'Attack Speed does not become Haste in the image');
+            assert.ok(modern.text.some(text=>text.includes('Tier 6 · progress ?')),'Unread fractional progress is visibly unknown');
+            await fs.writeFile(path.join(output,'character-modern-interop.png'),Buffer.from(modern.dataUrl.split(',')[1],'base64'));
+            console.log(`Rendered modern interoperability: ${modern.width}x${modern.height}, ${modern.size} bytes, observed fields drawn distinctly`);
         } finally {window.destroy();server.close();app.quit();}
     };
     try {
-        await writeFile(join(temporary,'main.cjs'),`(${fixture.toString()})(${JSON.stringify({root,output,snapshot:createCharacterDemo(),profile:join(temporary,'profile')})}).catch(error=>{console.error(error);require('electron').app.exit(1);});`);
+        await writeFile(join(temporary,'main.cjs'),`(${fixture.toString()})(${JSON.stringify({root,output,snapshot:createCharacterDemo(),modernSnapshot:modernRestored.snapshot(),progressSnapshot:progressRestored.snapshot(),profile:join(temporary,'profile')})}).catch(error=>{console.error(error);require('electron').app.exit(1);});`);
         const electron=createRequire(import.meta.url)('electron'),env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
         const status=await new Promise((resolve,reject)=>{const child=spawn(electron,[join(temporary,'main.cjs')],{env,stdio:'inherit',windowsHide:true});child.on('error',reject);child.on('exit',resolve);});
         assert.equal(status,0,'Real canvas fixture succeeds');

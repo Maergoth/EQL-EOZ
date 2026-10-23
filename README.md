@@ -11,6 +11,9 @@ snapshots.** See [PR #11](https://github.com/Maergoth/EQL-EOZ/pull/11), the
 
 In **Settings → Screen reading**, start an explicitly selected source, then use
 **Calibrate OCR area** to draw around a complete examine or Inventory/stat pane.
+Screen reading currently requires the **Default Modern (`default_modern`)
+game UI skin**. Other skins remain unverified until their layouts are supported.
+Ordinary log parsing works independently of the game UI skin.
 Keyboard percentage fields and **Full frame** are available too. Areas are saved
 per source and capture mode and reset if the frame size changes. OCR proposes
 editable fields; unresolved values remain unknown.
@@ -134,7 +137,8 @@ Nothing publishes merely because a candidate was captured or previewed.
 
 In **Character**, start a named capture session and examine equipment manually,
 import an examine screenshot, or add cards yourself. Review item names, wiki
-matches, tiers, base/observed values and augments. Place each physical copy in a
+matches, tiers, upgrade progress, base/observed values and augments. Leave unread
+progress blank; an explicit zero is different from unknown. Place each physical copy in a
 named slot with drag-and-drop or the slot menu; confirm replacements and slot
 warnings. Identical copies remain distinct. Removing a mistaken card is retained
 through journal replay.

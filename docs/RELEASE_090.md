@@ -29,10 +29,10 @@ Preserve unrelated EQLWiki dirty files.
 
 | Work | Owner | Status |
 | --- | --- | --- |
-| OCR calibration/parser/preprocessing + regressions | capture_pipeline_089 | Complete; measured private image/negative controls, parser/reader/cancellation suites pass |
-| Fresh wiki contracts/auth acceptance | wiki_contribution_089 | In progress; production read-only, loopback writes only |
-| Character/Linux/package acceptance | character_model_089 | Audit complete; timestamp fix and focused local regressions pass; final-head CI/package checks pending |
-| Game UI evidence, integration, metadata, CI and publication | root | Source/native calibration and workspace checks pass; final CI/publication gates below |
+| OCR calibration/parser/preprocessing + regressions | capture_pipeline_089 | Modern live frame and selected panes measured; focused parser/reader/cancellation suites pass |
+| Fresh wiki contracts/auth acceptance | wiki_contribution_089 | Read-only contracts/parse and loopback write flows passed; independent Modern evidence/stat-default review |
+| Character/Linux/package acceptance | character_model_089 | Modern adapters and unknown-progress handling; synthetic native pixel gate and final-head platform checks |
+| Game UI evidence, integration, metadata, CI and publication | root | PR11 merged; first release held on preview race; follow-up PR12 must pass all changed-head gates |
 
 1. Gather game-window/screenshot/UI-file evidence, record measured truth privately.
 2. Calibrate item and character fields without guessing stats or disguising OCR
@@ -49,20 +49,39 @@ Preserve unrelated EQLWiki dirty files.
 
 ## Calibration evidence
 
+The owner limits first-release OCR support to the currently displayed Modern
+skin. The live client configuration identifies it as `default_modern`; Settings,
+Character instructions and the release walkthrough require Default Modern
+(`default_modern`) for screen reading. Other game skins remain unverified; log
+parsing is independent of skin. A newly available 3840×2088 live Inventory and
+three-examine frame exposed centered-tab and split-column parsing defects. The
+corrected production reader now returns three independent exact item names,
+tiers and bare slot labels plus a separate right-side Inventory proposal. Full
+frame processing took about 7.6 seconds; each selected examine pane about
+1.0–1.3 seconds and Inventory about 2.7 seconds. Selected panes recovered the
+small attribute column more completely. Full-frame weak digits and an Inventory
+resource maximum and resist disputed between passes stay unknown; no catalog supplies OCR
+truth. This measures these panes and items, not every Modern layout or slot.
+Private game pixels and character values stay outside Git.
+
 The supplied 748×331 composite now yields the exact observed item name
 `Boots of the Long Road +10`, AC14, HP15, tier10 and Size SMALL through the
 production reader in about 2.3 seconds. The baseline scene is followed by at
-most two detected name/stat row refinements, each capped at 1MP output. Aligned
-higher-confidence words can improve their nearest matching scene word; original
-name alternatives and raw row text remain evidence. No wiki data supplies
+most two detected refinements: a name crop capped at 1MP, or a stat/Inventory
+atlas capped at 4MP. An atlas joins at most four detected source regions, each
+at most 1MP, and maps every retained OCR word back to its own source pane.
+Aligned higher-confidence name words can improve their nearest matching scene
+word; original name alternatives, pane-scoped raw rows and conflicting numeric
+reads remain evidence. Independently observed labels may align a damaged label;
+values are never repaired from the wiki or from another item. No wiki data supplies
 numeric truth. Weight0.2 remains unknown: OCR repeatedly reads `02`, even at
 95% confidence, and no missing decimal or digits are invented. Complete totals
 from this tiny overlap remain unverified; confidence is not measured accuracy.
 
 All four actual 2560×1369 combat/world screenshots in the local game directory
 were negative controls: zero item/character proposals on each, one scene pass,
-about 3.9/5.2/6.2/8.2 seconds. The actual images contain no item examine or
-Inventory panes. Large synthetic item/character fixtures continue to read known
+with a single scene pass. All four were rechecked after the Modern changes.
+The actual images contain no item examine or Inventory panes. Large synthetic item/character fixtures continue to read known
 stats correctly; they remain separate evidence from real-game accuracy.
 
 The engine supports normalized explicit regions tied to source/session and
@@ -148,7 +167,19 @@ and private `D:/EQLWiki/.local/validation/eoz-character-090-acceptance` evidence
 
 ## Final verification
 
-The full source suite and dependency audit pass locally after these changes.
+The full source suite and dependency audit now pass locally after the Modern
+follow-up, alongside native capture/calibration/workspace, unknown/zero progress
+round trips, catalog relevance and actual source/assembled offline Modern pixel
+OCR. The generated fixture uses synthetic text/geometry only; Windows and Linux
+X11 build workflows repeat that gate. Final exact-head remote and packaged
+checks remain required. PR11 was merged after exact-head CI/installer checks passed. Its first unified
+release attempt exposed a timing bug when reopening calibration immediately after
+Save: a queued close event could invalidate the new preview. Publication was
+blocked. The follow-up keeps stale close events from affecting an opening/open
+preview and adds a portable, deterministic native close-event regression before
+retrying 0.9.0 publication. PR12 also contains the measured Modern pane fixes,
+Character field adapters and explicit unknown progress, and reviewed item-stat
+defaults that exclude OCR metadata from generated wiki stat text.
 Final independent review also corrected duplicate item-source zone headings:
 sequential NPC additions now reuse the unique existing block, with LF/CRLF,
 protected-comment, preservation and idempotence regressions.
@@ -163,7 +194,8 @@ including six 0.9.0 captures. Private pixels remain outside Git; only synthetic
 UI captures are included.
 
 Final exact-head CI, installer run, merge SHA, release run, shared bootstrap and
-public asset digests are recorded in [PR11](https://github.com/Maergoth/EQL-EOZ/pull/11)
-and private `D:/EQLWiki/.local/validation/eoz-0.9.0-release-verified.json` when
+public asset digests are recorded in [PR11](https://github.com/Maergoth/EQL-EOZ/pull/11),
+[PR12](https://github.com/Maergoth/EQL-EOZ/pull/12) and private
+`D:/EQLWiki/.local/validation/eoz-0.9.0-release-verified.json` when
 those gates finish. That evidence must be verified before reporting publication;
 the source tree itself does not assert results of its future build.

@@ -45,6 +45,7 @@ jobs:
       - run: npm run test:appearance -- --screenshots ci-screenshots/appearance
       - run: npm run test:wiki-auth
       - run: npm run test:capture-native
+      - run: npm run test:modern-ocr
       - run: npm run test:capture-calibration -- --screenshots ci-screenshots/capture-calibration
       - run: npm run test:capture-workspace -- --screenshots ci-screenshots/capture-workspace
       - run: npm run test:system-fonts -- --screenshots ci-screenshots/system-fonts

@@ -5,10 +5,11 @@
 - Add Contribute to Wiki and Character workspaces, sharing the existing main/overlay font settings and log session.
 - Make local screen reading opt-in, with explicit source selection, visible capture ownership and bounded offline OCR/journal retention. Character capture pauses contribution capture; imported screenshots do not enable continuous reading.
 - Calibrate an optional OCR area from the current source preview; retain per-source/mode regions and reset safely when capture dimensions change. Bounded item-name/stat follow-up reads preserve observed evidence and leave unresolved values unknown.
+- Support the Default Modern (`default_modern`) game UI for screen reading, with separate examine and Inventory panes, centered titles, split stat columns and explicit upgrade progress. Other skins remain unverified.
 - Keep editable item/NPC/zone candidates and evidence locally. Review extracted fields, uncertain values and fresh potential wiki matches before preparing a page plan from the current wiki blueprints.
 - Use the wiki's normal login in a dedicated isolated window. Require explicit review and publish acknowledgement for every planned page; retain conflict guards, per-page results and retry of unfinished changes.
 - Include existing-item source edits for confirmed NPC loot when the zone and normal/raid identity are known; leave unverified zone `/who` names Unknown.
-- Build character equipment from separate physical item cards, nullable tiers, augment evidence and 23 named slots with keyboard/select alternatives. Preserve observed No Equipment and equipped statistics separately from calculated gear sums.
+- Build character equipment from separate physical item cards, nullable tiers and upgrade progress, augment evidence and 23 named slots with keyboard/select alternatives. Preserve observed No Equipment and equipped statistics separately from calculated gear sums.
 - Preserve real capture timestamps and removed-card cutoffs across character reloads and journal replay.
 - Preview, copy or save a bounded character PNG. Optional uploads target the authenticated user's own talk page after explicit review; partial upload/talk failures remain recoverable.
 - Keep game-log evidence authoritative for supported events and treat OCR output as proposals. Validation uses synthetic/offline OCR, native Windows/Linux X11 and loopback-wiki fixtures; production login/write, foreground-game composition and native-Wayland acceptance remain manual.
