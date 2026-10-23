@@ -141,3 +141,11 @@ or installed profile enter fixtures or Git. Complete source tests, dependency
 audit and fresh catalog checks are release gates. Native Wayland, physical game
 composition, all skins and exact server-derived equipped totals remain outside
 synthetic acceptance; label estimates and uncertainty in the product.
+
+The first changed-head CI run exposed native fixture interference on compact
+desktops: unrelated visible panels could become magnet targets or invalidate a
+group while being staged. Edge tests now expose only their selected panel;
+four-panel docking is staged separately within a compact work area and asserts
+each relation before propagation. The full main-app smoke isolates its pair
+subsection and also passes a 1024×700 test-only work-area contract. Native input,
+touching/size/anchor/collision assertions and production guards remain intact.

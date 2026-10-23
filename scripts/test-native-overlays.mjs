@@ -14,6 +14,10 @@ const electron = require('electron');
 const temporary = await mkdtemp(join(tmpdir(), 'eoz-native-overlay-smoke-'));
 const screenshotArgument = process.argv.indexOf('--screenshots');
 const screenshots = screenshotArgument === -1 ? join(temporary, 'screenshots') : resolve(process.argv[screenshotArgument + 1] || '');
+const workAreaArgument = process.argv.indexOf('--work-area');
+const workAreaMatch = workAreaArgument === -1 ? null : /^(\d+)x(\d+)$/.exec(process.argv[workAreaArgument + 1] || '');
+if (workAreaArgument !== -1 && (!workAreaMatch || Number(workAreaMatch[1]) < 1024 || Number(workAreaMatch[2]) < 700)) throw new Error('--work-area must be WIDTHxHEIGHT, at least 1024x700');
+const fixtureWorkArea = workAreaMatch ? { width:Number(workAreaMatch[1]), height:Number(workAreaMatch[2]) } : null;
 try {
     const profile = join(temporary, 'profile');
     const linux = process.platform === 'linux';
@@ -42,7 +46,7 @@ try {
     await writeFile(join(profile, 'eye-of-zomm-config.json'), JSON.stringify({ eqRootPath:game, logPath:linux?'':log, logSelection:linux?'automatic':'manual' }));
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
     await writeFile(join(temporary, 'package.json'), JSON.stringify({ name:'eoz-native-overlay-smoke', version:pkg.version, main:'main.cjs' }));
-    const run = async ({ root, log, screenshots, fixtureUpdateVersion }) => {
+    const run = async ({ root, log, screenshots, fixtureUpdateVersion, fixtureWorkArea }) => {
         const electron = require('electron');
         const { app, BrowserWindow } = electron;
         const fs = require('node:fs/promises');
@@ -70,9 +74,20 @@ try {
             return window;
         }
         Object.setPrototypeOf(RecordedWindow, BrowserWindow); RecordedWindow.prototype = BrowserWindow.prototype;
+        // Constrain only the application's display contract for compact-CI
+        // reproduction. Native windows and the actual OS monitor are unchanged.
+        const fixtureScreen = fixtureWorkArea ? new Proxy(electron.screen, { get(target, key) {
+            if (key === 'getAllDisplays') return () => {
+                const display = target.getPrimaryDisplay(), area = display.workArea;
+                assert(area.width >= fixtureWorkArea.width && area.height >= fixtureWorkArea.height, 'fixture work area must fit the actual primary display');
+                return [{ ...display, workArea:{ x:area.x, y:area.y, ...fixtureWorkArea } }];
+            };
+            const value = Reflect.get(target, key, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+        } }) : electron.screen;
         const originalLoad = Module._load;
         Module._load = function(name, ...args) {
-            if (name === 'electron') return { ...electron, BrowserWindow:RecordedWindow };
+            if (name === 'electron') return { ...electron, BrowserWindow:RecordedWindow, screen:fixtureScreen };
             return originalLoad.call(this, name, ...args);
         };
         // Keep test windows hidden. capturePage still paints the real renderer;
@@ -215,10 +230,14 @@ try {
             }finally{pointerWindow.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,...pointerMoved});pointerWindow.hide();}
             await until(async()=>execute(pointerWindow,()=>!document.body.classList.contains('is-resizing')),'resize capture releases after pointer up');
             };
+            // This subsection verifies a Parse/Triggers pair. Other panels are
+            // restored afterward; their collision guards remain production-real
+            // and the separate native fixture exercises four-panel docking.
+            await control('hide','map');await control('hide','intel');
             const resizeTarget={x:100,y:100,width:parseBeforeResize.width+86,height:parseBeforeResize.height+40};panels().parse.setBounds(resizeTarget);
             const actualTarget=panels().parse.getBounds(),timerWindow=panels().timers;
             timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+9,width:actualTarget.width-8,height:84});
-            await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height&&bounds.width===actualTarget.width;},'Triggers touches current resized native Parse bounds and shares its width');
+            try{await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height&&bounds.width===actualTarget.width;},'Triggers touches current resized native Parse bounds and shares its width');}catch(error){throw Error(`${error.message}; target=${JSON.stringify(actualTarget)} timer=${JSON.stringify(timerWindow.getBounds())} workAreas=${JSON.stringify(fixtureScreen.getAllDisplays().map(display=>display.workArea))} preferences=${JSON.stringify((await state()).panels)}`);}
             // Native setBounds is fixture positioning, not user height intent.
             // Establish manual height through the real own-panel resize path.
             await action('timers','resize',{deltaWidth:0,deltaHeight:20});
@@ -230,6 +249,7 @@ try {
             assert.equal((await state()).panels.timers.manualHeight,true);
             await screenshot(panels().parse,'parse-layout-editing');await screenshot(timerWindow,'triggers-layout-editing');
             await control('reset-layout');
+            await control('show','map');await control('show','intel');
             assert.equal((await state()).panels.timers.manualHeight,false,'Reset positions restores automatic compact Triggers height');
             assert.equal(nativeCalls.get(panels().parse.id).filter(call => call[0] === 'setIgnoreMouseEvents').at(-1)[1], false);
             const focusCalls = () => [...nativeCalls.values()].flat().filter(call => call[0] === 'focus').length;
@@ -771,7 +791,7 @@ try {
             assert.deepEqual(split.timers.timers.map(({id,expiresAt})=>({id,expiresAt})),deadlines,'Manual session splits preserve all running trigger IDs/deadlines');
             await append(['You slash a synthetic skeleton for 9 points of damage.']);
             await until(async()=>(await state()).snapshot.session.parse.totalDamage===9,'Only newly appended log lines enter the split session');
-            return { ok:true, platform:process.platform, windowBackend:app.commandLine.getSwitchValue('ozone-platform'), windows:ids.length, damage:9, timers:split.timers.timers.length, sharedSession:true, globalOverlayCycle:true,parseDragGrip:true,parseResizable:true,trustedResizePointer:true,triggersResizeAndSnap:true,physicalDragTested:false,inactiveFocus, screenshots };
+            return { ok:true, platform:process.platform, windowBackend:app.commandLine.getSwitchValue('ozone-platform'), windows:ids.length, damage:9, timers:split.timers.timers.length, sharedSession:true, globalOverlayCycle:true,parseDragGrip:true,parseResizable:true,trustedResizePointer:true,triggersResizeAndSnap:true,fixtureWorkArea,physicalDragTested:false,inactiveFocus, screenshots };
         };
         let started = false;
         app.on('browser-window-created', () => { if (!started) { started = true; void inspect().then(result => { console.log('EOZ_NATIVE_OVERLAY_SMOKE=' + JSON.stringify(result)); app.exit(0); }).catch(error => { console.error(error.stack); app.exit(1); }); } });
@@ -779,7 +799,7 @@ try {
         require(path.join(root, 'desktop/main.cjs'));
     };
     const fixtureVersionParts=pkg.version.split('.');fixtureVersionParts[2]=String(Number(fixtureVersionParts[2])+1);const fixtureUpdateVersion=fixtureVersionParts.join('.');
-    await writeFile(join(temporary, 'main.cjs'), `const { app } = require('electron');\napp.setPath('userData', ${JSON.stringify(profile)});\n(${run.toString()})(${JSON.stringify({root, log, screenshots, fixtureUpdateVersion})}).catch(error => { console.error(error.stack); app.exit(1); });\n`);
+    await writeFile(join(temporary, 'main.cjs'), `const { app } = require('electron');\napp.setPath('userData', ${JSON.stringify(profile)});\n(${run.toString()})(${JSON.stringify({root, log, screenshots, fixtureUpdateVersion, fixtureWorkArea})}).catch(error => { console.error(error.stack); app.exit(1); });\n`);
     const result = await new Promise((resolve, reject) => {
         const child = spawn(electron, [temporary, '--disable-gpu', '--mute-audio'], { windowsHide:true, stdio:['ignore', 'pipe', 'pipe'] });
         let output = '';
