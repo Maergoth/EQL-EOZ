@@ -113,3 +113,17 @@ Those initial runs did not reach capture or packaging and are not acceptance
 evidence for those stages. Final integration also retains newly parsed backstab
 damage in editable/shared item statistics separately from base damage; no
 equipped-total formula is inferred for it.
+
+The next remote head, `9388eae`, passed that tour gate and reached the new native
+capture scenario. It exposed a fixture-only scale error: a 1920-wide canvas was
+rendered at 960 CSS pixels, shrinking nominal 20px tooltip text to 10px at DPR 1.
+The corrected synthetic source draws a 960x660 scene at its native font size,
+preserves its geometry on every redraw, and commits the compositor surface.
+Two adjacent marker colors outside the item acknowledge actual native pixels;
+a bounded four-pixel blend transition handles fractional scaling. Changed
+stages must reach capture admission within 1500 ms, then remain visible for at
+least 700 ms. Exact three-item OCR, source/session/generation/original time,
+queued-frame and fresh unchanged baseline assertions remain intact. Logs report
+actual admission and visibility durations; they do not claim every stage lasted
+exactly 700 ms. Test-only Chromium scale overrides leave OS display settings
+unchanged. Neither failed remote run produced a release package.
