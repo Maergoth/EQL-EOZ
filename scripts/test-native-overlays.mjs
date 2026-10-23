@@ -214,6 +214,9 @@ try {
             const actualTarget=panels().parse.getBounds(),timerWindow=panels().timers;
             timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+9,width:actualTarget.width-8,height:84});
             await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height+6&&bounds.width===actualTarget.width;},'Triggers snaps to current resized native Parse bounds, not its old defaults');
+            // Native setBounds is fixture positioning, not user height intent.
+            // Establish manual height through the real own-panel resize path.
+            await action('timers','resize',{deltaWidth:0,deltaHeight:20});
             const timerBeforeResize=timerWindow.getBounds();
             const timerHandle=await execute(timerWindow,()=>{const handle=document.querySelector('#overlay-resize-handle'),grip=document.querySelector('#parse-drag-grip'),menu=document.querySelector('.hover-menu');return{cursor:getComputedStyle(handle).cursor,display:getComputedStyle(handle).display,grip:getComputedStyle(grip).webkitAppRegion,handle:handle.getBoundingClientRect().toJSON(),menu:menu.getBoundingClientRect().toJSON()};});
             assert.equal(timerHandle.cursor,'nwse-resize');assert.equal(timerHandle.display,'block');assert.equal(timerHandle.grip,'drag');assert(timerHandle.handle.left>=timerHandle.menu.right,'Triggers resize corner is separate from its settings button');

@@ -246,7 +246,7 @@ class OverlayHost {
             const width=delta?current.width+payload.deltaWidth:payload.width,height=delta?current.height+payload.deltaHeight:payload.height;
             if(!Number.isFinite(width)||!Number.isFinite(height)||!delta&&(width<1||height<1||width>4000||height>4000))throw new Error('Invalid overlay size.');
             const displays=this.displays();let bounds=clampBounds({...current,width:Math.round(width),height:Math.round(height)},displays,prefs.bounds,id==='timers'?36:160);
-            if(id==='timers'){bounds=this.snapTimers(bounds,true,displays);prefs.manualHeight=true;}
+            if(id==='timers'){bounds=this.snapTimers(bounds,true,displays);if(height!==current.height)prefs.manualHeight=true;}
             prefs.bounds=bounds;this.apply(id);this.scheduleSave();return{ok:true,bounds:clone(bounds)};
         }
         if (action === 'content-height') {
@@ -307,11 +307,15 @@ class OverlayHost {
         });
         win.webContents.on('render-process-gone', () => { this.ready.delete(id); this.crashed.add(id); });
         win.on('will-move', event => { if (prefs.locked) event.preventDefault(); });
-        win.on('will-resize', event => { if (prefs.locked) event.preventDefault(); });
+        // Electron emits will-resize for native user gestures, not setBounds.
+        // Generic resize events also include auto-fit and native DIP rounding.
+        win.on('will-resize', (event,bounds) => {
+            if (prefs.locked) { event.preventDefault();return; }
+            if(id==='timers'&&Number.isFinite(bounds?.height)&&bounds.height!==win.getBounds().height)prefs.manualHeight=true;
+        });
         const saveBounds = (resizing=false) => {
             if (win.isDestroyed() || this.disposed) return;
             const current=win.getBounds(),displays=this.displays();
-            if(id==='timers'&&resizing&&current.height!==prefs.bounds.height)prefs.manualHeight=true;
             let bounds=clampBounds(current,displays,prefs.bounds,id==='timers'?36:160);
             if(id==='timers'&&!prefs.locked&&!prefs.passThrough)bounds=this.snapTimers(bounds,resizing,displays);
             prefs.bounds=bounds;

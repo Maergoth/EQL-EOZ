@@ -217,6 +217,26 @@ test('timer windows fit only visible countdown rows and the swing bar without a 
     await assert.rejects(host.handleOverlayRequest(overlayEvent('parse'),'content-height',300),/Invalid timer content height/,'Only Timers can request content fitting');
 }));
 
+test('automatic Triggers height survives native rounding; only explicit height editing makes it manual',()=>fixture(async({host,overlayEvent})=>{
+    await host.control('show','timers');const win=host.windows.get('timers'),nativeBounds=win.setBounds.bind(win);
+    // Windows/DPI conversion may return a different logical size than requested.
+    // A generic resize notification is not evidence of a user resize gesture.
+    win.setBounds=value=>nativeBounds({...value,height:Math.ceil(value.height/2)*2});
+    await host.handleOverlayRequest(overlayEvent('timers'),'content-height',37);
+    assert.equal(win.getBounds().height,38);assert.equal(host.getState().panels.timers.manualHeight,false,'programmatic rounded auto-fit must not freeze as manual');
+    await host.control('appearance',null,{fontFamily:'verdana',fontSize:20});await host.control('font-scale','timers',1.75);
+    await host.handleOverlayRequest(overlayEvent('timers'),'content-height',94);
+    assert.equal(win.getBounds().height,94,'a later enlarged font can still fit its complete content');assert.equal(host.getState().panels.timers.manualHeight,false);
+    await host.control('lock','timers',false);
+    await host.handleOverlayRequest(overlayEvent('timers'),'resize',{deltaWidth:20,deltaHeight:0});
+    assert.equal(host.getState().panels.timers.manualHeight,false,'editing width alone retains content-height fitting');
+    let prevented=false;win.emit('will-resize',{preventDefault(){prevented=true;}},{...win.getBounds(),height:120});assert.equal(prevented,false);win.setBounds({...win.getBounds(),height:120});
+    assert.equal(host.getState().panels.timers.manualHeight,true,'a native user height resize remains an explicit choice');
+    await host.handleOverlayRequest(overlayEvent('timers'),'content-height',150);assert.equal(win.getBounds().height,120);
+    await host.control('reset-layout');await host.control('lock','timers',true);prevented=false;
+    win.emit('will-resize',{preventDefault(){prevented=true;}},{...win.getBounds(),height:160});assert.equal(prevented,true);assert.equal(host.getState().panels.timers.manualHeight,false,'a blocked locked gesture does not change height policy');
+}));
+
 test('startup restores only the selected native panels with their independent lock and mouse state', () => fixture(async ({ host, nativeWindows }) => {
     assert.equal(nativeWindows.length, 1);
     assert.equal(host.windows.has('parse'), true);

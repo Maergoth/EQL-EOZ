@@ -51,6 +51,16 @@ try{
         const originalFocus=BrowserWindow.prototype.focus;let focusCalls=0;
         BrowserWindow.prototype.focus=function(){focusCalls++;};
         global.fetch=async()=>{throw Error('External network disabled for synthetic 3D smoke');};
+        const diagnostics=[],observedSessions=new WeakSet();
+        const record=(kind,value)=>{diagnostics.push({kind,...value});if(diagnostics.length>60)diagnostics.shift();};
+        const urlLabel=value=>{try{const url=new URL(value);return `${url.origin}${url.pathname}`;}catch{return String(value||'').slice(0,300);}};
+        function observeWindow(window){
+            const contents=window.webContents,id=contents.id;
+            contents.on('console-message',(event,level,message,line,sourceId)=>{const severity=event.level??level;if(severity==='warning'||severity==='error'||Number(severity)>=2)record('console',{id,level:severity,message:String(event.message??message??'').slice(0,1200),line:event.lineNumber??line,source:urlLabel(event.sourceId??sourceId)});});
+            contents.on('did-fail-load',(_event,code,description,url,mainFrame)=>record('load-failed',{id,code,description,url:urlLabel(url),mainFrame}));
+            contents.on('render-process-gone',(_event,details)=>record('renderer-gone',{id,reason:details.reason,exitCode:details.exitCode}));
+            if(!observedSessions.has(contents.session)){observedSessions.add(contents.session);contents.session.webRequest.onErrorOccurred({urls:['<all_urls>']},details=>record('request-failed',{url:urlLabel(details.url),error:details.error,type:details.resourceType}));}
+        }
         const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
         const until=async(fn,label,timeout=12000)=>{const end=Date.now()+timeout;let last;while(Date.now()<end){try{const value=await fn();if(value)return value;}catch(error){last=error;}await wait(65);}throw Error(`Timed out: ${label}${last?` (${last.message})`:''}`);};
         const execute=(target,fn,...args)=>target.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
@@ -66,14 +76,20 @@ try{
             await until(async()=>{const value=await state();return value.snapshot?.session?.map?.location?.z===12&&value.snapshot.session.map.npcs.length===3;},'logged player and three synthetic source records');
             await control('show','map');
             const map=await until(()=>BrowserWindow.getAllWindows().find(window=>window.webContents.getURL().includes('/overlay-map.html?panel=map')),'native Map document');
-            await until(()=>mainExecute(map,()=>Boolean(document.querySelector('[data-map-action="mode"]'))&&!document.hidden),'visible native Map controller');
+            await until(()=>mainExecute(map,()=>{const button=document.querySelector('[data-map-action="mode"]');return button&&!button.disabled&&!document.hidden&&document.querySelector('#overlay-title')?.textContent==='Mistmoore Castle';}),'visible native Map controller with authoritative session and enabled controls');
             owner.hide();const before=await state(),logged=before.snapshot.session.map.location,sessionId=before.snapshot.sessionId;
             const frame=()=>map.webContents.mainFrame.frames.find(candidate=>candidate.url.includes('/zoneviewer/viewer.html?overlay=1'));
             const childExecute=(fn,...args)=>execute(frame(),fn,...args);
             const click=action=>mainExecute(map,action=>document.querySelector(`[data-map-action="${action}"]`).click(),action);
             const capture=async name=>{if(!screenshots)return;await mainExecute(map,()=>{for(const animation of document.getAnimations())if(animation.effect?.getTiming().iterations!==Infinity)animation.finish();});map.webContents.sendInputEvent({type:'mouseMove',x:120,y:20});map.webContents.invalidate();await wait(300);const image=await map.webContents.capturePage();await fs.writeFile(path.join(screenshots,name),image.toPNG());};
             await click('mode');
-            await until(()=>frame()&&childExecute(()=>Boolean(window.eqlEyeOfZommViewer?.focusAtLocation&&window.eqlZoneViewer?.renderer)),'shipped overlay viewer API and WebGL renderer');
+            assert.equal(await mainExecute(map,()=>document.querySelector('[data-map-action="mode"]').textContent),'Top 3D','A ready mode control must apply the requested transition before waiting for its viewer');
+            try{
+                await until(()=>frame()&&childExecute(()=>Boolean(window.eqlEyeOfZommViewer?.focusAtLocation&&window.eqlZoneViewer?.renderer)),'shipped overlay viewer API and WebGL renderer');
+            }catch(error){
+                let state;try{state=await mainExecute(map,()=>({hidden:document.hidden,ready:document.readyState,mode:document.querySelector('[data-map-action="mode"]')?.textContent,disabled:document.querySelector('[data-map-action="mode"]')?.disabled,status:document.querySelector('#overlay-status')?.textContent,mapStatus:document.querySelector('.native-map-3d-status')?.textContent,frames:[...document.querySelectorAll('iframe')].map(frame=>({src:frame.getAttribute('src'),ready:frame.contentDocument?.readyState,api:Boolean(frame.contentWindow?.eqlEyeOfZommViewer),renderer:Boolean(frame.contentWindow?.eqlZoneViewer?.renderer)}))}));}catch(snapshotError){state={error:snapshotError.message};}
+                console.error('EOZ_MAP_STARTUP_DIAGNOSTICS='+JSON.stringify({state,visible:map.isVisible(),frames:map.webContents.mainFrame.frames.map(value=>urlLabel(value.url)),events:diagnostics}));throw error;
+            }
             const policy=await childExecute(async()=>{
                 const blocked=async(url,options)=>{try{await fetch(url,options);return false;}catch{return true;}};
                 const manifest=await fetch('/api/eq-files'),map=await fetch('/api/eq-file?path=Maps%2Fmistmoore.txt&surface=overlay-map');
@@ -229,7 +245,7 @@ try{
             console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,realConfiguredFolder:true,realS3dEqgHydration:true,realParserWorker:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,groundMarkerBothViews:true,followOffMarker:true,autoZManualReenable:true,mainViewerAutoZ:true,unknownHeightGrounded:true,resetAndHideUnload:true,hateFallbackAndManualSlice:true}));
             BrowserWindow.prototype.focus=originalFocus;app.exit(0);
         }
-        app.on('browser-window-created',()=>{if(started)return;started=true;void inspect().catch(error=>{console.error(error.stack);app.exit(1);});});
+        app.on('browser-window-created',(_event,window)=>{observeWindow(window);if(started)return;started=true;void inspect().catch(error=>{console.error('EOZ_MAP_DIAGNOSTICS='+JSON.stringify(diagnostics));console.error(error.stack);app.exit(1);});});
         setTimeout(()=>{console.error('3D overlay smoke exceeded 55 seconds');app.exit(2);},55000).unref();require(path.join(root,'desktop/main.cjs'));
     };
     await writeFile(join(temporary,'main.cjs'),`const {app}=require('electron');app.setPath('userData',${JSON.stringify(profile)});(${run.toString()})(${JSON.stringify({root,log,screenshots})});`);

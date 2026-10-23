@@ -273,6 +273,12 @@ requires the same monitor work area and never clamps a snap across its boundary.
 There is no hidden persistent docking relation or automatic following. Explicit
 Triggers height changes are saved as manual height; normal content snapshots
 cannot undo them. **Reset positions** restores automatic compact content height.
+Manual height is established by the explicit corner/keyboard resize IPC, or by
+Electron's user-only `will-resize` event on Windows/macOS. Linux users should use
+the visible corner or keyboard controls to retain a chosen height; native Linux
+edge gestures do not provide that event and are not claimed to persist manual
+height. Generic resize notifications never establish user intent: they also
+occur during automatic fitting and native logical-pixel rounding.
 
 `tests/native-overlays.mjs` covers the full/mixed-state cycle, independent
 preferences, resize authorization and bounds, current-target magnetic alignment,
@@ -289,6 +295,14 @@ Pointer injection supplies Electron's explicit global coordinates and waits for
 a fresh visible frame. It runs after hidden screenshot checks because Windows
 Viz can stall an immediate hidden `capturePage` following show/resize/hide.
 The inspected Parse and Triggers images show distinct grips and corner controls.
+PR13's Windows appearance gate exposed an auto-fit regression: a rounded native
+resize had incorrectly enabled manual height, freezing a small Triggers window
+when fonts grew. A deterministic rounded-size regression failed the old code;
+the corrected host and the real appearance fixture (10/20 px with .75/1.75 panel
+scales, process restart and reset) passed locally. The native overlay cycle,
+pointer/keyboard resize and resized-Parse snapping fixture also passed after the
+correction. These are local source results; remote final-head results belong to
+the release ledger.
 These use disposable profiles and synthetic log data;
 physical OS dragging, foreground-game composition and native Wayland remain
 manual acceptance limits. Native image evidence remains private under
