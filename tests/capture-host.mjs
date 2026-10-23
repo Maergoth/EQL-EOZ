@@ -245,6 +245,24 @@ for(const change of ['stop','owner','crop','size']){
     }finally{await changed.host.dispose();}
 }
 {
+    const resized=fixture(),pane={selectionKind:'visual-item',visualKey:'0123456789abcdef',itemRegion:{x:0,y:0,width:1,height:1}};
+    try{
+        await resized.host.listSources();await resized.host.start({mode:'character',sourceId:'window:game',sessionId:'resized-pane'});
+        resized.tick();resized.host.submitFrame({...resized.frame('before-resize'),...pane});await resized.waitForRead();
+        const oldGeneration=resized.host.generation;
+        resized.tick();const fresh=resized.frame('after-resize',200,40),admission=resized.host.submitFrame({...fresh,...pane});
+        assert.equal(resized.host.generation,oldGeneration+1);assert.equal(resized.host.activeFrameGeneration,oldGeneration,'the old OCR is still completing when the resized frame arrives');
+        assert.equal(admission.accepted,true,'an invalidated active pane cannot suppress matching pixels from the new source size');
+        assert.equal(resized.host.pending.length,1);assert.equal(resized.host.pending[0].capturedAt,fresh.capturedAt);
+        assert.equal(resized.host.submitFrame({...resized.frame('same-current-pane',200,40),...pane}).duplicate,true,'the same pane still coalesces inside the current generation');
+        resized.resolve('Item: Synthetic Stale Size\nHP 999');await new Promise(resolve=>setImmediate(resolve));await resized.waitForRead();
+        assert.equal(resized.observations.length,0,'the invalidated pre-resize read remains rejected');
+        resized.resolve('Item: Synthetic Resized Pane\nHP 7');await resized.host.processing;
+        assert.equal(resized.observations.length,1);assert.equal(resized.observations[0].subject.name,'Synthetic Resized Pane');
+        assert.equal(resized.observations[0].input.captureGeneration,resized.host.generation);assert.equal(Date.parse(resized.observations[0].capturedAt),fresh.capturedAt);
+    }finally{await resized.host.dispose();}
+}
+{
     const fresh=fixture(),stats='Character Stats\nHP 330/398\nMana 296/296\nSTR 90\nSTA 105';
     try{
         await fresh.host.listSources();await fresh.host.start({mode:'character',sourceId:'window:game'});fresh.tick();fresh.host.submitFrame(fresh.frame('unchanged-empty-inventory'));await fresh.waitForRead();fresh.resolve(stats);await fresh.host.processing;

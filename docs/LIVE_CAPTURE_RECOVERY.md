@@ -202,5 +202,25 @@ mapping and evidence isolation; it does not claim native 4K recognition.
   that probe's small in-memory image cache did not retain its original PNG.
 - The final normal `npm test` passed after all source/host changes were frozen,
   including runtime preparation and release/history/source-manifest checks.
-- Pending: final native checks, exact-head CI/platform/package
+- Final combined review reproduced and fixed a resize-generation dedup edge:
+  an invalidated active OCR key could suppress the first matching pane at the
+  new source size. Active-key dedup now requires the current generation. Its
+  held-old-read regression fails before the guard and passes afterward, keeping
+  current-generation coalescing and stale-result rejection intact.
+- A final local static native-window fixture missed its 500 ms draw-to-capture
+  assertion. A private instrumented run traces 3.228 seconds of unchanged video
+  pixels/currentTime before Windows delivers the redraw; source sampling stays
+  at 125–140 ms, configuration waits at 0–1 ms and candidate detection at 2–4 ms.
+  The new pixels are snapshotted 47 ms after delivery. This is a native static
+  window/compositor limitation, distinct from encoder loss. Both Windows CI
+  jobs passed that fixture on the first PR head. Adding only a 16 x 16 non-item
+  8 Hz animation passes the unchanged 500 ms assertion: stage 2 is captured in
+  316 ms and stage 3 in 50 ms, with all three OCR identities, calibration, fresh
+  baseline and Stop checks passing. The native fixture now models continuously
+  changing game scenery this way; no production workaround is introduced.
+- The full uninstrumented native gate passes after that fixture-only correction
+  on the resize-guard-fixed source: B/C captures 328/193 ms after draw, all
+  three exact identities and original provenance, calibration/clipboard,
+  unchanged fresh baseline, journal and Stop. The strict 500 ms assertion stays.
+- Pending: final post-review source check, exact-head CI/platform/package
   checks and publication. No new release is yet claimed.

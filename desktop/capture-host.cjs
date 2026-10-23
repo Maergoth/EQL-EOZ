@@ -278,7 +278,7 @@ class CaptureHost {
         this.prunePending();
         const base={png,hash,size,capturedAt:value.capturedAt,generation:this.generation,owner:this.owner,sessionId:this.sessionId,sourceId:this.source?.id};
         const sharedScene=kind==='visual-item'&&!this.region&&value.sceneFallback===true;
-        if(this.recentlySeen(key)||this.activeFrameHash===key||this.pending.some(frame=>frame.key===key)){
+        if(this.recentlySeen(key)||(this.activeFrameGeneration===this.generation&&this.activeFrameHash===key)||this.pending.some(frame=>frame.key===key)){
             this.skippedFrames++;this.rejectFrame('duplicate');const sceneAccepted=sharedScene&&this.queueSceneReference(base);if(sceneAccepted){this.startPump();this.emitFrameStatus();}return {accepted:false,duplicate:true,...(sceneAccepted?{sceneAccepted:true}:{})};
         }
         // Animated scenery gets one replaceable fallback slot. It cannot evict
