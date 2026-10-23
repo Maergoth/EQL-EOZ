@@ -15,6 +15,7 @@ const requiredModules = [
     'app/map-overlay.js', 'app/map-overlay-data.js', 'app/wiki-discovery.js', 'app/wiki-discovery-ui.js',
     'app/trigger-match-core.js', 'app/trigger-matcher.js', 'app/workers/trigger-match.worker.js',
     'app/timer-alerts.js', 'desktop/discovery-host.cjs', 'desktop/overlay-host.cjs', 'desktop/overlay-docking.cjs', 'desktop/overlay-preload.cjs', 'app/character-walkthrough.js',
+    'app/capture-png.worker.js',
     'app/zone-identity.js', 'app/viewer-zone-selection.js', 'app/zone-load-guard.js',
     'app/viewport-framing.js', 'app/established-route-guard.js', 'app/drop-certification.js', 'app/navigation-policy.js', 'app/route-validation.js', 'app/zoneviewer/ZoneViewerApp.js'
 ];
@@ -87,11 +88,13 @@ for (const relative of requiredModules) {
             error => error.message === `Packaged ${relative} is missing.`);
         await writeFile(join(fixture, relative), sources.get(relative));
     }
-    await writeFile(join(fixture, 'app/route-validation.js'), '// Stale collision validation\n');
-    await buildArchive();
-    assert.throws(() => verifyPackagedRuntimeSources(packagedText, sourceText),
-        /Packaged app\/route-validation\.js differs from the tested source/);
-    await writeFile(join(fixture, 'app/route-validation.js'), sources.get('app/route-validation.js'));
+    for (const relative of ['app/route-validation.js', 'app/capture-png.worker.js']) {
+        await writeFile(join(fixture, relative), '// Stale packaged runtime\n');
+        await buildArchive();
+        assert.throws(() => verifyPackagedRuntimeSources(packagedText, sourceText),
+            error => error.message === `Packaged ${relative} differs from the tested source.`);
+        await writeFile(join(fixture, relative), sources.get(relative));
+    }
 
     for (const change of [
         pack => { pack.meta.manifestVersion = 'old-synthetic-manifest'; pack.meta.version = 'old-synthetic-pack'; },

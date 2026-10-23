@@ -6,6 +6,7 @@
 - Recover repeated observations from the active walkthrough into one physical item card, retaining evidence, manual edits and explicit copy/removal choices.
 - Automatically locate Default Modern tooltip panes, crop and enlarge them before offline OCR, and prioritize distinct tooltip pixels over animated scenery. Keep bounded temporary queues, periodic full-scene fallback and manually calibrated areas.
 - Keep acquiring bounded snapshots while a previous full-resolution screenshot is being encoded, preserving short tooltip frames and their original timestamps. Derive detection, fingerprints and OCR pixels from one frozen frame to prevent mixed-frame duplicate suppression.
+- Encode screenshots in one local browser worker so renderer idle scheduling cannot stall the tooltip queue. Keep original capture times and source checks; report encoding failures visibly.
 - Preserve compact tooltip name and stat rereads when Inventory is also visible; retain editable OCR uncertainty.
 
 ## 0.9.2 - Capture brief item tooltips

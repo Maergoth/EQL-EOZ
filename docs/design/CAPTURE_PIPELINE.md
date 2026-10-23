@@ -11,7 +11,7 @@ packaged and live-game behavior remains an explicit acceptance item.
 
 Implemented files: `desktop/capture-host.cjs`, `capture-image.cjs`,
 `screen-read-journal.cjs`, `capture-reader.cjs`, `ocr-service.cjs`, `ocr-worker.cjs`,
-`ocr-runtime.cjs`, `capture-source-preload.cjs`; `app/capture-source.html`, `capture-source.js` and
+`ocr-runtime.cjs`, `capture-source-preload.cjs`; `app/capture-source.html`, `capture-source.js`, `capture-png.worker.js` and
 `screen-read-parser.js`. Existing parser changes are additive `sourceEvidence`
 and `sourceConfidence` fields, preserving its current source attribution/totals.
 
@@ -484,14 +484,32 @@ Acquisition freezes one frame before visual detection and fingerprinting; the
 same immutable pixels become the queued PNG. Independent live-video reads can
 otherwise mix one tooltip's geometry/key with the next tooltip's pixels. A
 deterministic video-advance regression exercises that race. Acquisition continues
-while PNG encoding awaits. Before the single encoder,
-the source retains at most two raw canvas snapshots and 64 MiB of pending pixel
-bytes, plus its one active encoding canvas and one capped working frame during
-analysis. The working frame is released on every nonqueue return. Items precede one replaceable scene;
+while PNG encoding awaits. One same-origin browser worker encodes an ImageBitmap
+created from that already frozen canvas using OffscreenCanvas. This avoids
+main-renderer idle PNG scheduling, which a Windows CI trace measured delaying
+correctly retained items for several seconds. No game identity, authentication
+or capture authority enters the encoder: it receives pixels, dimensions and an
+opaque job ID. Only the matching worker instance/job may resolve a request.
+
+Before the single encoder, the source retains at most two raw canvas snapshots
+and 64 MiB of pending pixel bytes, plus one capped working frame during analysis.
+The active encode can briefly have three bounded image surfaces (source canvas,
+transferred bitmap and worker canvas); the source releases its canvas immediately
+after successful transfer, and the worker closes its bitmap after drawing.
+All surfaces are bounded to 4096 x 2160. These are logical image bounds, not an
+application RSS guarantee. Encoded PNGs remain capped at 32 MiB. The working
+frame is released on every nonqueue return. Items precede one replaceable scene;
 queued duplicate pane pixels coalesce. Each snapshot carries its original
 capture time and immutable context. Source changes, null configuration,
-source-size/ROI/generation changes and disposal release pending canvases;
-post-encode configuration checks prevent late delivery. Raw snapshots expire
+source-size/ROI/generation changes and disposal release pending canvases and
+terminate the encoder. Worker errors, malformed replies and a 15-second encoding
+timeout report the existing visible encode warning. The browser's noncancellable
+bitmap creation retains the one serial slot until it settles, then closes any
+stale bitmap; source changes cannot accumulate bitmap acquisitions. Stop itself
+does not await it. After transfer, cancellation releases the job promptly. There
+is no silent renderer fallback after image transfer. A future current job can
+create a new worker. Post-encode configuration checks prevent late delivery.
+Raw snapshots expire
 after 15 seconds, within the host's 30-second
 incoming-frame boundary. Capacity, age and encode losses feed the existing
 visible warning and a no-text source-drop aggregate. Raw pixels remain in

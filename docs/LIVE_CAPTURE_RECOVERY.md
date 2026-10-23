@@ -317,6 +317,26 @@ mapping and evidence isolation; it does not claim native 4K recognition.
   retains at most three small synthetic stage crops, serialized only on failure.
   Private-image/background modes do not install pixel diagnostics. Use that
   timeline to establish the cause before changing acquisition or serialization.
+- The Windows candidate trace on `fb6d1fd` establishes encoding backlog: all
+  three actual frozen markers have valid regions/keys and B/C enter the raw
+  queue with original context. A's native PNG callback takes 6,705 ms, an A
+  heartbeat 2,219 ms, then B 5,242 ms before the deliberate 2,500 ms callback
+  delay. C remains intact in the queue at the deadline; there is no overflow or
+  missing video/detector evidence. Implement one dedicated same-origin PNG
+  worker to avoid renderer idle encoding, preserving all acquisition metadata,
+  source and host bounds and unchanged acceptance deadlines. A private one-shot
+  worker comparison decoded exactly to the same 4K synthetic pixels; it did not
+  reproduce the CI idle stall and is not a throughput or memory guarantee.
+- The worker source/protocol suites and independent lifecycle/memory review
+  pass, including pending bitmap creation across eight context changes, stale
+  replies, transfer/encoding errors and timeout recovery. Full normal `npm test`
+  passes with the new worker and actual-ASAR missing/stale checks. Windows native
+  capture passes exact original image/time/context, fresh baseline and Stop.
+  Windows native and 4K priority gates pass all three exact OCR names, zero
+  drops and unchanged exposure/deadline/queue limits. The 4K worker encodes A
+  in 26 ms and C in 24 ms; B takes 2,544 ms including its deliberate worker-ID
+  reply delay. This local fixture result still requires exact-head CI and
+  packaged platform acceptance.
 - The final coherent-source normal `npm test` and full native capture gate also
   pass, including exact admitted images, fresh baseline and Stop.
   Pending: exact-head CI/platform/package

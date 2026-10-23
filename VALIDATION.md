@@ -17,6 +17,13 @@ fixtures match original PNG hashes, capture times and context within real toolti
 exposures, including multiple valid compositor variants; late heartbeats cannot
 substitute for queued items.
 
+A Windows CI trace also retained all three correct frozen tooltip images while
+renderer PNG callbacks took 6.7 and 5.2 seconds and blocked admission. Encoding
+now uses one same-origin browser worker; it receives only immutable pixels and
+an opaque job ID. The source keeps original capture metadata and validates
+context again before submission. Exact-head worker, native and package gates
+are required; the earlier main-thread encoder passes do not certify that change.
+
 Source changes, actual-pixel measurements and acceptance are tracked in
 [LIVE_CAPTURE_RECOVERY.md](docs/LIVE_CAPTURE_RECOVERY.md). Private screenshots,
 OCR text and profile projections are excluded from Git. Exact-head CI,

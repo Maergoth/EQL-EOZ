@@ -14,7 +14,7 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
     const server=http.createServer(async(request,response)=>{
         const name=request.url==='/'?null:request.url?.slice(1);
         if(!name){response.end('<!doctype html><title>Eye of Zomm test control</title>');return;}
-        if(!['capture-source.html','capture-source.js'].includes(name)){response.writeHead(404).end();return;}
+        if(!['capture-source.html','capture-source.js','capture-png.worker.js'].includes(name)){response.writeHead(404).end();return;}
         response.setHeader('Content-Type',name.endsWith('.html')?'text/html':'text/javascript');response.end(await fs.readFile(path.join(sourceRoot,'app',name)));
     });
     await new Promise(done=>server.listen(0,'127.0.0.1',done));const origin=`http://127.0.0.1:${server.address().port}`;

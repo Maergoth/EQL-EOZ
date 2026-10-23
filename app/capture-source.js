@@ -3,6 +3,7 @@
 let stream=null,stopped=false,timer=null,busy=false,encoding=false,contextRevision=0,lastFrozenAt=-Infinity,lastSampledAt=-Infinity,lastFingerprint=null,lastIdentity='',lastContext='',lastSceneAt=-Infinity;
 const snapshots=[],MAX_PENDING_SNAPSHOTS=2,MAX_PENDING_BYTES=64*1024*1024,MAX_RAW_AGE_MS=15000;
 let pendingBytes=0;
+let pngWorker=null,pngJob=null,pngSequence=0;
 const paneMemory=new Map();
 const api=window.eyeOfZommCaptureSource,video=document.getElementById('source');
 const comparison=document.createElement('canvas');comparison.width=256;comparison.height=144;
@@ -10,11 +11,55 @@ const visual=document.createElement('canvas');
 function releaseSnapshot(snapshot){snapshot.canvas.width=snapshot.canvas.height=1;}
 function discardSnapshot(index){const [snapshot]=snapshots.splice(index,1);pendingBytes-=snapshot.rawBytes;releaseSnapshot(snapshot);return snapshot;}
 function clearSnapshots(){while(snapshots.length)discardSnapshot(0);}
-function stop(){stopped=true;contextRevision++;clearTimeout(timer);clearSnapshots();stream?.getTracks().forEach(track=>track.stop());stream=null;lastFingerprint=null;paneMemory.clear();comparison.width=comparison.height=visual.width=visual.height=1;}
+function stop(){stopped=true;contextRevision++;clearTimeout(timer);clearSnapshots();closePngWorker();stream?.getTracks().forEach(track=>track.stop());stream=null;lastFingerprint=null;paneMemory.clear();comparison.width=comparison.height=visual.width=visual.height=1;}
 function captureIdentity(capture,width,height){return JSON.stringify([capture.generation,capture.owner,capture.sessionId,capture.sourceId,width,height,capture.region]);}
 function sourceDrop(reason){void api.signal('sample-drop',{reason,count:1}).catch(()=>{});}
 function pruneSnapshots(){for(let n=snapshots.length-1;n>=0;n--)if(Date.now()-snapshots[n].frame.capturedAt>MAX_RAW_AGE_MS){const old=discardSnapshot(n);if(old.frame.selectionKind!=='scene')sourceDrop('age');}}
-function setContext(identity){if(identity===lastContext)return;contextRevision++;clearSnapshots();paneMemory.clear();lastFingerprint=null;lastIdentity='';lastSceneAt=-Infinity;lastContext=identity;}
+function setContext(identity){if(identity===lastContext)return;contextRevision++;clearSnapshots();closePngWorker();paneMemory.clear();lastFingerprint=null;lastIdentity='';lastSceneAt=-Infinity;lastContext=identity;}
+function closePngWorker(reportPending=false){
+    const worker=pngWorker;pngWorker=null;
+    if(pngJob?.worker===worker){
+        const job=pngJob;pngJob=null;clearTimeout(job.timer);job.cancelled=true;job.error=Error('PNG encoding cancelled.');
+        // Bitmap creation cannot be cancelled. Keep this one serial operation
+        // occupied until it settles, rather than accumulating old acquisitions
+        // across source changes. Stop itself never awaits this promise.
+        if(job.creating&&reportPending){job.error.captureReported=true;sourceDrop('encode');void api.signal('frame-error').catch(()=>{});}
+        if(!job.creating)job.reject(job.error);
+    }
+    worker?.terminate();
+}
+function encodePng(snapshot){
+    if(!pngWorker){
+        const worker=pngWorker=new Worker('./capture-png.worker.js');
+        worker.onmessage=event=>{
+            const job=pngJob,value=event.data;
+            if(pngWorker!==worker||job?.worker!==worker||value?.id!==job.id)return;
+            if(value.ok!==true||value.width!==job.width||value.height!==job.height||
+                !(value.bytes instanceof ArrayBuffer)||value.bytes.byteLength<1||value.bytes.byteLength>32*1024*1024){closePngWorker();return;}
+            pngJob=null;clearTimeout(job.timer);job.resolve(new Uint8Array(value.bytes));
+        };
+        const failed=event=>{event?.preventDefault?.();if(pngWorker===worker)closePngWorker(true);};
+        worker.onerror=failed;worker.onmessageerror=failed;
+    }
+    const worker=pngWorker;
+    return new Promise((resolve,reject)=>{
+        const job={worker,id:++pngSequence,width:snapshot.canvas.width,height:snapshot.canvas.height,resolve,reject,creating:true};
+        pngJob=job;
+        job.timer=setTimeout(()=>{if(pngJob===job&&pngWorker===worker)closePngWorker(true);},MAX_RAW_AGE_MS);
+        // Only this immutable canvas can establish the encoded frame. Never
+        // re-read the mutable video or fall back to renderer-thread encoding.
+        Promise.resolve().then(()=>job.cancelled?null:createImageBitmap(snapshot.canvas)).then(bitmap=>{
+            job.creating=false;
+            if(job.cancelled){bitmap?.close();job.reject(job.error);return;}
+            if(pngJob!==job||pngWorker!==worker||stopped||snapshot.stream!==stream||snapshot.revision!==contextRevision){bitmap?.close();if(pngJob===job)closePngWorker();return;}
+            try{worker.postMessage({id:job.id,width:job.width,height:job.height,bitmap},[bitmap]);}
+            catch(error){bitmap.close();if(pngJob===job&&pngWorker===worker)closePngWorker();return;}
+            // Ownership has moved to the worker. Releasing here avoids holding
+            // the full original canvas throughout PNG serialization.
+            releaseSnapshot(snapshot);
+        }).catch(()=>{job.creating=false;if(job.cancelled)job.reject(job.error);else if(pngJob===job&&pngWorker===worker)closePngWorker();});
+    });
+}
 async function encodeSnapshots(){
     if(encoding||stopped)return;encoding=true;
     try{while(!stopped&&snapshots.length){
@@ -22,10 +67,8 @@ async function encodeSnapshots(){
         const index=snapshots.findIndex(snapshot=>snapshot.frame.selectionKind!=='scene'),snapshot=snapshots.splice(index<0?0:index,1)[0];pendingBytes-=snapshot.rawBytes;
         try{
             const encodeStartedAt=Date.now();
-            const blob=await new Promise(resolve=>snapshot.canvas.toBlob(resolve,'image/png'));
+            const bytes=await encodePng(snapshot);
             if(stopped||snapshot.stream!==stream||snapshot.revision!==contextRevision)continue;
-            if(!blob||blob.size>32*1024*1024){sourceDrop('encode');continue;}
-            const bytes=new Uint8Array(await blob.arrayBuffer());
             const encodeMs=Date.now()-encodeStartedAt;
             if(stopped||snapshot.stream!==stream||snapshot.revision!==contextRevision)continue;
             // Permission, owner and ROI may change while PNG encoding awaits.
@@ -34,7 +77,7 @@ async function encodeSnapshots(){
             if(!capture||captureIdentity(capture,video.videoWidth,video.videoHeight)!==snapshot.identity){setContext(capture?captureIdentity(capture,video.videoWidth,video.videoHeight):'');continue;}
             if(Date.now()-snapshot.frame.capturedAt>MAX_RAW_AGE_MS){if(snapshot.frame.selectionKind!=='scene')sourceDrop('age');continue;}
             await api.frame({...snapshot.frame,bytes,sourceTiming:{...snapshot.frame.sourceTiming,sourceQueueMs:encodeStartedAt-snapshot.frame.capturedAt,encodeMs}});
-        }catch{if(!stopped&&snapshot.stream===stream&&snapshot.revision===contextRevision){sourceDrop('encode');void api.signal('frame-error').catch(()=>{});}}
+        }catch(error){if(!error?.captureReported&&!stopped&&snapshot.stream===stream&&snapshot.revision===contextRevision){sourceDrop('encode');void api.signal('frame-error').catch(()=>{});}}
         finally{releaseSnapshot(snapshot);}
     }}finally{encoding=false;}
 }
