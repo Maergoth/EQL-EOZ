@@ -11,7 +11,7 @@ assert.equal(characterItemLabel({name:'Synthetic Item +5 +5',tier:5}),'Synthetic
 assert.equal(characterItemLabel({name:'Synthetic Item',tier:null}),'Synthetic Item · tier unknown');
 const snapshot=model.snapshot(),board=characterEquipmentMarkup(snapshot),loose=characterLooseCandidates(snapshot),bag=characterLooseInventoryMarkup(loose,unknown.id);
 assert.deepEqual(new Set(CHARACTER_EQUIPMENT_ROWS.flat()),new Set(CHARACTER_SLOTS.map(slot=>slot.id)),'Modern board contains every canonical slot exactly once');
-assert.equal((board.match(/data-slot-id=/g)||[]).length,25);assert(board.includes('data-equipped-card="ear1"'));assert(!board.includes('<select'));
+assert.equal((board.match(/data-slot-id=/g)||[]).length,24);assert(!board.includes('data-slot-id="power"'));assert(!board.includes('Power source'));assert(board.includes('data-equipped-card="ear1"'));assert(!board.includes('<select'));
 assert.equal((board.match(/data-unequip-slot=/g)||[]).length,1,'only occupied slots expose unequip');
 const unequipButton=board.match(/<button\b[^>]*data-unequip-slot="ear1"[^>]*>×<\/button>/)?.[0];
 assert(unequipButton);assert(unequipButton.includes('type="button"'));assert(unequipButton.includes('class="character-item-remove character-equipped-remove"'));assert(unequipButton.includes('draggable="false"'));
@@ -33,5 +33,5 @@ model.setStatSnapshot('base',{stats:{AC_MITIGATION:20,ATK:77},confirmed:true});c
 model.setStatSnapshot('base',{stats:{ATK_OFFENSE:30,AC:88},confirmed:true});const partialAtk=characterStatSummaryMarkup(model.totals());assert(partialAtk.includes('data-summary-stat="AC"'));assert(!partialAtk.includes('data-summary-stat="ATK"'));
 console.log('Character inventory presentation: complete compact board, one tier label, escaped item names, unresolved warning, disjoint physical copies, live totals and identity/AA fallback passed.');
 
-const controls=characterTierControlsMarkup(unknown);assert(controls.includes('data-card-tier'));assert(controls.includes('data-card-fraction'));assert(controls.includes('max="31"'));assert(!controls.includes('<details'));assert(board.includes('data-slot-id="any1"'));assert(board.includes('data-slot-id="any2"'));
+const controls=characterTierControlsMarkup(unknown);assert(controls.includes('data-card-tier'));assert(controls.includes('max="10"'));assert(!controls.includes('data-card-fraction'));assert(!/progress/i.test(controls));assert(!controls.includes('<details'));assert(board.includes('data-slot-id="any1"'));assert(board.includes('data-slot-id="any2"'));
 assert.equal(model.setTierPreview(first.id,{tier:2,fraction:0}).ok,true);const preview=model.snapshot().candidates.find(card=>card.id===first.id);const previewMarkup=characterItemStatBodyMarkup(preview);assert(previewMarkup.includes('is-scaled'));assert(previewMarkup.includes('Preview from wiki base stats'));assert(characterItemStatBodyMarkup({...preview,slotReadWarning:'Conflicting slot &lt;value&gt;'}).includes('Conflicting slot &amp;lt;value&amp;gt;'));

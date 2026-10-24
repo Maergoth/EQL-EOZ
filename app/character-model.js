@@ -1,4 +1,5 @@
 import { scaleItemStat } from './item-scaling.js';
+import { parseItemAugmentSlots } from './screen-read-parser.js';
 
 // Local, versioned data only. This module has no DOM, capture, network or wiki
 // write dependency. One candidate represents one physical copy, not a title.
@@ -14,7 +15,7 @@ export const CHARACTER_SLOTS = Object.freeze([
     ['neck','Neck','NECK'],['shoulders','Shoulders','SHOULDERS'],['arms','Arms','ARMS'],['back','Back','BACK'],
     ['wrist1','Left wrist','WRIST'],['wrist2','Right wrist','WRIST'],['range','Range','RANGE'],['hands','Hands','HANDS'],
     ['primary','Primary','PRIMARY'],['secondary','Secondary','SECONDARY'],['finger1','Left finger','FINGER'],['finger2','Right finger','FINGER'],
-    ['chest','Chest','CHEST'],['legs','Legs','LEGS'],['feet','Feet','FEET'],['waist','Waist','WAIST'],['ammo','Ammo','AMMO'],['power','Power source','POWER SOURCE'],
+    ['chest','Chest','CHEST'],['legs','Legs','LEGS'],['feet','Feet','FEET'],['waist','Waist','WAIST'],['ammo','Ammo','AMMO'],
     ['any1','Any slot 1','UNIVERSAL'],['any2','Any slot 2','UNIVERSAL']
 ].map(([id,label,kind]) => Object.freeze({id,label,kind,...(kind==='UNIVERSAL'?{universal:true}:{})})));
 const SLOT_BY_ID = new Map(CHARACTER_SLOTS.map(slot => [slot.id,slot]));
@@ -32,7 +33,8 @@ const fullTier = value => Number.isInteger(value) && value >= 0 && value <= 10 ?
 const tierFraction = (value,tier) => tier === null || numeric(value) === null ? null : Math.max(0,Math.min(2 ** tier - 1,Math.floor(numeric(value))));
 const keyFor = value => clean(value,32).toUpperCase().replace(/[ -]+/g,'_');
 const rawStatBlock = value => String(value ?? '').replace(/\r\n?/g,'\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,' ').split('\n').slice(0,CHARACTER_LIMITS.rawStatLines).join('\n').trim().slice(0,CHARACTER_LIMITS.rawStatBlock);
-const EDITABLE_CAPTURE_FIELDS=new Set(['name','wikiTitle','slots','tier','fraction','rawStatBlock','level']);
+const EDITABLE_CAPTURE_FIELDS=new Set(['name','wikiTitle','slots','tier','fraction','rawStatBlock','level','augmentSlots','augments']);
+const socketCount=value=>Number.isInteger(value)&&value>=0&&value<=CHARACTER_LIMITS.augments?value:null;
 
 /** Tier is separate metadata. Remove only complete trailing +0..+10 labels;
  * never infer a numeric tier or alter the original OCR observation. */
@@ -92,13 +94,20 @@ const OBSERVATION_STATS = Object.freeze({ac:'AC',acMitigation:'AC_MITIGATION',ac
  * Current/max resources remain separate; no max/total/base value is inferred.
  */
 export function characterObservationInput(observation={}) {
-    if (!Array.isArray(observation.fields)) return observation.item || observation.fields?.item || observation.fields || observation;
+    if (!Array.isArray(observation.fields)) {
+        const input=observation.item || observation.fields?.item || observation.fields || observation;
+        if((observation.kind==='ocr'||observation.source==='ocr')&&input&&typeof input==='object'){
+            const {fraction,fractionMaximum,...item}=input;return item;
+        }
+        return input;
+    }
     const fields=Object.fromEntries(observation.fields.slice(0,100).filter(field=>typeof field?.key==='string').map(field=>[field.key,field.value]));
     const stats={};
     for (const [key,target] of Object.entries(OBSERVATION_STATS)) if(has(fields,key)) stats[target]=fields[key];
     const block=fields.rawStatBlock ?? fields.statBlockText ?? (has(fields,'statLines')?list(fields.statLines).join('\n'):undefined);
-    return {name:fields.name || observation.subject?.name,tier:fields.tier,fraction:fields.fraction,slots:fields.slots,stats,...(block!==undefined?{rawStatBlock:block}:{}),
-        level:fields.requiredLevel,augments:list(fields.augmentNames).map(name=>({name})),augmentStatus:'unknown',statsComplete:false};
+    const augments=list(fields.augments).filter(value=>value&&Number.isInteger(value.index)).map(value=>({index:value.index,name:value.name})),capacity=socketCount(fields.augmentSlotCount),empty=socketCount(fields.emptyAugmentSlots);
+    return {name:fields.name || observation.subject?.name,tier:fields.tier,slots:fields.slots,stats,...(block!==undefined?{rawStatBlock:block}:{}),
+        level:fields.requiredLevel,...(has(fields,'augments')?{augments}:{}),...(capacity!==null?{augmentSlots:capacity}:{}),...(empty!==null?{emptyAugmentSlots:empty}:{}),augmentStatus:capacity!==null&&empty===capacity&&!augments.length?'none':'unknown',statsComplete:false};
 }
 function metadata(value={}) {
     const aaCount=numeric(value.aaCount);
@@ -106,14 +115,29 @@ function metadata(value={}) {
         classes:[...new Set(list(value.classes).slice(0,3).map(value => clean(value,40)).filter(Boolean))],
         aaCount:Number.isInteger(aaCount) && aaCount >= 0 ? aaCount : null, sessionName:clean(value.sessionName,120) };
 }
-function augmentRecord(value={}) {
-    return {name:clean(value.name), id:clean(value.id,120), stats:normalizeCharacterStats(value.stats), statsComplete:value.statsComplete === true};
+function augmentRecord(value={},index=0) {
+    value=value&&typeof value==='object'?value:{};
+    return {index,name:clean(value.name),wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),id:clean(value.id,120),iconId:clean(value.iconId,120),icon:safeCharacterIcon(value.icon),tier:fullTier(value.tier),stats:normalizeCharacterStats(value.stats),statsComplete:value.statsComplete===true||value.complete===true};
+}
+function normalizeAugments(values){
+    const result=[],used=new Set();
+    for(const value of list(values).slice(0,CHARACTER_LIMITS.augments)){
+        let index=Number.isInteger(value?.index)&&value.index>=0&&value.index<CHARACTER_LIMITS.augments&&!used.has(value.index)?value.index:0;
+        while(used.has(index))index++;
+        used.add(index);result.push(augmentRecord(value,index));
+    }
+    return result.sort((a,b)=>a.index-b.index);
+}
+function augmentBaseline(value){
+    return value&&typeof value==='object'&&['included','excluded','unknown'].includes(value.mode)?{mode:value.mode,emptyKnown:value.emptyKnown===true,augments:normalizeAugments(value.augments)}:null;
 }
 const automaticObservation=value=>Boolean(value&&((value.kind==='ocr'||value.source==='ocr')&&(!value.subject?.kind||value.subject.kind==='item')||Array.isArray(value.fields)&&value.subject?.kind==='item'));
 function normalizeCandidate(value={}) {
     const tier = fullTier(value.tier);
     const evidence=list(value.evidence).slice(-CHARACTER_LIMITS.evidence).map(evidenceRecord),captured=evidence.some(record=>record.observationId&&(record.parserVersion||record.source==='ocr'));
     const observedTier=has(value,'observedTier')?fullTier(value.observedTier):captured&&!list(value.editedFields).some(key=>key==='tier'||key==='fraction')?tier:null;
+    const block=rawStatBlock(value.rawStatBlock ?? value.statBlockText ?? list(value.statLines).join('\n')),sockets=parseItemAugmentSlots(block),augments=normalizeAugments(Array.isArray(value.augments)?value.augments:sockets.augments);
+    const augmentSlots=value.augmentSlots!==undefined?socketCount(value.augmentSlots):value.augmentSlotCount!==undefined?socketCount(value.augmentSlotCount):sockets.augmentSlotCount;
     return { id:clean(value.id,100), instanceKey:clean(value.instanceKey,200), name:characterBaseItemName(value.name), observedName:has(value,'observedName')?clean(value.observedName):list(value.evidence).some(record=>record?.observationId||record?.text)?clean(value.name):'', wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),
         origin:['automatic','manual'].includes(value.origin)?value.origin:captured?'automatic':'manual',legacyManualStats:value.legacyManualStats===true||!has(value,'origin')&&!captured,lastObservedAt:atTime(value.lastObservedAt)??evidence.reduce((latest,record)=>record.at!==null?Math.max(latest??0,record.at):latest,null),lastObservedSequence:journalSequence(value.lastObservedSequence),
         observedTier,observedFraction:tierFraction(has(value,'observedFraction')?value.observedFraction:value.fraction,observedTier),statBasis:value.statBasis==='catalog-tier-preview'?'catalog-tier-preview':'observed',previewWarning:clean(value.previewWarning,300),slotReadWarning:clean(value.slotReadWarning,300),
@@ -125,9 +149,9 @@ function normalizeCandidate(value={}) {
         editedFields:[...new Set(list(value.editedFields).filter(key=>EDITABLE_CAPTURE_FIELDS.has(key)))],
         unscaledStatKeys:[...new Set(list(value.unscaledStatKeys).slice(0,CHARACTER_LIMITS.stats).map(keyFor).filter(key=>/^[A-Z][A-Z0-9_]{0,31}$/.test(key)))],
         observedStatsComplete:value.observedStatsComplete === true, baseStatsComplete:value.baseStatsComplete === true,
-        augments:list(value.augments).slice(0,CHARACTER_LIMITS.augments).map(augmentRecord),
+        augments,augmentSlots,emptyAugmentSlots:value.emptyAugmentSlots!==undefined?socketCount(value.emptyAugmentSlots):sockets.emptyAugmentSlots,augmentBaseline:augmentBaseline(value.augmentBaseline),
         augmentStatus:['none','included','excluded','unknown'].includes(value.augmentStatus) ? value.augmentStatus : 'unknown',
-        level:numeric(value.level), notes:clean(value.notes,600), rawStatBlock:rawStatBlock(value.rawStatBlock ?? value.statBlockText ?? list(value.statLines).join('\n')),evidence,
+        level:numeric(value.level), notes:clean(value.notes,600), rawStatBlock:block,evidence,
         createdAt:atTime(value.createdAt), updatedAt:atTime(value.updatedAt), seenCount:Math.max(1,Math.min(100000,Math.floor(numeric(value.seenCount)||1))) };
 }
 function statSnapshot(value) {
@@ -173,14 +197,15 @@ function normalizeState(value) {
 }
 
 /** Effective item values are separate from both catalog base and observed totals.
- * Observed examine stats take precedence and are never scaled again. Unknown
- * tier prevents scaling catalog stats. Augments add only when explicitly excluded.
+ * Observed examine stats take precedence and are never scaled again. Catalog
+ * previews use whole tiers; old progress metadata is retained but not required.
+ * Unknown tier prevents scaling. Augments add only when explicitly excluded.
  */
 export function characterItemStats(candidate) {
     const item = normalizeCandidate(candidate),previewRequested=item.statBasis==='catalog-tier-preview',preview=previewRequested&&characterEquipmentEligibility(item).known&&Object.keys(item.baseStats).length>0, observed = !preview&&Object.keys(item.observedStats).length > 0;
     const bases=preview?Object.fromEntries([...new Set([...Object.keys(item.baseStats),...Object.keys(item.observedStats)])].map(key=>[key,has(item.baseStats,key)?item.baseStats[key]:null])):item.baseStats;
     const stats = observed ? {...item.observedStats} : Object.fromEntries(Object.entries(bases).map(([key,value]) =>
-        [key,value === null || item.tier === null || item.fraction === null || item.tier>0&&item.unscaledStatKeys.includes(key) ? null : scaleItemStat(key,value,item.tier,{fraction:item.fraction})]));
+        [key,value === null || item.tier === null || item.tier>0&&item.unscaledStatKeys.includes(key) ? null : scaleItemStat(key,value,item.tier,{fraction:0})]));
     const warnings = [];
     const suffix=item.observedName.match(/(?:\s*\+(?:10|[0-9]))+\s*$/u)?.[0],writtenTiers=suffix?[...suffix.matchAll(/\+(10|[0-9])/g)].map(match=>Number(match[1])):[];
     const nameTier=preview?item.observedTier:item.tier;
@@ -189,15 +214,30 @@ export function characterItemStats(candidate) {
     if(item.slotReadWarning)warnings.push(item.slotReadWarning);
     if(previewRequested&&!preview)warnings.push('Catalog tier preview is unavailable; captured values remain unchanged.');
     if(preview)warnings.push('Catalog tier preview; captured item values remain unchanged and are not rescaled.');
-    let complete = observed ? item.observedStatsComplete : item.baseStatsComplete && item.tier !== null && item.fraction !== null;
+    let complete = observed ? item.observedStatsComplete : item.baseStatsComplete && item.tier !== null;
     let uncertainAll = false;
     if (!observed && item.tier === null) warnings.push('Item tier is unknown; catalog base stats are not an equipped value.');
-    if (!observed && item.tier !== null && item.fraction === null) warnings.push('Fractional progress is unknown; review it before scaling catalog base stats.');
     if (!observed && item.tier>0 && item.unscaledStatKeys.length) warnings.push(`Tier adjustment is unverified for ${item.unscaledStatKeys.join(', ')}; those equipped values remain unknown.`);
     if (!complete) warnings.push('Item stats are incomplete.');
     if (item.augmentStatus === 'unknown') { complete=false; uncertainAll=true; warnings.push('Augment presence or stat inclusion needs review.'); }
     if(preview&&item.augmentStatus==='included'){complete=false;uncertainAll=true;warnings.push('Catalog preview does not establish the effects included in the captured augmented item.');}
-    if (item.augmentStatus === 'excluded') {
+    if(item.augmentBaseline){
+        const baseline=item.augmentBaseline,originals=new Map(baseline.augments.map(augment=>[augment.index,augment])),current=new Map(item.augments.map(augment=>[augment.index,augment]));
+        const additive=!observed||baseline.mode==='excluded',baseComplete=observed?item.observedStatsComplete:item.baseStatsComplete&&item.tier!==null;
+        for(const index of new Set([...originals.keys(),...current.keys()])){
+            const before=originals.get(index),after=current.get(index);
+            if(!additive&&JSON.stringify(before)===JSON.stringify(after))continue;
+            if(additive&&!after)continue;
+            for(const key of new Set([...Object.keys(stats),...Object.keys(before?.stats||{}),...Object.keys(after?.stats||{})])){
+                const base=has(stats,key)?stats[key]:baseComplete?0:null;
+                const old=additive?0:before?(has(before.stats,key)?before.stats[key]:before.statsComplete?0:null):baseline.emptyKnown?0:null;
+                const next=after?(has(after.stats,key)?after.stats[key]:after.statsComplete?0:null):0;
+                stats[key]=base===null||old===null||next===null?null:base-old+next;
+            }
+            if(!additive&&!before&&!baseline.emptyKnown||before&&!before.statsComplete||after&&!after.statsComplete){complete=false;uncertainAll=true;}
+        }
+        if(uncertainAll)warnings.push('An original socket contribution is unknown; the augment adjustment remains partial.');
+    }else if (item.augmentStatus === 'excluded') {
         for (const augment of item.augments) {
             if (!augment.statsComplete) { complete=false; uncertainAll=true; }
             for (const key of new Set([...Object.keys(stats),...Object.keys(augment.stats)])) {
@@ -464,7 +504,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             slots:source.slots?.length ? source.slots : wiki.slots,tier:source.tier,fraction:source.fraction,observedStats:source.observedStats || source.stats,
             observedStatsComplete:source.statsComplete || source.observedStatsComplete,editedStatKeys:automaticObservation(observation)?[]:Object.keys(normalizeCharacterStats(source.observedStats||source.stats)),baseStats:wiki.stats || source.baseStats,
             unscaledStatKeys:source.unscaledStatKeys,
-            baseStatsComplete:options.wikiItem ? true : source.baseStatsComplete,augments:source.augments,augmentStatus:source.augmentStatus,
+            baseStatsComplete:options.wikiItem ? true : source.baseStatsComplete,augments:source.augments,augmentSlots:source.augmentSlots,emptyAugmentSlots:source.emptyAugmentSlots,augmentStatus:source.augmentStatus,
             level:source.level,notes:source.notes,rawStatBlock:source.rawStatBlock ?? source.statBlockText ?? list(source.statLines).join('\n'),evidence:[evidence],createdAt:timestamp(),updatedAt:timestamp(),...identity});
         if (!candidate.name) return {ok:false,error:'An item name is required.'};
         state.candidates.push(candidate);
@@ -483,18 +523,46 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         if(!characterEquipmentEligibility(next).canEquip){next.catalogIdentity=null;detach(id);}
         state.candidates[state.candidates.indexOf(current)]=next; return result(next);
     }
-    function setTierPreview(id,{tier,fraction=0}={}) {
+    function setTierPreview(id,{tier}={}) {
         const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
-        if(fullTier(tier)===null||!Number.isInteger(fraction)||fraction<0||fraction>=(tier===10?1:2**tier))return {ok:false,error:'Choose tier 0–10 and valid fractional progress; tier 10 uses zero only.'};
-        const available=characterEquipmentEligibility(current).known&&Object.keys(current.baseStats).length>0,original=Object.keys(current.observedStats).length>0&&current.observedTier===tier&&current.observedFraction!==null&&current.observedFraction===fraction;
+        if(fullTier(tier)===null)return {ok:false,error:'Choose tier 0–10.'};
+        const available=characterEquipmentEligibility(current).known&&Object.keys(current.baseStats).length>0,original=Object.keys(current.observedStats).length>0&&current.observedTier===tier;
         if(original)return setObservedBasis(id);
-        return updateCandidate(id,{tier,fraction,statBasis:available?'catalog-tier-preview':'observed',previewWarning:available?'':'Catalog tier preview is unavailable; captured values remain unchanged.'});
+        return updateCandidate(id,{tier,fraction:0,statBasis:available?'catalog-tier-preview':'observed',previewWarning:available?'':'Catalog tier preview is unavailable; captured values remain unchanged.'});
     }
     function setObservedBasis(id) {
         const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
         if(!Object.keys(current.observedStats).length)return {ok:false,error:'No captured item values are available.'};
         const next=normalizeCandidate({...current,tier:current.observedTier,fraction:current.observedFraction,statBasis:'observed',previewWarning:'',editedFields:current.editedFields.filter(key=>key!=='tier'&&key!=='fraction'),updatedAt:timestamp()});
         state.candidates[state.candidates.indexOf(current)]=next;return result(next);
+    }
+    function socketBaseline(current){
+        if(current.augmentBaseline)return clone(current.augmentBaseline);
+        const excluded=!Object.keys(current.observedStats).length||['none','excluded'].includes(current.augmentStatus);
+        return {mode:excluded?'excluded':current.augmentStatus==='included'?'included':'unknown',emptyKnown:excluded||current.augmentSlots!==null&&current.emptyAugmentSlots!==null&&current.emptyAugmentSlots+current.augments.length===current.augmentSlots,augments:clone(current.augments)};
+    }
+    function setAugmentSlots(id,count){
+        const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
+        if(socketCount(count)===null)return {ok:false,error:'Choose 0–8 augment slots.'};
+        if(current.augments.some(augment=>augment.index>=count))return {ok:false,error:'Remove occupied augments before reducing the slot count.'};
+        return updateCandidate(id,{augmentSlots:count});
+    }
+    function setAugment(id,index,known){
+        const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
+        if(current.augmentSlots===null)return {ok:false,error:'Set the augment slot count first.'};
+        if(!Number.isInteger(index)||index<0||index>=current.augmentSlots)return {ok:false,error:'Choose an available numbered augment slot.'};
+        if(!characterEquipmentEligibility(known).known)return {ok:false,error:'Choose a known cached item for this augment slot.'};
+        // A catalog ingredient supplies its own tiered base stats; it does not
+        // recursively contain the selected item's possible sockets/effects.
+        const effective=has(known,'baseStats')||has(known,'observedStats')?characterItemStats({...known,augmentStatus:'none',augments:[],augmentBaseline:null}):{stats:normalizeCharacterStats(known.stats),complete:known.statsComplete===true||known.complete===true};
+        const augment=augmentRecord({...known,stats:effective.stats,statsComplete:effective.complete},index),augments=[...current.augments.filter(value=>value.index!==index),augment];
+        return updateCandidate(id,{augments,augmentBaseline:socketBaseline(current),augmentStatus:current.augmentStatus==='none'?'excluded':current.augmentStatus});
+    }
+    function removeAugment(id,index){
+        const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
+        if(!Number.isInteger(index)||index<0||index>=CHARACTER_LIMITS.augments)return {ok:false,error:'Choose a numbered augment slot.'};
+        if(!current.augments.some(value=>value.index===index))return {ok:true,candidate:clone(current),saved:true};
+        return updateCandidate(id,{augments:current.augments.filter(value=>value.index!==index),augmentBaseline:socketBaseline(current)});
     }
     /** Explicit same-copy recapture for the guided flow, never general replay or
      * title-based identity matching. New observed keys can fill gaps, including
@@ -531,6 +599,9 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         const effectiveTier=patch.tier??current.tier;
         if(source.fraction!==undefined&&!editedFields.has('fraction')&&(tier===null||tier===effectiveTier))patch.fraction=source.fraction;
         if(source.rawStatBlock!==undefined&&!editedFields.has('rawStatBlock'))patch.rawStatBlock=source.rawStatBlock;
+        if(!editedFields.has('augmentSlots')&&!current.augmentBaseline&&source.augmentSlots!==undefined)patch.augmentSlots=source.augmentSlots;
+        if(!editedFields.has('augments')&&!current.augmentBaseline&&source.augments!==undefined)patch.augments=source.augments;
+        if(!current.augmentBaseline&&source.emptyAugmentSlots!==undefined)patch.emptyAugmentSlots=source.emptyAugmentSlots;
         if(numeric(source.level)!==null&&!editedFields.has('level'))patch.level=source.level;
         const wiki=options.wikiItem;
         if(wiki&&typeof wiki==='object') {
@@ -564,7 +635,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         const outcome=assign(id,decision.slot);
         return outcome.ok ? {...decision,saved:outcome.saved} : {...decision,ok:false,assigned:false,slot:null,error:outcome.error};
     }
-    return {intake,lookupObservation,updateCandidate,mergeObservation,setTierPreview,setObservedBasis,resolveCatalog,invalidateCatalog,reconcileCatalog,assign,autoAssign,
+    return {intake,lookupObservation,updateCandidate,mergeObservation,setTierPreview,setObservedBasis,setAugmentSlots,setAugment,removeAugment,resolveCatalog,invalidateCatalog,reconcileCatalog,assign,autoAssign,
         snapshot:()=>clone(state), totals:()=>characterTotals(state),
         duplicateCandidate(id) { const source=get(id);if(!source)return {ok:false,error:'Item card no longer exists.'};
             if(state.candidates.length>=CHARACTER_LIMITS.candidates)return capacityError();const beforeAddition=clone(state);
@@ -595,6 +666,6 @@ export function characterShareSummary(snapshot) {
         equipment:CHARACTER_SLOTS.map(slot=>{const item=byId.get(state.equipment[slot.id]);return {slot:slot.id,label:slot.label,item:item ? {
             name:item.name,wikiTitle:item.wikiTitle,wikiMatch:item.wikiMatch,iconId:item.iconId,tier:item.tier,fraction:item.fraction,observedTier:item.observedTier,observedFraction:item.observedFraction,statBasis:item.statBasis,level:item.level,
             slots:item.slots,observedStats:item.observedStats,baseStats:item.baseStats,...characterItemStats(item),
-            augments:clone(item.augments),augmentStatus:item.augmentStatus,slotWarning:characterSlotCompatibility(item,slot.id).warning} : null};}),
+            augments:clone(item.augments),augmentSlots:item.augmentSlots,augmentStatus:item.augmentStatus,slotWarning:characterSlotCompatibility(item,slot.id).warning} : null};}),
         caveat:'Equipped estimates add No Equipment + gear; caps, buffs, worn effects and attribute-derived resource changes are omitted. AC/ATK components need unavailable formulas. Prior equipped captures stay separate.'};
 }

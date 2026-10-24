@@ -342,3 +342,22 @@ function visualFrame(f,id,key){return {...f.frame(id),selectionKind:'visual-item
     }finally{await fair.host.dispose();}
 }
 console.log('Capture host: animated-world scene replacement, item-priority ROI/FIFO, bounded candidate retention, frame admission before preprocessing, private aggregate diagnostics and original lifecycle/provenance checks passed.');
+{
+    const pasted=fixture();let clipboardReads=0,dialogs=0;
+    try{
+        pasted.host.electron.dialog={showOpenDialog:async()=>{dialogs++;return{canceled:true};}};
+        pasted.host.electron.clipboard.readImage=()=>{clipboardReads++;return{isEmpty:()=>true};};
+        assert.equal(clipboardReads,0,'Creating the workspace never reads clipboard images');
+        await assert.rejects(pasted.host.importImage({source:'arbitrary'}),/file or paste/);assert.equal(clipboardReads,0);
+        await assert.rejects(pasted.host.importImage({source:'clipboard'}),/Copy an item screenshot/);assert.equal(pasted.ocr.calls,0);assert.equal(pasted.host.hold,false);
+        pasted.host.electron.clipboard.readImage=()=>{clipboardReads++;return{isEmpty:()=>false,getSize:()=>({width:8192,height:8192}),toPNG:()=>{throw Error('Must reject dimensions before encoding');}};};
+        await assert.rejects(pasted.host.importImage({source:'clipboard'}),/16 megapixels/);assert.equal(pasted.ocr.calls,0);
+        pasted.host.electron.clipboard.readImage=()=>{clipboardReads++;return pasted.host.electron.nativeImage.createFromBuffer(png('clipboard-item'));};
+        const pending=pasted.host.importImage({mode:'character',sessionId:'explicit-paste',source:'clipboard'});
+        await pasted.waitForRead();pasted.resolve('Item: Synthetic Clipboard Helm +3\nSlot: HEAD\nAC 12\nHP 45\n5 empty slots');
+        const result=await pending;assert(result.records.length>0);assert.equal(dialogs,0,'Explicit paste does not open the file picker');
+        for(const record of result.records){assert.equal(record.kind,'manual');assert.equal(record.owner,'character');assert.equal(record.sessionId,'explicit-paste');assert.equal(record.input.sourceId,null);assert.equal(record.input.captureGeneration,1);}
+        assert.equal(pasted.host.hold,false,'Capture is released after pasted-image OCR');
+    }finally{await pasted.host.dispose();}
+}
+console.log('Capture clipboard import: explicit request only, image/dimension bounds, no file dialog, manual session and generation provenance passed.');

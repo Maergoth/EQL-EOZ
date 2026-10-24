@@ -1,5 +1,6 @@
 import { CHARACTER_SLOTS, characterBaseItemName, characterEquipmentEligibility, characterItemStats, characterStatLabel, safeCharacterIcon } from './character-model.js';
 import { isItemStatModified } from './item-stat-presentation.js';
+import { characterTotalGroups } from './character-totals.js';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const number=value=>value===null||value===undefined?'?':Number.isInteger(value)?String(value):String(Math.round(value*100)/100);
@@ -7,11 +8,11 @@ export const CHARACTER_EQUIPMENT_ROWS=Object.freeze([
     ['ear1','neck','face','head','ear2'],
     ['finger1','wrist1','arms','hands','wrist2','finger2'],
     ['shoulders','chest','back','waist','legs','feet'],
-    ['primary','secondary','range','ammo','charm','power'],
+    ['primary','secondary','range','ammo','charm'],
     ['any1','any2']
 ]);
-const SHORT_SLOT={ear1:'L ear',ear2:'R ear',finger1:'L finger',finger2:'R finger',wrist1:'L wrist',wrist2:'R wrist',shoulders:'Shoulder',primary:'Primary',secondary:'Second.',power:'Power',any1:'Any 1',any2:'Any 2'};
-const SLOT_MARK={ear1:'LE',ear2:'RE',head:'HD',face:'FC',neck:'NK',shoulders:'SH',arms:'AR',back:'BK',wrist1:'LW',wrist2:'RW',range:'RG',hands:'HN',primary:'1H',secondary:'2H',finger1:'LF',finger2:'RF',chest:'CH',legs:'LG',feet:'FT',waist:'WT',ammo:'AM',charm:'CM',power:'PS'};
+const SHORT_SLOT={ear1:'L ear',ear2:'R ear',finger1:'L finger',finger2:'R finger',wrist1:'L wrist',wrist2:'R wrist',shoulders:'Shoulder',primary:'Primary',secondary:'Second.',any1:'Any 1',any2:'Any 2'};
+const SLOT_MARK={ear1:'LE',ear2:'RE',head:'HD',face:'FC',neck:'NK',shoulders:'SH',arms:'AR',back:'BK',wrist1:'LW',wrist2:'RW',range:'RG',hands:'HN',primary:'1H',secondary:'2H',finger1:'LF',finger2:'RF',chest:'CH',legs:'LG',feet:'FT',waist:'WT',ammo:'AM',charm:'CM'};
 export function characterItemLabel(card){
     const name=characterBaseItemName(card?.name)||'Unknown item';
     return `${name}${card?.tier===null||card?.tier===undefined?' · tier unknown':card.tier>0?` +${card.tier}`:''}`;
@@ -40,25 +41,27 @@ export function characterIdentityMarkup(metadata){
 }
 
 export function characterStatSummaryMarkup(totals){
-    const base=totals.base?.stats||{},hasAc=['AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION'].some(key=>Object.hasOwn(base,key)),hasAtk=['ATK_OFFENSE','ATK_ACCURACY'].some(key=>Object.hasOwn(base,key));
-    const resourceKeys=['HP','MP','END'].map(key=>Object.hasOwn(base,`${key}_MAXIMUM`)?`${key}_MAXIMUM`:key);
-    const groups=[['Resources',resourceKeys],['Combat',['AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','AC','ATK_OFFENSE','ATK_ACCURACY','ATK','HASTE']],['Attributes',['STR','STA','AGI','DEX','WIS','INT','CHA']],['Resists',['SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE','SV_CORRUPTION']]];
-    return groups.map(([name,keys])=>`<section class="character-mini-stat-group"><h4>${name}</h4><dl>${keys.filter(key=>!(key==='AC'&&hasAc)&&!(key==='ATK'&&hasAtk)).map(key=>{
-        const value=totals.computed[key],label=characterStatLabel(key.endsWith('_MAXIMUM')?key.slice(0,-8):key),title=value?.caveats?.join(' ')||'No Equipment baseline has not been captured.';
-        return `<div data-summary-stat="${key}" title="${escape(title)}"><dt>${escape(label)}</dt><dd class="${value?.value===null||!value?'is-unknown':''}">${number(value?.value)}${value?.value!==null&&value?.value!==undefined&&!value.complete?'*':''}</dd></div>`;
-    }).join('')}</dl></section>`).join('');
+    return characterTotalGroups(totals).map(group=>`<section class="character-mini-stat-group"><h4>${group.label}</h4><dl>${group.rows.map(row=>`<div data-summary-stat="${row.key}" title="${escape(row.caveats.join(' '))}"><dt>${escape(row.label)}</dt><dd class="${row.value===null?'is-unknown':''}">${number(row.value)}${row.value!==null&&!row.complete?'*':''}</dd></div>`).join('')}</dl></section>`).join('');
 }
 
 export function characterItemTitleMarkup(card){
     return `<div class="character-item-detail-title">${itemIcon(card)}<div><strong>${escape(characterItemLabel(card))}</strong><small>${escape(card.slots.join(' / ')||'Slots unknown')}${card.level!==null?` · Level ${escape(card.level)}`:''}</small></div></div>`;
 }
 export function characterTierControlsMarkup(card){
-    const maximum=card.tier===10?0:card.tier===null?0:2**card.tier-1;
-    return `<div class="character-tier-controls"><label>Item tier <output data-card-tier-value>${card.tier===null?'Unknown':`+${card.tier}`}</output><input data-card-tier type="range" min="0" max="10" step="1" value="${card.tier??0}" aria-label="Selected item tier"></label><label>Progress<input data-card-fraction type="number" min="0" max="${maximum}" step="1" value="${card.fraction??''}" placeholder="Unknown" ${card.tier===null||card.tier===10?'disabled':''} aria-label="Selected item fractional progress"></label><div class="capture-actions"><button class="text-button" type="button" data-card-tier-unknown>Unknown tier</button>${Object.keys(card.observedStats).length?'<button class="text-button" type="button" data-card-observed-basis>Use captured stats</button>':''}</div></div>`;
+    return `<div class="character-tier-controls"><label>Item tier <output data-card-tier-value>${card.tier===null?'Unknown':`+${card.tier}`}</output><input data-card-tier type="range" min="0" max="10" step="1" value="${card.tier??0}" aria-label="Selected item tier"></label><div class="capture-actions"><button class="text-button" type="button" data-card-tier-unknown>Unknown tier</button>${Object.keys(card.observedStats).length?'<button class="text-button" type="button" data-card-observed-basis>Use captured stats</button>':''}</div></div>`;
 }
 export function characterItemStatBodyMarkup(card){
     const read=characterItemStats(card),known=characterEquipmentEligibility(card).known;
     const raw=String(card.observedName||'').trim(),tierMatch=raw.match(/\+(\d+)\s*$/),tierConflict=tierMatch&&card.tier!==null&&Number(tierMatch[1])!==card.tier;
-    return `${known?'':'<p class="character-match-warning">! Match this item to the cached wiki catalog before equipping.</p>'}<dl class="character-item-stat-block">${Object.entries(read.stats).map(([key,value])=>`<div><dt>${escape(characterStatLabel(key))}</dt><dd class="${read.basis!=='observed-examine'&&isItemStatModified(card.baseStats[key],value,card.tier)?'is-scaled':''}">${number(value)}</dd></div>`).join('')||'<div><dt>Statistics</dt><dd>Not read</dd></div>'}</dl>${raw&&characterBaseItemName(raw)!==characterBaseItemName(card.name)?`<p class="settings-helper">Screen read: ${escape(raw)}</p>`:''}${tierConflict&&read.basis!=='catalog-tier-preview'?'<p class="character-match-warning">The screen-read tier differs from this card. Review its tier.</p>':''}<p class="settings-helper">${read.basis==='observed-examine'?'Observed item values':read.basis==='catalog-tier-preview'?'Preview from wiki base stats · original captured values retained':'Catalog values at this tier'}${read.complete?'':' · partial / review unknown values'}</p>${[card.previewWarning,card.slotReadWarning].filter(Boolean).map(message=>`<p class="character-match-warning">${escape(message)}</p>`).join('')}`;
+    return `${known?'':'<p class="character-match-warning">! Match this item to the cached wiki catalog before equipping.</p>'}<dl class="character-item-stat-block">${Object.entries(read.stats).map(([key,value])=>`<div><dt>${escape(characterStatLabel(key))}</dt><dd class="${read.basis!=='observed-examine'&&isItemStatModified(card.baseStats[key],value,card.tier)?'is-scaled':''}">${number(value)}</dd></div>`).join('')||'<div><dt>Statistics</dt><dd>Not read</dd></div>'}</dl>${characterAugmentSlotsMarkup(card)}${raw&&characterBaseItemName(raw)!==characterBaseItemName(card.name)?`<p class="settings-helper">Screen read: ${escape(raw)}</p>`:''}${tierConflict&&read.basis!=='catalog-tier-preview'?'<p class="character-match-warning">The screen-read tier differs from this card. Review its tier.</p>':''}<p class="settings-helper">${read.basis==='observed-examine'?'Captured values':read.basis==='catalog-tier-preview'?'Preview from wiki base stats':'Catalog values at this tier'}</p>${[card.previewWarning,card.slotReadWarning].filter(Boolean).map(message=>`<p class="character-match-warning">${escape(message)}</p>`).join('')}`;
+}
+export function characterAugmentSlotsMarkup(card){
+    const count=card.augmentSlots;
+    if(!Number.isInteger(count))return `<button type="button" class="text-button" data-augment-configure="${escape(card.id)}">Set augment slots</button>`;
+    if(!count)return `<button type="button" class="text-button" data-augment-configure="${escape(card.id)}">Augment slots: 0 · Change</button>`;
+    return `<div class="character-augment-section"><span>Augments</span> <button type="button" class="text-button" data-augment-configure="${escape(card.id)}">Change slots</button><div class="character-augment-slots">${Array.from({length:count},(_,index)=>{
+        const augment=card.augments?.find(item=>item.index===index),name=augment?characterItemLabel(augment):'Empty augment slot '+(index+1);
+        return `<div class="character-augment-slot"><button type="button" data-augment-pick="${escape(card.id)}" data-augment-index="${index}" aria-label="${escape((augment?'Replace ':'Choose item for ')+name)}" title="${escape(name)}">${augment?itemIcon(augment):'<span aria-hidden="true">+</span>'}</button>${augment?`<button type="button" class="character-augment-remove" data-augment-remove="${escape(card.id)}" data-augment-index="${index}" aria-label="Remove ${escape(name)}">×</button>`:''}</div>`;
+    }).join('')}</div></div>`;
 }
 export function characterItemTooltipMarkup(card){return characterItemTitleMarkup(card)+characterItemStatBodyMarkup(card);}

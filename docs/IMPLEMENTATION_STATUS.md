@@ -1,5 +1,15 @@
 # Eye of Zomm implementation status
 
+0.9.6 adds a compact total-only character inspect, clickable indexed augment
+sockets, filtered empty-slot Add item with a tier slider and explicit screenshot
+paste, and reviewed interactive wiki sheets. Power Source and Character
+fractional progress controls are removed without discarding saved cards or
+observations. See [CHARACTER_SHEETS_PLAN.md](CHARACTER_SHEETS_PLAN.md) for the
+cross-repository schema, ownership, actual checks and wiki activation boundary.
+The wiki component and two database templates must be installed before app
+sharing is enabled; source/PR preparation alone is not live deployment.
+
+
 0.9.5 adds visible selected-item tier/progress controls with labeled catalog previews,
 private Character storage independent of the loopback port, automatic cross-session
 item reuse, explicit extra copies, two manual Any slots, strict compatible-slot
@@ -20,9 +30,9 @@ release screenshots, a five-second Windows restart countdown and an opt-in swing
 estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 [release history](RELEASE_HISTORY.md) and [validation](../VALIDATION.md).
 
-Last updated: 2026-10-23
+Last updated: 2026-10-24
 
-Code baseline: 0.9.5; inventory follow-up tracked in [CHARACTER_INVENTORY_PERSISTENCE.md](CHARACTER_INVENTORY_PERSISTENCE.md)
+Code baseline: 0.9.6; inspect follow-up tracked in [CHARACTER_SHEETS_PLAN.md](CHARACTER_SHEETS_PLAN.md)
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 

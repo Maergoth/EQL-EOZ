@@ -27,6 +27,8 @@ class WikiHost {
             case 'prepare-plan':return await this.client.preparePlan(value);
             case 'get-plan':return await this.client.getPlan(String(value?.planId||''));
             case 'submit-plan':return await this.client.submitPlan(value);
+            case 'character-sheet-capability':return await this.client.characterSheetCapability();
+            case 'share-character':return await this.client.shareCharacter(value);
             case 'upload-character':{
                 if(!value||typeof value!=='object')throw new WikiError('png','Invalid character snapshot.');
                 const bytes=validatePNG(value.png);
