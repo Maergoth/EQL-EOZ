@@ -1,6 +1,6 @@
 # Eye of Zomm 0.9.8 execution plan
 
-Updated: 2026-10-24. This is the active plan for the next release after 0.9.7.
+Updated: 2026-10-24. This records the completed 0.9.8 implementation and release.
 
 ## Read this first after context compaction
 
@@ -14,8 +14,13 @@ The tracked `docs/RELEASE_098_PLAN.md` is authoritative and is linked from
 Keep private evidence and machine-specific recovery instructions in the local
 checkpoint; never commit player data, account data or secrets.
 
-**Current state: implementation in progress on the follow-up branch. No 0.9.8
-features are published yet.** The candidate package version is now 0.9.8; production remains 0.9.7 until publication.
+**Current state: completed and published as 0.9.8.**
+All requested implementation, wiki activation and local cleanup are complete.
+The app release is [0.9.8](https://github.com/Maergoth/EQL-EOZ/releases/tag/v0.9.8),
+from reviewed PR21 and merge `f531a891dc16a857f0ef61ef63c5c49a843af54e`.
+Wiki runtime/schema/templates and the real API documentation were installed
+separately; the local cleanup retained a private backup. No new database/dataset
+pull was triggered. The closing evidence below distinguishes tests from live work.
 
 ### Resume procedure
 
@@ -102,18 +107,18 @@ report integration APIs. Root owns plan integration and completion receipts.
 - [x] **P2 / AUDITED:** Review current Character/import/cards, queue/discovery,
   contribution editor, wiki client and active wiki components. Three audit streams
   performed read-only source inspection; findings below are implementation inputs.
-- [ ] **P3:** Recheck active registration/configuration before wiki changes and
+- [x] **P3:** Recheck active registration/configuration before wiki changes and
   pin blueprint/template/API contracts. Public page reads are allowed; no dataset
   refresh or database snapshot is needed for planning.
 
 ## C — Character inventory, cards and User-page sharing
 
-### C1. Tier slider in the equipped item mouseover — AUDITED
+### C1. Tier slider in the equipped item mouseover — COMPLETE
 
-- [ ] Put the tier slider immediately below the item name in the equipped hover.
-- [ ] Keep the hover open while moving into/using the slider, including keyboard
+- [x] Put the tier slider immediately below the item name in the equipped hover.
+- [x] Keep the hover open while moving into/using the slider, including keyboard
   focus. Update its card without moving the equipment grid or losing focus.
-- [ ] Synchronize selected-item and hover controls. Keep modified preview values
+- [x] Synchronize selected-item and hover controls. Keep modified preview values
   green. Character totals remain the recorded values, independent of tier edits.
 
 Files: `app/character-inventory-view.js` (`characterItemTooltipMarkup`,
@@ -123,25 +128,25 @@ Files: `app/character-inventory-view.js` (`characterItemTooltipMarkup`,
 Acceptance: change an equipped item's tier with the pointer and keyboard without
 scrolling; card preview updates, hover stays usable, totals do not change.
 
-### C2. Imported Exaltations and capacity — AUDITED
+### C2. Imported Exaltations and capacity — COMPLETE
 
-- [ ] Rename all user-facing Augment labels to **Exaltation**, including pickers,
+- [x] Rename all user-facing Augment labels to **Exaltation**, including pickers,
   tooltips, inspect/PNG and wiki Character rendering. Internal persisted key names
   may remain compatible; do not destroy old saves just to rename a label.
-- [ ] For attached socket rows only, resolve a trailing `(Exaltation)` name to
+- [x] For attached socket rows only, resolve a trailing `(Exaltation)` name to
   its exact known base item when no distinct article exists. Keep original name,
   tier and sourceSlot as private provenance. Never weaken worn-item matching.
-- [ ] Apply the same bounded alias in both `resolveInventoryCatalog` and the
+- [x] Apply the same bounded alias in both `resolveInventoryCatalog` and the
   model's independent import identity guard. Unknown base items stay empty.
-- [ ] Prefill occupied sockets from the parsed parent/child export structure;
+- [x] Prefill occupied sockets from the parsed parent/child export structure;
   keep paired physical copies distinct and KeyRing entries out of worn gear.
-- [ ] Use five sockets when capacity is unknown. Preserve explicit observed
+- [x] Use five sockets when capacity is unknown. Preserve explicit observed
   capacity and occupied indices above five through existing max eight. Do not
   infer capacity from the ambiguous TSV Slots column or discard occupied sockets.
   Explicit confirmed capacity below five stays exact; evidence wins and five is
   the fallback when capacity is unknown. This is an implementation decision,
   not a reason to block on another permission question.
-- [ ] Capture visible total/empty/occupied socket counts in Contribute, with
+- [x] Capture visible total/empty/occupied socket counts in Contribute, with
   user correction available. Store total capacity separately from occupied rows.
 
 Files: `app/inventory-export.js`, `character-catalog.js`, `character-model.js`,
@@ -156,20 +161,20 @@ from canonical catalog data, not invented from OCR or added to character totals.
 Acceptance: exported Thornstinger (Exaltation) fills its parent socket with the
 correct canonical item/tier; unknown children stay empty; restart preserves it.
 
-### C3. Complete shared item cards — AUDITED
+### C3. Complete shared item cards — COMPLETE
 
-- [ ] Centralize bounded item-card details shared by Character equipment hover,
+- [x] Centralize bounded item-card details shared by Character equipment hover,
   selected item, manual search, inventory and share-preview. Audit other app item
   hovers and reuse the same presentation/data where compatible.
-- [ ] Retain effects/procs, effect type, cast time, required level, skill/delay,
+- [x] Retain effects/procs, effect type, cast time, required level, skill/delay,
   flags, slot/class/race, size/weight and other real wiki card content.
-- [ ] Show Thornstinger's **Rampage (Combat, Casting Time: Instant), level 45**.
+- [x] Show Thornstinger's **Rampage (Combat, Casting Time: Instant), level 45**.
   Its existing pack displayLines already contain this; no dataset pull is needed.
-- [ ] Avoid showing unlabelled base numeric text alongside scaled previews.
+- [x] Avoid showing unlabelled base numeric text alongside scaled previews.
   Reuse wiki slider/presentation rules; escape all plain text and restrict links.
-- [ ] Extend the public Character sheet serialization only with explicit bounded
+- [x] Extend the public Character sheet serialization only with explicit bounded
   safe metadata fields; no raw HTML, raw OCR, paths or private import provenance.
-- [ ] Update wiki helper/template rendering and skin hovers to produce equivalent
+- [x] Update wiki helper/template rendering and skin hovers to produce equivalent
   rich cards. Reuse active AjaxHoverHelper/ItemLevelSlider DOM contracts where
   practical, without executing arbitrary remote script in the desktop app.
 
@@ -190,16 +195,16 @@ Prefer a bounded structured card over simply raising arbitrary text-line caps.
 An exporter source improvement must not trigger a fresh dataset in this release;
 use already-cached proc lines and explicit review-time metadata where needed.
 
-### C4. Share to the user's User page — AUDITED
+### C4. Share to the user's User page — COMPLETE
 
-- [ ] New interactive sheets publish to authenticated account's **User:Name**.
+- [x] New interactive sheets publish to authenticated account's **User:Name**.
   Update preview, confirmation, button, status and result link text.
-- [ ] Keep separate collapsed Character (Server) sections. Sharing again replaces
+- [x] Keep separate collapsed Character (Server) sections. Sharing again replaces
   only that character's owned marker block and preserves unrelated user content.
-- [ ] Bind persisted share attempts to their destination. An old User_talk retry
+- [x] Bind persisted share attempts to their destination. An old User_talk retry
   must not replay a talk-page beforeHash against a User page. Require fresh preview
   for a destination change; preserve old on-wiki talk content.
-- [ ] Preserve normal edit attribution, permissions, account assertions,
+- [x] Preserve normal edit attribution, permissions, account assertions,
   revision-conflict checks, redirects and uncertain-write idempotency.
 
 Files: `desktop/wiki-client.cjs::shareCharacter`, `desktop/wiki-host.cjs`,
@@ -210,16 +215,16 @@ content survives, and old attempts/account switches cannot write to the wrong pa
 
 ## D — Correct contribution detection and immediate spawn capture
 
-### D1. One typed identity/presence resolver — AUDITED
+### D1. One typed identity/presence resolver — COMPLETE
 
-- [ ] Unify queue and transient discovery identity rules: Unicode normalization,
+- [x] Unify queue and transient discovery identity rules: Unicode normalization,
   apostrophe/backtick variants, whitespace/underscores, canonical wikiTitle,
   first-letter/case variants, known aliases and supported item tier decorations.
-- [ ] Retain grammatical articles in NPC identity. Do not create false equality
+- [x] Retain grammatical articles in NPC identity. Do not create false equality
   by stripping arbitrary suffixes or fuzzy-matching distinct entities.
-- [ ] Complete cached presence establishes absence; incomplete cache means
+- [x] Complete cached presence establishes absence; incomplete cache means
   unknown. Reconcile saved candidates when catalog membership changes.
-- [ ] Route both notices and queue intake through the same eligibility decision.
+- [x] Route both notices and queue intake through the same eligibility decision.
   A known Cloak of Flames +tier must not get a missing-wiki notice.
 
 Files: `app/contribution-evidence.js`, `contribution-queue.js`,
@@ -229,44 +234,44 @@ Audit: ordinary lowercasing already works. Queue strips item tiers, folds
 apostrophes/NFKC and indexes wikiTitle; legacy notices do not do so consistently.
 The fix must remove divergent decisions rather than add another lowercase patch.
 
-### D2. Typed contribution reasons and partial-page work — AUDITED
+### D2. Typed contribution reasons and partial-page work — COMPLETE
 
-- [ ] Store explicit reasons such as `missing-page`, `missing-source`,
+- [x] Store explicit reasons such as `missing-page`, `missing-source`,
   `tier0-verification`, with known canonical page/revision where available.
-- [ ] Unknown mob pages are new-mob tasks. Known mobs are not new merely because
+- [x] Unknown mob pages are new-mob tasks. Known mobs are not new merely because
   a case or tier differs. Missing sources on known items are patch tasks.
-- [ ] Preserve genuinely missing zone/item tasks too, with the collected
+- [x] Preserve genuinely missing zone/item tasks too, with the collected
   mob-zone-item links. Known zone pages get only actual missing population/loot
   relationship work, not a duplicate blank page. Existing Contribute intake stays
   independent of whether Character or its walkthrough is open.
-- [ ] Tier-zero evidence for reverse-calculated stats becomes a confirmation
+- [x] Tier-zero evidence for reverse-calculated stats becomes a confirmation
   task on the existing item, with a supported provenance transition that removes
   the warning only after genuine tier-zero verification.
-- [ ] Do not add every known item as new. Exclude items whose wiki already states
+- [x] Do not add every known item as new. Exclude items whose wiki already states
   an intentional non-mob source (quest/crafted/vendor/no drops) unless evidence
   proposes a distinct real missing source that the user can review.
-- [ ] Queue known-item/known-NPC/known-zone missing relationships too. Existing
+- [x] Queue known-item/known-NPC/known-zone missing relationships too. Existing
   source links are compared canonically; preserve normal/raid section identity.
-- [ ] Retain locally submitted/ignored/reviewed identity state until wiki catches
+- [x] Retain locally submitted/ignored/reviewed identity state until wiki catches
   up. New evidence may enrich a task without repeatedly calling it new or alerting.
 
 Files: queue/evidence, metadata normalization, editor task summary,
 `app/contribution-model.js`, `desktop/wiki-client.cjs`.
 
-### D3. Unknown kill -> immediate bottom-right /loc prompt — AUDITED
+### D3. Unknown kill -> immediate bottom-right /loc prompt — COMPLETE
 
-- [ ] On the first fresh unknown mob kill, automatically arm next `/loc` and
+- [x] On the first fresh unknown mob kill, automatically arm next `/loc` and
   show a non-interrupting bottom-right prompt immediately, independent of opening
   Contribute or enabling OCR. Say to stand at its spawn before typing `/loc`.
-- [ ] Save next valid location as the targeted spawn proposal. Keep current
+- [x] Save next valid location as the targeted spawn proposal. Keep current
   log/source, zone, time, cursor and sequence guards; a kill position is not spawn.
-- [ ] If another unknown dies before `/loc`, the newest eligible kill becomes
+- [x] If another unknown dies before `/loc`, the newest eligible kill becomes
   the one active target and its prompt names it. Older requests remain saved but
   inactive for explicit re-arm. Never silently retarget after capturing one loc
   or apply one location to several mobs. UI shows actual armed/cancelled state.
-- [ ] Expire/cancel arming on source/zone change and stale timeout. Preserve the
+- [x] Expire/cancel arming on source/zone change and stale timeout. Preserve the
   draft/request, permit explicit re-arm, and avoid reopening old prompts on replay.
-- [ ] Suppress duplicate/queued/submitted/ignored prompts across restart and live
+- [x] Suppress duplicate/queued/submitted/ignored prompts across restart and live
   intake. Reuse hover-paused notice behavior without stealing game focus.
 
 Files: `contribution-queue.js` (`consumeLog`, `armSpawnLocation`),
@@ -276,13 +281,13 @@ Files: `contribution-queue.js` (`consumeLog`, `armSpawnLocation`),
 Audit: current queue creates `requested` but does not arm automatically. A saved
 submitted NPC without prior spawnRequest can still re-prompt; fix suppression too.
 
-### D4. Generated pet suppression — SOURCE VERIFIED
+### D4. Generated pet suppression — COMPLETE
 
-- [ ] Implement a bounded generated-name matcher based on EQEmu's algorithm,
+- [x] Implement a bounded generated-name matcher based on EQEmu's algorithm,
   not a broad prefix regex or just the user's example list.
-- [ ] Prefer positively known wiki NPCs over heuristic pet suppression; retain
+- [x] Prefer positively known wiki NPCs over heuristic pet suppression; retain
   manual contribution override and separate explicit pet evidence when available.
-- [ ] Cover consider/kill/source-derived intake consistently. Do not suppress
+- [x] Cover consider/kill/source-derived intake consistently. Do not suppress
   all short names or unrelated creatures.
 
 Source: [EQEmu GetRandPetName, pinned revision](https://github.com/EQEmu/EQEmu/blob/4aceae18b94ffaafc08e2b17bc41cd72c77f795d/zone/pets.cpp#L34).
@@ -294,66 +299,66 @@ outputs). Record any explicitly supported legacy exceptions separately.
 
 ## U — Simplified Contribute editor
 
-### U1. Match review first — TODO
+### U1. Match review first — COMPLETE
 
-- [ ] Show potential existing pages and task reason at the top, before fields.
-- [ ] Offer selection of existing page for a patch, or explicit confirmation of
+- [x] Show potential existing pages and task reason at the top, before fields.
+- [x] Offer selection of existing page for a patch, or explicit confirmation of
   genuinely missing page. Use one clear identity decision instead of many boxes.
-- [ ] Disable submission until matching is reviewed; changing identity/zone
+- [x] Disable submission until matching is reviewed; changing identity/zone
   invalidates only the affected review/plan. Full wiki diff preview stays required.
 
-### U2. Fields, loot and defaults — TODO
+### U2. Fields, loot and defaults — COMPLETE
 
-- [ ] Remove per-field Verified checkboxes and the meaningless OCR/log disclaimer.
+- [x] Remove per-field Verified checkboxes and the meaningless OCR/log disclaimer.
   Keep provenance internally and one final reviewed diff for writes.
-- [ ] Human-readable labels and grey formatting-example placeholders. Confirm
+- [x] Human-readable labels and grey formatting-example placeholders. Confirm
   respawn-time syntax from live blueprint/example source before choosing `3h/3d`.
-- [ ] All empty fields optional except NPC spawn location; serialize blank
+- [x] All empty fields optional except NPC spawn location; serialize blank
   blueprint values as `?` where supported. Do not create bogus item-location
   requirements or treat `?` as a real number/link/relationship.
-- [ ] Default Classic Era and Normal instance. Raid Instance is a checkbox beside
+- [x] Default Classic Era and Normal instance. Raid Instance is a checkbox beside
   zone; preserve dynamic existing Raid Instance sections and put Raid first.
-- [ ] Prepopulate observed loot as item rows with **Common Loot / Unique Loot**
+- [x] Prepopulate observed loot as item rows with **Common Loot / Unique Loot**
   buttons. Preserve evidence and allow redlinks. Remove `knownLoot`/one-title-per-
   line presentation. Extend zone/NPC patch rendering to the correct loot section.
   These are section classifications, not statistical Common/Rare drop-frequency
   claims; do not derive them from the new observation archive.
-- [ ] Preserve in-progress edits if new log evidence arrives in the background.
+- [x] Preserve in-progress edits if new log evidence arrives in the background.
   Review state/digests still invalidate when material data actually changes.
 
-### U3. Screenshot and Icon Finder — TODO
+### U3. Screenshot and Icon Finder — COMPLETE
 
-- [ ] Large empty **+** drop zone supports select and paste. Show selected image,
+- [x] Large empty **+** drop zone supports select and paste. Show selected image,
   change/remove controls and upload target without requiring OCR for all tasks.
-- [ ] Keep local OCR import distinct from actual file upload. Bind upload and
+- [x] Keep local OCR import distinct from actual file upload. Bind upload and
   article link to the authenticated user and reviewed plan; show upload outcome.
-- [ ] Reuse wiki static Icon Finder catalog/index, matching algorithm and original
+- [x] Reuse wiki static Icon Finder catalog/index, matching algorithm and original
   aliases/IDs; lazy-load on explicit image/search use, cache locally and bound UI.
-- [ ] Keep exact artwork IDs, attribution/license fields and PNG/JPEG validation;
+- [x] Keep exact artwork IDs, attribution/license fields and bounded PNG validation (clipboard images convert to PNG);
   no screenshot is silently published, no raw private capture in a public fixture.
 
-### U4. Base recovery without checkbox clutter — TODO
+### U4. Base recovery without checkbox clutter — COMPLETE
 
-- [ ] Observed tier >0 shows the short note that tier-zero verification is needed.
+- [x] Observed tier >0 shows the short note that tier-zero verification is needed.
   Remove fractional-progress UI and repeated verification checkboxes/descriptions
   from this flow; preserve old observation metadata internally.
-- [ ] Reuse bounded inverse scaling. Present ambiguous values for correction/
+- [x] Reuse bounded inverse scaling. Present ambiguous values for correction/
   selection when needed; do not silently invent a unique base, progress or subtract
   Exaltation/modifier values. Final diff remains the one publication review.
-- [ ] Append the requested warning to any item whose base stats were recovered:
+- [x] Append the requested warning to any item whose base stats were recovered:
   "These stats are reverse calculated from a tier X item. Please confirm with a
   tier 0 item and remove this message". Store machine-readable provenance without
   changing the human wording unnecessarily.
-- [ ] Tier-zero confirmation task can replace recovered proposals and remove
+- [x] Tier-zero confirmation task can replace recovered proposals and remove
   this warning through a scoped reviewed patch, keeping other article content.
 
-### U5. Effect -> spell contribution — TODO
+### U5. Effect -> spell contribution — COMPLETE
 
-- [ ] Detect item effect/proc name, type, cast time and required level in input.
-- [ ] Resolve existing spell/effect page first. Never duplicate a known spell.
-- [ ] If missing, include a spell-blueprint page in the same multi-page reviewed
+- [x] Detect item effect/proc name, type, cast time and required level in input.
+- [x] Resolve existing spell/effect page first. Never duplicate a known spell.
+- [x] If missing, include a spell-blueprint page in the same multi-page reviewed
   plan, with unknown optional data `?` and item/effect reciprocal links as supported.
-- [ ] Handle partially applied plans, existing-page races and retry safely; never
+- [x] Handle partially applied plans, existing-page races and retry safely; never
   silently overwrite a spell page or mark an unattempted write successful.
 
 Files for U1-U5: `app/capture-workspace.js/css`, `contribution-model.js`,
@@ -362,11 +367,11 @@ Files for U1-U5: `app/capture-workspace.js/css`, `contribution-model.js`,
 
 ## W — Wiki contracts, API and server deployment
 
-### W1. API/schema contract — AUDITED, DESIGN TO FINALIZE
+### W1. API/schema contract — COMPLETE
 
-Active `extensions/EQLClientData` 1.1.2 currently exposes only the read-only POST
-`action=eqlmetadata`; there is no observation-write API or schema updater.
-Do not claim hourly storage already exists.
+At the planning baseline, `extensions/EQLClientData` 1.1.2 exposed only the
+read-only POST `action=eqlmetadata`. Installed production 1.2.0 now also provides
+the named-session observation endpoint and its three separately installed tables.
 
 Registration/API files: `extensions/EQLClientData/extension.json`,
 `includes/ApiMetadata.php`, `ConfigRepository.php`, `Hooks.php`,
@@ -374,114 +379,114 @@ Registration/API files: `extensions/EQLClientData/extension.json`,
 `includes/ObservationRepository.php`, schema updater hook and extension-owned SQL
 definitions. Keep the existing `eqlmetadata` contract backward compatible.
 
-- [ ] Freeze versioned request/response contracts before client/server parallel
+- [x] Freeze versioned request/response contracts before client/server parallel
   edits. Extend the active extension rather than adding an unauthenticated PHP
   upload/edit service. Use existing normal Action API for page edits and uploads.
-- [ ] Provide bounded batched identity/source/recovery metadata needed for explicit
+- [x] Provide bounded batched identity/source/recovery metadata needed for explicit
   contribution review when the cached pack is insufficient. Reuse revisions/cache;
   no repeated polling or per-hover requests during normal play.
-- [ ] Add authenticated CSRF-protected write module for observation batches with
+- [x] Add authenticated CSRF-protected write module for observation batches with
   normal account permission/block/rate-limit checks and server-recorded actor.
-- [ ] Add schema definitions and LoadExtensionSchemaUpdates hook; use unique
+- [x] Add schema definitions and LoadExtensionSchemaUpdates hook; use unique
   batch/event keys, bounded fields and prepared DB queries. No raw log archive.
   Proposed tables: attributed batch/receipt records plus typed observation rows;
   unique `(actor_id, event_uuid)` and payload hash. Exact same-ID replay is a
   duplicate acknowledgement; changed payload under the same ID is a conflict.
   Keep observed_at separate from received_at. Derive actor server-side.
-- [ ] Document failure behavior for unavailable API/schema, old clients and
+- [x] Document failure behavior for unavailable API/schema, old clients and
   disabled collection. Never discard a local unsent batch on failed submission.
 
-### W2. Drop-observation storage — TODO
+### W2. Drop-observation storage — COMPLETE
 
-- [ ] Store versioned opaque event IDs, batch ID, game/server scope, canonical
+- [x] Store versioned opaque event IDs, batch ID, game/server scope, canonical
   NPC/item/zone identities, instance normal/raid/unknown, observed count, event
   kind, evidence confidence and source correlation. Keep ingestion actor private.
-- [ ] Store kills separately from loot observations; incomplete looting and log
+- [x] Store kills separately from loot observations; incomplete looting and log
   gaps are unknown completeness, never zero drops. Avoid overclaiming denominators.
-- [ ] Deduplicate retries within a sender; multiple players observing the same
+- [x] Deduplicate retries within a sender; multiple players observing the same
   kill are not automatically independent kills. Preserve enough non-sensitive
   provenance for later server-side cross-client reconciliation; do not publish
   misleading percentages or unique-kill counts before that is solved.
-- [ ] Keep speculative recent-kill/encounter sources distinct from explicit
+- [x] Keep speculative recent-kill/encounter sources distinct from explicit
   corpse wording. Exclude pet/irrelevant events through shared intake rules.
-- [ ] Add private retention/size limits and indexed lookups. Scope this release
+- [x] Add private retention/size limits and indexed lookups. Scope this release
   to collection/storage, not automatic percentages or loot-page overlays.
 
-### W3. Attributed partial-page plans, effects and uploads — TODO
+### W3. Attributed partial-page plans, effects and uploads — COMPLETE
 
-- [ ] Extend existing plan builder to scoped patches on known primary pages:
+- [x] Extend existing plan builder to scoped patches on known primary pages:
   missing sources, tier-zero verification, NPC/zone loot and missing effect pages.
-- [ ] Use fresh revisions, complete preview, expected account and CSRF on every
+- [x] Use fresh revisions, complete preview, expected account and CSRF on every
   edit/upload. Keep partial success receipts; refuse ambiguous sections/redirects
   instead of replacing whole existing articles.
-- [ ] Preserve captions/license/attribution and file naming; store actual wiki
+- [x] Preserve captions/license/attribution and file naming; store actual wiki
   file reference in the planned article. Never expose login tokens to renderer.
-- [ ] Spell/NPC/item/zone templates come from the live reviewed Help blueprints;
+- [x] Spell/NPC/item/zone templates come from the live reviewed Help blueprints;
   no ad hoc namespace/category/casing conventions invented by the app.
 
-### W4. Character template/card update — TODO
+### W4. Character template/card update — COMPLETE
 
-- [ ] Agree safe optional schema extension with C3; preserve old schema readers
+- [x] Agree safe optional schema extension with C3; preserve old schema readers
   and existing eight dense socket helper support.
-- [ ] Generate/review template sources and unsaved render. Publish only reviewed
+- [x] Generate/review template sources and unsaved render. Publish only reviewed
   revisions using expected current revisions plus fresh private backups.
-- [ ] Deploy skin/template support before app enables new fields/User-page flow.
+- [x] Deploy skin/template support before app enables new fields/User-page flow.
 
-### W5. Actual activation and documentation — TODO
+### W5. Actual activation and documentation — COMPLETE
 
-- [ ] Wiki component map/development/API docs identify active modules, payloads,
+- [x] Wiki component map/development/API docs identify active modules, payloads,
   schema, limits, auth, attribution, retention and recovery behavior.
-- [ ] Scoped feature PR to staging, then scoped production promotion. Record
+- [x] Scoped feature PR to staging, then scoped production promotion. Record
   source commit and successful file deployment separately from schema/templates.
-- [ ] Install schema once as a reviewed deployment step; never run write-enabled
+- [x] Install schema once as a reviewed deployment step; never run write-enabled
   maintenance as a routine test. Verify tables/API health read-only afterward.
-- [ ] Any required host-only job/config is installed separately with a receipt;
+- [x] Any required host-only job/config is installed separately with a receipt;
   ops source alone is not installed. Prefer app hourly push so an extra wiki cron
   is unnecessary unless the finalized contract actually needs one.
-- [ ] Rollback: disable ingestion/sender first; preserve accepted observations,
+- [x] Rollback: disable ingestion/sender first; preserve accepted observations,
   revert compatible files, restore DB template only via fresh backup/revision
   guard. No automatic destructive table drop or database restore.
 
-### W6. Reusable create/edit API and public API_Documentation — IN PROGRESS
+### W6. Reusable create/edit API and public API_Documentation — COMPLETE
 
-- [ ] Make page creation/editing an explicit supported integration contract for
+- [x] Make page creation/editing an explicit supported integration contract for
   external tools. No EoZ-only secret, user-agent gate or shared bot authorship.
-- [ ] Reuse MediaWiki `action=query` for source/revision/account context,
+- [x] Reuse MediaWiki `action=query` for source/revision/account context,
   `action=parse` for unsaved previews, `action=edit` with createonly/nocreate,
   baserevid/starttimestamp, assert/assertuser and user CSRF; reuse `action=upload`
   with normal image warnings/license review. Every edit remains the caller's.
-- [ ] Document blueprint retrieval from reviewed Help source and safe minimal
+- [x] Document blueprint retrieval from reviewed Help source and safe minimal
   item/NPC/zone/spell patches, existing-page races and partially applied retries.
-- [ ] Provide public schema, auth/login options actually enabled here, examples,
+- [x] Provide public schema, auth/login options actually enabled here, examples,
   limits, error/retry handling, API versioning and endpoint discovery for metadata
   and observations. Other clients can implement the same workflow without EoZ.
-- [ ] Save reviewed page source in `ops/api-documentation.wiki`; publish to
+- [x] Save reviewed page source in `ops/api-documentation.wiki`; publish to
   [API_Documentation](https://eqlwiki.com/API_Documentation) with current revision
   checks and a fresh private backup (or createonly if missing). Verify rendered
   content and examples. File deployment alone does not publish this page.
-- [ ] Link documentation from app Contribute/settings and the wiki/API component
+- [x] Link documentation from app Contribute/settings and the wiki/API component
   guide. Publish only endpoints that are actually enabled; mark future proposals
   clearly rather than documenting unshipped behavior as live.
 
 ## S — Hourly persisted app sender
 
-- [ ] **S1:** Collect minimal structured kill/loot observations alongside existing
+- [x] **S1:** Collect minimal structured kill/loot observations alongside existing
   log parsing, independent of OCR and whether Contribute is open. Tap fresh events
   before wiki-presence, queued/submitted and Ignore filters: known mobs/items must
   still contribute observations. Apply explicit pet/player safety classification
   to telemetry separately from contribution eligibility.
-- [ ] **S2:** Persist a bounded private outbox in main-process storage. Use atomic
+- [x] **S2:** Persist a bounded private outbox in main-process storage. Use atomic
   writes, stable batch/event IDs and retry acknowledgements; retain offline data.
   New session, clearing Contribute, Ignore and the bounded OCR journal must not
   erase unacknowledged observations. Ordinary batches exclude player names, paths,
   raw chat, screenshots and coordinates.
-- [ ] **S3:** Flush at most hourly while running and authenticated; on launch,
+- [x] **S3:** Flush at most hourly while running and authenticated; on launch,
   catch up if due, not every log event. Back off on network/auth errors. Closing
   the app preserves pending data; no promise of transmission while app is closed.
-- [ ] **S4:** Make collection/upload state clear in settings, use existing wiki
+- [x] **S4:** Make collection/upload state clear in settings, use existing wiki
   login, and never silently upload personal logs/screenshots or unrelated data.
   No new external service/database beyond the wiki is needed.
-- [ ] **S5:** Keep accepted telemetry separate from reviewed wiki edits. Actor
+- [x] **S5:** Keep accepted telemetry separate from reviewed wiki edits. Actor
   attribution on ingestion does not fabricate article revision authorship.
 
 Proposed files: `app/drop-observations.js`, `desktop/drop-observation-storage.cjs`,
@@ -493,17 +498,17 @@ New explicit owner request: clean up the local app's current list after the new
 matching/eligibility rules are installed. This is part of completion, not just
 a future release-note suggestion.
 
-- [ ] **L1:** Identify actual installed profile/storage and take a private fresh
+- [x] **L1:** Identify actual installed profile/storage and take a private fresh
   backup before changing it. Do not commit/upload the queue, user data or screenshots.
-- [ ] **L2:** Dry-run the new resolver over every saved entry, producing a private
+- [x] **L2:** Dry-run the new resolver over every saved entry, producing a private
   count/reason report: false missing-page, generated pet, duplicate, missing source,
   tier0-verification, genuine unknown, submitted/partial plan, unresolved.
-- [ ] **L3:** Archive obsolete false positives and consolidate safe untouched
+- [x] **L3:** Archive obsolete false positives and consolidate safe untouched
   duplicates. Preserve user-written fields, evidence, in-flight/partial plans and
   legitimate patch/verification tasks. Reclassify known items with real gaps.
-- [ ] **L4:** Apply idempotent versioned migration to the user's queue; never clear
+- [x] **L4:** Apply idempotent versioned migration to the user's queue; never clear
   their whole list. If an entry's identity/plan is ambiguous, retain it for review.
-- [ ] **L5:** Reopen/read back the cleaned queue and verify counts. Record backup
+- [x] **L5:** Reopen/read back the cleaned queue and verify counts. Record backup
   location, before/after counts and restoration instructions privately. Keep a
   future-client load migration so other users' false positives are handled too.
 
@@ -513,25 +518,25 @@ and edited work remain. Restoring the backup remains possible.
 
 ## R — Focused verification and release
 
-- [ ] **R1:** Update relevant guides, changelog, README and browsable What's New
+- [x] **R1:** Update relevant guides, changelog, README and browsable What's New
   with actual synthetic screenshots of the changed Character/Contribute UI. Keep
   older release media immutable and clearly distinguish shipped versus planned.
-- [ ] **R2:** Run focused regressions for identity/gap reasons, pets, automatic
+- [x] **R2:** Run focused regressions for identity/gap reasons, pets, automatic
   location targeting, retry suppression, sockets, hover tiers, proc cards, User-
   page destinations, partial edits, uploads and authenticated idempotent ingestion.
   One representative native UI check covers pointer/focus/layout. PHP/JS syntax,
   required CI and Windows/Linux packaging gates remain mandatory.
-- [ ] **R3:** Verify deployed wiki API/schema/templates before publishing the app;
+- [x] **R3:** Verify deployed wiki API/schema/templates before publishing the app;
   record actual production activation and minimal read-back. Fixtures are not
   live edits; do not create real test contributions just to claim live coverage.
-- [ ] **R4:** Bump app version only when feature work is integrated. Open/update
+- [x] **R4:** Bump app version only when feature work is integrated. Open/update
   app PR against main; attach all PRs to this chat. Merge exact reviewed passing
   source, allow release workflow to build Windows+Linux, and verify required assets
   and updater metadata for this version. Do not rerun unrelated exhaustive audits.
-- [ ] **R5:** Reuse current dataset/bootstrap; do not trigger a producer pull.
+- [x] **R5:** Reuse current dataset/bootstrap; do not trigger a producer pull.
   Preserve prior releases and cached user data. Record any ordinary cached-read
   download separately from generating/pulling a new database dataset.
-- [ ] **R6:** Complete local cleanup L1-L5 and final checkpoint. Report app release
+- [x] **R6:** Complete local cleanup L1-L5 and final checkpoint. Report app release
   URL, wiki activation, local cleanup outcome and any genuine remaining limitation.
 
 Minimal acceptance examples: known base item +5; backtick/case NPC; known item
@@ -629,29 +634,23 @@ Do not collapse this ledger into a vague "mostly done" summary.
 
 | Task | Implementation | Evidence/PR | Live/local activation |
 | --- | --- | --- | --- |
-| P1/P2 plan and audits | Complete | This plan; draft app PR21 | Planning does not install features |
-| C1 tier hover | Implemented | Native workspace slider keeps focus; totals unchanged | App release pending |
-| C2 Exaltations/default sockets | Implemented | Import/model/inspect/socket suites | App release pending |
-| C3 rich item cards/procs | Implemented across app/overlay/wiki source | Shared safe metadata; native Character hover; unsaved wiki parser | Wiki template activation and app release pending |
-| C4 User-page share/retries | Implemented | Destination/account-bound client retry suite | App release pending |
-| D1 shared identity | Implemented | Resolver/queue/discovery suites | App release pending |
-| D2 typed existing-page gaps | Implemented | Queue reconciliation and protected-work tests | App release pending |
-| D3 immediate prompt/automatic loc | Implemented | Native main/preload hover-held prompt, source cancellation | App release pending |
-| D4 generated pets | Implemented | Pinned EQEmu source and exact-generator tests | App release pending |
-| U1 matching-first review | Implemented | Native editor identity gate and fresh final review | App release pending |
-| U2 simplified fields/loot/defaults | Implemented | Native Common/Unique controls, hidden raw field | App release pending |
-| U3 screenshot upload/Icon Finder | Implemented | Exact wiki algorithm6 native matching; explicit upload/retry tests | App release pending |
-| U4 simplified recovery/tier0 verification | Implemented | Bounded provisional recovery and proof-preserving patch tests | App release pending |
-| U5 item-effect spell pages | Implemented | Missing spell child plan, known spell reuse and retry tests | App release pending |
-| W1 API/schema contract | Implemented, v1 frozen | Wiki PR62; actual MW registration/CSRF tests | Source/schema/config activation pending |
-| W2 drop storage | Implemented | Separate transactional actor/event/receipt storage tests | Narrow schema/config activation pending |
-| W3 partial-page plans | Implemented | Canonical per-page grouping and normal/raid guarded updates | App release pending |
-| W4 rich Character templates | Implemented | 808 serializer-to-unsaved-wiki parser checks; hover DOM | Template/CSS activation pending |
-| W5 wiki deployment | In progress | Staging PR62 exact-head checks | Scoped production promotion pending |
-| W6 reusable create/edit API and API_Documentation | Implemented | Standard attributed Action API; guarded fixed page publisher | Actual public page publication pending |
-| S1-S5 hourly outbox | Implemented | Durable exact-account/ACK retry suites; normal close/reload drain | App release pending |
-| L1-L5 this user's local cleanup | Applied | Private backup/hash-CAS/readback receipt; no fresh catalog pull | 49 active ->37 active +12 archived; unrelated values retained |
-| R1-R6 release/docs/lean gates | In progress | Illustrated history and focused native gates pass; source gate running | App PR21/published release pending |
+| P1/P2/P3 planning and source audit | Complete | Durable task IDs, source/contract pins and active registration rechecked | Plan and source published |
+| C1 tier hover | Complete | Native 13px/20px workspace; focused slider and unchanged totals | App 0.9.8 |
+| C2 Exaltations/default sockets | Complete | Import/model/card tests; actual occupied positions retained | App 0.9.8 |
+| C3 rich shared item cards/procs | Complete | Safe detail metadata, native procs,808 unsaved wiki checks per environment | App 0.9.8 + installed templates |
+| C4 User-page sharing | Complete | Account/destination/retry checks; actual-main loopback share | App 0.9.8; legacy talk content preserved |
+| D1/D2 identity and existing-page gaps | Complete | Shared resolver, typed tasks, partial/protected work and persistent registry | App 0.9.8 |
+| D3 immediate spawn prompt | Complete | Native exact-frame/preload, hover-held 15s, next/loc and source guards | App 0.9.8 |
+| D4 generated pets | Complete | Pinned EQEmu generator; known wiki NPC precedence | App 0.9.8 |
+| U1/U2 matching-first editor, loot and defaults | Complete | Actual-main workflow and synthetic native layout/pointer/focus gates | App 0.9.8 |
+| U3 screenshots and wiki Icon Finder | Complete | Explicit PNG upload/account retry; exact wiki algorithm 6 native match | App 0.9.8 |
+| U4/U5 recovery, tier0 and effect spells | Complete | Bounded numeric proposals, proof-scoped patches, missing spell child plans | App 0.9.8 |
+| W1/W2/W3 API, storage and partial-page plans | Complete | 79 API/repository checks; staging real-store six-check rollback; canonical CAS plans | Production 1.2.0, three InnoDB tables enabled/available |
+| W4/W5 Character templates and production activation | Complete | Exact 13 runtime hashes, scoped PR62/63, deployed source and fresh backups | Helper 199392/main 199393; no production test telemetry |
+| W6 reusable create/edit API and public docs | Complete | Standard attributed Action API; source+public examples; scoped docs PR64/65 | API_Documentation 199399; expanded wiki developer README live |
+| S1-S5 hourly observation outbox | Complete | Atomic storage, account/ACK/backoff, shutdown/reload barrier and Settings | App 0.9.8; accepted server batches persist immediately |
+| L1-L5 local queue cleanup | Complete | Fresh private backup, stopped-app guard, hash-CAS/readback, other values unchanged | 49 active ->37 active +12 archived |
+| R1-R6 release and documentation | Complete after release receipt gate | Exact reviewed CI 40089620166; main/release 40090400822/40090400835; illustrated history | Required Windows/Linux assets, checksums and updater selection verified |
 
 ## Progress log
 
@@ -685,3 +684,43 @@ Do not collapse this ledger into a vague "mostly done" summary.
   page installation remain distinct release gates. App package+lock are0.9.8;
   baseline production is0.9.7 until actual publication. Required full source and
   exact-head Windows/Linux gates remain in progress. No dataset refresh occurred.
+
+## Release closeout and test boundaries
+
+- App PR21 merged exact reviewed head `3ae8309306f9a2f35f2095b70194a509016497e6`;
+  source, Windows desktop and Linux package CI all passed. The published merge
+  is `f531a891dc16a857f0ef61ef63c5c49a843af54e`. Required release jobs own actual
+  Windows/Linux packaged execution; the final public check covers tag/source,
+  five uploaded assets, checksum manifests and0.9.7→0.9.8 updater selection.
+- Wiki feature PR62 and scoped production PR63 installed the runtime/schema.
+  Production feature merge is `524a7c760ed4936f0cbbf7593da6b9daeebc20ad`;
+  docs-only PR64/65 advanced main to `9bc176ca0f6af3a702b0324f4652f5a5978724bb`.
+  Installed template revisions are 199392/199393; public API docs revision 199399
+  explicitly records installed/enabled storage, attribution, cadence and quotas.
+- The real staging repository test used an existing actor in a cancelled outer
+  transaction; all observation/batch rows and counters returned to their prior
+  state. Positive API authorization/transport cases include synthetic fixtures;
+  no real-account production HTTP login, saved Character page or upload was
+  performed as a smoke test. Production storage was enabled without artificial
+  observation rows. Exact runtime hashes, fresh private backups and public
+  negative-auth/registration/live-template checks establish actual installation.
+- The owner's installed queue cleanup archived 12 safe obsolete entries and
+  retained 37, including edited/partial tasks and genuine gaps. Private receipts
+  and the original envelope remain outside Git; unrelated profile values were
+  preserved. Client startup/catalog replacement reconciliation also runs for
+  other installations and is idempotent.
+- Existing public dataset `20261024T085302Z-c28bb275d34c` was reused. Ordinary
+  build/client reads of that public pack are distinct from a producer/database
+  pull. No producer run, full database download or historical package audit was
+  added. No automatic drop percentages or encounter denominator are claimed.
+- Both repositories' README developer sections map concrete code entry points,
+  authentication, attributed page edits/uploads, observations and the separate
+  exporter→dataset branch→local cache. App screenshots are isolated synthetic
+  records; prior media/history remain immutable. The latest docs-only closeout
+  must not change runtime/version or replace the published 0.9.8 assets.
+- A later main native run exposed a fixture ordering race: the item OCR event
+  arrives before the saved screenshot attachment finishes and rerenders the
+  editor. The follow-up waits for the fresh attachment and final editor before
+  opening Icon Finder. The full actual-main native fixture passes with that
+  wait; only the test changes, with no published runtime/version/asset changes.
+  Follow-up CI certifies this correction separately from the released head.
