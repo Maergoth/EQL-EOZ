@@ -1,5 +1,13 @@
 # Eye of Zomm contributor handoff
 
+0.9.5 adds visible selected-item tier/progress controls with labeled catalog previews,
+private Character storage independent of the loopback port, automatic cross-session
+item reuse, explicit extra copies, two manual Any slots, strict compatible-slot
+placement and drag highlights. Removed-item suppression is scoped to a capture
+pass; fresh later passes and Rescan removed items recover valid reads. See
+[the current persistence plan](CHARACTER_INVENTORY_PERSISTENCE.md) for the
+archive audit, acceptance and limits.
+
 The **0.9.4 inventory follow-up** adds a compact Character sheet, strict known-item
 equipment, bounded catalog spelling recovery, a fuzzy-match picker and disjoint
 loose/equipped physical cards. See [the durable plan](CHARACTER_INVENTORY_REVIEW.md)
@@ -50,7 +58,7 @@ local log parser and versioned release; application validation runs in GitHub CI
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.9.4**, extending released 0.9.3. Four independent native windows provide Parse, Map, Zone & loot and Triggers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
+Current code baseline: **0.9.5**, extending released 0.9.4. Four independent native windows provide Parse, Map, Zone & loot and Triggers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
 
 [Overlay workspace follow-up](OVERLAY_MAP_WORKSPACE.md) is the 0.8.5 continuation
 index. Native Map has a collapsing control header and Map/Top/First cycle;
@@ -210,7 +218,7 @@ The app is read-only with respect to EverQuest. It may consume `/loc` lines prod
 
 ## Exact next work
 
-Complete the final 0.9.4 source and full-app fixture checks, then require the
+Complete the final 0.9.5 source and full-app fixture checks, then require the
 reviewed head's Windows/Linux native/package gates before merge. Verify the
 published installer, AppImage and deb against that source, archived images,
 offline OCR inventory and one fresh shared bootstrap. Record actual run IDs

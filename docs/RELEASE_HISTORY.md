@@ -1,5 +1,10 @@
 # Browsable release history
 
+Version 0.9.5 adds two actual synthetic captures of the visible selected-item
+tier controls and Rescan/25-slot board. Both were captured by the isolated
+native Character walkthrough and visually inspected before archiving; no
+player or game pixels. Every older entry and image stays unchanged.
+
 Version 0.9.4 adds two actual synthetic Character captures: the dense equipment
 sheet and an unmatched-item wiki picker. Both come from the native walkthrough
 with a disposable profile, fake capture/share APIs and synthetic item records,

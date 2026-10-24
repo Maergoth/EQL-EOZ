@@ -14,10 +14,11 @@ export const CHARACTER_SLOTS = Object.freeze([
     ['neck','Neck','NECK'],['shoulders','Shoulders','SHOULDERS'],['arms','Arms','ARMS'],['back','Back','BACK'],
     ['wrist1','Left wrist','WRIST'],['wrist2','Right wrist','WRIST'],['range','Range','RANGE'],['hands','Hands','HANDS'],
     ['primary','Primary','PRIMARY'],['secondary','Secondary','SECONDARY'],['finger1','Left finger','FINGER'],['finger2','Right finger','FINGER'],
-    ['chest','Chest','CHEST'],['legs','Legs','LEGS'],['feet','Feet','FEET'],['waist','Waist','WAIST'],['ammo','Ammo','AMMO'],['power','Power source','POWER SOURCE']
-].map(([id,label,kind]) => Object.freeze({id,label,kind})));
+    ['chest','Chest','CHEST'],['legs','Legs','LEGS'],['feet','Feet','FEET'],['waist','Waist','WAIST'],['ammo','Ammo','AMMO'],['power','Power source','POWER SOURCE'],
+    ['any1','Any slot 1','UNIVERSAL'],['any2','Any slot 2','UNIVERSAL']
+].map(([id,label,kind]) => Object.freeze({id,label,kind,...(kind==='UNIVERSAL'?{universal:true}:{})})));
 const SLOT_BY_ID = new Map(CHARACTER_SLOTS.map(slot => [slot.id,slot]));
-const SLOT_KINDS = new Set(CHARACTER_SLOTS.map(slot => slot.kind));
+const SLOT_KINDS = new Set(CHARACTER_SLOTS.filter(slot=>!slot.universal).map(slot => slot.kind));
 const clean = (value, limit=240) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g,' ').trim().replace(/\s+/g,' ').slice(0,limit);
 const clone = value => JSON.parse(JSON.stringify(value));
 const finite = value => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1e9;
@@ -108,9 +109,14 @@ function metadata(value={}) {
 function augmentRecord(value={}) {
     return {name:clean(value.name), id:clean(value.id,120), stats:normalizeCharacterStats(value.stats), statsComplete:value.statsComplete === true};
 }
+const automaticObservation=value=>Boolean(value&&((value.kind==='ocr'||value.source==='ocr')&&(!value.subject?.kind||value.subject.kind==='item')||Array.isArray(value.fields)&&value.subject?.kind==='item'));
 function normalizeCandidate(value={}) {
     const tier = fullTier(value.tier);
+    const evidence=list(value.evidence).slice(-CHARACTER_LIMITS.evidence).map(evidenceRecord),captured=evidence.some(record=>record.observationId&&(record.parserVersion||record.source==='ocr'));
+    const observedTier=has(value,'observedTier')?fullTier(value.observedTier):captured&&!list(value.editedFields).some(key=>key==='tier'||key==='fraction')?tier:null;
     return { id:clean(value.id,100), instanceKey:clean(value.instanceKey,200), name:characterBaseItemName(value.name), observedName:has(value,'observedName')?clean(value.observedName):list(value.evidence).some(record=>record?.observationId||record?.text)?clean(value.name):'', wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),
+        origin:['automatic','manual'].includes(value.origin)?value.origin:captured?'automatic':'manual',legacyManualStats:value.legacyManualStats===true||!has(value,'origin')&&!captured,lastObservedAt:atTime(value.lastObservedAt)??evidence.reduce((latest,record)=>record.at!==null?Math.max(latest??0,record.at):latest,null),lastObservedSequence:journalSequence(value.lastObservedSequence),
+        observedTier,observedFraction:tierFraction(has(value,'observedFraction')?value.observedFraction:value.fraction,observedTier),statBasis:value.statBasis==='catalog-tier-preview'?'catalog-tier-preview':'observed',previewWarning:clean(value.previewWarning,300),slotReadWarning:clean(value.slotReadWarning,300),
         wikiMatch:['confirmed','suggested','unmatched'].includes(value.wikiMatch) ? value.wikiMatch : 'unmatched',
         iconId:clean(value.iconId,120), icon:safeCharacterIcon(value.icon), slots:characterSlotKinds(value.slots), tier,
         fraction:tierFraction(value.fraction,tier),
@@ -121,7 +127,7 @@ function normalizeCandidate(value={}) {
         observedStatsComplete:value.observedStatsComplete === true, baseStatsComplete:value.baseStatsComplete === true,
         augments:list(value.augments).slice(0,CHARACTER_LIMITS.augments).map(augmentRecord),
         augmentStatus:['none','included','excluded','unknown'].includes(value.augmentStatus) ? value.augmentStatus : 'unknown',
-        level:numeric(value.level), notes:clean(value.notes,600), rawStatBlock:rawStatBlock(value.rawStatBlock ?? value.statBlockText ?? list(value.statLines).join('\n')),evidence:list(value.evidence).slice(-CHARACTER_LIMITS.evidence).map(evidenceRecord),
+        level:numeric(value.level), notes:clean(value.notes,600), rawStatBlock:rawStatBlock(value.rawStatBlock ?? value.statBlockText ?? list(value.statLines).join('\n')),evidence,
         createdAt:atTime(value.createdAt), updatedAt:atTime(value.updatedAt), seenCount:Math.max(1,Math.min(100000,Math.floor(numeric(value.seenCount)||1))) };
 }
 function statSnapshot(value) {
@@ -147,7 +153,7 @@ function normalizeState(value) {
         const id = clean(value.equipment?.[slot.id],100);
         if (seen.has(id) && !assigned.has(id)) {
             const candidate=result.candidates.find(item=>item.id===id);
-            (characterEquipmentEligibility(candidate).canEquip?result.equipment:result.pendingEquipment)[slot.id]=id; assigned.add(id);
+            (characterSlotCompatibility(candidate,slot.id).compatible?result.equipment:result.pendingEquipment)[slot.id]=id; assigned.add(id);
         }
         const pendingId=clean(value.pendingEquipment?.[slot.id],100);
         if(!result.equipment[slot.id]&&!result.pendingEquipment[slot.id]&&seen.has(pendingId)&&!assigned.has(pendingId)){result.pendingEquipment[slot.id]=pendingId;assigned.add(pendingId);}
@@ -171,12 +177,18 @@ function normalizeState(value) {
  * tier prevents scaling catalog stats. Augments add only when explicitly excluded.
  */
 export function characterItemStats(candidate) {
-    const item = normalizeCandidate(candidate), observed = Object.keys(item.observedStats).length > 0;
-    const stats = observed ? {...item.observedStats} : Object.fromEntries(Object.entries(item.baseStats).map(([key,value]) =>
+    const item = normalizeCandidate(candidate),previewRequested=item.statBasis==='catalog-tier-preview',preview=previewRequested&&characterEquipmentEligibility(item).known&&Object.keys(item.baseStats).length>0, observed = !preview&&Object.keys(item.observedStats).length > 0;
+    const bases=preview?Object.fromEntries([...new Set([...Object.keys(item.baseStats),...Object.keys(item.observedStats)])].map(key=>[key,has(item.baseStats,key)?item.baseStats[key]:null])):item.baseStats;
+    const stats = observed ? {...item.observedStats} : Object.fromEntries(Object.entries(bases).map(([key,value]) =>
         [key,value === null || item.tier === null || item.fraction === null || item.tier>0&&item.unscaledStatKeys.includes(key) ? null : scaleItemStat(key,value,item.tier,{fraction:item.fraction})]));
     const warnings = [];
     const suffix=item.observedName.match(/(?:\s*\+(?:10|[0-9]))+\s*$/u)?.[0],writtenTiers=suffix?[...suffix.matchAll(/\+(10|[0-9])/g)].map(match=>Number(match[1])):[];
-    if(new Set(writtenTiers).size>1||item.tier!==null&&writtenTiers.some(tier=>tier!==item.tier))warnings.push('The written name tier conflicts with another tier value; review the original item reading.');
+    const nameTier=preview?item.observedTier:item.tier;
+    if(new Set(writtenTiers).size>1||nameTier!==null&&writtenTiers.some(tier=>tier!==nameTier))warnings.push('The written name tier conflicts with another tier value; review the original item reading.');
+    if(item.previewWarning)warnings.push(item.previewWarning);
+    if(item.slotReadWarning)warnings.push(item.slotReadWarning);
+    if(previewRequested&&!preview)warnings.push('Catalog tier preview is unavailable; captured values remain unchanged.');
+    if(preview)warnings.push('Catalog tier preview; captured item values remain unchanged and are not rescaled.');
     let complete = observed ? item.observedStatsComplete : item.baseStatsComplete && item.tier !== null && item.fraction !== null;
     let uncertainAll = false;
     if (!observed && item.tier === null) warnings.push('Item tier is unknown; catalog base stats are not an equipped value.');
@@ -184,6 +196,7 @@ export function characterItemStats(candidate) {
     if (!observed && item.tier>0 && item.unscaledStatKeys.length) warnings.push(`Tier adjustment is unverified for ${item.unscaledStatKeys.join(', ')}; those equipped values remain unknown.`);
     if (!complete) warnings.push('Item stats are incomplete.');
     if (item.augmentStatus === 'unknown') { complete=false; uncertainAll=true; warnings.push('Augment presence or stat inclusion needs review.'); }
+    if(preview&&item.augmentStatus==='included'){complete=false;uncertainAll=true;warnings.push('Catalog preview does not establish the effects included in the captured augmented item.');}
     if (item.augmentStatus === 'excluded') {
         for (const augment of item.augments) {
             if (!augment.statsComplete) { complete=false; uncertainAll=true; }
@@ -196,12 +209,14 @@ export function characterItemStats(candidate) {
         if (!item.augments.length) { complete=false; uncertainAll=true; warnings.push('Excluded augment stats have not been supplied.'); }
     }
     if (Object.values(stats).some(value => value === null)) complete=false;
-    return {stats, complete, uncertainAll, basis:observed ? 'observed-examine' : 'scaled-catalog', warnings};
+    return {stats, complete, uncertainAll, basis:preview?'catalog-tier-preview':observed ? 'observed-examine' : 'scaled-catalog', warnings};
 }
 
 export function characterSlotCompatibility(candidate, slotId) {
     const slot = SLOT_BY_ID.get(slotId);
     if (!slot) return {compatible:false,unknown:false,warning:'Unknown equipment slot.'};
+    const eligibility=characterEquipmentEligibility(candidate);if(!eligibility.canEquip)return {compatible:false,unknown:true,warning:eligibility.reason};
+    if(slot.universal)return {compatible:true,unknown:false,warning:''};
     const kinds = characterSlotKinds(candidate?.slots);
     if (!kinds.length) return {compatible:false,unknown:true,warning:'Compatible slots are unknown; confirm the placement.'};
     const compatible = kinds.includes('ANY') || kinds.includes(slot.kind);
@@ -217,7 +232,7 @@ export function characterAutoAssignment(snapshot,candidateId) {
     if(!characterEquipmentEligibility(candidate).canEquip)return {ok:true,assigned:false,slot:null,reason:'unknown-catalog',choices:[]};
     const existing=CHARACTER_SLOTS.find(slot=>state.equipment[slot.id]===candidateId);
     if(existing)return {ok:true,assigned:true,slot:existing.id,reason:'already-assigned',choices:[existing.id]};
-    const kinds=candidate.slots,choices=CHARACTER_SLOTS.filter(slot=>kinds.includes('ANY')||kinds.includes(slot.kind)).map(slot=>slot.id);
+    const kinds=candidate.slots,choices=CHARACTER_SLOTS.filter(slot=>!slot.universal&&(kinds.includes('ANY')||kinds.includes(slot.kind))).map(slot=>slot.id);
     if(!kinds.length)return {ok:true,assigned:false,slot:null,reason:'unknown-slots',choices};
     if(kinds.includes('ANY'))return {ok:true,assigned:false,slot:null,reason:'any-slot',choices};
     if(kinds.length!==1)return {ok:true,assigned:false,slot:null,reason:'multiple-slot-kinds',choices};
@@ -304,12 +319,10 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     catch { warn('Saved character data could not be read. A new local snapshot is available.'); }
     const timestamp = () => atTime(now());
     const nextId = () => { let id; do { id=`character-${++state.sequence}`; } while (state.candidates.some(candidate=>candidate.id===id)); return id; };
-    const protectedIds = () => new Set(Object.values(state.equipment));
     const expireReference = () => {const record=state.observationRefs.shift();if(record)state.observationFloor=Math.max(state.observationFloor,record.sequence||0);return record;};
     const trim = () => {
-        const protectedSet=protectedIds();
         while(state.observationRefs.length>CHARACTER_LIMITS.observationRefs)expireReference();
-        while (state.candidates.length>CHARACTER_LIMITS.candidates || JSON.stringify(state).length>CHARACTER_LIMITS.storageBytes) {
+        while (JSON.stringify(state).length>CHARACTER_LIMITS.storageBytes) {
             // ID-only history yields to inventory under storage pressure. A
             // monotonic journal floor expires those old replay records without
             // guessing a physical identity from names, tiers or timestamps.
@@ -318,23 +331,18 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
                 while(state.observationRefs.length&&released<excess){const record=expireReference();released+=JSON.stringify(record).length+1;}
                 continue;
             }
-            const index=state.candidates.findIndex(candidate=>!protectedSet.has(candidate.id));
-            if (index>=0) {rememberRemoval(state.candidates[index]);state.candidates.splice(index,1);continue;}
-            // The assigned array itself is small and remains intact. Under an
-            // extreme protected-only payload, expire oldest evidence and cached
-            // pixels (the exact icon ID can resolve again from the local pack).
+            // Inventory is durable. Expire redundant evidence and cached pixels
+            // before refusing an oversized addition/edit; never delete a card.
             const evidence=state.candidates.find(candidate=>candidate.evidence.length>1);
             if(evidence) {evidence.evidence.shift();continue;}
             const icon=state.candidates.find(candidate=>candidate.icon);
             if(icon) {icon.icon='';continue;}
-            const text=state.candidates.find(candidate=>candidate.evidence.some(record=>record.text));
-            if(text) {for(const record of text.evidence)record.text='';continue;}
             break;
         }
     };
     const save = () => {
         state.updatedAt=timestamp(); trim();
-        try { storage?.setItem(CHARACTER_STORAGE_KEY,JSON.stringify(state)); return true; }
+        try { const serialized=JSON.stringify(state);if(serialized.length>CHARACTER_LIMITS.storageBytes)throw Error('Character storage bound exceeded.');storage?.setItem(CHARACTER_STORAGE_KEY,serialized); return true; }
         catch { if (!warned) { warned=true;warn('Character changes remain in memory because local storage could not save them.'); } return false; }
     };
     const get = id => state.candidates.find(candidate=>candidate.id===id);
@@ -347,6 +355,26 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         state.observationRefs.push({observationId:evidence.observationId,sessionId:evidence.sessionId,candidateId,sequence:journalSequence(observation.sequence)});
     };
     const variantKey = source => JSON.stringify([fullTier(source.tier),tierFraction(source.fraction,fullTier(source.tier)),list(source.augments).map(augment=>[clean(augment.name),clean(augment.id)])]);
+    const observationDetails=observation=>{
+        const source=characterObservationInput(observation),evidence=evidenceRecord(observation),instance=clean(source.instanceKey||observation.instanceKey,160);
+        return {source,evidence,instanceKey:instance?clean(`${clean(observation.sessionId,80)}|${instance}`,200):'',variant:variantKey(source)};
+    };
+    const wasRemoved=({evidence,instanceKey,variant})=>state.removedObservations.some(record=>record.observationId===evidence.observationId&&record.sessionId===evidence.sessionId)||Boolean(instanceKey&&evidence.at!==null&&state.removedInstances.some(record=>record.instanceKey===instanceKey&&variantKey(record.variant)===variant&&evidence.at<=record.at));
+    function lookupObservation(observation={},options={}) {
+        const details=observationDetails(observation),{source,evidence,instanceKey,variant}=details,reference=observationReference(evidence);
+        if(reference)return {status:get(reference.candidateId)?'match':'ignored',candidateId:get(reference.candidateId)?.id||null,choices:get(reference.candidateId)?[reference.candidateId]:[],reason:'reference'};
+        if(expiredObservation(observation)||wasRemoved(details))return {status:'ignored',candidateId:null,choices:[],reason:'removed-or-expired'};
+        const instance=instanceKey?state.candidates.find(candidate=>candidate.instanceKey===instanceKey&&variantKey(candidate)===variant):null;
+        if(instance)return {status:'match',candidateId:instance.id,choices:[instance.id],reason:'instance'};
+        if(!automaticObservation(observation))return {status:'new',candidateId:null,choices:[],reason:'manual-add'};
+        const incomingIdentity=catalogIdentity(options.wikiItem||source.catalogIdentity),name=value=>characterBaseItemName(value).normalize('NFKC').toLowerCase(),names=new Set([source.name,incomingIdentity?.name].map(name).filter(Boolean));
+        const choices=state.candidates.filter(candidate=>{
+            const known=characterEquipmentEligibility(candidate).known;
+            if(incomingIdentity&&known)return identityTitle(incomingIdentity.wikiTitle)===identityTitle(candidate.catalogIdentity.wikiTitle);
+            return [candidate.name,candidate.observedName].map(name).some(value=>value&&names.has(value));
+        }).map(candidate=>candidate.id);
+        return {status:choices.length>1?'ambiguous':choices.length?'match':'new',candidateId:choices.length===1?choices[0]:null,choices,reason:'item-identity'};
+    }
     const rememberRemoval = candidate => {
         for(const reference of state.observationRefs)if(reference.candidateId===candidate.id)reference.candidateId='';
         for(const evidence of candidate.evidence) if(evidence.observationId && !state.removedObservations.some(record=>record.observationId===evidence.observationId&&record.sessionId===evidence.sessionId)) state.removedObservations.push({observationId:evidence.observationId,sessionId:evidence.sessionId});
@@ -361,6 +389,12 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         const saved=save();
         return get(candidate.id) ? {ok:true,candidate:clone(get(candidate.id)),...extra,saved}
             : {ok:false,error:'This item did not fit in the bounded inventory. Remove unused cards before adding it.',saved};
+    };
+    const capacityError=()=>({ok:false,error:`Inventory holds ${CHARACTER_LIMITS.candidates} cards. Remove an unused card before adding another copy.`});
+    const addedResult=(candidate,before,extra={})=>{
+        const outcome=result(candidate,extra);
+        if(JSON.stringify(state).length>CHARACTER_LIMITS.storageBytes){state=before;return {ok:false,error:'This item exceeds the bounded inventory storage. Existing cards were kept; remove an unused card before adding it.',saved:false};}
+        return outcome;
     };
     const detach=id=>{for(const assignments of [state.equipment,state.pendingEquipment])for(const [slot,assigned]of Object.entries(assignments))if(assigned===id)delete assignments[slot];};
     function catalogPatch(item,{match='manual',icon}={}) {
@@ -392,12 +426,16 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             if(!patch){detach(candidate.id);return normalizeCandidate({...candidate,catalogIdentity:null,wikiMatch:'unmatched'});}
             exact.add(candidate.id);return normalizeCandidate({...candidate,...patch,...(Object.keys(candidate.baseStats).length?{baseStats:candidate.baseStats,baseStatsComplete:candidate.baseStatsComplete,unscaledStatKeys:candidate.unscaledStatKeys}:{}),slots:candidate.slots.length?candidate.slots:resolution.item.slots});
         });
-        for(const [slot,id]of Object.entries(state.pendingEquipment))if(exact.has(id)&&!state.equipment[slot]&&!Object.values(state.equipment).includes(id))state.equipment[slot]=id;
+        for(const [slot,id]of Object.entries(state.pendingEquipment))if(exact.has(id)&&characterSlotCompatibility(get(id),slot).compatible&&!state.equipment[slot]&&!Object.values(state.equipment).includes(id))state.equipment[slot]=id;
         state.pendingEquipment={};return {ok:true,saved:save()};
     }
     function intake(observation={},options={}) {
         const source=characterObservationInput(observation);
         const wiki=options.wikiItem || {}, evidence=evidenceRecord(observation);
+        const decision=lookupObservation(observation,options);
+        if(decision.status==='ignored')return {ok:true,ignored:true,deduplicated:true,candidate:null};
+        if(decision.status==='ambiguous')return {ok:true,ambiguous:true,deduplicated:true,candidate:null,choices:decision.choices};
+        if(decision.status==='match'&&decision.reason!=='reference'&&automaticObservation(observation))return {...mergeObservation(decision.candidateId,observation,options),deduplicated:true,merged:true};
         const reference=observationReference(evidence);
         if(reference) {
             const prior=get(reference.candidateId);
@@ -418,11 +456,13 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             rememberObservation(prior.id,observation,evidence);
             return result(prior,{deduplicated:true});
         }
+        if(state.candidates.length>=CHARACTER_LIMITS.candidates)return capacityError();
+        const beforeAddition=clone(state);
         const identity=options.wikiItem?catalogPatch(wiki,{match:options.catalogMatch||'exact',icon:options.icon}):null;
-        const candidate=normalizeCandidate({id:nextId(),instanceKey,name:source.name || wiki.name,observedName:source.observedName ?? (!source.catalogIdentity&&(Array.isArray(observation.fields)||evidence.observationId)?source.name:''),wikiTitle:source.wikiTitle || wiki.wikiTitle || wiki.name,catalogIdentity:source.catalogIdentity,
+        const candidate=normalizeCandidate({id:nextId(),instanceKey,origin:automaticObservation(observation)?'automatic':'manual',lastObservedAt:evidence.at,lastObservedSequence:journalSequence(observation.sequence),observedTier:automaticObservation(observation)?fullTier(source.tier):null,observedFraction:automaticObservation(observation)?source.fraction:null,name:source.name || wiki.name,observedName:source.observedName ?? (!source.catalogIdentity&&(Array.isArray(observation.fields)||evidence.observationId)?source.name:''),wikiTitle:source.wikiTitle || wiki.wikiTitle || wiki.name,catalogIdentity:source.catalogIdentity,
             wikiMatch:options.wikiItem ? 'suggested' : source.wikiMatch,iconId:source.iconId ?? wiki.iconId,icon:options.icon || source.icon,
             slots:source.slots?.length ? source.slots : wiki.slots,tier:source.tier,fraction:source.fraction,observedStats:source.observedStats || source.stats,
-            observedStatsComplete:source.statsComplete || source.observedStatsComplete,baseStats:wiki.stats || source.baseStats,
+            observedStatsComplete:source.statsComplete || source.observedStatsComplete,editedStatKeys:automaticObservation(observation)?[]:Object.keys(normalizeCharacterStats(source.observedStats||source.stats)),baseStats:wiki.stats || source.baseStats,
             unscaledStatKeys:source.unscaledStatKeys,
             baseStatsComplete:options.wikiItem ? true : source.baseStatsComplete,augments:source.augments,augmentStatus:source.augmentStatus,
             level:source.level,notes:source.notes,rawStatBlock:source.rawStatBlock ?? source.statBlockText ?? list(source.statLines).join('\n'),evidence:[evidence],createdAt:timestamp(),updatedAt:timestamp(),...identity});
@@ -430,17 +470,31 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         state.candidates.push(candidate);
         rememberObservation(candidate.id,observation,evidence);
         const assignment=options.autoAssign===true ? autoAssign(candidate.id) : undefined;
-        return result(candidate,{deduplicated:false,...(assignment?{assignment}:{})});
+        return addedResult(candidate,beforeAddition,{deduplicated:false,...(assignment?{assignment}:{})});
     }
     function updateCandidate(id,patch={}) {
         const current=get(id); if (!current) return {ok:false,error:'Item card no longer exists.'};
         const editedStatKeys=has(patch,'observedStats')?[...current.editedStatKeys,...Object.keys(current.observedStats),...Object.keys(normalizeCharacterStats(patch.observedStats))]:current.editedStatKeys;
         const editedFields=[...current.editedFields,...Object.keys(patch).filter(key=>EDITABLE_CAPTURE_FIELDS.has(key))];
         if(has(patch,'tier')||has(patch,'fraction'))editedFields.push('tier','fraction');
-        const next=normalizeCandidate({...current,...patch,catalogIdentity:current.catalogIdentity,observedName:current.observedName,editedStatKeys,editedFields,id:current.id,instanceKey:current.instanceKey,createdAt:current.createdAt,evidence:current.evidence,updatedAt:timestamp()});
+        const next=normalizeCandidate({...current,...patch,origin:current.origin,lastObservedAt:current.lastObservedAt,lastObservedSequence:current.lastObservedSequence,observedTier:current.observedTier,observedFraction:current.observedFraction,catalogIdentity:current.catalogIdentity,observedName:current.observedName,editedStatKeys,editedFields,id:current.id,instanceKey:current.instanceKey,createdAt:current.createdAt,evidence:current.evidence,updatedAt:timestamp()});
         if (!next.name) return {ok:false,error:'An item name is required.'};
+        if(has(patch,'slots')){next.slotReadWarning='';if(Object.entries(state.equipment).some(([slot,assigned])=>assigned===id&&!characterSlotCompatibility(next,slot).compatible))detach(id);}
         if(!characterEquipmentEligibility(next).canEquip){next.catalogIdentity=null;detach(id);}
         state.candidates[state.candidates.indexOf(current)]=next; return result(next);
+    }
+    function setTierPreview(id,{tier,fraction=0}={}) {
+        const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
+        if(fullTier(tier)===null||!Number.isInteger(fraction)||fraction<0||fraction>=(tier===10?1:2**tier))return {ok:false,error:'Choose tier 0–10 and valid fractional progress; tier 10 uses zero only.'};
+        const available=characterEquipmentEligibility(current).known&&Object.keys(current.baseStats).length>0,original=Object.keys(current.observedStats).length>0&&current.observedTier===tier&&current.observedFraction!==null&&current.observedFraction===fraction;
+        if(original)return setObservedBasis(id);
+        return updateCandidate(id,{tier,fraction,statBasis:available?'catalog-tier-preview':'observed',previewWarning:available?'':'Catalog tier preview is unavailable; captured values remain unchanged.'});
+    }
+    function setObservedBasis(id) {
+        const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
+        if(!Object.keys(current.observedStats).length)return {ok:false,error:'No captured item values are available.'};
+        const next=normalizeCandidate({...current,tier:current.observedTier,fraction:current.observedFraction,statBasis:'observed',previewWarning:'',editedFields:current.editedFields.filter(key=>key!=='tier'&&key!=='fraction'),updatedAt:timestamp()});
+        state.candidates[state.candidates.indexOf(current)]=next;return result(next);
     }
     /** Explicit same-copy recapture for the guided flow, never general replay or
      * title-based identity matching. New observed keys can fill gaps, including
@@ -450,17 +504,25 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         const evidence=evidenceRecord(observation),reference=observationReference(evidence);
         if(reference&&reference.candidateId!==id)return reference.candidateId?{ok:false,error:'This observation already belongs to a different item copy.'}:{ok:true,ignored:true,deduplicated:true,candidate:null};
         if(!reference&&expiredObservation(observation))return {ok:true,ignored:true,deduplicated:true,candidate:null};
+        if(!reference&&wasRemoved(observationDetails(observation)))return {ok:true,ignored:true,deduplicated:true,candidate:null};
+        const duplicate=Boolean(reference)||evidence.observationId&&current.evidence.some(record=>record.observationId===evidence.observationId&&record.sessionId===evidence.sessionId),sequence=journalSequence(observation.sequence);
+        const stale=current.lastObservedAt!==null?(evidence.at===null||evidence.at<current.lastObservedAt):sequence!==null&&current.lastObservedSequence!==null&&sequence<current.lastObservedSequence;
+        if(stale){const next=normalizeCandidate({...current,evidence:duplicate?current.evidence:[...current.evidence,evidence],seenCount:current.seenCount+(duplicate?0:1),updatedAt:timestamp()});state.candidates[state.candidates.indexOf(current)]=next;rememberObservation(id,observation,evidence);return result(next,{stale:true,mergedStatKeys:[],preservedStatKeys:[]});}
         const source=characterObservationInput(observation),incoming=normalizeCharacterStats(source.observedStats||source.stats),protectedKeys=new Set(current.editedStatKeys);
-        const captured=current.evidence.some(record=>record.observationId&&(record.parserVersion||record.source&&record.source!=='manual'));
-        if(!captured)for(const key of Object.keys(current.observedStats))protectedKeys.add(key);
+        if(current.legacyManualStats)for(const key of Object.keys(current.observedStats))protectedKeys.add(key);
         const observedStats={...current.observedStats},mergedStatKeys=[],preservedStatKeys=[];
         for(const [key,value]of Object.entries(incoming)) {
             if(protectedKeys.has(key)){preservedStatKeys.push(key);continue;}
             observedStats[key]=value;mergedStatKeys.push(key);
         }
         const patch={observedStats},editedFields=new Set(current.editedFields);
+        if(automaticObservation(observation)&&Object.keys(incoming).length){patch.observedTier=fullTier(source.tier);patch.observedFraction=tierFraction(source.fraction,patch.observedTier);}
         const slots=characterSlotKinds(source.slots);
-        if(slots.length&&!editedFields.has('slots'))patch.slots=slots;
+        if(slots.length&&!editedFields.has('slots')){
+            const conflicts=Object.entries(state.equipment).some(([slot,assigned])=>assigned===id&&!characterSlotCompatibility({...current,slots},slot).compatible);
+            if(conflicts)patch.slotReadWarning='A newer slot reading conflicts with this placed copy; review its compatible slots.';
+            else {patch.slots=slots;patch.slotReadWarning='';}
+        }
         const tier=fullTier(source.tier);
         if(tier!==null&&!editedFields.has('tier')) {
             patch.tier=tier;
@@ -479,18 +541,17 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             }
         }
         if(!current.icon&&safeCharacterIcon(options.icon))patch.icon=options.icon;
-        const duplicate=Boolean(reference)||evidence.observationId&&current.evidence.some(record=>record.observationId===evidence.observationId&&record.sessionId===evidence.sessionId);
-        const next=normalizeCandidate({...current,...patch,editedStatKeys:[...protectedKeys],evidence:duplicate?current.evidence:[...current.evidence,evidence],seenCount:current.seenCount+(duplicate?0:1),updatedAt:timestamp()});
+        const next=normalizeCandidate({...current,...patch,lastObservedAt:evidence.at??current.lastObservedAt,lastObservedSequence:Math.max(sequence||0,current.lastObservedSequence||0)||null,editedStatKeys:[...protectedKeys],evidence:duplicate?current.evidence:[...current.evidence,evidence],seenCount:current.seenCount+(duplicate?0:1),updatedAt:timestamp()});
         state.candidates[state.candidates.indexOf(current)]=next;
         rememberObservation(id,observation,evidence);
         return result(next,{mergedStatKeys,preservedStatKeys});
     }
-    function assign(id,slotId,{replace=false,allowIncompatible=false}={}) {
+    function assign(id,slotId,{replace=false}={}) {
         const candidate=get(id); if (!candidate) return {ok:false,error:'Item card no longer exists.'};
         const eligibility=characterEquipmentEligibility(candidate);if(!eligibility.canEquip)return {ok:false,error:eligibility.reason,reason:'unknown-catalog'};
         const compatibility=characterSlotCompatibility(candidate,slotId);
         if (!SLOT_BY_ID.has(slotId)) return {ok:false,error:compatibility.warning};
-        if (!compatibility.compatible && !allowIncompatible) return {ok:false,error:compatibility.warning,needsConfirmation:true};
+        if (!compatibility.compatible) return {ok:false,error:compatibility.warning};
         const previous=state.equipment[slotId];
         if (previous && previous!==id && !replace) return {ok:false,error:'This slot already has an item. Confirm replacement.',needsConfirmation:true};
         detach(id);delete state.pendingEquipment[slotId];
@@ -503,11 +564,12 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         const outcome=assign(id,decision.slot);
         return outcome.ok ? {...decision,saved:outcome.saved} : {...decision,ok:false,assigned:false,slot:null,error:outcome.error};
     }
-    return {intake,updateCandidate,mergeObservation,resolveCatalog,invalidateCatalog,reconcileCatalog,assign,autoAssign,
+    return {intake,lookupObservation,updateCandidate,mergeObservation,setTierPreview,setObservedBasis,resolveCatalog,invalidateCatalog,reconcileCatalog,assign,autoAssign,
         snapshot:()=>clone(state), totals:()=>characterTotals(state),
         duplicateCandidate(id) { const source=get(id);if(!source)return {ok:false,error:'Item card no longer exists.'};
-            const candidate=normalizeCandidate({...source,id:nextId(),instanceKey:'',evidence:[],seenCount:1,createdAt:timestamp(),updatedAt:timestamp()});
-            state.candidates.push(candidate);return result(candidate); },
+            if(state.candidates.length>=CHARACTER_LIMITS.candidates)return capacityError();const beforeAddition=clone(state);
+            const candidate=normalizeCandidate({...source,id:nextId(),origin:'manual',instanceKey:'',evidence:[],seenCount:1,createdAt:timestamp(),updatedAt:timestamp()});
+            state.candidates.push(candidate);return addedResult(candidate,beforeAddition); },
         removeCandidate(id) { if (!get(id)) return {ok:false,error:'Item card no longer exists.'};rememberRemoval(get(id));
             state.candidates=state.candidates.filter(candidate=>candidate.id!==id);
             detach(id);
@@ -531,7 +593,7 @@ export function characterShareSummary(snapshot) {
             equipped:state.statSnapshots.equipped ? {stats:state.statSnapshots.equipped.stats,confirmed:state.statSnapshots.equipped.confirmed} : null,
             derived:totals.derived,computed:totals.computed},
         equipment:CHARACTER_SLOTS.map(slot=>{const item=byId.get(state.equipment[slot.id]);return {slot:slot.id,label:slot.label,item:item ? {
-            name:item.name,wikiTitle:item.wikiTitle,wikiMatch:item.wikiMatch,iconId:item.iconId,tier:item.tier,fraction:item.fraction,level:item.level,
+            name:item.name,wikiTitle:item.wikiTitle,wikiMatch:item.wikiMatch,iconId:item.iconId,tier:item.tier,fraction:item.fraction,observedTier:item.observedTier,observedFraction:item.observedFraction,statBasis:item.statBasis,level:item.level,
             slots:item.slots,observedStats:item.observedStats,baseStats:item.baseStats,...characterItemStats(item),
             augments:clone(item.augments),augmentStatus:item.augmentStatus,slotWarning:characterSlotCompatibility(item,slot.id).warning} : null};}),
         caveat:'Equipped estimates add No Equipment + gear; caps, buffs, worn effects and attribute-derived resource changes are omitted. AC/ATK components need unavailable formulas. Prior equipped captures stay separate.'};

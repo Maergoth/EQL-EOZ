@@ -4,22 +4,19 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.4 gives Character a compact MMO inventory.** Identity and equipped
-estimates sit beside 23 icon slots; equipped physical items leave loose
-inventory. Bounded OCR spelling corrections use the cached wiki catalog, and
-unmatched reads stay highlighted until you choose a match. Item tiers display
-once while original observations remain available for review.
+**0.9.5 keeps your Character inventory across restarts.** Adjust a selected
+item’s tier and progress beside its stats, arrange known gear in 25 compact
+slots including two Any slots, and see valid targets while dragging. Adjusted
+wiki previews appear in green while original captured values remain intact.
 
-Unequip slowly, one item at a time. Keep each complete Default Modern tooltip
-visible until its card appears. Reading continues through slot and snapshot
-review; capture ends when you finish or cancel. See the
-[inventory review plan](docs/CHARACTER_INVENTORY_REVIEW.md),
-[live capture recovery plan](docs/LIVE_CAPTURE_RECOVERY.md) and
-[guided walkthrough](docs/CHARACTER_WALKTHROUGH.md).
+Automatic screen reads update the saved item instead of adding copies. Use
+**Second copy** for another physical item. Unequip slowly and keep each complete
+Default Modern tooltip visible until its card appears. **Rescan removed items**
+allows a fresh read after removing a bad capture; stale queued reads stay blocked.
+See the [persistence and capture audit](docs/CHARACTER_INVENTORY_PERSISTENCE.md)
+and [guided walkthrough](docs/CHARACTER_WALKTHROUGH.md).
 
-![Compact Character inventory with synthetic identity, equipped estimates and icon slots](app/assets/whats-new/0.9.4/character-inventory.png)
-
-![Unmatched synthetic items with a warning and selectable wiki matches](app/assets/whats-new/0.9.4/character-unmatched-match.png)
+![Character inventory with visible tier controls and two Any slots](app/assets/whats-new/0.9.5/character-tier-inventory.png)
 
 In **Settings → Screen reading**, start an explicitly selected source. Optionally use
 **Calibrate OCR area** to draw around a complete examine or Inventory/stat pane.

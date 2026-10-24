@@ -14,6 +14,8 @@ function itemIdentity(item={}){
 }
 const matches=(a,b)=>a.name&&a.name===b.name&&['tier','fraction'].every(k=>a[k]===null||b[k]===null||a[k]===b[k])&&(!a.augments.length||!b.augments.length||JSON.stringify(a.augments)===JSON.stringify(b.augments));
 const identityKey=value=>JSON.stringify(value);
+const readPass=value=>value&&typeof value==='object'?{step:ITEM_STEPS.has(value.step)?value.step:'unequip',from:finiteTime(value.from),sourceId:bounded(value.sourceId,180),generation:generation(value.generation)}:null;
+const samePass=(a,b)=>Boolean(a&&b&&a.step===b.step&&a.from===b.from&&a.sourceId===b.sourceId&&a.generation===b.generation);
 function identityAliases(values,current){
     // Keep the initial observed identity and the five most recent alternatives.
     // The editable current identity is also checked independently during lookup.
@@ -39,11 +41,14 @@ function normalize(raw){
     result.itemPhaseStartedAt=finiteTime(raw.itemPhaseStartedAt);
     result.itemReadWindows=(Array.isArray(raw.itemReadWindows)?raw.itemReadWindows:[]).slice(-MAX_ITEM_WINDOWS).filter(window=>window&&ITEM_STEPS.has(window.step)&&finiteTime(window.from)>0&&generation(window.generation)!==null&&bounded(window.sourceId,180)&&(window.until===null||finiteTime(window.until)>=window.from)).map(window=>({step:window.step,from:finiteTime(window.from),until:window.until===null?null:finiteTime(window.until),sourceId:bounded(window.sourceId,180),generation:window.generation}));
     result.items=[...new Map((Array.isArray(raw.items)?raw.items:[]).slice(-120).filter(x=>x&&bounded(x.id)).map(x=>{const identity=itemIdentity(x.identity);return[bounded(x.id,180),{id:bounded(x.id,180),identity,aliases:identityAliases(x.aliases,identity)}];})).values()];
-    result.ignored=(Array.isArray(raw.ignored)?raw.ignored:[]).slice(-120).map(itemIdentity).filter(x=>x.name);
+    const legacyPass=readPass(result.itemReadWindows.at(-1)||{step:result.step,from:result.itemPhaseStartedAt||result.startedAt,sourceId:result.sourceId});
+    result.ignored=(Array.isArray(raw.ignored)?raw.ignored:[]).slice(-120).map(value=>({...itemIdentity(value),removedAt:typeof value.removedAt==='number'&&Number.isFinite(value.removedAt)&&value.removedAt>=0?value.removedAt:null,pass:readPass(value.pass)||legacyPass})).filter(x=>x.name);
     for(const [id,choice] of Object.entries(raw.slotChoices||{}).slice(0,120))if(/^[\w-]{1,180}$/.test(id))result.slotChoices[id]=bounded(choice,40);
     return result;
 }
-/** Resumable local workflow. This controller never starts capture by itself. */
+/** Resumable local workflow. This controller never starts capture by itself.
+ * items/aliases describe this flow, not the persistent inventory. After these
+ * phase/source guards, the model owns cross-session automatic-item lookup. */
 export function createCharacterWalkthrough({storage=globalThis.localStorage,now=Date.now,id=()=>globalThis.crypto.randomUUID(),onWarning=()=>{}}={}){
     let state=initial();try{const raw=storage?.getItem(CHARACTER_WALKTHROUGH_KEY);if(raw&&raw.length<=MAX_STORED_CHARACTERS)state=normalize(JSON.parse(raw));}catch{/* Optional draft cannot block Character. */}
     let captureContext=null;
@@ -73,9 +78,31 @@ export function createCharacterWalkthrough({storage=globalThis.localStorage,now=
         }
         if(!captureContext||prior?.sourceId!==captureContext.sourceId||prior.generation!==captureContext.generation)closeItemWindow();openItemWindow();if(before!==JSON.stringify([state.itemReadTracking,state.itemPhaseStartedAt,state.itemReadWindows]))return save();return clone(state);
     }
-    function itemWindow(observation){
+    function findItemWindow(observation){
         const at=Date.parse(observation?.capturedAt||''),sourceId=observation?.input?.sourceId,readGeneration=generation(observation?.input?.captureGeneration);
-        return Number.isFinite(at)&&at<=now()&&typeof sourceId==='string'&&readGeneration!==null&&state.itemReadWindows.some(window=>window.sourceId===sourceId&&window.generation===readGeneration&&at>=window.from&&(window.until===null||at<window.until));
+        return Number.isFinite(at)&&at<=now()&&typeof sourceId==='string'&&readGeneration!==null?state.itemReadWindows.find(window=>window.sourceId===sourceId&&window.generation===readGeneration&&at>=window.from&&(window.until===null||at<window.until)):null;
+    }
+    const itemWindow=observation=>Boolean(findItemWindow(observation));
+    function ignores(item,observation,{manualRead}={}){
+        // Automatic acquisition is item-type based across tier/progress; an OCR
+        // tier fluctuation must not recreate an X-removed held tooltip.
+        const identity=itemIdentity(item),ignored=state.ignored.filter(entry=>identity.name&&entry.name===identity.name);if(!ignored.length)return false;
+        const at=Date.parse(observation?.capturedAt||''),window=findItemWindow(observation);
+        if(!isCurrent(observation)||!Number.isFinite(at)||at>now())return true;
+        if(observation.kind!=='manual'&&(!captureContext||observation.input?.sourceId!==captureContext.sourceId||observation.input?.captureGeneration!==captureContext.generation))return true;
+        return ignored.some(entry=>{
+            if(entry.removedAt!==null&&at<=entry.removedAt)return true;
+            if(observation?.kind==='manual'){
+                // The caller still validates the explicit import action token.
+                // A fresh import generation is deliberate, unlike a live held
+                // tooltip heartbeat. Old journal/manual events cannot self-start.
+                const initiatedAt=manualRead?.at;if(manualRead?.eligible!==true||manualRead.sessionId!==state.sessionId||typeof initiatedAt!=='number'||!Number.isFinite(initiatedAt)||at<initiatedAt||entry.removedAt!==null&&initiatedAt<=entry.removedAt)return true;
+                const nextGeneration=generation(observation.input?.captureGeneration),freshGeneration=nextGeneration!==null&&entry.pass?.generation!==null&&nextGeneration>(entry.pass?.generation??-1),freshPhase=state.itemPhaseStartedAt>(entry.pass?.from||0);
+                return !ITEM_STEPS.has(state.step)||initiatedAt<state.itemPhaseStartedAt||!(freshGeneration||freshPhase);
+            }
+            if(!window||samePass(readPass(window),entry.pass))return true;
+            return window.from<(entry.removedAt??((entry.pass?.from||0)+1));
+        });
     }
     function begin(){captureContext=null;state={...initial(),active:true,sessionId:bounded(id(),120),startedAt:now(),itemReadTracking:true};return save();}
     function advance({captureRunning=false,sequence=0,itemReadStartedAt}={}){
@@ -101,9 +128,10 @@ export function createCharacterWalkthrough({storage=globalThis.localStorage,now=
         acceptBase(){if(state.step!=='base')throw Error('No Equipment is reviewed in the base-stat step.');state.baseAccepted=true;return save();},
         findItem(item){const compatible=compatibleIds(item);return compatible.length===1?compatible[0]:null;},
         ambiguousItem(item){return compatibleIds(item).length>1;},
-        ignores(item){const identity=itemIdentity(item);return state.ignored.some(x=>matches(x,identity));},
+        ignores,
+        rescanItems(){if(!state.active||!ITEM_STEPS.has(state.step))throw Error('Rescan items during Unequip, Re-equip, Slots or Review.');setStep(state.step,{itemReadStartedAt:now()});return save();},
         rememberItem(candidate){const identity=itemIdentity(candidate),prior=state.items.find(x=>x.id===candidate.id);if(prior){prior.aliases=identityAliases([...(prior.aliases||[]),prior.identity],identity);prior.identity=identity;}else state.items.push({id:candidate.id,identity,aliases:identityAliases([],identity)});state.items=state.items.slice(-120);return save();},
-        removeItem(candidate){const prior=state.items.find(x=>x.id===candidate.id),identities=[...(prior?.aliases||[]),...(prior?[prior.identity]:[]),itemIdentity(candidate)];state.items=state.items.filter(x=>x.id!==candidate.id);state.ignored=[...new Map([...state.ignored,...identities].filter(identity=>identity.name).map(identity=>[identityKey(identity),identity])).values()].slice(-120);delete state.slotChoices[candidate.id];return save();},
+        removeItem(candidate){const prior=state.items.find(x=>x.id===candidate.id),identities=[...(prior?.aliases||[]),...(prior?[prior.identity]:[]),itemIdentity(candidate)],pass=readPass(state.itemReadWindows.at(-1)||{step:state.step,from:state.itemPhaseStartedAt||state.startedAt,sourceId:state.sourceId,generation:captureContext?.generation}),removedAt=now();state.items=state.items.filter(x=>x.id!==candidate.id);state.ignored=[...new Map([...state.ignored,...identities.filter(identity=>identity.name).map(identity=>({...identity,removedAt,pass}))].filter(identity=>identity.name).map(identity=>[identityKey(itemIdentity(identity)),identity])).values()].slice(-120);delete state.slotChoices[candidate.id];return save();},
         chooseSlot(id,value){state.slotChoices[bounded(id,180)]=bounded(value,40);return save();},
         complete(){if(state.step!=='review')throw Error('Review the snapshot before completing this walkthrough.');closeItemWindow();captureContext=null;state.active=false;state.step='complete';state.completedAt=now();return save();},
         cancel(){closeItemWindow();captureContext=null;state.active=false;state.step='details';state.sourceId='';return save();}

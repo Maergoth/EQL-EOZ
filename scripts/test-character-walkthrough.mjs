@@ -139,8 +139,19 @@ async function run({root,temporary,screenshots}){
         assert.equal(await execute(()=>document.querySelector('[data-calculated-stat="HP"]').cells[2].textContent),'37 *','Removing assigned gear immediately updates the gear total');
         await execute(()=>{fixture.workspace.dispose();fixture.workspace=fixture.mount();});await step('unequip');
         assert.equal(await execute(()=>fixture.starts.length),1,'Remounting resumes the local workflow without starting another source');
-        await observe('item',removed);
+        const heldRemovedRead=await observe('item',removed);
         assert.equal((await model()).candidates.length,2,'Removed card stays removed after remount and a new observation ID');
+        await observe('item',{...removed,tier:4,hp:999});assert.equal((await model()).candidates.length,2,'A fluctuating tier cannot bypass the same-pass removal guard');
+        assert.equal(await execute(()=>!!document.querySelector('[data-character-rescan]')),true,'A suppressed removal has a discoverable recovery action');
+        await snapshot('character-rescan-items.png',{selector:'[data-walkthrough-status]'});
+        await new Promise(done=>setTimeout(done,5));await click('[data-character-rescan]');
+        const rescanCutoff=await execute(()=>fixture.flow().itemPhaseStartedAt);
+        await observe('item',removed,{capturedAt:heldRemovedRead.capturedAt});assert.equal((await model()).candidates.length,2,'Rescan cannot restore a queued frame captured before the new pass');
+        await new Promise(done=>setTimeout(done,5));const recoveredRemovedRead=await observe('item',removed);
+        assert(Date.parse(recoveredRemovedRead.capturedAt)>=rescanCutoff);const recoveredRemoved=(await model()).candidates.find(card=>card.name===removed.name);
+        assert(recoveredRemoved&&recoveredRemoved.id!==removedId,'A fresh read after Rescan recovers a removed item without reviving its tombstoned card');assert.equal((await model()).equipment.head,recoveredRemoved.id);
+        await click(`[data-equipped-card="head"][data-edit-card="${recoveredRemoved.id}"]`);await click('[data-remove-card]');
+        await observe('item',removed);assert.equal((await model()).candidates.length,2,'Removing the recovered item starts another same-pass held-tooltip guard');
         // Neither equipped pixels nor a previous session can seed the baseline.
         await observe('character',{hp:999,str:999});
         const lateUnequipAt=await execute(()=>Date.now());await new Promise(done=>setTimeout(done,5));await click('[data-walkthrough-next]');await step('base');
@@ -261,16 +272,26 @@ async function run({root,temporary,screenshots}){
             fixture.replayRecords=[...Array.from({length:4},(_,index)=>record(index+1,ring)),record(5,boots),record(6,ring,{sessionId:'synthetic-older-walkthrough'})];
             fixture.workspace.dispose();fixture.workspace=fixture.mount();
         },slotsRead,boots);
-        await until(async()=>(await model()).candidates.length===beforeRecovery+2,'current-flow journal recovery without repeated-card duplication');
+        await until(async()=>(await model()).candidates.length===beforeRecovery+1,'cross-session journal recovery without repeated-card duplication');
         const recovered=(await model()).candidates.filter(card=>card.name==='Synthetic Recovered Ring');
-        assert.equal(recovered.length,2,'The same name in an older session retains a distinct physical card');
-        assert.equal(recovered.find(card=>card.evidence.some(evidence=>evidence.sessionId===sessionBefore)).seenCount,4,'Four current-flow rereads merge into one recovered physical card');
-        assert.equal(recovered.find(card=>card.seenCount===4).evidence.length,4);
+        assert.equal(recovered.length,1,'A different OCR session does not imply a second physical copy');
+        assert.equal(recovered[0].seenCount,5,'Current and older-session rereads merge into the same automatic card');
+        assert.equal(recovered[0].evidence.length,5);
         assert.equal((await model()).candidates.find(card=>card.id===bootsId).observedStats.HASTE,16,'Journal recovery preserves deliberately corrected values');
         const readsBeforeRepeat=await execute(()=>fixture.reads.length);await execute(()=>{fixture.workspace.dispose();fixture.workspace=fixture.mount();});
         await until(()=>execute(count=>fixture.reads.length>count,readsBeforeRepeat),'repeated remount journal replay');
-        assert.equal((await model()).candidates.length,beforeRecovery+2,'Exact observation IDs remain idempotent across repeated remounts');
-        assert.equal((await model()).candidates.find(card=>card.seenCount===4&&card.name==='Synthetic Recovered Ring').evidence.length,4);
+        assert.equal((await model()).candidates.length,beforeRecovery+1,'Exact observation IDs remain idempotent across repeated remounts');
+        assert.equal((await model()).candidates.find(card=>card.name==='Synthetic Recovered Ring').evidence.length,5);
+        await click(`[data-edit-card="${recovered[0].id}"]`);await click('[data-duplicate-card]');
+        const ringCopies=(await model()).candidates.filter(card=>card.name==='Synthetic Recovered Ring');
+        assert.equal(ringCopies.length,2,'Second copy is an explicit manual action');assert.notEqual(ringCopies[0].id,ringCopies[1].id);
+        const copiesBeforeRead=structuredClone(ringCopies);await observe('item',{name:'Synthetic Recovered Ring',slots:['Fingers'],tier:7,fraction:0,hp:0});
+        const copiesAfterRead=(await model()).candidates.filter(card=>card.name==='Synthetic Recovered Ring');
+        assert.equal(copiesAfterRead.length,2,'An ambiguous automatic read does not create a third copy');
+        assert.deepEqual(copiesAfterRead.map(card=>({id:card.id,tier:card.tier,stats:card.observedStats})),copiesBeforeRead.map(card=>({id:card.id,tier:card.tier,stats:card.observedStats})),'Automatic reading does not guess which explicit copy changed');
+        assert.equal(await execute(()=>document.querySelectorAll('[data-ocr-copy-choice]').length),2,'The uncertain read offers its two existing physical copies');
+        await click(`[data-ocr-copy-choice="${ringCopies[0].id}"]`);
+        assert.equal((await model()).candidates.find(card=>card.id===ringCopies[0].id).tier,7,'Explicit copy selection applies the reading only to that copy');assert.equal((await model()).candidates.find(card=>card.id===ringCopies[1].id).tier,ringCopies[1].tier);
         assert.equal(await execute(id=>document.querySelector(`[data-walkthrough-slot="${id}"]`).value,anyId),'');
         await click('[data-walkthrough-next]');assert.equal(await execute(()=>fixture.flow().step),'slots','Unresolved ANY cannot silently complete');
         await execute(id=>{const select=document.querySelector(`[data-walkthrough-slot="${id}"]`);select.value='charm';select.dispatchEvent(new Event('change',{bubbles:true}));},anyId);
@@ -304,12 +325,24 @@ async function run({root,temporary,screenshots}){
         // Copy is a completion action in its own right, not just an action on an
         // already completed save. A second explicit walkthrough has fresh base
         // values and no observed equipped-stat capture.
+        const retainedIds=(await model()).candidates.map(card=>card.id).sort();
+        await execute(()=>{fixture.workspace.dispose();fixture.workspace=fixture.mount();});await step('complete');
+        assert.deepEqual((await model()).candidates.map(card=>card.id).sort(),retainedIds,'Completing and remounting preserves every saved physical item');
+        const equippedBeforeNew=(await model()).equipment;assert(Object.keys(equippedBeforeNew).length>0,'The completed layout remains equipped on a normal remount');
         await click('[data-walkthrough-new]');await step('details');
         await execute(()=>document.querySelector('[data-character-metadata]').requestSubmit());await step('source');
+        assert.deepEqual((await model()).candidates.map(card=>card.id).sort(),retainedIds,'A new walkthrough keeps inventory IDs');assert.deepEqual((await model()).equipment,{},'A new walkthrough explicitly resets its layout');assert.equal((await model()).statSnapshots.base,null,'A new walkthrough requires a fresh baseline');
         await click('[data-walkthrough-start-source]');await step('unequip');
+        await observe('item',{...boots,tier:5,fraction:0,hp:82,rawStatBlock:'Feet\nTier: 5\nHP: 82\nSTR: 9\nHaste: 12%'});
+        assert.deepEqual((await model()).candidates.map(card=>card.id).sort(),retainedIds,'A new source session and tier still reuse the unique saved automatic item');
+        assert.equal((await model()).candidates.filter(card=>card.name===boots.name).length,1);
         // Identity matching may correct OCR spelling, but never supplies stats
         // or permits an unresolved item to contribute to equipped totals.
-        await click(`[data-loose-inventory] [data-edit-card="${bootsId}"]`);await click('[data-slot-id="feet"] [data-equip-slot]');assert.equal((await model()).equipment.feet,bootsId,'The second walkthrough explicitly equips an existing known card before the occupied-slot check');
+        assert.equal((await model()).equipment.feet,bootsId,'A reused previously unassigned known card auto-equips into its unique normal slot in the new walkthrough');
+        await click(`[data-equipped-card="feet"][data-edit-card="${bootsId}"]`);await click('[data-card-unequip]');
+        const manualPlacementCount=(await model()).candidates.length;await observe('item',{...boots,tier:5,fraction:0});
+        assert.equal((await model()).candidates.length,manualPlacementCount);assert(!Object.values((await model()).equipment).includes(bootsId),'A held tooltip cannot undo manual Unequip during the same walkthrough');assert.equal(await execute(id=>fixture.flow().slotChoices[id],bootsId),'__skip__');
+        await click(`[data-loose-inventory] [data-edit-card="${bootsId}"]`);await click('[data-slot-id="feet"] [data-equip-slot]');
         const gearHp=()=>execute(()=>Number(document.querySelector('[data-calculated-stat="HP"]').cells[2].textContent.match(/-?\d+/)?.[0]));
         const beforeUnknownHp=await gearHp();
         const mystery={name:'Synthetic Uncatalogued Mystery',slots:['Head'],tier:2,hp:9000,rawStatBlock:'Head\nHP: 9000\nUncatalogued inscription: keep this'};
@@ -317,6 +350,8 @@ async function run({root,temporary,screenshots}){
         await observe('item',mystery);await observe('item',fuzzy);
         const unknownCards=(await model()).candidates,mysteryId=unknownCards.find(card=>card.name===mystery.name).id,fuzzyId=unknownCards.find(card=>card.observedName===fuzzy.name).id;
         for(const id of [mysteryId,fuzzyId]){assert(!Object.values((await model()).equipment).includes(id));assert.equal(await execute(id=>{const card=document.querySelector(`[data-loose-inventory] [data-character-card="${id}"]`);return card?.classList.contains('is-unmatched')&&Boolean(card.querySelector('[data-item-unmatched]'));},id),true);}
+        const unknownDrag=await execute(id=>{const item=document.querySelector(`[data-loose-inventory] [data-edit-card="${id}"]`),dataTransfer=new DataTransfer();item.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer}));const valid=document.querySelectorAll('[data-slot-id].is-valid-drop').length,invalid=document.querySelectorAll('[data-slot-id].is-invalid-drop').length;document.querySelector('[data-slot-id="any1"]').dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer}));return{valid,invalid,confirm:!!document.querySelector('[data-character-placement-status] button')};},mysteryId);
+        assert.deepEqual(unknownDrag,{valid:0,invalid:25,confirm:false},'Unknown items have no valid drop targets, including either universal slot');
         assert.equal(await gearHp(),beforeUnknownHp,'Unknown and fuzzy-unreviewed items cannot increase equipment stats');
         assert.equal(await execute(id=>document.querySelector(`[data-character-card="${id}"]`).querySelectorAll('[data-item-tier]').length,fuzzyId),1,'A captured tier suffix does not produce a second tier badge');
         await click(`[data-loose-inventory] [data-edit-card="${fuzzyId}"]`);assert.equal(await execute(id=>document.querySelector('[data-item-match-picker]')?.dataset.itemMatchPicker===id,fuzzyId),true);
@@ -325,11 +360,19 @@ async function run({root,temporary,screenshots}){
         const observedBeforeMatch=(await model()).candidates.find(card=>card.id===fuzzyId);await execute(()=>[...document.querySelectorAll('[data-item-match-select]')].find(button=>button.textContent.includes('Synthetic Trail Boots')).click());
         const matched=(await model()).candidates.find(card=>card.id===fuzzyId);assert.equal(matched.name,'Synthetic Trail Boots');assert.equal(matched.observedName,fuzzy.name);assert.deepEqual(matched.observedStats,observedBeforeMatch.observedStats);assert.equal(matched.rawStatBlock,fuzzy.rawStatBlock);assert.deepEqual(matched.evidence,observedBeforeMatch.evidence,'Canonicalizing identity preserves the original capture evidence');
         assert.equal((await model()).equipment.feet,bootsId,'Matching does not silently replace an occupied slot');
+        const knownDrag=await execute(id=>{const item=document.querySelector(`[data-loose-inventory] [data-edit-card="${id}"]`),dataTransfer=new DataTransfer();item.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer}));const valid=[...document.querySelectorAll('[data-slot-id].is-valid-drop')].map(slot=>slot.dataset.slotId).sort();document.querySelector('[data-slot-id="head"]').dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer}));return{valid,confirm:!!document.querySelector('[data-character-placement-status] button'),head:fixture.model().equipment.head||null,cleared:!document.querySelector('[data-slot-id].is-valid-drop,[data-slot-id].is-invalid-drop')};},fuzzyId);
+        assert.deepEqual(knownDrag,{valid:['any1','any2','feet'],confirm:false,head:null,cleared:true},'Only compatible and universal targets highlight; an invalid normal slot cannot be forced');
+        await execute(id=>{const item=document.querySelector(`[data-loose-inventory] [data-edit-card="${id}"]`),dataTransfer=new DataTransfer();item.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer}));document.querySelector('[data-slot-id="feet"]').dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer}));},fuzzyId);
+        assert.equal((await model()).equipment.feet,bootsId,'A valid occupied drop leaves the original card until confirmation');assert.equal(await execute(()=>!!document.querySelector('[data-character-placement-status] button')),true,'Only occupied compatible placement offers confirmation');
+        await execute(()=>document.querySelector('[data-character-placement-status] button').click());assert.equal((await model()).equipment.feet,fuzzyId);assert.equal(await execute(id=>!!document.querySelector(`[data-loose-inventory] [data-character-card="${id}"]`),bootsId),true,'Confirming a compatible replacement restores the displaced physical item to inventory');
+        await click(`[data-equipped-card="feet"][data-edit-card="${fuzzyId}"]`);await click('[data-card-unequip]');await click(`[data-loose-inventory] [data-edit-card="${bootsId}"]`);await click('[data-slot-id="feet"] [data-equip-slot]');
         await click(`[data-equipped-card="feet"][data-edit-card="${bootsId}"]`);await click('[data-card-unequip]');assert.equal(await execute(id=>document.querySelectorAll(`[data-loose-inventory] [data-character-card="${id}"]`).length,bootsId),1);
         const withoutBootsHp=await gearHp();await click(`[data-loose-inventory] [data-edit-card="${fuzzyId}"]`);await click('[data-slot-id="feet"] [data-equip-slot]');assert.equal((await model()).equipment.feet,fuzzyId);assert.equal(await gearHp(),withoutBootsHp+91,'Clicking the empty slot equips the selected known item and immediately updates totals');
         assert.equal(await execute(id=>Boolean(document.querySelector(`[data-loose-inventory] [data-character-card="${id}"]`)),fuzzyId),false);await click(`[data-equipped-card="feet"][data-edit-card="${fuzzyId}"]`);await click('[data-card-unequip]');assert.equal(await gearHp(),withoutBootsHp);assert.equal(await execute(id=>document.querySelectorAll(`[data-loose-inventory] [data-character-card="${id}"]`).length,fuzzyId),1,'Unequip restores the same physical item without duplication');
         const beforeLegacyHp=await gearHp();await execute(id=>{fixture.workspace.dispose();const legacy=fixture.model();legacy.equipment.head=id;const card=legacy.candidates.find(card=>card.id===id);card.wikiTitle=card.name;card.wikiMatch='confirmed';delete card.catalogIdentity;localStorage.setItem('eql-eye-of-zomm-character-v1',JSON.stringify(legacy));fixture.workspace=fixture.mount();},mysteryId);await step('unequip');assert.equal((await model()).equipment.head,undefined,'A legacy typed wiki match cannot restore an unknown item into equipment');assert.equal(await gearHp(),beforeLegacyHp,'Legacy unknown gear is excluded from computed totals after real remount');assert.equal(await execute(id=>Boolean(document.querySelector(`[data-loose-inventory] [data-character-card="${id}"] [data-item-unmatched]`)),mysteryId),true);
         const persistedMatched=(await model()).candidates.find(card=>card.id===fuzzyId);assert.equal(persistedMatched.name,'Synthetic Trail Boots');assert.equal(persistedMatched.observedName,fuzzy.name);assert.equal((await model()).metadata.aaCount,123);assert.match(await execute(()=>document.querySelector('[data-character-identity]').textContent),/Synthetic Pathfinder/);
+        await click(`[data-loose-inventory] [data-edit-card="${fuzzyId}"]`);await click('[data-slot-id="any1"] [data-equip-slot]');assert.equal((await model()).equipment.any1,fuzzyId,'Any 1 accepts a known item without changing its normal slots');await click(`[data-equipped-card="any1"][data-edit-card="${fuzzyId}"]`);await click('[data-card-unequip]');await click('[data-slot-id="any2"] [data-equip-slot]');assert.equal((await model()).equipment.any2,fuzzyId,'Any 2 is independently usable');await click(`[data-equipped-card="any2"][data-edit-card="${fuzzyId}"]`);await click('[data-card-unequip]');
+        assert.equal(await execute(()=>document.querySelector('.character-advanced-editor').open),false);await snapshot('character-selected-tier.png',{selector:'[data-character-editor]'});
         await snapshot('character-compact-inventory-1024.png',{selector:'[data-character-slots]'});await snapshot('character-compact-inventory-1024-20px.png',{font:20,selector:'[data-character-slots]'});
         await click('[data-walkthrough-next]');await step('base');
         const copyGate=await execute(()=>fixture.flow());
@@ -345,8 +388,8 @@ async function run({root,temporary,screenshots}){
         await click('[data-share-close]');
         assert.equal(requests.length,0,`Walkthrough must stay offline: ${JSON.stringify(requests)}`);
         await execute(()=>fixture.workspace.dispose());
-        return{ok:true,message:'Native Character walkthrough passed: details/source, staged freshness, automatic and ANY slots, same-item merge, persistent removal, computed review, resumable capture, canceled save and one completion stop.',screenshots:!!screenshots};
-    }catch(error){error.message+=`\nRenderer diagnostics: ${JSON.stringify(errors)}\nSynthetic UI: ${JSON.stringify(await diagnostic())}`;throw error;}
+        return{ok:true,message:'Native Character walkthrough passed: staged freshness, persistent inventory, cross-session OCR dedup, manual-copy choice, Rescan cutoffs, manual placement, 25 strict/Any slots and drag targets, computed review, resumable capture and completion.',screenshots:!!screenshots};
+    }catch(error){const detail=`\nRenderer diagnostics: ${JSON.stringify(errors)}\nSynthetic UI: ${JSON.stringify(await diagnostic())}`;error.message+=detail;error.stack=String(error.stack||error.message)+detail;throw error;}
     finally{window.destroy();await new Promise(done=>server.close(done));}
 }
 

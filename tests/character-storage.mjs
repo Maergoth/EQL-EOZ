@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import {createCharacterStorage} from '../app/character-storage.js';
+import {createCharacterModel,CHARACTER_STORAGE_KEY as KEY} from '../app/character-model.js';
+import {createCharacterWalkthrough,CHARACTER_WALKTHROUGH_KEY as FLOW} from '../app/character-walkthrough.js';
+const memory=()=>{const values=new Map();return{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};};
+const draft=label=>JSON.stringify({schemaVersion:1,label});
+const legacy=memory(),disk={},writes=[],warnings=[];legacy.setItem(KEY,draft('legacy inventory'));legacy.setItem(FLOW,draft('legacy flow'));
+const api={read:async()=>({values:{...disk},error:null}),write:async({key,value})=>{writes.push({key,value});disk[key]=value;return{ok:true};},flush:async()=>({ok:true})};
+const first=await createCharacterStorage({api,legacyStorage:legacy,onWarning:message=>warnings.push(message)});
+assert.equal(first.getItem(KEY),draft('legacy inventory'));assert((await first.flush()).ok);assert.equal(disk[FLOW],draft('legacy flow'));
+first.setItem(KEY,draft('saved gear'));assert((await first.flush()).ok);assert.equal(disk[KEY],draft('saved gear'));
+const fallbackOrigin=memory();fallbackOrigin.setItem(KEY,draft('old data on another port'));
+const restored=await createCharacterStorage({api,legacyStorage:fallbackOrigin});assert.equal(restored.getItem(KEY),draft('saved gear'));assert.equal(fallbackOrigin.getItem(KEY),draft('saved gear'));
+restored.removeItem(KEY);assert((await restored.flush()).ok);assert.equal(disk[KEY],null);
+fallbackOrigin.setItem(KEY,draft('stale resurrection'));const tombstone=await createCharacterStorage({api,legacyStorage:fallbackOrigin});assert.equal(tombstone.getItem(KEY),null);assert.equal(fallbackOrigin.getItem(KEY),null);
+assert.throws(()=>first.setItem('other-app-key','x'),/Unsupported/);assert.throws(()=>first.setItem(KEY,'x'.repeat(1500001)),/limit/);assert.throws(()=>first.setItem(KEY,'界'.repeat(500001)),/limit/);
+assert.equal(first.getItem('other-app-key'),null);
+const priorWrites=writes.length,corrupt=memory();corrupt.setItem(KEY,draft('recoverable local gear'));
+const blocked=await createCharacterStorage({api:{...api,read:async()=>({values:{},error:'Private file needs recovery.'})},legacyStorage:corrupt,onWarning:message=>warnings.push(message)});
+blocked.setItem(KEY,draft('local edit'));assert.equal(writes.length,priorWrites,'Read corruption never seeds or overwrites the host file');assert.equal(corrupt.getItem(KEY),draft('local edit'));assert.equal((await blocked.flush()).ok,false);
+const failureWarnings=[],failed=await createCharacterStorage({api:{...api,write:async()=>{throw Error('Disk unavailable');}},legacyStorage:memory(),onWarning:message=>failureWarnings.push(message)});
+failed.setItem(KEY,draft('unsaved edit'));assert.equal((await failed.flush()).ok,false);assert.equal(failed.getItem(KEY),draft('unsaved edit'));assert.equal(failureWarnings.length,1);
+await new Promise(resolve=>setTimeout(resolve,0));assert.equal((await failed.flush()).ok,false,'A settled failed write remains visible');
+assert(warnings.some(message=>message.includes('could not be loaded')));
+for(const key of [KEY,FLOW])for(const original of ['{broken synthetic JSON',JSON.stringify({schemaVersion:2,label:'future version'}),'[]','null',JSON.stringify({label:'missing schema'})])for(const authority of ['host','legacy']){
+    const local=memory(),entryWarnings=[],entryWrites=[],hostValues=authority==='host'?{[key]:original}:{};
+    local.setItem(key,authority==='legacy'?original:draft('browser value must not replace authoritative corrupt data'));
+    const localBefore=local.getItem(key),hostBefore=JSON.stringify(hostValues);
+    const entry=await createCharacterStorage({api:{read:async()=>({values:hostValues,error:null}),write:async value=>{entryWrites.push(value);hostValues[value.key]=value.value;return{ok:true};},flush:async()=>({ok:true})},legacyStorage:local,onWarning:message=>entryWarnings.push(message)});
+    assert.equal(entry.getItem(key),null,'An unreadable entry does not reach a model fallback that can overwrite it');
+    if(key===KEY)assert.equal(createCharacterModel({storage:entry}).setMetadata({name:'Synthetic startup seed'}).saved,false,'Real model startup fallback cannot overwrite the preserved entry');
+    else createCharacterWalkthrough({storage:entry,id:()=> 'synthetic-blocked-flow'}).begin();
+    assert.throws(()=>entry.setItem(key,draft('attempted replacement')),/preserved/);assert.throws(()=>entry.removeItem(key),/preserved/);
+    assert.equal(local.getItem(key),localBefore,'Blocked writes/removals preserve original browser-only data too');assert.equal(JSON.stringify(hostValues),hostBefore,'Blocked host entries remain byte-for-byte unchanged');assert.equal(entryWrites.length,0);assert.equal((await entry.flush()).ok,false);assert(entryWarnings.some(message=>message.includes('malformed')||message.includes('unsupported')));
+}
+const browserOnly=memory(),browserOriginal='{malformed browser-only draft';browserOnly.setItem(KEY,browserOriginal);const browserBlocked=await createCharacterStorage({api:null,legacyStorage:browserOnly});assert.throws(()=>browserBlocked.setItem(KEY,draft('new')),/preserved/);assert.throws(()=>browserBlocked.removeItem(KEY),/preserved/);assert.equal(browserOnly.getItem(KEY),browserOriginal);
+console.log('Character renderer storage: port-independent authority, migration, tombstones, bounds, read/per-entry corruption preservation and visible async write failure passed.');

@@ -122,7 +122,7 @@ export async function renderCharacterShare(snapshot,{document=globalThis.documen
             text(value,sx+250-valueWidth,sy,{bold:true});
         });
     });
-    text('EQUIPMENT  /  23 NAMED SLOTS',48,plan.gearTop-48,{color:COLORS.gold,bold:true});
+    text('EQUIPMENT  /  25 NAMED SLOTS',48,plan.gearTop-48,{color:COLORS.gold,bold:true});
 
     const byId=new Map((snapshot.candidates || []).map(item=>[item.id,item]));
     const iconCache=new Map();
@@ -150,7 +150,7 @@ export async function renderCharacterShare(snapshot,{document=globalThis.documen
             if(nameRows.length>2) throw new Error('An item title is too long for the share card. Review the extracted name before exporting.');
             lines(nameRows,x+81,y+41,{color:COLORS.heading,bold:true});
             const details=[item.tier===null ? 'Tier ?' : `Tier ${item.tier}${item.fraction===null ? ' · progress ?' : item.fraction ? ` +${item.fraction}/${2**item.tier}` : ''}`,item.level===null ? '' : `Req. level ${item.level}`,
-                item.wikiMatch==='confirmed' ? 'Wiki match reviewed' : item.wikiTitle ? 'Wiki match suggested' : 'Wiki match unknown'];
+                item.basis==='catalog-tier-preview'?'Catalog tier preview':item.basis==='observed-examine'?'Captured values':'Scaled catalog'];
             text(details.filter(Boolean).join('  ·  '),x+81,y+99,{color:COLORS.muted,scale:.8});
             const augments=item.augments.length ? `Augments: ${item.augments.map(augment=>augment.name || '?').join(', ')} (${item.augmentStatus})` : `Augments: ${item.augmentStatus==='none' ? 'none confirmed' : item.augmentStatus}`;
             const augRows=wrap(augments,w-36,{scale:.75});

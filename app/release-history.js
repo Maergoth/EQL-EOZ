@@ -2,6 +2,39 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
   {
+    "version": "0.9.5",
+    "title": "Keep your inventory and recover missed item reads",
+    "changes": [
+      "Adjust selected-item tier and progress beside its stats, outside Edit captured values. Wiki-based previews show adjusted values in green and retain original captured statistics.",
+      "Keep Character inventory, placements and walkthrough state across restarts, upgrades and changed local ports. A new walkthrough retains inventory while rebuilding its placements and baseline.",
+      "Reuse one automatic item card across capture sessions and changing tiers. Add extra physical copies with Second copy; choose which saved copy to update when a read is ambiguous.",
+      "Use two manual Any slots. Valid slots light up while dragging, and incompatible normal placements are rejected.",
+      "Recover removed items during fresh later capture passes or with Rescan removed items. Stale queued reads and the held tooltip remain blocked."
+    ],
+    "steps": [
+      {
+        "title": "Adjust tier beside the selected item",
+        "image": "0.9.5/character-tier-inventory",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Select an inventory or equipped item to adjust Item tier and Progress without opening Edit captured values. A tier change previews known wiki base stats, labels that preview and shows changed values in green. Original observed values remain available with Use captured stats. Extra physical copies are manual; screen reads update an existing saved card.",
+        "alt": "Synthetic selected Character item with visible tier slider and progress, separate inventory and the advanced editor closed.",
+        "caption": "Actual synthetic Character component capture. Native checks exercise trusted keyboard changes, focus and scroll retention, persistence and stat recalculation; no player data or game pixels.",
+        "imageSha256": "44c9213172511c3dc03989a8bd4aa49a6b643cba41a446f34c865cff3ade4031"
+      },
+      {
+        "title": "Recover removed items and use Any slots",
+        "image": "0.9.5/character-rescan-items",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "If you removed a bad read, choose Rescan removed items and show the complete tooltip again. Only fresh frames after the rescan can recover it. Known items can be placed manually into Any 1 or Any 2; normal slots accept only compatible items. Dragging highlights valid targets, and equipped copies leave loose inventory.",
+        "alt": "Synthetic Character walkthrough showing Rescan removed items, saved/equipped/loose counts and the 25-slot equipment board including Any 1 and Any 2.",
+        "caption": "Actual synthetic Character component. Native regressions distinguish held or stale reads from a fresh rescan and verify valid drag targets, occupied replacement and strict slot rejection.",
+        "imageSha256": "a7dc1fe74fe4a8e38326afd44f566ef014c49c2b9ca4fe636034ba0cfb4e84e6"
+      }
+    ]
+  },
+  {
     "version": "0.9.4",
     "title": "A compact Character inventory with wiki matching",
     "changes": [

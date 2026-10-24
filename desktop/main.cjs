@@ -18,6 +18,7 @@ const { DiscoveryHost } = require('./discovery-host.cjs');
 const { CaptureHost } = require('./capture-host.cjs');
 const { WikiHost } = require('./wiki-host.cjs');
 const { ShareHost } = require('./share-host.cjs');
+const { CharacterStorage } = require('./character-storage.cjs');
 const { installLocalFontPermissions } = require('./font-permissions.cjs');
 const { normalizeWindowPlacement, WindowPlacement } = require('./window-placement.cjs');
 const {
@@ -51,6 +52,7 @@ let discoveryHost = null;
 let captureHost = null;
 let wikiHost = null;
 let shareHost = null;
+let characterStorage = null;
 let quitting = false;
 let sessionNeedsReload = false;
 let windowPlacement = null;
@@ -855,6 +857,9 @@ async function bootstrap() {
         await electron.session.defaultSession.clearCache();
         config=await updateConfig({frontendCacheVersion:APP_VERSION});
     }
+    characterStorage = new CharacterStorage({directory:userDataDir(),electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
+        warn:message=>console.warn('[Eye of Zomm]',message)});
+    await characterStorage.initialize();
     captureHost = new CaptureHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     wikiHost = new WikiHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
         stateDir:path.join(userDataDir(),'wiki-contributions'),version:APP_VERSION});
@@ -942,5 +947,6 @@ app.on('before-quit', event => {
     shareHost?.dispose();
     appUpdater?.shutdown();
     try { server?.close(); } catch {}
-    quitFlush=Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain]).finally(()=>{quitReady=true;app.quit();});
+    quitFlush=Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain,characterStorage?.close()])
+        .finally(()=>{electron.session.defaultSession.flushStorageData();quitReady=true;app.quit();});
 });

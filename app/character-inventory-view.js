@@ -1,4 +1,5 @@
 import { CHARACTER_SLOTS, characterBaseItemName, characterEquipmentEligibility, characterItemStats, characterStatLabel, safeCharacterIcon } from './character-model.js';
+import { isItemStatModified } from './item-stat-presentation.js';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const number=value=>value===null||value===undefined?'?':Number.isInteger(value)?String(value):String(Math.round(value*100)/100);
@@ -6,9 +7,10 @@ export const CHARACTER_EQUIPMENT_ROWS=Object.freeze([
     ['ear1','neck','face','head','ear2'],
     ['finger1','wrist1','arms','hands','wrist2','finger2'],
     ['shoulders','chest','back','waist','legs','feet'],
-    ['primary','secondary','range','ammo','charm','power']
+    ['primary','secondary','range','ammo','charm','power'],
+    ['any1','any2']
 ]);
-const SHORT_SLOT={ear1:'L ear',ear2:'R ear',finger1:'L finger',finger2:'R finger',wrist1:'L wrist',wrist2:'R wrist',shoulders:'Shoulder',primary:'Primary',secondary:'Second.',power:'Power'};
+const SHORT_SLOT={ear1:'L ear',ear2:'R ear',finger1:'L finger',finger2:'R finger',wrist1:'L wrist',wrist2:'R wrist',shoulders:'Shoulder',primary:'Primary',secondary:'Second.',power:'Power',any1:'Any 1',any2:'Any 2'};
 const SLOT_MARK={ear1:'LE',ear2:'RE',head:'HD',face:'FC',neck:'NK',shoulders:'SH',arms:'AR',back:'BK',wrist1:'LW',wrist2:'RW',range:'RG',hands:'HN',primary:'1H',secondary:'2H',finger1:'LF',finger2:'RF',chest:'CH',legs:'LG',feet:'FT',waist:'WT',ammo:'AM',charm:'CM',power:'PS'};
 export function characterItemLabel(card){
     const name=characterBaseItemName(card?.name)||'Unknown item';
@@ -21,7 +23,7 @@ export function characterEquipmentMarkup(snapshot){
     const byId=new Map(snapshot.candidates.map(card=>[card.id,card])),slots=new Map(CHARACTER_SLOTS.map(slot=>[slot.id,slot]));
     return CHARACTER_EQUIPMENT_ROWS.flatMap((row,r)=>row.map((id,c)=>{
         const slot=slots.get(id),card=byId.get(snapshot.equipment[id]);
-        return `<div class="character-slot" data-slot-id="${id}" style="--slot-row:${r+1};--slot-column:${c+1}"><span class="character-slot-label">${escape(SHORT_SLOT[id]||slot.label)}</span><button type="button" class="character-slot-icon ${card?'is-equipped':''}" ${card?`data-equipped-card="${id}" data-edit-card="${escape(card.id)}" draggable="true"`:`data-equip-slot="${id}"`} aria-label="${escape(`${slot.label}: ${card?characterItemLabel(card):'empty'}`)}">${card?itemIcon(card)+tierBadge(card):`<span aria-hidden="true">${SLOT_MARK[id]}</span>`}</button></div>`;
+        return `<div class="character-slot ${slot.universal?'is-universal':''}" data-slot-id="${id}" style="--slot-row:${r+1};--slot-column:${c+1+(r===4?2:0)}"><span class="character-slot-label">${escape(SHORT_SLOT[id]||slot.label)}</span><button type="button" class="character-slot-icon ${card?'is-equipped':''}" ${card?`data-equipped-card="${id}" data-edit-card="${escape(card.id)}" draggable="true"`:`data-equip-slot="${id}"`} aria-label="${escape(`${slot.label}: ${card?characterItemLabel(card):'empty'}`)}">${card?itemIcon(card)+tierBadge(card):`<span aria-hidden="true">${slot.universal?'ANY':SLOT_MARK[id]}</span>`}</button></div>`;
     })).join('');
 }
 
@@ -46,8 +48,16 @@ export function characterStatSummaryMarkup(totals){
     }).join('')}</dl></section>`).join('');
 }
 
-export function characterItemTooltipMarkup(card){
+export function characterItemTitleMarkup(card){
+    return `<div class="character-item-detail-title">${itemIcon(card)}<div><strong>${escape(characterItemLabel(card))}</strong><small>${escape(card.slots.join(' / ')||'Slots unknown')}${card.level!==null?` · Level ${escape(card.level)}`:''}</small></div></div>`;
+}
+export function characterTierControlsMarkup(card){
+    const maximum=card.tier===10?0:card.tier===null?0:2**card.tier-1;
+    return `<div class="character-tier-controls"><label>Item tier <output data-card-tier-value>${card.tier===null?'Unknown':`+${card.tier}`}</output><input data-card-tier type="range" min="0" max="10" step="1" value="${card.tier??0}" aria-label="Selected item tier"></label><label>Progress<input data-card-fraction type="number" min="0" max="${maximum}" step="1" value="${card.fraction??''}" placeholder="Unknown" ${card.tier===null||card.tier===10?'disabled':''} aria-label="Selected item fractional progress"></label><div class="capture-actions"><button class="text-button" type="button" data-card-tier-unknown>Unknown tier</button>${Object.keys(card.observedStats).length?'<button class="text-button" type="button" data-card-observed-basis>Use captured stats</button>':''}</div></div>`;
+}
+export function characterItemStatBodyMarkup(card){
     const read=characterItemStats(card),known=characterEquipmentEligibility(card).known;
     const raw=String(card.observedName||'').trim(),tierMatch=raw.match(/\+(\d+)\s*$/),tierConflict=tierMatch&&card.tier!==null&&Number(tierMatch[1])!==card.tier;
-    return `<div class="character-item-detail-title">${itemIcon(card)}<div><strong>${escape(characterItemLabel(card))}</strong><small>${escape(card.slots.join(' / ')||'Slots unknown')}${card.level!==null?` · Level ${escape(card.level)}`:''}</small></div></div>${known?'':'<p class="character-match-warning">! Match this item to the cached wiki catalog before equipping.</p>'}<dl class="character-item-stat-block">${Object.entries(read.stats).map(([key,value])=>`<div><dt>${escape(characterStatLabel(key))}</dt><dd>${number(value)}</dd></div>`).join('')||'<div><dt>Statistics</dt><dd>Not read</dd></div>'}</dl>${raw&&characterBaseItemName(raw)!==characterBaseItemName(card.name)?`<p class="settings-helper">Screen read: ${escape(raw)}</p>`:''}${tierConflict?'<p class="character-match-warning">The screen-read tier differs from this card. Review its tier.</p>':''}<p class="settings-helper">${read.basis==='observed-examine'?'Observed item values':'Catalog values at this tier'}${read.complete?'':' · partial / review unknown values'}</p>`;
+    return `${known?'':'<p class="character-match-warning">! Match this item to the cached wiki catalog before equipping.</p>'}<dl class="character-item-stat-block">${Object.entries(read.stats).map(([key,value])=>`<div><dt>${escape(characterStatLabel(key))}</dt><dd class="${read.basis!=='observed-examine'&&isItemStatModified(card.baseStats[key],value,card.tier)?'is-scaled':''}">${number(value)}</dd></div>`).join('')||'<div><dt>Statistics</dt><dd>Not read</dd></div>'}</dl>${raw&&characterBaseItemName(raw)!==characterBaseItemName(card.name)?`<p class="settings-helper">Screen read: ${escape(raw)}</p>`:''}${tierConflict&&read.basis!=='catalog-tier-preview'?'<p class="character-match-warning">The screen-read tier differs from this card. Review its tier.</p>':''}<p class="settings-helper">${read.basis==='observed-examine'?'Observed item values':read.basis==='catalog-tier-preview'?'Preview from wiki base stats · original captured values retained':'Catalog values at this tier'}${read.complete?'':' · partial / review unknown values'}</p>${[card.previewWarning,card.slotReadWarning].filter(Boolean).map(message=>`<p class="character-match-warning">${escape(message)}</p>`).join('')}`;
 }
+export function characterItemTooltipMarkup(card){return characterItemTitleMarkup(card)+characterItemStatBodyMarkup(card);}

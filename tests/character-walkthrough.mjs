@@ -169,3 +169,45 @@ console.log('Character walkthrough: explicit source start, resumable phases, sta
 console.log('Walkthrough review: whitespace-preserving bounded drafts, bounded original identity aliases, unique physical-card matching and alias-aware ambiguity/removal passed.');
 console.log('Delayed item reads: bounded capture-phase windows, first-frame start timing, strict base freshness, session/source/generation rejection, explicit imports and canceled replay passed.');
 console.log('Pending journal append: actual host suppresses the invalidated live event and remount rejects canceled-generation recovery while preserving accepted cards.');
+
+// Starting a flow resets its tracking/gear review, never the stored inventory.
+// Model dedup happens only after the original source/phase admission succeeds.
+const persistentValues=new Map(),persistentStorage={getItem:key=>persistentValues.get(key)||null,setItem:(key,value)=>persistentValues.set(key,value)};
+let persistentClock=40000,persistentSession='persistent-flow-a';
+const persistentFlow=createCharacterWalkthrough({storage:persistentStorage,now:()=>persistentClock,id:()=>persistentSession});let persistentModel=createCharacterModel({storage:persistentStorage,now:()=>persistentClock}),persistentCardId=null;
+const persistentCatalog={name:'Synthetic Persistent Walkthrough Cap',wikiTitle:'Synthetic Persistent Walkthrough Cap',slots:['HEAD'],stats:{HP:40}};
+for(const [index,sessionId]of ['persistent-flow-a','persistent-flow-b'].entries()){
+    persistentSession=sessionId;persistentFlow.begin();persistentModel.beginSnapshot();persistentFlow.advance();persistentFlow.source('window:persistent');
+    const status={owner:'character',sessionId,phase:'running',source:{id:'window:persistent'},generation:index+1,generationStartedAt:persistentClock};persistentFlow.syncCapture(status);persistentFlow.advance({captureRunning:true,itemReadStartedAt:persistentClock});persistentClock+=10;
+    const record={id:`persistent-read-${index}`,kind:'ocr',owner:'character',sessionId,capturedAt:new Date(persistentClock).toISOString(),sequence:index+1,input:{sourceId:status.source.id,captureGeneration:status.generation},subject:{kind:'item',name:'Synthetic Persistent Walkthrough Cap'},fields:[{key:'name',value:'Synthetic Persistent Walkthrough Cap'},{key:'slots',value:['Head']},{key:'tier',value:index},{key:'fraction',value:0},{key:'hp',value:41+index}]};
+    assert(persistentFlow.acceptsItem(record));assert(!persistentFlow.acceptsItem({...record,input:{...record.input,sourceId:'wrong-source'}}));assert(!persistentFlow.acceptsItem({...record,input:{...record.input,captureGeneration:0}}));assert(!persistentFlow.acceptsItem({...record,sessionId:'wrong-session'}));
+    const result=persistentModel.intake(record,{wikiItem:persistentCatalog});if(persistentCardId)assert.equal(result.candidate.id,persistentCardId);persistentCardId=result.candidate.id;persistentFlow.rememberItem(result.candidate);persistentModel.autoAssign(persistentCardId);
+    persistentClock+=10;persistentFlow.advance({sequence:record.sequence});assert(!persistentFlow.acceptsBase(record),'An earlier eligible item cannot become a fresh No Equipment baseline');assert(!persistentFlow.acceptsItem({...record,id:'base-phase-item',capturedAt:new Date(persistentClock).toISOString()}));
+    persistentFlow.cancel();persistentModel=createCharacterModel({storage:persistentStorage,now:()=>persistentClock});assert.equal(persistentModel.snapshot().candidates.length,1);assert.equal(persistentModel.snapshot().equipment.head,persistentCardId);persistentClock+=100;
+}
+assert.equal(persistentModel.snapshot().candidates[0].evidence.length,2);assert.equal(persistentModel.snapshot().candidates[0].tier,1);
+console.log('Persistent inventory: a new walkthrough reuses the same automatic card across sessions while source/generation/phase and fresh-base gates remain strict.');
+
+let ignoredClock=50000;const ignoredStore=new Map(),ignoredStorage={getItem:key=>ignoredStore.get(key)||null,setItem:(key,value)=>ignoredStore.set(key,value)},passFlow=createCharacterWalkthrough({storage:ignoredStorage,now:()=>ignoredClock,id:()=> 'synthetic-ignore-pass'});
+passFlow.begin();passFlow.advance();passFlow.source('window:ignore-pass');
+let passStatus={owner:'character',sessionId:'synthetic-ignore-pass',phase:'running',source:{id:'window:ignore-pass'},generation:1,generationStartedAt:ignoredClock};passFlow.syncCapture(passStatus);passFlow.advance({captureRunning:true,itemReadStartedAt:ignoredClock});
+const ignoredCard={id:'removed-synthetic-card',name:'Synthetic Removed Cap',tier:3,fraction:0};passFlow.rememberItem(ignoredCard);ignoredClock=50010;passFlow.removeItem(ignoredCard);
+const passRead=(id,at)=>({id,kind:'ocr',owner:'character',sessionId:'synthetic-ignore-pass',capturedAt:new Date(at).toISOString(),input:{sourceId:'window:ignore-pass',captureGeneration:1}});
+ignoredClock=50080;const heldRead=passRead('held-tooltip-heartbeat',50060),queuedBeforeX=passRead('queued-before-X',50009);assert(passFlow.acceptsItem(heldRead));assert(passFlow.ignores(ignoredCard,heldRead),'Same-pass held-tooltip heartbeat cannot undo X');assert(passFlow.ignores(ignoredCard,queuedBeforeX));
+assert(passFlow.ignores({...ignoredCard,tier:7,fraction:5},heldRead),'An OCR tier/progress fluctuation cannot recreate the same removed item type inside the held pass');
+const legacyIgnored={...passFlow.snapshot(),ignored:passFlow.snapshot().ignored.map(({name,tier,fraction,augments})=>({name,tier,fraction,augments}))},legacyIgnoreFlow=createCharacterWalkthrough({storage:{getItem:()=>JSON.stringify(legacyIgnored)},now:()=>ignoredClock});
+legacyIgnoreFlow.syncCapture(passStatus);assert(legacyIgnoreFlow.ignores(ignoredCard,heldRead),'A released identity-only ignore remains bound to its saved pass on remount');
+ignoredClock=50100;passFlow.rescanItems();ignoredClock=50120;const afterRescan=passRead('fresh-after-rescan',50101),betweenXAndRescan=passRead('queued-before-rescan',50090);
+assert(passFlow.acceptsItem(afterRescan));assert(!passFlow.ignores(ignoredCard,afterRescan),'Explicit Rescan admits only a fresh frame in the new eligible pass');assert(passFlow.ignores(ignoredCard,queuedBeforeX));assert(passFlow.ignores(ignoredCard,betweenXAndRescan),'Queued frames from the removed pass remain blocked after Rescan');
+assert(passFlow.ignores(ignoredCard,{...afterRescan,sessionId:'wrong-session'}));assert(passFlow.ignores(ignoredCard,{...afterRescan,input:{...afterRescan.input,sourceId:'wrong-source'}}));
+ignoredClock=50200;passStatus={...passStatus,generation:2,generationStartedAt:ignoredClock};legacyIgnoreFlow.syncCapture(passStatus);ignoredClock=50220;const newGeneration={...passRead('fresh-after-upgrade-resume',50201),input:{sourceId:'window:ignore-pass',captureGeneration:2}};
+assert(legacyIgnoreFlow.acceptsItem(newGeneration));assert(!legacyIgnoreFlow.ignores(ignoredCard,newGeneration),'Explicit resume/new generation can recover a legacy ignored identity using fresh frames');assert(legacyIgnoreFlow.ignores(ignoredCard,heldRead),'Legacy queued/journal frames never become fresh through migration');
+ignoredClock=50300;passFlow.advance({sequence:1});assert.equal(passFlow.snapshot().step,'base');assert.throws(()=>passFlow.rescanItems(),/Unequip/);assert(!passFlow.acceptsItem(passRead('base-item',50301)));assert(!passFlow.acceptsBase({...queuedBeforeX,sequence:2}));passFlow.acceptBase();ignoredClock=50400;passFlow.advance();ignoredClock=50420;const laterPhase=passRead('fresh-reequip',50401);assert(!passFlow.ignores(ignoredCard,laterPhase),'A later eligible phase automatically opens a recovery pass');
+passFlow.rememberItem(ignoredCard);ignoredClock=50430;passFlow.removeItem(ignoredCard);ignoredClock=50440;passFlow.rescanItems();ignoredClock=50460;
+const manualAfter={...passRead('manual-import',50455),kind:'manual',input:{sourceId:null,captureGeneration:3}},manualBeforeToken={eligible:true,sessionId:'synthetic-ignore-pass',at:50425},manualAfterToken={...manualBeforeToken,at:50445};
+assert(passFlow.ignores(ignoredCard,manualAfter,{manualRead:manualBeforeToken}),'A pre-X pending file import cannot undo removal using its later completion timestamp');assert(!passFlow.ignores(ignoredCard,manualAfter,{manualRead:manualAfterToken}));assert(passFlow.ignores(ignoredCard,manualAfter),'Unsolicited manual journal rows never reset an ignore');
+// Privacy-safe analogue of a small saved inventory with many rejected aliases.
+for(let index=0;index<17;index++)passFlow.removeItem({id:`synthetic-alias-${index}`,name:`Synthetic ignored alias ${index}`,tier:0});
+ignoredClock=50500;passFlow.rescanItems();ignoredClock=50520;for(let index=0;index<17;index++)assert(!passFlow.ignores({name:`Synthetic ignored alias ${index}`,tier:0},passRead(`recovered-alias-${index}`,50501)));
+assert(passFlow.snapshot().ignored.length<=120);assert(passFlow.snapshot().itemReadWindows.length<=32);
+console.log('Removal passes: held rereads and stale queued/manual records stay blocked; fresh phase/resume/Rescan records recover, including conservatively migrated legacy ignores.');

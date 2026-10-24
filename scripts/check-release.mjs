@@ -60,7 +60,7 @@ for (const relative of ['../.github/workflows/build-windows.yml']) {
 }
 
 const windowsWorkflow = readFileSync(new URL('../.github/workflows/build-windows.yml', import.meta.url), 'utf8');
-for (const required of ['workflow_call:', 'bootstrap_artifact:', 'Download shared verified release bootstrap', "inputs.bootstrap_artifact == ''", "inputs.bootstrap_artifact != ''", 'SHA256SUMS-Windows-x64.txt', 'npm run test:appearance']) {
+for (const required of ['workflow_call:', 'bootstrap_artifact:', 'Download shared verified release bootstrap', "inputs.bootstrap_artifact == ''", "inputs.bootstrap_artifact != ''", 'SHA256SUMS-Windows-x64.txt', 'npm run test:appearance', 'npm run test:character-storage']) {
     if (!windowsWorkflow.includes(required)) throw new Error(`Windows workflow is missing shared release behavior: ${required}`);
 }
 if (windowsWorkflow.includes('action-gh-release') || windowsWorkflow.includes('gh release create')) throw new Error('The Windows build must not independently publish a release.');
@@ -79,7 +79,7 @@ for (const required of ['release-assets.mjs --notes --source-commit', '--notes-f
 }
 
 const linuxWorkflow = readFileSync(new URL('../.github/workflows/build-linux.yml', import.meta.url), 'utf8');
-for (const required of ['ubuntu-22.04', 'npm ci', 'npm run audit:deps', 'npm test', 'xvfb-run', 'openbox', 'npm run test:native-overlays', 'npm run test:map-overlay-3d', 'npm run test:appearance', 'node scripts/test-linux-package.mjs', '--packaged-root dist/linux-unpacked/resources/app.asar', 'fetch-bootstrap-pack.mjs --required', 'Download shared verified release bootstrap', "inputs.bootstrap_artifact == ''", "inputs.bootstrap_artifact != ''", 'npm run test:catalog', 'npm run dist:linux', 'npm run test:artifact -- --platform linux', 'SHA256SUMS-Linux-x64.txt']) {
+for (const required of ['ubuntu-22.04', 'npm ci', 'npm run audit:deps', 'npm test', 'xvfb-run', 'openbox', 'npm run test:native-overlays', 'npm run test:map-overlay-3d', 'npm run test:appearance', 'node scripts/test-linux-package.mjs', '--packaged-root dist/linux-unpacked/resources/app.asar', 'fetch-bootstrap-pack.mjs --required', 'Download shared verified release bootstrap', "inputs.bootstrap_artifact == ''", "inputs.bootstrap_artifact != ''", 'npm run test:catalog', 'npm run dist:linux', 'npm run test:artifact -- --platform linux', 'npm run test:character-storage', 'SHA256SUMS-Linux-x64.txt']) {
     if (!linuxWorkflow.includes(required)) throw new Error(`Linux workflow is missing native/package release gate: ${required}`);
 }
 if (linuxWorkflow.includes('action-gh-release') || linuxWorkflow.includes('gh release create')) throw new Error('The Linux build must not independently publish a release.');

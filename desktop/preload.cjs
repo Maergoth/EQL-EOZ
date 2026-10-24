@@ -2,6 +2,12 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+contextBridge.exposeInMainWorld('eyeOfZommCharacterStorage', {
+    read:()=>ipcRenderer.invoke('eye-of-zomm:character-storage','read'),
+    write:value=>ipcRenderer.invoke('eye-of-zomm:character-storage','write',value),
+    flush:()=>ipcRenderer.invoke('eye-of-zomm:character-storage','flush')
+});
+
 contextBridge.exposeInMainWorld('eyeOfZommWindow', {
     minimize: () => ipcRenderer.invoke('eye-of-zomm:window', 'minimize'),
     toggleMaximize: () => ipcRenderer.invoke('eye-of-zomm:window', 'toggle-maximize'),
