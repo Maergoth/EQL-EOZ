@@ -374,6 +374,12 @@ async function run({root,temporary,screenshots}){
         await click(`[data-loose-inventory] [data-edit-card="${fuzzyId}"]`);await click('[data-slot-id="any1"] [data-equip-slot]');assert.equal((await model()).equipment.any1,fuzzyId,'Any 1 accepts a known item without changing its normal slots');await click(`[data-equipped-card="any1"][data-edit-card="${fuzzyId}"]`);await click('[data-card-unequip]');await click('[data-slot-id="any2"] [data-equip-slot]');assert.equal((await model()).equipment.any2,fuzzyId,'Any 2 is independently usable');await click(`[data-equipped-card="any2"][data-edit-card="${fuzzyId}"]`);await click('[data-card-unequip]');
         assert.equal(await execute(()=>document.querySelector('.character-advanced-editor').open),false);await snapshot('character-selected-tier.png',{selector:'[data-character-editor]'});
         await snapshot('character-compact-inventory-1024.png',{selector:'[data-character-slots]'});await snapshot('character-compact-inventory-1024-20px.png',{font:20,selector:'[data-character-slots]'});
+        // Leave an actual removal alias in this flow without removing either
+        // saved Ring. After completion it must not veto a deliberate import.
+        await click(`[data-edit-card="${ringCopies[0].id}"]`);await click('[data-duplicate-card]');
+        const temporaryRing=(await model()).candidates.find(card=>card.name==='Synthetic Recovered Ring'&&!ringCopies.some(existing=>existing.id===card.id));assert(temporaryRing);
+        await click('[data-remove-card]');assert.equal((await model()).candidates.filter(card=>card.name==='Synthetic Recovered Ring').length,2);
+        assert.equal(await execute(()=>fixture.flow().ignored.some(item=>item.name==='synthetic recovered ring')),true,'A real removal alias remains saved for the completed flow');
         await click('[data-walkthrough-next]');await step('base');
         const copyGate=await execute(()=>fixture.flow());
         await observe('character',{hp:620,str:76},{capturedAt:new Date(copyGate.baseAfterAt+1).toISOString(),sequence:copyGate.baseAfterSequence+1});
@@ -386,6 +392,12 @@ async function run({root,temporary,screenshots}){
         await click('[data-share-copy]');await until(()=>execute(()=>fixture.copyCalls.length===3),'repeat completed copy');
         assert.equal(await execute(()=>fixture.stops.length),2,'Repeat copy does not stop another session');
         await click('[data-share-close]');
+        const inactiveBefore=await model(),inactiveRingBefore=inactiveBefore.candidates.filter(card=>card.name==='Synthetic Recovered Ring');assert.equal(inactiveRingBefore.length,2);assert.equal(await execute(()=>fixture.flow().active),false);
+        await click('[data-character-workbench] [data-character-import]');await until(()=>execute(()=>Boolean(fixture.pendingImport)),'explicit screenshot import outside a walkthrough');
+        await execute(()=>fixture.pendingImport.finish([{kind:'item',values:{name:'Synthetic Recovered Ring',slots:['Fingers'],tier:6,fraction:0,hp:17}}]));await until(()=>execute(()=>!fixture.pendingImport),'inactive screenshot import completes');
+        assert.equal((await model()).candidates.length,inactiveBefore.candidates.length,'An ambiguous inactive import does not create a third copy');assert.equal(await execute(()=>document.querySelectorAll('[data-ocr-copy-choice]').length),2,'The explicit inactive import offers both saved copies despite the old removal alias');
+        const chosenRing=inactiveRingBefore[0],unchosenRing=inactiveRingBefore[1];await click(`[data-ocr-copy-choice="${chosenRing.id}"]`);
+        const inactiveAfter=await model();assert.equal(inactiveAfter.candidates.length,inactiveBefore.candidates.length);assert.equal(inactiveAfter.candidates.find(card=>card.id===chosenRing.id).observedStats.HP,17,'An old completed-flow removal cannot veto an explicit saved-copy selection');assert.equal(inactiveAfter.candidates.find(card=>card.id===chosenRing.id).tier,6);assert.deepEqual(inactiveAfter.candidates.find(card=>card.id===unchosenRing.id),unchosenRing,'The other physical copy is untouched');assert.equal(await execute(()=>fixture.state.enabled),false,'The offline import and copy choice do not restart screen capture');
         assert.equal(requests.length,0,`Walkthrough must stay offline: ${JSON.stringify(requests)}`);
         await execute(()=>fixture.workspace.dispose());
         return{ok:true,message:'Native Character walkthrough passed: staged freshness, persistent inventory, cross-session OCR dedup, manual-copy choice, Rescan cutoffs, manual placement, 25 strict/Any slots and drag targets, computed review, resumable capture and completion.',screenshots:!!screenshots};

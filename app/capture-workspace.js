@@ -373,7 +373,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
                     if(walkthrough.snapshot().active?!walkthrough.acceptsItem(observation,{manualRead}):!(manualRead?.eligible&&manualRead.inactive))return warning('This reading belongs to an earlier capture pass. Show the item again.');
                     const current=character.lookupObservation(observation,options),id=button.dataset.ocrCopyChoice;
                     if(!(current.status==='match'&&current.candidateId===id||current.status==='ambiguous'&&current.choices.includes(id))){status.replaceChildren();return warning('Those item copies changed. Show the item again before choosing a copy.');}
-                    if(walkthrough.ignores(rawAdapted,observation,{manualRead})||walkthrough.ignores(adapted,observation,{manualRead})){status.replaceChildren();return warning('That item was removed during this pass. Use Rescan removed items for a fresh reading.');}
+                    if(walkthrough.snapshot().active&&(walkthrough.ignores(rawAdapted,observation,{manualRead})||walkthrough.ignores(adapted,observation,{manualRead}))){status.replaceChildren();return warning('That item was removed during this pass. Use Rescan removed items for a fresh reading.');}
                     const resolved=character.mergeObservation(id,observation,options);status.replaceChildren();accept(resolved);
                 });
                 return;
