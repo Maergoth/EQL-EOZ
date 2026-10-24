@@ -4,11 +4,20 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.8: clearer Character cards and reviewed contributions.** This
-follow-up adds equipped-hover tier controls, imported Exaltations, richer item
-details, User-page character sheets and a screenshot-based Icon Finder. Version
-0.9.8 and its wiki integration are published; see
-[the completed release record](docs/RELEASE_098_PLAN.md).
+**0.9.9: clearer gap reviews and Character controls.** Filter the discovery
+queue by gap type, with new monsters/items first and plain New Page / Update Page
+tags. Existing-page reviews show the specific addition and linked pages; other
+fields stay collapsed. Duplicate/case-variant matches and known Exaltation export
+names no longer become separate page work. Item tier changes update equipment
+badges immediately, with a short hover delay and compact Exaltation summaries.
+See [the release plan](docs/RELEASE_099_PLAN.md) for implementation and checks.
+
+![Filtered discovery queue and clear page-action tags](app/assets/whats-new/0.9.9/contribution-filtered-queue.png)
+
+![Targeted source update with destination card and linked-page additions](app/assets/whats-new/0.9.9/contribution-targeted-source-update.png)
+
+These are actual Chromium component captures with synthetic data and isolated
+wiki/storage APIs. Earlier screenshots and browsable updates remain archived.
 
 Keep all gear on. Enter character details, type
 `/outputfile inventory`, then let EoZ detect the fresh matching export in your
@@ -25,7 +34,7 @@ panes. See [the inventory-export flow](docs/CHARACTER_WALKTHROUGH.md) and
 
 The compact inspect and interactive wiki sharing introduced in 0.9.6 remain:
 24 equipment slots including two Any slots, clickable known gear/Exaltations,
-PNG copy/save and an explicitly reviewed interactive share. In 0.9.8 new shares
+PNG copy/save and an explicitly reviewed interactive share. Since 0.9.8 new shares
 target your **User:Name** page. Character Select preserves
 separate **Character (Server)** saves. The wiki contract and activation boundary
 are documented in [the cross-repository plan](docs/CHARACTER_SHEETS_PLAN.md).
@@ -417,3 +426,12 @@ before changing either side of that contract.
 The main source areas are `app/` (UI, parsing, maps and local knowledge), `desktop/` (Electron, overlays and file bridge), `server/` (wiki export), `scripts/` (build/validation), `tests/` and `wiki/` (optional launcher integration).
 
 Eye of Zomm is [MIT licensed](LICENSE). Zone Viewer, Recast/Detour and PNUT notices remain under `THIRD_PARTY/`.
+
+The 0.9.9 presentation layer is in `app/contribution-presentation.js` (queue
+categories, filters and order), `app/contribution-update.js` (specific gap fields
+and addition summaries), and `app/contribution-editor.js` (destination cards and
+form markup). `desktop/wiki-client.cjs` independently builds canonical reciprocal
+item/monster/zone edits; it never trusts a UI summary as authorization. Unsupported
+existing page layouts need manual resolution instead of destructive reformatting.
+`npm run test:workspace-099` exercises the real component with isolated synthetic
+records, including pointer timing, filters, focused tier changes and slot badges.

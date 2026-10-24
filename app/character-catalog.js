@@ -1,4 +1,5 @@
 import {characterCatalogDetails,characterItemDetailsMarkup} from './character-item-card.js';
+import {createWikiResolver,itemExaltationBaseIdentity,itemExportBaseIdentity} from './wiki-identity.js';
 import { characterBaseItemName, characterSlotKinds, normalizeCharacterStats, safeCharacterIcon } from './character-model.js';
 import { scaleItemStat } from './item-scaling.js';
 import { isItemStatModified } from './item-stat-presentation.js';
@@ -77,20 +78,30 @@ export function resolveCharacterCatalog(pack,observedName,{limit=CHARACTER_CATAL
 
 /** Inventory import establishes exact article presence even without rich stats.
  * Fuzzy proposals stay manual. Presence never supplies invented equipment stats. */
+const inventoryResolvers=new WeakMap();
+function inventoryResolver(pack){
+    if(!pack||typeof pack!=='object')return createWikiResolver({});
+    const version=pack.meta?.manifestVersion||pack.meta?.version,prior=inventoryResolvers.get(pack);
+    if(prior&&prior.items===pack.items&&prior.entities===pack.wikiEntities&&prior.version===version)return prior.resolver;
+    const resolver=createWikiResolver(pack);inventoryResolvers.set(pack,{items:pack.items,entities:pack.wikiEntities,version,resolver});return resolver;
+}
 export function resolveInventoryCatalog(pack,name,{socket=false}={}){
+    const resolver=inventoryResolver(pack);
     const lookup=value=>{
-        const match=resolveCharacterCatalog(pack,value);
-        if(match.status==='exact')return {item:match.item,icon:pack?.icons?.[match.item.iconId]};
-        const key=value=>text(value).normalize('NFKC').replace(/_/g,' ').replace(/\s+/gu,' ').toLowerCase(),query=key(characterBaseItemName(value));
-        for(const record of [...(pack?.wikiEntities?.items||[]),...(pack?.wikiEntities?.titles||[])]){
-            const title=typeof record==='string'?record:record?.wikiTitle||record?.title||record?.name;
-            if(title&&[title,record?.name].some(name=>name&&key(name)===query))return {item:{name:characterBaseItemName(value),wikiTitle:title,slots:[],stats:{}}};
-        }
-        return {};
+        const match=resolver.resolve('item',value,{itemAliases:false});
+        if(match.membership!=='present')return {};
+        const item=match.records.find(record=>Array.isArray(pack?.items)&&pack.items.includes(record));
+        return item?{item,icon:pack?.icons?.[item.iconId]}:{item:{name:characterBaseItemName(value),wikiTitle:match.canonicalTitle,slots:[],stats:{}}};
     };
     const direct=lookup(name);if(direct.item)return direct;
-    const base=socket&&characterBaseItemName(name).replace(/\s*\(Exaltation\)$/i,'').trim();
-    if(base&&base!==characterBaseItemName(name)){const resolved=lookup(base);if(resolved.item)return {...resolved,exaltationAlias:true};}
+    // A genuinely ambiguous direct identity must remain a manual decision.
+    if(resolver.resolve('item',name,{itemAliases:false}).membership==='ambiguous')return {};
+    const observed=characterBaseItemName(name),exaltation=socket?itemExaltationBaseIdentity(name):observed;
+    if(exaltation&&exaltation!==observed){const resolved=lookup(exaltation);if(resolved.item)return {...resolved,exaltationAlias:true};}
+    const base=itemExportBaseIdentity(observed);
+    if(/\*$/u.test(observed)&&base&&base!==observed&&(!/\(Exaltation\)/i.test(observed)||socket)){
+        const resolved=lookup(base);if(resolved.item)return {...resolved,exportNameAlias:true};
+    }
     return {};
 }
 

@@ -1,5 +1,7 @@
 # Validation report — v0.9.7
 
+0.9.9: focused identity, import, update-planning and Character source regressions pass. The isolated native component checks match-card layout/dedup, gap filtering, compact source update forms, 350ms actual pointer hover/adjacent transitions, tier badge/focus consistency and unchanged recorded totals at ordinary/large text. These checks are synthetic; exact-head platform/package/publication receipts belong in docs/RELEASE_099_PLAN.md.
+
 ## 0.9.7 candidate: inventory export and observed stats
 
 The current flow replaces the unreleased baseline-retry story: keep gear on,

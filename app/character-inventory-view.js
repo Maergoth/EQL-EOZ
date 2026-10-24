@@ -19,6 +19,23 @@ export function characterItemLabel(card){
     return `${name}${card?.tier===null||card?.tier===undefined?' · tier unknown':card.tier>0?` +${card.tier}`:''}`;
 }
 const tierBadge=card=>`<span class="character-tier" data-item-tier>${card.tier===null?'?':card.tier>0?`+${card.tier}`:'0'}</span>`;
+/** Refresh existing icons without replacing the hovered card or focused tier slider. */
+export function updateCharacterItemTierMarkup(root,card){
+    if(!root?.querySelectorAll||!card?.id)return 0;
+    let changed=0;
+    for(const button of root.querySelectorAll('[data-edit-card]')){
+        if(button.dataset.editCard!==card.id)continue;
+        const label=characterItemLabel(card),badge=button.querySelector('[data-item-tier]'),hiddenName=button.querySelector('.character-sr-only');
+        if(badge)badge.textContent=card.tier===null||card.tier===undefined?'?':card.tier>0?'+'+card.tier:'0';
+        if(hiddenName)hiddenName.textContent=label;
+        const slot=CHARACTER_SLOTS.find(value=>value.id===button.dataset.equippedCard);
+        button.setAttribute('aria-label',slot?slot.label+': '+label:label+(characterEquipmentEligibility(card).known?'':' · match needed'));
+        const remove=slot&&button.closest('[data-slot-id]')?.querySelector('[data-unequip-slot]');
+        if(remove){const description='Unequip '+label+' from '+slot.label;remove.setAttribute('aria-label',description);remove.setAttribute('title',description);}
+        changed++;
+    }
+    return changed;
+}
 function itemIcon(card){return safeCharacterIcon(card?.icon)?`<img src="${escape(card.icon)}" alt="" draggable="false">`:'<span class="character-item-glyph" aria-hidden="true">◇</span>';}
 
 export function characterEquipmentMarkup(snapshot){
@@ -49,7 +66,7 @@ export function characterItemTitleMarkup(card){
     return `<div class="character-item-detail-title">${itemIcon(card)}<div><strong>${escape(characterItemLabel(card))}</strong><small>${escape(card.slots.join(' / ')||'Slots unknown')}${card.level!==null?` · Level ${escape(card.level)}`:''}</small></div></div>`;
 }
 export function characterTierControlsMarkup(card){
-    return `<div class="character-tier-controls"><label>Item tier <output data-card-tier-value>${card.tier===null?'Unknown':`+${card.tier}`}</output><input data-card-tier type="range" min="0" max="10" step="1" value="${card.tier??0}" aria-label="Selected item tier"></label><div class="capture-actions"><button class="text-button" type="button" data-card-tier-unknown>Unknown tier</button>${Object.keys(card.observedStats).length?'<button class="text-button" type="button" data-card-observed-basis>Use captured stats</button>':''}</div></div>`;
+    return `<div class="character-tier-controls"><label>Item tier <output data-card-tier-value>+${card.tier??0}</output><input data-card-tier type="range" min="0" max="10" step="1" value="${card.tier??0}" aria-label="Selected item tier"></label>${Object.keys(card.observedStats).length?'<div class="capture-actions"><button class="text-button" type="button" data-card-observed-basis>Use captured stats</button></div>':''}</div>`;
 }
 export function characterItemStatBodyMarkup(card){
     const read=characterItemStats(card),known=characterEquipmentEligibility(card).known;
@@ -62,7 +79,7 @@ export function characterAugmentSlotsMarkup(card){
     if(!count)return `<button type="button" class="text-button" data-augment-configure="${escape(card.id)}">Exaltation slots: 0 · Change</button>`;
     return `<div class="character-augment-section"><span>Exaltations</span> <button type="button" class="text-button" data-augment-configure="${escape(card.id)}">Change slots</button><div class="character-augment-slots">${Array.from({length:count},(_,index)=>{
         const augment=card.augments?.find(item=>item.index===index),name=augment?characterItemLabel(augment):'Empty Exaltation slot '+(index+1);
-        return `<div class="character-augment-slot"><button type="button" data-augment-pick="${escape(card.id)}" data-augment-index="${index}" aria-label="${escape((augment?'Replace ':'Choose item for ')+name)}" title="${escape(name)}">${augment?itemIcon(augment):'<span aria-hidden="true">+</span>'}</button>${augment?`<button type="button" class="character-augment-remove" data-augment-remove="${escape(card.id)}" data-augment-index="${index}" aria-label="Remove ${escape(name)}">×</button>`:''}</div>`;
+        return `<div class="character-augment-slot"><button type="button" data-augment-pick="${escape(card.id)}" data-augment-index="${index}" aria-label="${escape((augment?'Replace Exaltation: ':'Choose item for ')+name)}" title="${escape(augment?'Exaltation: '+name:name)}">${augment?itemIcon(augment):'<span aria-hidden="true">+</span>'}</button>${augment?`<button type="button" class="character-augment-remove" data-augment-remove="${escape(card.id)}" data-augment-index="${index}" aria-label="Remove ${escape(name)}">×</button>`:''}</div>`;
     }).join('')}</div></div>`;
 }
 export function characterItemTooltipMarkup(card){return characterItemTitleMarkup(card)+`<div data-tooltip-tier data-tooltip-card="${escape(card.id)}">${characterTierControlsMarkup(card)}</div>`+`<div data-tooltip-item-stats>${characterItemStatBodyMarkup(card)}</div>`;}

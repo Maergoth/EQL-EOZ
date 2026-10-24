@@ -70,6 +70,8 @@ jobs:
         run: npm run test:capture-calibration
       - name: Test contribution and character workflows with a loopback wiki
         run: npm run test:capture-workspace
+      - name: Test current contribution and Character UI
+        run: npm run test:workspace-099
       - name: Test guided Character capture and base-only estimates
         run: npm run test:character-walkthrough
       - name: Test installed system fonts and changed-stat colors

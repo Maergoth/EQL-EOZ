@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createCharacterModel, characterLooseCandidates, CHARACTER_SLOTS } from '../app/character-model.js';
 import { characterCatalogCard } from '../app/character-catalog.js';
-import { characterItemLabel, characterEquipmentMarkup, characterLooseInventoryMarkup, characterIdentityMarkup, characterStatSummaryMarkup, characterItemTooltipMarkup, characterTierControlsMarkup, characterItemStatBodyMarkup, CHARACTER_EQUIPMENT_ROWS } from '../app/character-inventory-view.js';
+import { characterItemLabel, updateCharacterItemTierMarkup, characterEquipmentMarkup, characterLooseInventoryMarkup, characterIdentityMarkup, characterStatSummaryMarkup, characterItemTooltipMarkup, characterTierControlsMarkup, characterItemStatBodyMarkup, CHARACTER_EQUIPMENT_ROWS } from '../app/character-inventory-view.js';
 
 const model=createCharacterModel({storage:null}),item={name:'Synthetic Earring',wikiTitle:'Synthetic Earring',slots:['EAR'],stats:{HP:10},statsComplete:true,augmentStatus:'none'};
 const first=model.intake({item:characterCatalogCard(item,{tier:0})}).candidate,second=model.duplicateCandidate(first.id).candidate;
@@ -38,3 +38,24 @@ const controls=characterTierControlsMarkup(unknown);assert(controls.includes('da
 assert.equal(model.setTierPreview(first.id,{tier:2,fraction:0}).ok,true);const preview=model.snapshot().candidates.find(card=>card.id===first.id);const previewMarkup=characterItemStatBodyMarkup(preview);assert(previewMarkup.includes('is-scaled'));assert(previewMarkup.includes('Preview from wiki base stats'));assert(characterItemStatBodyMarkup({...preview,slotReadWarning:'Conflicting slot &lt;value&gt;'}).includes('Conflicting slot &amp;lt;value&amp;gt;'));
 assert.equal(model.setAugmentSlots(first.id,1).ok,true);assert.equal(model.setAugment(first.id,0,characterCatalogCard({...item,name:'Synthetic Tooltip Augment',wikiTitle:'Synthetic Tooltip Augment'},{tier:0})).ok,true);assert(model.assign(first.id,'ear1').ok);
 assert.equal(characterStatSummaryMarkup(model.totals()),partialAtk,'Gear, tier and augment changes affect the item view while the total panel remains the reviewed equipped observation');
+
+// A slider update refreshes both icon surfaces in place, including accessible names.
+function existingButton(id,slot=''){
+    const badge={textContent:'old'},hiddenName={textContent:'old'},attributes={},removeAttributes={};
+    const remove={setAttribute:(key,value)=>removeAttributes[key]=value};
+    return {dataset:{editCard:id,...(slot?{equippedCard:slot}:{})},badge,hiddenName,attributes,removeAttributes,
+        querySelector:selector=>selector==='[data-item-tier]'?badge:selector==='.character-sr-only'?hiddenName:null,
+        setAttribute:(key,value)=>attributes[key]=value,closest:()=>({querySelector:()=>remove})};
+}
+const icon=existingButton(first.id,'ear1'),looseIcon=existingButton(first.id),otherIcon=existingButton(second.id),range={value:'7'};
+const roots={querySelectorAll:()=>[icon,looseIcon,otherIcon]},tierCard={...preview,tier:7};
+assert.equal(updateCharacterItemTierMarkup(roots,tierCard),2);
+assert.equal(icon.badge.textContent,'+7');assert.equal(looseIcon.badge.textContent,'+7');assert.equal(otherIcon.badge.textContent,'old');
+assert.equal(icon.attributes['aria-label'],'Left ear: Synthetic Earring +7');
+assert.equal(looseIcon.hiddenName.textContent,'Synthetic Earring +7');assert.equal(looseIcon.attributes['aria-label'],'Synthetic Earring +7');
+assert.equal(icon.removeAttributes.title,'Unequip Synthetic Earring +7 from Left ear');
+assert.equal(range.value,'7','Badge refresh leaves existing tier slider nodes intact');
+assert.equal(updateCharacterItemTierMarkup(roots,{...tierCard,tier:0}),2);assert.equal(icon.badge.textContent,'0');
+assert.equal(icon.attributes['aria-label'],'Left ear: Synthetic Earring');
+const numeric=characterTierControlsMarkup({...unknown,tier:null});assert(numeric.includes('min="0"'));assert(numeric.includes('value="0"'));assert(numeric.includes('>+0</output>'));assert(!/unknown tier|data-card-tier-unknown/i.test(numeric));
+assert(!characterTierControlsMarkup({...preview,observedStats:{}}).includes('capture-actions'),'No empty action row after retiring unknown tier');

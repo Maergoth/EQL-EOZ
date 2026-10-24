@@ -21,6 +21,9 @@ const summary=characterStatSummaryMarkup(model.totals());assert(!summary.include
 const tooltip=characterItemTooltipMarkup(model.snapshot().candidates.find(card=>card.id===item.id));assert.equal((tooltip.match(/data-augment-pick=/g)||[]).length,2);assert(tooltip.includes('data-augment-remove='));assert(!/partial item stats|augments unknown|partial \/ review/i.test(tooltip));
 const sheet=buildCharacterWikiSheet(model.snapshot()),markup=characterInspectMarkup(sheet);
 assert(markup.includes('Synthetic &lt;Knight&gt;'));assert(!markup.includes('Synthetic <Knight>'));assert(markup.includes('https://eqlwiki.com/Synthetic%20Boots'));assert(markup.includes('https://eqlwiki.com/Synthetic%20Blade'));assert(!markup.includes('HP_CURRENT'));assert(!markup.includes('data-unequip-slot'));assert(!markup.includes('data-character-card'));
+const compactExaltation=markup.match(/<div data-character-exaltation>[\s\S]*?<\/div>/)?.[0];
+assert(compactExaltation?.includes('Exaltation'));assert(compactExaltation?.includes('Synthetic Blade'));
+assert(!compactExaltation.includes('<dl'));assert(!compactExaltation.includes('character-item-details'),'Exaltations expose their identity without duplicating item stat blocks');
 const plan=characterShareLayout(model.snapshot());assert.equal(plan.groups.length,2);assert.equal(plan.groups.flatMap(group=>group.rows).find(row=>row.key==='HP_MAXIMUM').value,500);assert.equal(plan.summary.equipment.length,24);
 assert(!Object.hasOwn(plan.summary.stats,'base'));assert(!Object.hasOwn(plan.summary.stats,'equipped'));
 model.clearCurrentStats();assert(characterTotalGroups(model.totals()).flatMap(group=>group.rows).every(row=>row.value===null),'Legacy baseline and catalog items cannot fabricate equipped totals');

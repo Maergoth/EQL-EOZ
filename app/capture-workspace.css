@@ -79,3 +79,18 @@
 .wiki-icon-finder .icon-finder-inputs{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.icon-finder-paste{border:1px dashed #727d8b;padding:14px;border-radius:6px;color:var(--muted)}.icon-finder-paste:focus-visible{outline:2px solid var(--gold2)}.icon-finder-preview{width:80px;height:80px;object-fit:contain;background:#000}.icon-finder-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin:12px 0}.icon-finder-result{padding:8px;background:#0b141e;border:1px solid #435063;border-radius:6px;min-width:0}.icon-finder-select{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-height:90px;width:100%;color:var(--text);border:0;background:transparent;cursor:pointer;overflow-wrap:anywhere}.icon-finder-select img{width:48px;height:48px;object-fit:contain}.icon-finder-select:hover,.icon-finder-select:focus-visible{outline:1px solid var(--gold2)}.icon-finder-result label{font-size:.8em!important}.icon-finder-inputs input[type=file]{max-width:210px}.observation-settings{border-top:1px solid var(--line-soft);margin-top:24px;padding-top:20px}
 
 #contribution-workspace [hidden],#character-workspace [hidden],#capture-settings [hidden]{display:none!important}
+
+/* 0.9.9: readable gap browsing and vertically arranged destination cards. */
+.contribution-filters{padding:8px 10px;margin:8px 0}.contribution-filters legend{color:var(--gold2);padding-inline:5px}
+#contribution-workspace .contribution-filters label.check-control{margin:7px 0;gap:7px;font-size:.9em}.contribution-filter-count{margin-left:auto;color:var(--muted)}
+#contribution-workspace .contribution-manual{margin:8px 0}.contribution-queue-type{color:var(--gold2)!important}
+.contribution-gap-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}.contribution-gap-tags>span{border:1px solid #465267;border-radius:4px;padding:2px 5px;color:#bac8d8;font-size:.82em}
+.contribution-match-first [data-potential-matches]{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));align-items:stretch;gap:10px;margin:12px 0}
+.contribution-match-first .contribution-match-row{display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:9px;padding:12px;background:#0b1420;border:1px solid #38485a;border-radius:6px;min-width:0}
+.contribution-match-row>a{font-size:1.05em}.contribution-match-row>button{margin:0;font-size:.9em;padding:6px 10px}.contribution-match-first h4{margin-bottom:8px;color:var(--muted)}
+.contribution-page-type{color:var(--gold2);font-weight:600}.contribution-change-summary{padding:12px 16px;border-left:3px solid #d3b660;background:#0b1720;margin:12px 0 18px;line-height:1.6}.contribution-change-summary h3{margin-top:0}.contribution-change-summary ul{padding-left:20px}.contribution-change-summary li{margin:7px 0}
+.contribution-zone-field[hidden]{display:none}
+.character-inspect-slot .character-inspect-item{display:block;visibility:hidden;opacity:0;pointer-events:none;transition:visibility 0s,opacity 0s;transition-delay:0s}
+.character-inspect-slot:hover .character-inspect-item{visibility:visible;opacity:1;pointer-events:auto;transition-delay:350ms}
+.character-inspect-slot:focus-within .character-inspect-item{visibility:visible;opacity:1;pointer-events:auto;transition-delay:0s}
+.character-exaltation-label{color:var(--muted);font-size:.85em}.character-inspect-augments [data-character-exaltation]{margin:7px 0}

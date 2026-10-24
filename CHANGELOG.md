@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.9 - Clearer wiki gap reviews and Character controls
+
+- Browse discovery gaps with New Page / Update Page tags and independent category filters. New monsters and items appear before smaller updates.
+- Choose an existing page from deduplicated vertical cards. Case-forgiving canonical matching and decorated Exaltation/container identities prevent false gaps while real page collisions still need review.
+- Review specific additions on existing pages instead of the full creation form. Drop-source reviews update item, monster and compatible zone lists together, preserving page formatting and revision guards.
+- Use a numeric item-tier slider with immediately matching equipment badges. A 350 ms hover pause prevents accidental popups; Exaltations use compact name summaries.
+
+See [the execution and release record](docs/RELEASE_099_PLAN.md).
+
 ## 0.9.8 - Richer Character cards and reviewed wiki contributions
 
 App publication, wiki schema/templates/API documentation activation and installed-list

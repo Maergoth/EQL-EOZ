@@ -1,5 +1,7 @@
 # Eye of Zomm — Product and UX Vision
 
+0.9.9 makes discovery review task-specific: Page Type > New Page/Update Page, plain gap tags and filters, matching before fields, focused additions for existing articles and preserved item/monster/zone formatting. Character hover waits350ms, tier badges agree immediately and Exaltations have compact names. Recorded character totals remain authoritative.
+
 ## 0.9.8 candidate
 
 Keep the recorded-only Character flow below. Add an equipped-hover tier slider,
