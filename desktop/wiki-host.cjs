@@ -1,10 +1,13 @@
 'use strict';
 const {WikiClient,WikiError,PRODUCTION_ORIGIN,validatePNG}=require('./wiki-client.cjs');
+const {readBoundedFile}=require('./wiki-attachments.cjs');
 const CHANNEL='eye-of-zomm:wiki';
 
 class WikiHost {
-    constructor({electron,origin,getMainWindow,stateDir,version,devWikiOrigin=null,allowLoopbackDevelopment=false,client=null,onStatus=null}) {
+    constructor({electron,origin,getMainWindow,stateDir,version,devWikiOrigin=null,allowLoopbackDevelopment=false,client=null,onStatus=null,onAttachmentPrepared=null,onIconRequest=null}) {
         this.electron=electron;this.origin=origin;this.getMainWindow=getMainWindow;this.disposed=false;this.loginWindow=null;this.onStatus=onStatus;
+        this.onAttachmentPrepared=onAttachmentPrepared;this.onIconRequest=onIconRequest;
+        this.statusRevision=0;
         this.session=electron.session.fromPartition(devWikiOrigin?'eye-of-zomm-wiki-development':'persist:eye-of-zomm-wiki');
         this.client=client||new WikiClient({session:this.session,version,stateDir,origin:devWikiOrigin||PRODUCTION_ORIGIN,allowLoopbackDevelopment});
         this.session.setPermissionRequestHandler?.((_contents,_permission,callback)=>callback(false));
@@ -19,7 +22,12 @@ class WikiHost {
         if(typeof action!=='string')throw new WikiError('action','Invalid wiki action.');
         try{
             switch(action){
-            case 'status':await this.client.load();return await this.client.status();
+            case 'status':{await this.client.load();return await this.freshStatus();}
+            case 'observation-status':return await this.client.observationStatus();
+            case 'submit-observations':return await this.client.submitObservations(value?.batch,{expectedUser:value?.expectedUser});
+            case 'prepare-attachment':return await this.prepareAttachment(value);
+            case 'discard-attachment':return await this.client.attachments.discard(String(value?.attachmentId||''));
+            case 'icon-catalog':case 'icon-match':if(typeof this.onIconRequest!=='function')throw new WikiError('icon','The wiki icon service is unavailable.');return await this.onIconRequest(action,value);
             case 'login':return this.login();
             case 'logout':return await this.logout();
             case 'matches':return await this.client.findMatches(value);
@@ -38,15 +46,33 @@ class WikiHost {
             }
             default:throw new WikiError('action','Unknown wiki action.');
             }
-        }catch(error){throw new Error(`${error.code?`[${error.code}] `:''}${String(error.message||'The wiki action failed.').slice(0,600)}`);}
+        }catch(error){if(['prepare-attachment','discard-attachment'].includes(action)&&typeof error.code==='string'&&/^E[A-Z]+$/.test(error.code))throw new Error('[attachment] The screenshot could not be read or saved. Select it again.');throw new Error(`${error.code?`[${error.code}] `:''}${String(error.message||'The wiki action failed.').slice(0,600)}`);}
     }
-    publishStatus(){
+    async prepareAttachment({candidateId,kind,source}={}){
+        if(typeof candidateId!=='string'||candidateId.length>160||!/^[A-Za-z0-9_-]+$/.test(candidateId)||!['item','npc','zone','spell'].includes(kind)||!['clipboard','file'].includes(source))throw new WikiError('attachment','Choose a candidate and explicitly paste/select a PNG screenshot.');
+        let bytes;
+        if(source==='clipboard'){const image=this.electron.clipboard.readImage();if(image.isEmpty())throw new WikiError('attachment','The clipboard does not contain an image.');const size=image.getSize();if(size.width>8192||size.height>8192||size.width*size.height>15000000)throw new WikiError('png','The screenshot exceeds the image size limit.');bytes=image.toPNG();}
+        else{const selected=await this.electron.dialog.showOpenDialog(this.getMainWindow(),{title:'Select contribution screenshot',properties:['openFile'],filters:[{name:'PNG screenshot',extensions:['png']}]});if(selected.canceled||!selected.filePaths?.[0])return {cancelled:true};bytes=await readBoundedFile(selected.filePaths[0]);}
+        if(this.disposed)throw new WikiError('closed','The wiki service closed.');
+        bytes=validatePNG(bytes);const image=this.electron.nativeImage.createFromBuffer(bytes);if(image.isEmpty())throw new WikiError('png','The screenshot could not be decoded.');
+        const descriptor=await this.client.attachments.add(bytes,{candidateId,kind}),size=image.getSize();
+        try{if(kind==='item'&&typeof this.onAttachmentPrepared==='function')await this.onAttachmentPrepared({png:bytes,candidateId,kind});}
+        catch(error){descriptor.warning='The screenshot was saved, but its item text could not be read. Review the entry manually.';}
+        return {id:descriptor.id,attachmentId:descriptor.id,thumbnail:image.resize({width:240,height:240,quality:'good'}).toDataURL(),width:size.width,height:size.height,bytes:descriptor.bytes,...(descriptor.warning?{warning:descriptor.warning}:{})};
+    }
+    async forwardStatus(status){
         if(this.disposed)return;
-        this.client.status().then(status=>{if(this.disposed)return;if(typeof this.onStatus==='function')this.onStatus(status);else{const main=this.getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('eye-of-zomm:wiki-state',status);}}).catch(()=>{});
+        if(typeof this.onStatus==='function')await this.onStatus(status);
+        else{const main=this.getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('eye-of-zomm:wiki-state',status);}
+    }
+    async freshStatus(){const revision=++this.statusRevision,status=await this.client.status();if(revision===this.statusRevision)await this.forwardStatus(status);return status;}
+    publishStatus(){
+        if(this.disposed)return Promise.resolve();
+        return this.freshStatus().catch(()=>{});
     }
     login(){
         if(this.disposed)throw new WikiError('closed','Wiki login has closed.');
-        if(this.loginWindow&&!this.loginWindow.isDestroyed()){this.loginWindow.show();this.loginWindow.focus();return {opening:true};}
+        if(this.loginWindow&&!this.loginWindow.isDestroyed()){this.loginWindow.show();this.loginWindow.focus();void this.publishStatus();return {opening:true};}
         const window=new this.electron.BrowserWindow({width:1000,height:760,minWidth:640,minHeight:480,title:'Log in to EQL Wiki',autoHideMenuBar:true,backgroundColor:'#0b1420',parent:this.getMainWindow(),webPreferences:{session:this.session,nodeIntegration:false,nodeIntegrationInSubFrames:false,contextIsolation:true,sandbox:true,webSecurity:true,webviewTag:false,allowRunningInsecureContent:false,navigateOnDragDrop:false}});
         this.loginWindow=window;
         const trusted=url=>{try{const parsed=new URL(url);return parsed.origin===this.client.origin&&!parsed.username&&!parsed.password;}catch{return false;}};
@@ -60,8 +86,9 @@ class WikiHost {
     }
     async logout(){
         if(this.client.busy)throw new WikiError('busy','Wait for the current wiki submission before logging out.');
+        this.statusRevision++;
         if(this.loginWindow&&!this.loginWindow.isDestroyed())this.loginWindow.close();
-        await this.session.clearStorageData();await this.session.clearCache();await this.client.clearAccountState();this.publishStatus();return {authenticated:false,user:null};
+        await this.session.clearStorageData();await this.session.clearCache();await this.client.clearAccountState();this.statusRevision++;const status={origin:this.client.origin,authenticated:false,user:null,canEdit:false,canCreate:false,canUpload:false,blocked:false};await this.forwardStatus(status);void this.publishStatus();return status;
     }
     dispose(){this.disposed=true;this.electron.ipcMain.removeHandler(CHANNEL);this.session.removeListener?.('will-download',this.downloadHandler);if(this.loginWindow&&!this.loginWindow.isDestroyed())this.loginWindow.close();this.loginWindow=null;}
 }

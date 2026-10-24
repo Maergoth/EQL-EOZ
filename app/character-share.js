@@ -85,7 +85,7 @@ export async function renderCharacterShare(snapshot,{document=globalThis.documen
             const name=characterItemLabel(item),rows=wrap(name,w-88,.72);
             if(rows.length>3)throw Error('An item name is too long for the compact share card. Review it before exporting.');
             rows.forEach((value,index)=>text(value,x+74,y+39+index*22,{color:COLORS.heading,scale:.72}));
-            const augments=item.augments?.length||0;if(augments)text(augments+' augment'+(augments===1?'':'s'),x+12,y+112,{color:COLORS.muted,scale:.65});
+            const augments=item.augments?.length||0;if(augments)text(augments+' Exaltation'+(augments===1?'':'s'),x+12,y+112,{color:COLORS.muted,scale:.65});
         }
     }
     const gap=24,columnWidth=(width-96-gap)/2;

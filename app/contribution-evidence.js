@@ -1,5 +1,5 @@
 // Log facts become reviewable suggestions, never an inferred spawn or wiki edit.
-import { contributionNameKey } from './contribution-model.js';
+import { createWikiResolver, normalizeWikiIdentity } from './wiki-identity.js';
 
 export const CONTRIBUTION_QUEUE_KEY = 'eql-eye-of-zomm-contributions-v1';
 export const CONTRIBUTION_QUEUE_BYTES = 1800000;
@@ -12,13 +12,7 @@ export function contributionSourceToken(value) {
     return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;
 }
 export function contributionMembership(pack={},kind,name='') {
-    const entities=pack.wikiEntities||{},list=kind==='item'?pack.items:kind==='npc'?pack.npcs:pack.zones;
-    const typed=kind==='item'?entities.items:kind==='npc'?entities.npcs:[];
-    const records=[...(Array.isArray(entities.titles)?entities.titles:[]),...(Array.isArray(typed)?typed:[]),...(Array.isArray(list)?list:[])];
-    const keys=new Set(records.flatMap(record=>typeof record==='string'?[record]:[record?.name,record?.title,record?.wikiTitle,...(Array.isArray(record?.aliases)?record.aliases:[])]).filter(Boolean).map(contributionNameKey));
-    const base=kind==='item'?String(name).replace(/\s*\+\d+(?:\s*\([^)]*\))?\s*$/,'').trim():name;
-    if(keys.has(contributionNameKey(name))||base!==name&&keys.has(contributionNameKey(base)))return 'present';
-    return pack.meta?.wikiEntitiesComplete===true&&pack.meta?.sample!==true&&['items','npcs','titles'].every(key=>Array.isArray(entities[key]))?'missing':'unknown';
+    return createWikiResolver(pack).resolve(kind,name).membership;
 }
 export function logContributionObservation(event,context={}, {now=Date.now(),freshnessMs=10000}={}) {
     if(!event||context.live!==true||!['consider','kill','loot','zone','location'].includes(event.type))return null;
@@ -27,10 +21,12 @@ export function logContributionObservation(event,context={}, {now=Date.now(),fre
     const zone=contributionEvidenceText(event.type==='zone'?event.zone:context.zone||event.zone);
     const source=contributionSourceToken(context.logId),cursor=Number.isSafeInteger(context.cursor)&&context.cursor>=0?context.cursor:null;
     const name=contributionEvidenceText(event.type==='loot'?event.item:event.type==='kill'?event.victim:event.type==='consider'?event.target?.name:event.type==='zone'?event.zone:'');
+    if(['kill','consider'].includes(event.type)&&(event.isPlayer===true||event.victimIsPlayer===true||event.targetType==='player'||event.isPet===true||['you','yourself',...(Array.isArray(context.playerNames)?context.playerNames.slice(0,200):[]).map(normalizeWikiIdentity)].includes(normalizeWikiIdentity(name))))return null;
     const identity=contributionSourceToken(JSON.stringify([event.type,name,zone,event.location||null]));
     const id=`log-${source}-${at}-${cursor??'line'}-${identity}`;
     const capturedAt=new Date(at).toISOString();
-    const input={logId:source,cursor,event:event.type,zone,live:true};
+    const instance=['normal','raid'].includes(context.instance)?context.instance:'unknown';
+    const input={logId:source,cursor,event:event.type,zone,instance,live:true};
     if(event.type==='location'){
         const location=Object.fromEntries(['x','y','z'].map(key=>[key,event.location?.[key]]));
         return Object.values(location).every(value=>typeof value==='number'&&Number.isFinite(value)&&Math.abs(value)<=1e8)
@@ -39,7 +35,7 @@ export function logContributionObservation(event,context={}, {now=Date.now(),fre
     if(!name)return null;
     const kind=event.type==='loot'?'item':['kill','consider'].includes(event.type)?'monster':'zone';
     const fields=[{key:'name',value:name,confidence:100}],relations=[];
-    const relate=(type,relatedName,evidence)=>relations.push({type,name:relatedName,zone,evidence,confirmed:false,eventId:id,at:capturedAt,...(type==='drop-source'?{item:name}:{})});
+    const relate=(type,relatedName,evidence)=>relations.push({type,name:relatedName,zone,instance,evidence,confirmed:false,eventId:id,at:capturedAt,...(type==='drop-source'?{item:name}:{})});
     if(event.type==='consider'&&Number.isFinite(event.target?.level))fields.push({key:'level',value:event.target.level,confidence:100});
     if(kind==='monster'&&zone){relate('mob-zone',name,event.type);relate('zone-population',name,event.type);}
     if(event.type==='loot'){

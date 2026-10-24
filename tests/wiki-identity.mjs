@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {createWikiResolver,normalizeWikiIdentity,itemBaseIdentity,wikiIdentityKey} from '../app/wiki-identity.js';
+import {isGeneratedPetName,classifyNpcEvidence} from '../app/generated-pets.js';
+const pack={meta:{wikiEntitiesComplete:true},wikiEntities:{items:['Copperleaf Cloak'],npcs:["Keeper O'Wood"],titles:['Copperleaf Cloak',"Keeper O'Wood",'Plain Page']},items:[{name:'Copperleaf Cloak',wikiTitle:'Copperleaf Cloak',aliases:['Copperleaf Cape'],revisionId:12}],npcs:[{name:"Keeper O'Wood",wikiTitle:"Keeper O'Wood"}],zones:[{name:'Forest Glade',wikiTitle:'The Forest Glade'}]};
+const resolver=createWikiResolver(pack);
+for(const name of ['COPPERLEAF_CLOAK +5','Copperleaf Cloak+0','Copperleaf Cape +10'])assert.equal(resolver.resolve('item',name).canonicalTitle,'Copperleaf Cloak');
+assert.equal(resolver.resolve('monster','Keeper O`Wood').canonicalTitle,"Keeper O'Wood");
+assert.equal(resolver.resolve('npc','the Keeper O`Wood').membership,'missing');
+assert.equal(resolver.resolve('zone','FOREST_GLADE').canonicalTitle,'The Forest Glade');
+assert.equal(resolver.resolve('item','Plain Page').membership,'present');
+assert.equal(resolver.resolve('item','Copperleaf Cloak +11').membership,'missing');
+assert.equal(normalizeWikiIdentity('Ｆｏｏ_&amp;_B&#39;ar'),'foo & b\'ar');
+assert.deepEqual(itemBaseIdentity('A Relic (Exaltation)+4'),{name:'A Relic (Exaltation)',tier:4});
+assert.deepEqual(itemBaseIdentity('A Relic+4 (Exaltation)'),{name:'A Relic (Exaltation)',tier:4});
+assert.notEqual(wikiIdentityKey('item','A Relic (Exaltation) +4'),wikiIdentityKey('item','A Relic +4'));
+for(const altered of [{...pack,meta:{}},{...pack,meta:{wikiEntitiesComplete:true,sample:true}},{...pack,wikiEntities:{items:[],npcs:[]}}]){const partial=createWikiResolver(altered);assert.equal(partial.resolve('item','Missing Relic').membership,'unknown');assert.equal(partial.resolve('item','Copperleaf Cloak').membership,'present');}
+const collision=createWikiResolver({...pack,items:[{name:'Shared alias',wikiTitle:'First Article'},{name:'Shared alias',wikiTitle:'Second Article'}]});assert.equal(collision.resolve('item','SHARED ALIAS +5').membership,'ambiguous');assert.equal(collision.has('item','Shared alias'),false);
+assert.equal(createWikiResolver({...pack,npcs:[{name:'Foo',wikiTitle:'Foo'},{name:'foo',wikiTitle:'foo'}]}).resolve('npc','FOO').membership,'ambiguous');
+for(const name of ['Gtik','Jabaner','Lasn','Vekab','Zobobtik'])assert(isGeneratedPetName(name),name);
+for(const name of ['Laser','Gektik','Ger','Gn','Jabektik','a Gtik','Gtik Guardian','Jabannn','Bob','X','Gtik2'])assert.equal(isGeneratedPetName(name),false,name);
+assert.equal(classifyNpcEvidence('Gtik',{membership:'missing'}).eligible,false);
+assert.equal(classifyNpcEvidence('Gtik',{membership:'present'}).eligible,true,'An actual canonical NPC overrides the name heuristic');
+assert.equal(classifyNpcEvidence('Gtik',{membership:'ambiguous'}).eligible,true,'Ambiguity needs review rather than pet-based deletion');
+console.log('Typed wiki identity: canonical aliases/tier/Unicode, grammatical articles, partial presence, collision refusal and pinned generated-pet exclusions passed.');

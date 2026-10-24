@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const {RendererDrain,CHANNEL}=createRequire(import.meta.url)('../desktop/renderer-drain.cjs');
+const handlers=new Map(),sent=[],main={isDestroyed:()=>false,webContents:{mainFrame:{url:'http://127.0.0.1:1234/'},send:(...args)=>sent.push(args)}};
+const ipcMain={handle:(name,callback)=>handlers.set(name,callback),removeHandler:name=>handlers.delete(name)};
+const host=new RendererDrain({ipcMain,origin:'http://127.0.0.1:1234',getMainWindow:()=>main,timeout:20});
+const invoke=handlers.get(CHANNEL),event={sender:main.webContents,senderFrame:main.webContents.mainFrame};
+assert.equal(await host.drain(),true,'A renderer which never collected has nothing to drain');
+for(const change of [{sender:{}},{senderFrame:{url:main.webContents.mainFrame.url}},{senderFrame:{url:'http://127.0.0.1:1234/overlay.html'}}])assert.throws(()=>invoke({...event,...change},'ready'));
+invoke(event,'ready');let finished=false;const closing=host.drain().then(ok=>{finished=true;return ok;});await Promise.resolve();assert.equal(finished,false,'A normal close waits for the renderer disk-write acknowledgement');
+const id=sent.at(-1)[1].id;assert.throws(()=>invoke(event,'complete',{id:'wrong',ok:true}));assert.equal(finished,false);
+invoke(event,'complete',{id,ok:true});assert.equal(await closing,true);
+const failed=host.drain();invoke(event,'complete',{id:sent.at(-1)[1].id,ok:false});assert.equal(await failed,false,'A failed local save can keep the app open');
+host.resume();assert.deepEqual(sent.at(-1),[CHANNEL,{resume:true}]);
+assert.equal(await host.drain(),false,'An unresponsive renderer cannot falsely acknowledge local persistence');
+host.reset();assert.equal(await host.drain(),true);host.dispose();assert.equal(handlers.size,0);
+console.log('Renderer drain: exact main-frame/token validation, close waits for local save, failure/timeout/resume and unloaded renderer passed.');

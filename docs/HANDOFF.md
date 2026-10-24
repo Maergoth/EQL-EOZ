@@ -1,6 +1,52 @@
 # Eye of Zomm contributor handoff
 
-## Current 0.9.7 inventory-export contract
+## Active 0.9.8 follow-up plan
+
+Read [the concrete 0.9.8 execution plan](RELEASE_098_PLAN.md) before continuing.
+It tracks every approved Character/card, Contribute, wiki API/drop-storage and
+local contribution-list cleanup requirement with task IDs, code locations,
+dependencies, acceptance conditions, owners and separate deployment checkboxes.
+Update its completion ledger and the private checkpoint before context compaction.
+Character/card, contribution identity/queue, observation outbox, wiki API and
+Icon Finder implementations pass the complete source suite and focused real-main
+workflow/lifecycle checks. Platform/package gates and live activation have
+separate records in the release plan and GitHub release workflows. The local
+queue cleanup archived12 stale entries and retained37, with a private backup.
+No updated database/dataset pull is requested.
+
+### Candidate integration contracts
+
+- Character uses only confirmed current displayed stats. Equipped-hover tiers,
+  catalog cards and Exaltations never change totals. Attached `(Exaltation)`
+  aliases are socket-only; unknown capacity falls back to five, retaining
+  observed capacity/occupied sockets through eight. New sheets target User pages;
+  old talk-page attempts require a fresh destination review.
+- Contribute shares typed identity/presence and durable Ignore/submitted state.
+  Existing pages can need missing-source/population or tier-zero work. A fresh
+  unknown kill arms one guarded next `/loc`; generated names are filtered with
+  the pinned EQEmu algorithm unless a wiki NPC is positively known. Safe untouched
+  false positives are archived; protected edits and partial plans are preserved.
+  The actual installed-profile cleanup requires its private backup/count receipt.
+- `app/drop-observations.js` collects minimal fresh events independently of
+  Contribute/OCR. The main-process atomic outbox and hourly host own persistence,
+  account binding, receipt validation, retry/backoff and opt-out. No raw logs,
+  chat, player fields, paths, screenshots or coordinates enter this API. See
+  [evidence/storage contracts](CONTRIBUTION_EVIDENCE_PLAN.md).
+- `app/icon-fingerprint.js`, `app/icon-finder.js` and
+  `desktop/icon-finder-host.cjs` reuse wiki algorithm 6 with exact aliases and
+  lazy bounded public catalog/index/thumbnail caching. Cropped icon pixels stay
+  local. The source provenance is in `THIRD_PARTY/EQL-Icon-Finder/README.md`.
+- Public [API_Documentation](https://eqlwiki.com/API_Documentation) must describe
+  attributed standard MediaWiki create/edit/upload and the enabled observation
+  contract for other clients too. File deployment does not install that wiki
+  page, templates or observation schema. Source tests do not prove activation.
+
+0.9.7 is published from main `e30028b330554760a5240131105365fe43aeef63`.
+Its source/package and wiki activation receipts establish the baseline only.
+The contract below remains in force; earlier candidate/pending wording is
+historical and must not cause a second 0.9.7 publication.
+
+## Published 0.9.7 inventory-export contract
 
 Keep all gear equipped. Enter metadata, generate a fresh `/outputfile inventory`
 and auto-import the matching file, then **Open Inventory → Scroll down → Click
@@ -82,7 +128,7 @@ local log parser and versioned release; application validation runs in GitHub CI
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.9.7 candidate**, extending released 0.9.6. Four independent native windows provide Parse, Map, Zone & loot and Triggers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
+Published baseline: **0.9.7**, with the next work scoped in the active 0.9.8 plan. Four independent native windows provide Parse, Map, Zone & loot and Triggers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
 
 [Overlay workspace follow-up](OVERLAY_MAP_WORKSPACE.md) is the 0.8.5 continuation
 index. Native Map has a collapsing control header and Map/Top/First cycle;

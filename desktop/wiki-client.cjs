@@ -4,6 +4,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const {WikiAttachments}=require('./wiki-attachments.cjs');
 const PRODUCTION_ORIGIN = 'https://eqlwiki.com';
 const MAX_JSON = 2 * 1024 * 1024, MAX_PAGE = 512 * 1024, MAX_PNG = 12 * 1024 * 1024;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -47,6 +48,7 @@ class WikiClient {
         this.session=session;this.version=version;this.stateDir=stateDir;this.now=now;this.id=id;
         this.plans=new Map();this.uploads=new Map();this.sheets=new Map();this.blueprintCache=null;this.busy=false;
         this.loaded=false;this.persistChain=Promise.resolve();
+        this.attachments=new WikiAttachments({stateDir,validate:validatePNG,now,id});
     }
     async load() {
         if(this.loaded)return;if(this.loading)return this.loading;
@@ -93,15 +95,34 @@ class WikiClient {
         const rights=new Set(user?.rights||[]);
         return {origin:this.origin,authenticated:namedUser(user),user:namedUser(user)?{id:user.id,name:user.name}:null,canEdit:namedUser(user)&&rights.has('edit')&&!user.blockid,canCreate:namedUser(user)&&rights.has('createpage')&&!user.blockid,canUpload:namedUser(user)&&rights.has('upload')&&!user.blockid,blocked:Boolean(user?.blockid),warning:this.loadWarning||null};
     }
-    async expectedUser(expected) {
+    async expectedUser(expected,{requireEdit=true}={}) {
         const status=await this.status();
         if(!status.authenticated)throw new WikiError('login','Log in to EQL Wiki before publishing.');
         if(expected && (status.user.id!==expected.id||status.user.name!==expected.name))throw new WikiError('account-changed','The wiki account changed. Review this contribution under the current account.');
-        if(!status.canEdit)throw new WikiError('permission','This account cannot currently edit the wiki.');
+        if(status.blocked||requireEdit&&!status.canEdit)throw new WikiError('permission','This account cannot currently perform this wiki operation.');
         return status;
     }
-    async page(title) {
-        const data=await this.request({action:'query',prop:'info|revisions',rvprop:'ids|timestamp|content',rvslots:'main',titles:title,curtimestamp:'1'});
+    async observationStatus() {
+        const status=await this.expectedUser(null,{requireEdit:false}),token=await this.csrf(status.user);
+        const data=await this.request({action:'eozobservations',operation:'status',assert:'user',assertuser:status.user.name,token},{post:true});
+        const result=data.eozobservations;
+        if(result?.schemaVersion!==1||result.account?.id!==status.user.id||result.account?.name!==status.user.name||typeof result.enabled!=='boolean'||typeof result.available!=='boolean')throw new WikiError('observation-ack','The wiki observation capability response was invalid.');
+        return copy(result);
+    }
+    async submitObservations(batch,{expectedUser=null}={}) {
+        if(!batch||batch.schemaVersion!==1||typeof batch.batchId!=='string'||!/^[A-Za-z0-9_-]{8,120}$/.test(batch.batchId)||!Array.isArray(batch.events)||batch.events.length<1||batch.events.length>100)throw new WikiError('observations','Invalid observation batch.');
+        const ids=batch.events.map(event=>event?.id);
+        if(ids.some(id=>typeof id!=='string'||!/^[A-Za-z0-9_-]{8,120}$/.test(id))||new Set(ids).size!==ids.length)throw new WikiError('observations','Observation IDs must be unique.');
+        const json=JSON.stringify(batch);if(Buffer.byteLength(json)>262144)throw new WikiError('observations','The observation batch exceeds 256 KiB.');
+        const status=await this.expectedUser(expectedUser,{requireEdit:false}),token=await this.csrf(status.user);
+        const data=await this.request({action:'eozobservations',operation:'submit',batch:json,assert:'user',assertuser:status.user.name,token},{post:true}),result=data.eozobservations;
+        if(result?.schemaVersion!==1||result.batchId!==batch.batchId||result.account?.id!==status.user.id||result.account?.name!==status.user.name||!['accepted','duplicates','conflicts','rejected'].every(key=>Array.isArray(result[key])))throw new WikiError('observation-ack','The wiki observation receipt did not match this batch/account. Pending events were retained.');
+        const acknowledged=[...result.accepted,...result.duplicates,...result.conflicts,...result.rejected.map(entry=>entry?.id)];
+        if(acknowledged.length!==ids.length||new Set(acknowledged).size!==ids.length||acknowledged.some(id=>!ids.includes(id))||result.rejected.some(entry=>typeof entry?.code!=='string'))throw new WikiError('observation-ack','The wiki receipt omitted, repeated or added event IDs. Pending events were retained.');
+        return copy(result);
+    }
+    async page(title,{resolveRedirects=false}={}) {
+        const data=await this.request({action:'query',prop:'info|revisions',rvprop:'ids|timestamp|content',rvslots:'main',titles:title,curtimestamp:'1',...(resolveRedirects?{redirects:'1',converttitles:'1'}:{})});
         const page=data.query?.pages?.[0];
         if(!page||page.invalid)throw new WikiError('title','The wiki rejected this page title.');
         const revision=page.revisions?.[0],content=revision?.slots?.main?.content||'';
@@ -110,7 +131,7 @@ class WikiClient {
     }
     async findMatches({ name, kind='item' }={}) {
         const {contributionTitle,findPotentialMatches}=await models(),title=contributionTitle(name);
-        if(!['item','npc','zone'].includes(kind))throw new WikiError('kind','Choose item, npc or zone.');
+        if(!['item','npc','zone','spell'].includes(kind))throw new WikiError('kind','Choose item, npc, zone or spell.');
         const variants=[title,...new Set([title.replace(/[\u2018\u2019`]/g,"'"),title.replace(/[\u2018\u2019']/g,'`')])].slice(0,3);
         const [exact,prefix,search]=await Promise.all([
             this.request({action:'query',prop:'info',titles:variants.join('|'),redirects:'1',converttitles:'1'}),
@@ -131,10 +152,13 @@ class WikiClient {
         result.url=`${this.origin}/index.php?title=Help%3AContents&oldid=${page.revision}`;
         this.blueprintCache={checkedAt:this.now(),value:result};return copy(result);
     }
-    digest(plan) {return hash(JSON.stringify({id:plan.id,wikiOrigin:plan.wikiOrigin,expectedUser:plan.expectedUser,blueprintRevision:plan.blueprintRevision,pages:plan.pages.map(page=>({title:page.title,beforeHash:page.beforeHash,afterHash:page.afterHash,baseRevision:page.baseRevision})),blockers:plan.blockers,matchesReviewed:plan.matchesReviewed}));}
+    digest(plan) {return hash(JSON.stringify({id:plan.id,wikiOrigin:plan.wikiOrigin,expectedUser:plan.expectedUser,blueprintRevision:plan.blueprintRevision,pages:plan.pages.map(page=>({title:page.title,beforeHash:page.beforeHash,afterHash:page.afterHash,baseRevision:page.baseRevision})),...(plan.attachment?{attachment:{id:plan.attachment.id,filename:plan.attachment.filename,sha256:plan.attachment.sha256,caption:plan.attachment.caption,license:plan.attachment.license}}:{}),blockers:plan.blockers,matchesReviewed:plan.matchesReviewed}));}
     async preparePlan({ candidate, relatedPages=[], matchesReviewed=false, editedText=null }={}) {
         await this.load();
-        const {buildContributionDraft,contributionTitle,patchContributionRelationship,normalizeContributionCandidate,contributionTemplates}=await models();
+        const {buildContributionDraft,contributionTitle,patchContributionRelationship,patchContributionPrimary,contributionItemEffects,normalizeContributionCandidate,contributionTemplates}=await models();
+        let attachment=null;
+        const attachmentId=candidate?.attachment?.id||candidate?.attachment?.attachmentId;
+        if(attachmentId){const item=await this.attachments.get(String(attachmentId),candidate.id);attachment={id:item.record.id,filename:`EoZ Contribution ${item.record.id}.png`,sha256:item.record.sha256,caption:String(candidate.attachment.caption||'').slice(0,2000),license:String(candidate.attachment.license||'').slice(0,2000),status:'pending'};candidate={...candidate,attachmentFilename:attachment.filename};}
         const normalizedCandidate=normalizeContributionCandidate(candidate);
         const blueprint=await this.blueprints({force:true}),account=await this.status();
         let draft=buildContributionDraft(candidate,blueprint);
@@ -142,13 +166,18 @@ class WikiClient {
         // MediaWiki normalizes the first title letter. Itempage decides whether
         // to render the article or only a tooltip by exact FULLPAGENAME equality.
         if(primary.title!==draft.title)draft=buildContributionDraft({...candidate,title:primary.title},blueprint);
-        const plan={schemaVersion:1,id:this.id(),wikiOrigin:this.origin,expectedUser:account.user,blueprintRevision:blueprint.revision,createdAt:new Date(this.now()).toISOString(),pages:[],warnings:[...draft.warnings],blockers:[...draft.blockers],matches,matchesReviewed:matchesReviewed===true};
+        const updating=!primary.missing&&normalizedCandidate.intent==='update';
+        let patch=null;if(updating)try{patch=patchContributionPrimary(primary.content,{...candidate,title:primary.title});}catch(error){patch={text:primary.content,warnings:[],blockers:[safeMessage(error.message)]};}
+        const plan={schemaVersion:1,id:this.id(),wikiOrigin:this.origin,expectedUser:account.user,blueprintRevision:blueprint.revision,createdAt:new Date(this.now()).toISOString(),pages:[],warnings:[...(updating?patch.warnings:draft.warnings)],blockers:[...(updating?patch.blockers||[]:draft.blockers)],matches,matchesReviewed:matchesReviewed===true,...(attachment?{attachment}:{})};
         if(normalizedCandidate.era&&!plan.blockers.some(message=>message.includes('era template name'))){const era=await this.request({action:'query',prop:'info',titles:`Template:${normalizedCandidate.era}`,redirects:'1'});if(!era.query?.pages?.some(page=>!page.missing&&page.ns===10))plan.blockers.push('The selected era template does not exist on the wiki. Choose a current canonical era template.');}
         if(!account.authenticated)plan.blockers.push('Log in, then prepare this review again before publishing.');
         if(!matchesReviewed)plan.blockers.push('Review potential matches before preparing the final publish plan.');
-        if(!primary.missing)plan.blockers.push('The primary title already exists. Select the existing page or use its wiki source editor.');
+        if(!primary.missing&&!updating)plan.blockers.push('The primary title already exists. Select the existing page or use its wiki source editor.');
+        if(primary.redirect)plan.blockers.push('Select the canonical destination page before preparing an update.');
+        if(primary.missing&&normalizedCandidate.intent==='update')plan.blockers.push('The selected update target no longer exists. Prepare a create review instead.');
+        if(attachment&&!account.canUpload)plan.blockers.push('This account cannot upload the selected screenshot.');
         if(matches.redirects?.length)plan.warnings.push('A related spelling redirects elsewhere. Confirm the correct entity before creating another page.');
-        let afterText=draft.text;
+        let afterText=updating?patch.text:draft.text;
         if(editedText!==null){
             if(typeof editedText!=='string'||!editedText.trim()||editedText.length>MAX_PAGE)throw new WikiError('draft','The edited wikicode is empty or exceeds the draft limit.');
             const requiredTemplate=draft.kind==='item'?'Itempage':draft.kind==='npc'?'Namedmobpage':null;
@@ -158,6 +187,15 @@ class WikiClient {
         }
         const addPage=(state,after,role)=>{const afterText=normalizeWikiSubmissionText(after);const page={id:this.id(),title:state.title,pageId:state.pageId,operation:state.missing?'create':'replace-reviewed',beforeText:state.content,afterText,baseRevision:state.revision,baseTimestamp:state.timestamp,startTimestamp:state.startTimestamp,beforeHash:hash(state.content),afterHash:hash(afterText),role,status:'pending',result:null};plan.pages.push(page);};
         addPage(primary,afterText,'primary');
+        if(normalizedCandidate.kind==='item')for(const effect of contributionItemEffects(candidate)){
+            const title=contributionTitle(effect.name);if(plan.pages.some(page=>page.title===title))continue;
+            const state=await this.page(title);if(!state.missing)continue;
+            const effectCandidate={kind:'spell',name:state.title,era:normalizedCandidate.era,playerText:'?',fields:{itemsWithEffect:{value:[primary.title],confirmed:true},castTime:{value:effect.castTime||'?',confirmed:true}}};
+            const effectDraft=buildContributionDraft(effectCandidate,blueprint);
+            if(effectDraft.blockers.length){plan.warnings.push(`${title}: the effect page requires manual review (${effectDraft.blockers.join(' ')}).`);continue;}
+            if(plan.pages.length>=11){plan.warnings.push(`${title}: too many related pages; create this effect separately.`);continue;}
+            addPage(state,effectDraft.text,'spell-effect');
+        }
         const relationships=[...(Array.isArray(relatedPages)?relatedPages:[])];
         if(normalizedCandidate.kind==='npc'){
             const loot=normalizedCandidate.field('knownLoot');
@@ -166,23 +204,52 @@ class WikiClient {
                 else{
                     const zone=await this.page(contributionTitle(normalizedCandidate.zone));
                     if(zone.missing||zone.redirect)plan.warnings.push(`${normalizedCandidate.zone}: resolve the zone identity on the wiki before preparing reciprocal item-source edits.`);
-                    else for(const itemTitle of new Set(loot.map(contributionTitle)))relationships.push({title:itemTitle,role:'item-source',npcTitle:draft.title,zoneTitle:zone.title,confirmed:true});
+                    else for(const itemTitle of new Set(loot.map(contributionTitle)))relationships.push({title:itemTitle,role:'item-source',npcTitle:draft.title,zoneTitle:zone.title,instance:normalizedCandidate.instance,confirmed:true});
                 }
             }
         }
-        if(relationships.length>10)plan.warnings.push('Only ten related pages can be included in one review. Remaining drop-source edits require another review or the wiki source editor.');
-        for(const related of relationships.slice(0,10)){
-            const title=contributionTitle(related.title);if(plan.pages.some(page=>page.title===title))throw new WikiError('plan','Each page can appear only once in a contribution.');
-            const relationshipConfirmed=related.confirmed===true || normalizedCandidate.sources.some(source=>source.confirmed&&source.npc===(related.npcTitle||title)&&source.zone===related.zoneTitle);
+        const groups=new Map(),lookups=new Map();
+        if(relationships.length>100)plan.warnings.push('Only the first 100 reviewed relationships are considered. Prepare the remainder separately.');
+        for(const related of relationships.slice(0,100)){
+            const title=contributionTitle(related.title),instance=['normal','raid'].includes(related.instance)?related.instance:['normal','raid'].includes(normalizedCandidate.instance)?normalizedCandidate.instance:'normal';
+            const relationshipConfirmed=related.confirmed===true || normalizedCandidate.sources.some(source=>source.confirmed&&source.npc===(related.npcTitle||title)&&source.zone===related.zoneTitle&&(['normal','raid'].includes(source.instance)?source.instance:normalizedCandidate.instance)===instance);
             if(!relationshipConfirmed){plan.warnings.push(`${title}: an unconfirmed reciprocal drop-source edit was excluded.`);continue;}
-            const state=await this.page(title);if(state.missing){plan.warnings.push(`${title} does not exist; its reciprocal edit was excluded.`);continue;}
-            if(plan.pages.some(page=>page.title===state.title||page.pageId&&page.pageId===state.pageId))throw new WikiError('plan','Each canonical wiki page can appear only once in a contribution.');
-            try{const patch=patchContributionRelationship(state.content,{...related,itemTitle:related.itemTitle||draft.title});if(patch.changed)addPage(state,patch.text,related.role);}
+            if(!lookups.has(title))lookups.set(title,await this.page(title,{resolveRedirects:true}));
+            const state=lookups.get(title);if(state.missing){plan.warnings.push(`${title} does not exist; its reciprocal edit was excluded.`);continue;}
+            const key=state.pageId?`id:${state.pageId}`:`title:${state.title}`;
+            let group=groups.get(key);
+            if(!group){
+                const existingPage=plan.pages.find(page=>page.title===state.title||page.pageId&&page.pageId===state.pageId);
+                if(!existingPage&&(groups.size>=10||plan.pages.length+[...groups.values()].filter(value=>!value.existingPage).length>=12)){plan.warnings.push(`${state.title}: only ten related pages within the total review limit can be included. Prepare remaining sources separately.`);continue;}
+                group={state,text:existingPage?.afterText||state.content,role:related.role,existingPage};groups.set(key,group);
+            }
+            if(group.state.revision!==state.revision||group.state.content!==state.content||group.existingPage&&(group.existingPage.baseRevision!==state.revision||group.existingPage.beforeHash!==hash(state.content))){plan.blockers.push(`${state.title} changed while preparing this review. Prepare it again.`);continue;}
+            const patchInput={...related,instance,itemTitle:related.role==='item-source'?state.title:related.itemTitle||draft.title,...(related.role==='npc-loot'?{npcTitle:state.title}:{})};
+            try{const patch=patchContributionRelationship(group.text,patchInput);if(patch.changed)group.text=patch.text;}
             catch(error){plan.warnings.push(`${title}: ${safeMessage(error.message)}`);}
+        }
+        for(const group of groups.values()){
+            if(group.existingPage){group.existingPage.afterText=normalizeWikiSubmissionText(group.text);group.existingPage.afterHash=hash(group.existingPage.afterText);}
+            else if(group.text!==group.state.content)addPage(group.state,group.text,group.role);
         }
         plan.reviewDigest=this.digest(plan);this.plans.set(plan.id,plan);if(this.plans.size>30)this.plans.delete(this.plans.keys().next().value);await this.persist();return safePlan(plan);
     }
     async getPlan(id) {await this.load();const plan=this.plans.get(id);if(!plan)throw new WikiError('plan','This contribution review is unavailable. Prepare a new review.');return safePlan(plan);}
+    async submitPlanAttachment(plan) {
+        const attachment=plan.attachment;if(!attachment)return true;
+        try{
+            const {bytes,record}=await this.attachments.get(attachment.id);
+            if(record.sha256!==attachment.sha256)throw new WikiError('attachment','The reviewed screenshot changed. Prepare a new review.');
+            const status=await this.expectedUser(plan.expectedUser);if(!status.canUpload)throw new WikiError('upload-permission','This account cannot upload the reviewed screenshot.');
+            const found=await this.request({action:'query',prop:'imageinfo',titles:`File:${attachment.filename}`,iiprop:'sha1|user'}),info=found.query?.pages?.[0]?.imageinfo?.[0];
+            if(info){if(info.sha1!==crypto.createHash('sha1').update(bytes).digest('hex')||info.user!==plan.expectedUser.name)throw new WikiError('file-exists','A different file already uses this reviewed filename. No image was overwritten.');attachment.status='applied';delete attachment.error;await this.persist();return true;}
+            const {literalWikiText}=await models(),token=await this.csrf(plan.expectedUser),form=new FormData();
+            for(const [key,value]of Object.entries({action:'upload',format:'json',formatversion:'2',errorformat:'plaintext',filename:attachment.filename,text:`Screenshot supplied by [[User:${plan.expectedUser.name}]].\n${literalWikiText(attachment.caption)}\n${literalWikiText(attachment.license)}`,comment:'Player-reviewed Eye of Zomm contribution screenshot',assert:'user',assertuser:plan.expectedUser.name,token}))form.set(key,value);
+            form.set('file',new Blob([bytes],{type:'image/png'}),attachment.filename);attachment.status='unknown';await this.persist();
+            const response=await this.request({}, {post:true,form});if(response.upload?.result!=='Success')throw new WikiError('upload-warning','The wiki did not accept this screenshot. Review its warning before retrying.');
+            attachment.status='applied';delete attachment.error;await this.persist();return true;
+        }catch(error){attachment.status=error.code==='unknown-write'?'unknown':'failed';attachment.error={code:error.code||'attachment',message:safeMessage(error.message)};await this.persist();return false;}
+    }
     async csrf(expected) {
         const result=await this.request({action:'query',meta:'tokens',type:'csrf',assert:'user',assertuser:expected.name}),token=result.query?.tokens?.csrftoken;
         if(typeof token!=='string'||!token||token==='+\\')throw new WikiError('token','The wiki login expired. Log in and review again.');return token;
@@ -195,6 +262,7 @@ class WikiClient {
         try{
             await this.expectedUser(plan.expectedUser);
             const blueprint=await this.blueprints({force:true});if(blueprint.revision!==plan.blueprintRevision)throw new WikiError('blueprint-changed','The wiki blueprints changed. Prepare a new review.');
+            if(!await this.submitPlanAttachment(plan)){plan.status=plan.pages.some(page=>page.status==='applied')?'partial':'needs-attention';await this.persist();return safePlan(plan);}
             for(const page of plan.pages){
                 if(page.status==='applied')continue;
                 await this.expectedUser(plan.expectedUser);
@@ -267,23 +335,24 @@ class WikiClient {
         await this.load();if(this.busy)throw new WikiError('busy','A wiki submission is already in progress.');this.busy=true;
         try{
             const status=await this.expectedUser();await this.characterSheetCapability();
-            const key=hash(characterWikiIdentity(sheet.metadata)),payloadHash=hash(JSON.stringify({sheet,caption:note}));
-            const prior=shareId===null?[...this.sheets.values()].reverse().find(item=>item.user?.id===status.user.id&&item.key===key&&item.payloadHash===payloadHash&&['pending','unknown'].includes(item.status)):null;
+            const destination=`User:${status.user.name}`,key=hash(characterWikiIdentity(sheet.metadata)),payloadHash=hash(JSON.stringify({sheet,caption:note}));
+            const prior=shareId===null?[...this.sheets.values()].reverse().find(item=>item.destination===destination&&item.user?.id===status.user.id&&item.key===key&&item.payloadHash===payloadHash&&['pending','unknown'].includes(item.status)):null;
             const id=prior?.shareId||(shareId===null?this.id():String(shareId));if(!/^[A-Za-z0-9_-]{8,100}$/.test(id))throw new WikiError('sheet-id','Invalid character sheet review identifier.');
             let record=this.sheets.get(id);
             if(shareId!==null&&!record)throw new WikiError('sheet-review','That saved character sheet review is unavailable. Preview and share it again.');
             if(record&&(record.origin!==this.origin||record.user?.id!==status.user.id||record.user?.name!==status.user.name||record.key!==key||record.payloadHash!==payloadHash))throw new WikiError('sheet-review','That character sheet review belongs to different content or a different account.');
-            const page=await this.page(`User_talk:${status.user.name}`);
-            if(page.redirect||page.title.replace(/^User[ _]talk:/i,'User_talk:')!==`User_talk:${status.user.name}`)throw new WikiError('sheet-talk','Resolve your talk-page redirect on the wiki before sharing.');
-            if(page.missing&&!status.canCreate)throw new WikiError('permission','This account cannot create its missing talk page.');
+            if(record&&record.destination!==destination)throw new WikiError('sheet-destination','This saved review targets the old talk page. Prepare a fresh review for your User page; existing talk-page content stays unchanged.');
+            const page=await this.page(destination);
+            if(page.redirect||page.title!==destination)throw new WikiError('sheet-user','Resolve your User-page redirect on the wiki before sharing.');
+            if(page.missing&&!status.canCreate)throw new WikiError('permission','This account cannot create its missing User page.');
             let replacement;try{replacement=patchCharacterWikiSheet(page.content,key,serializeCharacterWikiSheet(sheet,{caption:note}),{metadata:sheet.metadata});}catch(error){throw new WikiError('sheet-conflict',error.message);}
-            if(replacement.text.length>MAX_PAGE||Buffer.byteLength(replacement.text,'utf8')>MAX_PAGE)throw new WikiError('size','Your talk page would exceed the safe automatic-edit limit. No changes were made.');
-            const reused=Boolean(record);if(!record){record={shareId:id,origin:this.origin,user:status.user,key,payloadHash,status:'pending',beforeRevision:null,beforeHash:null};this.sheets.set(id,record);if(this.sheets.size>20)this.sheets.delete(this.sheets.keys().next().value);}
-            const result=()=>({...copy(record),reused,talkPageUrl:`${this.origin}/User_talk:${encodeURIComponent(record.user.name)}`});
+            if(replacement.text.length>MAX_PAGE||Buffer.byteLength(replacement.text,'utf8')>MAX_PAGE)throw new WikiError('size','Your User page would exceed the safe automatic-edit limit. No changes were made.');
+            const reused=Boolean(record);if(!record){record={shareId:id,origin:this.origin,user:status.user,destination,key,payloadHash,status:'pending',beforeRevision:null,beforeHash:null};this.sheets.set(id,record);if(this.sheets.size>20)this.sheets.delete(this.sheets.keys().next().value);}
+            const result=()=>({...copy(record),reused,userPageUrl:`${this.origin}/User:${encodeURIComponent(record.user.name)}`,pageUrl:`${this.origin}/User:${encodeURIComponent(record.user.name)}`});
             if(!replacement.changed){const reconciled=record.status==='unknown';record.status='applied';record.revision=page.revision;record.reconciled=reconciled;delete record.error;await this.persist();return result();}
             // A retry may only resend the identical reviewed before-state. A
             // matching applied block above reconciles even unrelated later edits.
-            if(record.beforeHash!==null&&(record.beforeRevision!==page.revision||record.beforeHash!==hash(page.content))){record.status='failed';record.error={code:'editconflict',message:'The talk page changed after this share attempt. Preview the sheet again before replacing it.'};await this.persist();return result();}
+            if(record.beforeHash!==null&&(record.beforeRevision!==page.revision||record.beforeHash!==hash(page.content))){record.status='failed';record.error={code:'editconflict',message:'The User page changed after this share attempt. Preview the sheet again before replacing it.'};await this.persist();return result();}
             record.beforeRevision=page.revision;record.beforeHash=hash(page.content);record.afterHash=hash(normalizeWikiSubmissionText(replacement.text));
             await this.expectedUser(record.user);const token=await this.csrf(record.user);
             record.status='unknown';record.reconciled=false;delete record.error;await this.persist();

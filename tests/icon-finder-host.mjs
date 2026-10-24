@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,rm,readFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,resolve,dirname,basename} from 'node:path';
+import {createRequire} from 'node:module';
+import {fingerprintDistance} from '../app/icon-fingerprint.js';
+const {IconFinderHost,iconUrl}=createRequire(import.meta.url)('../desktop/icon-finder-host.cjs');
+const directory=await mkdtemp(join(tmpdir(),'eoz-icon-finder-unit-')),generation='a'.repeat(24),zero=Array(768).fill(20),colored=Array(768).fill(180),fp={hashHi:0,hashLo:0,rgb:zero};
+assert.equal(fingerprintDistance(fp,fp),0);assert(fingerprintDistance(fp,{...fp,rgb:colored})>0);
+for(const url of ['https://evil.test/images/Icon.png','https://eqlwiki.com/api.php','https://eqlwiki.com/images/a.png?secret=1','https://user@eqlwiki.com/images/a.png','file:///C:/private.png'])assert.throws(()=>iconUrl(url));
+const urls=index=>`https://eqlwiki.com/images/a/aa/Item_${index}.png`,record=index=>({title:`File:Item_${index}.png`,url:urls(index),hashHi:index===574?0:index,hashLo:0,rgb:Buffer.from(index===574?zero:colored).toString('base64'),aliases:index===574?[{title:'File:Item_574.png',url:urls(574)},{title:'File:Item_575.png',url:urls(575)}]:[{title:`File:Item_${index}.png`,url:urls(index)}]});
+// A tiny regular PNG header is enough for the unit decoder substitute; the
+// separate native UI fixture exercises actual PNG/canvas decoding.
+const png=Buffer.alloc(24);Buffer.from('89504e470d0a1a0a','hex').copy(png);png.writeUInt32BE(32,16);png.writeUInt32BE(32,20);
+const nativeImage={createFromBuffer:bytes=>({isEmpty:()=>false,getSize:()=>({width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)}),resize:()=>({toPNG:()=>bytes})})};
+const requests=[];let offline=false;
+const fetchImpl=async(url,options)=>{requests.push({url,options});assert.equal(options.method,'GET');assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');if(offline)throw Error('synthetic offline');const resource=url.endsWith('meta.json')?{ready:true,algorithm:6,generation}:url.includes('/catalog-')?{generation,icons:Array.from({length:130},(_,index)=>['item',String(index),`File:Item_${index}.png`,urls(index)])}:url.includes('/index-')?{ready:true,algorithm:6,generation,records:[record(574),...Array.from({length:120},(_,index)=>record(index))]}:null;const bytes=resource?Buffer.from(JSON.stringify(resource)):png;return{ok:true,url,headers:{get:key=>key==='content-type'?(resource?'application/json':'image/png'):key==='content-length'?String(bytes.length):null},arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)};};
+try{
+    const host=new IconFinderHost({stateDir:directory,nativeImage,fetchImpl});assert.equal(requests.length,0,'Constructing the service does not fetch anything');
+    const catalog=await host.handle('icon-catalog',{page:0});assert.equal(catalog.records.length,48);assert.equal(catalog.total,130);assert(!requests.some(value=>value.url.includes('/index-')),'Browsing does not fetch the fingerprint index');assert(catalog.records.every(record=>record.dataUrl.startsWith('data:image/png;base64,')));assert.equal((await host.handle('icon-catalog',{page:2})).records.length,34);
+    const matched=await host.handle('icon-match',{algorithm:6,fingerprints:[fp],page:0});assert.equal(matched.total,100);assert.equal(matched.records.length,48);assert.equal(matched.records[0].iconId,'574');assert.deepEqual(matched.records[0].aliases.map(value=>value.iconId),['574','575']);assert.equal(matched.records[0].similarity,100);assert.equal((await host.handle('icon-match',{algorithm:6,fingerprints:[fp],page:2})).records.length,4,'All100 ranked groups are reachable');
+    await assert.rejects(host.handle('icon-match',{algorithm:5,fingerprints:[fp]}));await assert.rejects(host.handle('icon-match',{algorithm:6,fingerprints:[{...fp,rgb:[0]}]}));await assert.rejects(host.handle('icon-match',{algorithm:6,fingerprints:[{...fp,hashHi:-1}]}));await assert.rejects(host.handle('icon-catalog',{url:'https://evil.test/'}));await assert.rejects(host.handle('icon-catalog',{page:-1}));
+    const before=requests.length;offline=true;host.dispose();const reopened=new IconFinderHost({stateDir:directory,nativeImage,fetchImpl});const offlineMatch=await reopened.handle('icon-match',{algorithm:6,fingerprints:[fp]});assert.equal(offlineMatch.records[0].iconId,'574');assert.equal(requests.length,before+1,'Cached immutable index/thumbs work after only the small metadata check fails');assert((await readFile(join(directory,`index-${generation}.json`),'utf8')).includes('File:Item_575.png'));reopened.dispose();
+    console.log('Icon Finder host: lazy public catalog/index, algorithm6 ranking, all100 candidates, complete artwork aliases, first-party bounded PNG proxy, strict fingerprints and offline generation cache passed.');
+}finally{assert.equal(dirname(resolve(directory)),resolve(tmpdir()));assert(basename(directory).startsWith('eoz-icon-finder-unit-'));await rm(directory,{recursive:true,force:true});}

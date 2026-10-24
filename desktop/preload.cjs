@@ -51,7 +51,29 @@ contextBridge.exposeInMainWorld('eyeOfZommCapture', {
     onStatus:callback=>subscribe('eye-of-zomm:capture-status',callback),
     onObservation:callback=>subscribe('eye-of-zomm:capture-observation',callback)
 });
+contextBridge.exposeInMainWorld('eyeOfZommLifecycle',{
+    onDrain:(drain,resume)=>{
+        if(typeof drain!=='function')return()=>{};
+        const remove=subscribe('eye-of-zomm:renderer-drain',value=>{
+            if(value?.resume){resume?.();return;}
+            if(typeof value?.id!=='string')return;
+            Promise.resolve().then(drain).then(ok=>ipcRenderer.invoke('eye-of-zomm:renderer-drain','complete',{id:value.id,ok:ok===true}),()=>ipcRenderer.invoke('eye-of-zomm:renderer-drain','complete',{id:value.id,ok:false})).catch(()=>{});
+        });
+        void ipcRenderer.invoke('eye-of-zomm:renderer-drain','ready').catch(()=>{});return remove;
+    }
+});
+contextBridge.exposeInMainWorld('eyeOfZommObservations',{
+    status:()=>ipcRenderer.invoke('eye-of-zomm:observations','status'),
+    collect:events=>ipcRenderer.invoke('eye-of-zomm:observations','collect',{events}),
+    configure:value=>ipcRenderer.invoke('eye-of-zomm:observations','configure',value)
+});
 contextBridge.exposeInMainWorld('eyeOfZommWiki', {
+    prepareAttachment:value=>ipcRenderer.invoke('eye-of-zomm:wiki','prepare-attachment',value),
+    discardAttachment:value=>ipcRenderer.invoke('eye-of-zomm:wiki','discard-attachment',value),
+    iconCatalog:value=>ipcRenderer.invoke('eye-of-zomm:wiki','icon-catalog',value),
+    iconMatch:value=>ipcRenderer.invoke('eye-of-zomm:wiki','icon-match',value),
+    observationStatus:()=>ipcRenderer.invoke('eye-of-zomm:wiki','observation-status'),
+    submitObservations:value=>ipcRenderer.invoke('eye-of-zomm:wiki','submit-observations',value),
     status:()=>ipcRenderer.invoke('eye-of-zomm:wiki','status'),
     login:()=>ipcRenderer.invoke('eye-of-zomm:wiki','login'),
     logout:()=>ipcRenderer.invoke('eye-of-zomm:wiki','logout'),

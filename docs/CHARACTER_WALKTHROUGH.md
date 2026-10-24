@@ -1,6 +1,11 @@
 # Character inventory export and stat review
 
-## Current 0.9.7 contract
+## Current contract and 0.9.8 candidate
+
+0.9.7 is published. The 0.9.8 follow-up keeps its inventory/current-stat flow and
+adds richer cards, Exaltations and User-page sharing. The changes below describe
+the candidate source; publication and wiki activation remain release gates in
+[the active execution plan](RELEASE_098_PLAN.md).
 
 The current flow is **details → inventory → stats → review → complete**.
 Keep all gear equipped throughout. Character imports the game's inventory file;
@@ -27,7 +32,12 @@ The parser validates the complete worn table before an atomic replacement.
 Preserve counts, IDs, exact worn locations, paired slots and physical duplicates.
 General bags, nested storage, Held, Bank, SharedBank and the separate KeyRing
 table do not become equipped gear. The file's Slots column is not proof of
-augment capacity. Malformed/stale results or a profile switch cannot partially
+Exaltation capacity. Attached child rows prefill their known parent's sockets.
+An exact trailing `(Exaltation)` can match its known base article only for a
+socket; ordinary worn gear still needs its exact identity. Unknown capacity uses
+five sockets, explicit observed capacity wins, and occupied positions are kept
+through the existing maximum of eight. Original source socket positions remain
+private. Malformed/stale results or a profile switch cannot partially
 overwrite the selected character. Export contents and paths stay private.
 
 ### 3. Recorded equipped, unbuffed stats
@@ -53,20 +63,27 @@ evasion AC, offense and ATK Accuracy independently. Additional Modifiers include
 Accuracy bonus (not ATK Accuracy), Avoidance, Combat effects, Strikethrough,
 Stun resist, Damage shield, Damage shield mitigation, DoT shielding, Melee
 shielding and Spell shielding. Missing values stay unknown. Do not add gear,
-augment, catalog, old baseline or legacy equipped values; item previews never
+Exaltation, catalog, old baseline or legacy equipped values; item previews never
 change character totals.
 
 ### 4. Review and share
 
-Review imported equipment, known augments and the recorded stat panel. Public
-gear requires a known canonical wiki identity. Unknown item/augment names do not
+Review imported equipment, known Exaltations and the recorded stat panel. Hover
+an equipped item to use its tier slider directly below its name; keyboard focus
+keeps the controls usable. Adjusted numeric previews are green. Cards also show
+real catalog restrictions, flags, procs/effects, cast times and required levels,
+including Thornstinger's Rampage. These previews do not recalculate totals.
+
+Public gear requires a known canonical wiki identity. Unknown item/Exaltation names do not
 create red-link gear: leave those slots/sockets empty. Use Contribute to review
 missing details, sync accepted wiki data, then export inventory again. Item
 examine OCR belongs to Contribute and cannot create Character gear.
 
 Preview/copy/save a local PNG or explicitly share the reviewed interactive sheet
-to the authenticated user's own talk page. Sharing replaces only that Character
-(Server)'s managed block and preserves other characters/discussion. Capability,
+to the authenticated user's own **User:Name** page. Sharing replaces only that
+Character (Server)'s managed block and preserves other characters/content.
+Existing talk-page sheets remain intact. Old attempts cannot reuse a talk-page
+revision/hash on a User page; review a changed destination afresh. Capability,
 revision and permission checks remain; no automatic publication or image upload
 is implied. A successful completion stops Character reading. Cancel/source loss
 does not fabricate stats or restart capture without the user's action.
@@ -89,8 +106,9 @@ and nonworn tables, `desktop/inventory-file-host.cjs` restricts paths, and
 and `capture-workspace.js` own phase/profile guards. `character-totals.js` supplies
 the same observed-only values to the inspect, PNG and normalized wiki payload.
 
-Final 0.9.7 source/native/Windows/Linux/package checks remain pending release-owner
-acceptance. Test fresh/stale exports, malformed input, paired/Any slots, missing
+0.9.7 source/native/platform/package receipts establish that released baseline.
+Final 0.9.8 source/native/Windows/Linux/package and wiki activation checks remain
+pending release-owner acceptance. Test fresh/stale exports, malformed input, paired/Any slots, missing
 wiki items/sockets, profile changes during imports, lower-rate stat capture,
 scroll/buff preparation, edited values, all modifiers and clear/relaunch. Live
 game skin/scale/compositing, production authentication and native Wayland remain

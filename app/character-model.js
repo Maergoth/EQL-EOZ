@@ -1,3 +1,4 @@
+import {characterCatalogDetails,normalizeCharacterItemDetails} from './character-item-card.js';
 import { scaleItemStat } from './item-scaling.js';
 import { parseItemAugmentSlots } from './screen-read-parser.js';
 
@@ -137,7 +138,7 @@ function metadata(value={}) {
 }
 function augmentRecord(value={},index=0) {
     value=value&&typeof value==='object'?value:{};
-    return {index,sourceSlot:Number.isInteger(value.sourceSlot)&&value.sourceSlot>0&&value.sourceSlot<=1e6?value.sourceSlot:null,inventoryOrigin:inventoryOrigin(value.inventoryOrigin),name:clean(value.name),wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),id:clean(value.id,120),iconId:clean(value.iconId,120),icon:safeCharacterIcon(value.icon),tier:fullTier(value.tier),stats:normalizeCharacterStats(value.stats),statsComplete:value.statsComplete===true||value.complete===true};
+    return {index,sourceSlot:Number.isInteger(value.sourceSlot)&&value.sourceSlot>0&&value.sourceSlot<=1e6?value.sourceSlot:null,inventoryOrigin:inventoryOrigin(value.inventoryOrigin),details:normalizeCharacterItemDetails(value.details),baseStats:normalizeCharacterStats(value.baseStats),unscaledStatKeys:list(value.unscaledStatKeys).map(keyFor),name:clean(value.name),wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),id:clean(value.id,120),iconId:clean(value.iconId,120),icon:safeCharacterIcon(value.icon),tier:fullTier(value.tier),stats:normalizeCharacterStats(value.stats),statsComplete:value.statsComplete===true||value.complete===true};
 }
 function normalizeAugments(values){
     const result=[],used=new Set();
@@ -166,12 +167,13 @@ function normalizeCandidate(value={}) {
     const evidence=list(value.evidence).slice(-CHARACTER_LIMITS.evidence).map(evidenceRecord),captured=evidence.some(record=>record.observationId&&(record.parserVersion||record.source==='ocr'));
     const observedTier=has(value,'observedTier')?fullTier(value.observedTier):captured&&!list(value.editedFields).some(key=>key==='tier'||key==='fraction')?tier:null;
     const block=rawStatBlock(value.rawStatBlock ?? value.statBlockText ?? list(value.statLines).join('\n')),sockets=parseItemAugmentSlots(block),augments=normalizeAugments(Array.isArray(value.augments)?value.augments:sockets.augments);
-    const augmentSlots=value.augmentSlots!==undefined?socketCount(value.augmentSlots):value.augmentSlotCount!==undefined?socketCount(value.augmentSlotCount):sockets.augmentSlotCount;
+    const explicitCapacity=value.augmentSlots!==undefined?socketCount(value.augmentSlots):value.augmentSlotCount!==undefined?socketCount(value.augmentSlotCount):sockets.augmentSlotCount;
+    const augmentSlots=explicitCapacity??Math.max(5,...augments.map(augment=>augment.index+1));
     return { id:clean(value.id,100), instanceKey:clean(value.instanceKey,200), inventoryOrigin:inventoryOrigin(value.inventoryOrigin),name:characterBaseItemName(value.name), observedName:has(value,'observedName')?clean(value.observedName):list(value.evidence).some(record=>record?.observationId||record?.text)?clean(value.name):'', wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),
         origin:['automatic','manual'].includes(value.origin)?value.origin:captured?'automatic':'manual',legacyManualStats:value.legacyManualStats===true||!has(value,'origin')&&!captured,lastObservedAt:atTime(value.lastObservedAt)??evidence.reduce((latest,record)=>record.at!==null?Math.max(latest??0,record.at):latest,null),lastObservedSequence:journalSequence(value.lastObservedSequence),
         observedTier,observedFraction:tierFraction(has(value,'observedFraction')?value.observedFraction:value.fraction,observedTier),statBasis:value.statBasis==='catalog-tier-preview'?'catalog-tier-preview':'observed',previewWarning:clean(value.previewWarning,300),slotReadWarning:clean(value.slotReadWarning,300),
         wikiMatch:['confirmed','suggested','unmatched'].includes(value.wikiMatch) ? value.wikiMatch : 'unmatched',
-        iconId:clean(value.iconId,120), icon:safeCharacterIcon(value.icon), slots:characterSlotKinds(value.slots), tier,
+        iconId:clean(value.iconId,120), icon:safeCharacterIcon(value.icon), details:normalizeCharacterItemDetails(value.details), slots:characterSlotKinds(value.slots), tier,
         fraction:tierFraction(value.fraction,tier),
         observedStats:normalizeCharacterStats(value.observedStats), baseStats:normalizeCharacterStats(value.baseStats),
         editedStatKeys:[...new Set(list(value.editedStatKeys).map(keyFor).filter(key=>/^[A-Z][A-Z0-9_]{0,31}$/.test(key)))].slice(-CHARACTER_LIMITS.stats*2),
@@ -233,6 +235,11 @@ function normalizeState(value) {
  * previews use whole tiers; old progress metadata is retained but not required.
  * Unknown tier prevents scaling. Augments add only when explicitly excluded.
  */
+export function characterExaltationStats(item={}){
+    if(Object.keys(item.stats||{}).length)return {stats:normalizeCharacterStats(item.stats),complete:item.statsComplete===true,basis:'observed-examine'};
+    return characterItemStats({...item,observedStats:{},baseStats:item.baseStats||{},baseStatsComplete:Object.keys(item.baseStats||{}).length>0,augmentStatus:'none',augments:[],augmentBaseline:null});
+}
+
 export function characterItemStats(candidate) {
     const item = normalizeCandidate(candidate),previewRequested=item.statBasis==='catalog-tier-preview',preview=previewRequested&&characterEquipmentEligibility(item).known&&Object.keys(item.baseStats).length>0, observed = !preview&&Object.keys(item.observedStats).length > 0;
     const bases=preview?Object.fromEntries([...new Set([...Object.keys(item.baseStats),...Object.keys(item.observedStats)])].map(key=>[key,has(item.baseStats,key)?item.baseStats[key]:null])):item.baseStats;
@@ -251,8 +258,8 @@ export function characterItemStats(candidate) {
     if (!observed && item.tier === null) warnings.push('Item tier is unknown; catalog base stats are not an equipped value.');
     if (!observed && item.tier>0 && item.unscaledStatKeys.length) warnings.push(`Tier adjustment is unverified for ${item.unscaledStatKeys.join(', ')}; those equipped values remain unknown.`);
     if (!complete) warnings.push('Item stats are incomplete.');
-    if (item.augmentStatus === 'unknown') { complete=false; uncertainAll=true; warnings.push('Augment presence or stat inclusion needs review.'); }
-    if(preview&&item.augmentStatus==='included'){complete=false;uncertainAll=true;warnings.push('Catalog preview does not establish the effects included in the captured augmented item.');}
+    if (item.augmentStatus === 'unknown') { complete=false; uncertainAll=true; warnings.push('Exaltation presence or stat inclusion needs review.'); }
+    if(preview&&item.augmentStatus==='included'){complete=false;uncertainAll=true;warnings.push('Catalog preview does not establish the effects included in the captured item with Exaltations.');}
     if(item.augmentBaseline){
         const baseline=item.augmentBaseline,originals=new Map(baseline.augments.map(augment=>[augment.index,augment])),current=new Map(item.augments.map(augment=>[augment.index,augment]));
         const additive=!observed||baseline.mode==='excluded',baseComplete=observed?item.observedStatsComplete:item.baseStatsComplete&&item.tier!==null,originalValues={...stats};
@@ -277,7 +284,7 @@ export function characterItemStats(candidate) {
             const value=originalValues[key],next=augmentContribution(item.augments,key);
             stats[key]=value===null||old===null||next===null?null:value-old+next;
         }
-        if(uncertainAll)warnings.push('An original socket contribution is unknown; the augment adjustment remains partial.');
+        if(uncertainAll)warnings.push('An original socket contribution is unknown; the Exaltation adjustment remains partial.');
     }else if (item.augmentStatus === 'excluded') {
         for (const augment of item.augments) {
             if (!augment.statsComplete) { complete=false; uncertainAll=true; }
@@ -287,7 +294,7 @@ export function characterItemStats(candidate) {
                 stats[key] = left === null || right === null ? null : left + right;
             }
         }
-        if (!item.augments.length) { complete=false; uncertainAll=true; warnings.push('Excluded augment stats have not been supplied.'); }
+        if (!item.augments.length) { complete=false; uncertainAll=true; warnings.push('Excluded Exaltation stats have not been supplied.'); }
     }
     if (Object.values(stats).some(value => value === null)) complete=false;
     return {stats, complete, uncertainAll, basis:preview?'catalog-tier-preview':observed ? 'observed-examine' : 'scaled-catalog', warnings};
@@ -329,7 +336,7 @@ export function characterLooseCandidates(snapshot) {
 }
 
 /** Character totals are a single reviewed, fully equipped observation.
- * Item tiers, augments, catalog stats and legacy baselines never enter totals.
+ * Item tiers, Exaltations, catalog stats and legacy baselines never enter totals.
  */
 export function characterTotals(snapshot) {
     const state=normalizeState(snapshot),current=clone(state.statSnapshots.current),computed={};
@@ -438,7 +445,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         if(!identity)return null;
         const baseStats=normalizeCharacterStats(item.stats);
         return {name:identity.name,wikiTitle:identity.wikiTitle,catalogIdentity:identity,wikiMatch:match==='fuzzy'?'suggested':'confirmed',
-            baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,
+            baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,details:characterCatalogDetails(item),
             unscaledStatKeys:has(baseStats,'SV_CORRUPTION')?['SV_CORRUPTION']:[],iconId:clean(item.iconId,120),icon:safeCharacterIcon(icon)};
     }
     function resolveCatalog(id,item,options={}) {
@@ -484,9 +491,9 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
                 const identity=JSON.stringify([slot||group,entry.location,entry.itemId,entry.tier]),occurrence=occurrences.get(identity)||0;occurrences.set(identity,occurrence+1);
                 const result={...entry,group,slot,key:JSON.stringify([slot||group,entry.location,entry.itemId,entry.tier,occurrence])};
                 if(entry.augments!==undefined||entry.augmentSlots!==undefined){
-                    if(!Array.isArray(entry.augments)||entry.augments.length>CHARACTER_LIMITS.augments||entry.augmentSlots!==entry.augments.length)throw Error('The inventory export contains an unsupported augment layout.');
+                    if(!Array.isArray(entry.augments)||entry.augments.length>CHARACTER_LIMITS.augments||entry.augmentSlots!==entry.augments.length)throw Error('The inventory export contains an unsupported Exaltation layout.');
                     const used=new Set();result.augments=entry.augments.map((child,index)=>{
-                        if(child?.index!==index||!Number.isInteger(child.sourceSlot)||child.sourceSlot<1||child.sourceSlot>1e6||used.has(child.sourceSlot)||child.augments!==undefined)throw Error('The inventory export contains an invalid augment location.');used.add(child.sourceSlot);
+                        if(child?.index!==index||!Number.isInteger(child.sourceSlot)||child.sourceSlot<1||child.sourceSlot>1e6||used.has(child.sourceSlot)||child.augments!==undefined)throw Error('The inventory export contains an invalid Exaltation location.');used.add(child.sourceSlot);
                         validate(child,'augment','socket');return {...child,group:'augment',slot:null,key:JSON.stringify([result.key,'socket',child.sourceSlot,child.itemId,child.tier])};
                     });
                 }
@@ -502,7 +509,8 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             const resolve=entry=>{
                 const resolution=resolveItem(clone(entry)),item=resolution?.item;
                 const exact=value=>String(value??'').normalize('NFKC').replace(/_/g,' ').replace(/\s+/gu,' ').trim().toLowerCase();
-                return item&&[item.name,item.wikiTitle].some(name=>exact(name)===exact(entry.baseName))?catalogPatch(item,{match:'exact',icon:resolution.icon}):null;
+                const exactName=exact(entry.baseName),socketAlias=entry.group==='augment'&&resolution?.exaltationAlias===true&&/\s*\(Exaltation\)$/i.test(entry.baseName)?exact(entry.baseName.replace(/\s*\(Exaltation\)$/i,'')):null;
+                return item&&[item.name,item.wikiTitle].some(name=>exact(name)===exactName||socketAlias&&exact(name)===socketAlias)?catalogPatch(item,{match:'exact',icon:resolution.icon}):null;
             };
             const reject=(entry,reason='wiki-item-missing',slot=entry.slot)=>rejectedItems.push({name:entry.name,baseName:entry.baseName,tier:entry.tier,itemId:entry.itemId,location:entry.location,...(slot?{slot}:{}),reason});
             const resolvedEntries=entries.map(entry=>({entry,patch:resolve(entry)}));
@@ -523,7 +531,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
                     for(const child of entry.augments.filter(child=>!child.empty)){
                         const known=resolve(child),old=prior?.augments.find(augment=>augment.inventoryOrigin?.key===child.key);
                         if(!known){reject(child,'wiki-item-missing',entry.slot);continue;}
-                        socketPatch.augments.push(augmentRecord({...old,index:child.index,sourceSlot:child.sourceSlot,inventoryOrigin:{...child,importedAt:at},name:known.name,wikiTitle:known.wikiTitle,catalogIdentity:known.catalogIdentity,iconId:known.iconId||old?.iconId||'',icon:known.icon||old?.icon||'',tier:child.tier,stats:old?.stats||{},statsComplete:old?.statsComplete===true},child.index));
+                        socketPatch.augments.push(augmentRecord({...old,index:child.index,sourceSlot:child.sourceSlot,inventoryOrigin:{...child,importedAt:at},name:known.name,wikiTitle:known.wikiTitle,catalogIdentity:known.catalogIdentity,details:known.details,baseStats:known.baseStats,unscaledStatKeys:known.unscaledStatKeys,iconId:known.iconId||old?.iconId||'',icon:known.icon||old?.icon||'',tier:child.tier,stats:old?.stats||{},statsComplete:old?.statsComplete===true},child.index));
                     }
                     socketPatch.emptyAugmentSlots=entry.augmentSlots-socketPatch.augments.length;
                     socketPatch.augmentStatus=socketPatch.augments.length?'included':'none';
@@ -574,7 +582,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         const identity=options.wikiItem?catalogPatch(wiki,{match:options.catalogMatch||'exact',icon:options.icon}):null;
         const candidate=normalizeCandidate({id:nextId(),instanceKey,origin:automaticObservation(observation)?'automatic':'manual',lastObservedAt:evidence.at,lastObservedSequence:journalSequence(observation.sequence),observedTier:automaticObservation(observation)?fullTier(source.tier):null,observedFraction:automaticObservation(observation)?source.fraction:null,name:source.name || wiki.name,observedName:source.observedName ?? (!source.catalogIdentity&&(Array.isArray(observation.fields)||evidence.observationId)?source.name:''),wikiTitle:source.wikiTitle || wiki.wikiTitle || wiki.name,catalogIdentity:source.catalogIdentity,
             wikiMatch:options.wikiItem ? 'suggested' : source.wikiMatch,iconId:source.iconId ?? wiki.iconId,icon:options.icon || source.icon,
-            slots:source.slots?.length ? source.slots : wiki.slots,tier:source.tier,fraction:source.fraction,observedStats:source.observedStats || source.stats,
+            details:source.details,slots:source.slots?.length ? source.slots : wiki.slots,tier:source.tier,fraction:source.fraction,observedStats:source.observedStats || source.stats,
             observedStatsComplete:source.statsComplete || source.observedStatsComplete,editedStatKeys:automaticObservation(observation)?[]:Object.keys(normalizeCharacterStats(source.observedStats||source.stats)),baseStats:wiki.stats || source.baseStats,
             unscaledStatKeys:source.unscaledStatKeys,
             baseStatsComplete:options.wikiItem ? true : source.baseStatsComplete,augments:source.augments,augmentSlots:source.augmentSlots,emptyAugmentSlots:source.emptyAugmentSlots,augmentStatus:source.augmentStatus,
@@ -635,14 +643,14 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     function setAugmentSlots(id,count){
         const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
         if(socketCount(count)===null)return {ok:false,error:'Choose 0–8 augment slots.'};
-        if(current.augments.some(augment=>augment.index>=count))return {ok:false,error:'Remove occupied augments before reducing the slot count.'};
+        if(current.augments.some(augment=>augment.index>=count))return {ok:false,error:'Remove occupied Exaltations before reducing the slot count.'};
         return updateCandidate(id,{augmentSlots:count});
     }
     function setAugment(id,index,known){
         const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
-        if(current.augmentSlots===null)return {ok:false,error:'Set the augment slot count first.'};
-        if(!Number.isInteger(index)||index<0||index>=current.augmentSlots)return {ok:false,error:'Choose an available numbered augment slot.'};
-        if(!characterEquipmentEligibility(known).known)return {ok:false,error:'Choose a known cached item for this augment slot.'};
+        if(current.augmentSlots===null)return {ok:false,error:'Set the Exaltation slot count first.'};
+        if(!Number.isInteger(index)||index<0||index>=current.augmentSlots)return {ok:false,error:'Choose an available numbered Exaltation slot.'};
+        if(!characterEquipmentEligibility(known).known)return {ok:false,error:'Choose a known cached item for this Exaltation slot.'};
         // A catalog ingredient supplies its own tiered base stats; it does not
         // recursively contain the selected item's possible sockets/effects.
         const effective=has(known,'baseStats')||has(known,'observedStats')?characterItemStats({...known,augmentStatus:'none',augments:[],augmentBaseline:null}):{stats:normalizeCharacterStats(known.stats),complete:known.statsComplete===true||known.complete===true};
@@ -651,7 +659,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     }
     function removeAugment(id,index){
         const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
-        if(!Number.isInteger(index)||index<0||index>=CHARACTER_LIMITS.augments)return {ok:false,error:'Choose a numbered augment slot.'};
+        if(!Number.isInteger(index)||index<0||index>=CHARACTER_LIMITS.augments)return {ok:false,error:'Choose a numbered Exaltation slot.'};
         if(!current.augments.some(value=>value.index===index))return {ok:true,candidate:clone(current),saved:true};
         return updateCandidate(id,{augments:current.augments.filter(value=>value.index!==index),augmentBaseline:socketBaseline(current)});
     }
@@ -757,7 +765,7 @@ export function characterShareSummary(snapshot) {
         stats:{current:totals.current?{stats:totals.current.stats,confirmed:totals.current.confirmed,at:totals.current.at}:null,computed:totals.computed},
         equipment:CHARACTER_SLOTS.map(slot=>{const item=byId.get(state.equipment[slot.id]);return {slot:slot.id,label:slot.label,item:item ? {
             name:item.name,wikiTitle:item.wikiTitle,wikiMatch:item.wikiMatch,iconId:item.iconId,tier:item.tier,fraction:item.fraction,observedTier:item.observedTier,observedFraction:item.observedFraction,statBasis:item.statBasis,level:item.level,
-            slots:item.slots,observedStats:item.observedStats,baseStats:item.baseStats,...characterItemStats(item),
-            augments:clone(item.augments),augmentSlots:item.augmentSlots,augmentStatus:item.augmentStatus,slotWarning:characterSlotCompatibility(item,slot.id).warning} : null};}),
-        caveat:'Character totals are the reviewed equipped statistics. Individual gear, tier and augment values never change the observed totals.'};
+            details:normalizeCharacterItemDetails(item.details),slots:item.slots,observedStats:item.observedStats,baseStats:item.baseStats,...characterItemStats(item),
+            augments:item.augments.map(augment=>({index:augment.index,name:augment.name,wikiTitle:augment.wikiTitle,iconId:augment.iconId,tier:augment.tier,details:normalizeCharacterItemDetails(augment.details),...characterExaltationStats(augment)})),augmentSlots:item.augmentSlots,augmentStatus:item.augmentStatus,slotWarning:characterSlotCompatibility(item,slot.id).warning} : null};}),
+        caveat:'Character totals are the reviewed equipped statistics. Individual gear, tier and Exaltation values never change the observed totals.'};
 }
