@@ -7,11 +7,12 @@ It tracks every approved Character/card, Contribute, wiki API/drop-storage and
 local contribution-list cleanup requirement with task IDs, code locations,
 dependencies, acceptance conditions, owners and separate deployment checkboxes.
 Update its completion ledger and the private checkpoint before context compaction.
-Pure Character/card, contribution identity/queue, observation outbox, wiki API
-and Icon Finder implementations now exist with focused synthetic checks. Root
-owns remaining integrated native/platform/package gates and activation receipts;
-this is still a candidate, not a published 0.9.8. No updated database/dataset pull
-is requested.
+Character/card, contribution identity/queue, observation outbox, wiki API and
+Icon Finder implementations pass the complete source suite and focused real-main
+workflow/lifecycle checks. Platform/package gates and live activation have
+separate records in the release plan and GitHub release workflows. The local
+queue cleanup archived12 stale entries and retained37, with a private backup.
+No updated database/dataset pull is requested.
 
 ### Candidate integration contracts
 

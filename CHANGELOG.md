@@ -2,9 +2,8 @@
 
 ## 0.9.8 - Richer Character cards and reviewed wiki contributions
 
-Candidate: source implementation and focused checks are in progress. App publication,
-wiki schema/templates/API documentation activation and installed-list cleanup have
-separate acceptance receipts in [the release plan](docs/RELEASE_098_PLAN.md).
+App publication, wiki schema/templates/API documentation activation and installed-list
+cleanup have separate acceptance records in [the release plan](docs/RELEASE_098_PLAN.md).
 
 - Put the equipped item's tier slider directly below its hover name. Keep adjusted preview values green and recorded Character totals unchanged.
 - Prefill known attached `(Exaltation)` export rows using an exact socket-only alias. Default unknown capacity to five sockets while preserving explicit observed capacity and occupied positions through eight; retain original artwork and private export provenance.

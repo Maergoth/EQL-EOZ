@@ -4,7 +4,7 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.8 candidate: clearer Character cards and reviewed contributions.** This
+**0.9.8: clearer Character cards and reviewed contributions.** This
 follow-up adds equipped-hover tier controls, imported Exaltations, richer item
 details, User-page character sheets and a screenshot-based Icon Finder. The
 published baseline remains 0.9.7 until the release gates and wiki activation
@@ -30,7 +30,7 @@ target your **User:Name** page. Character Select preserves
 separate **Character (Server)** saves. The wiki contract and activation boundary
 are documented in [the cross-repository plan](docs/CHARACTER_SHEETS_PLAN.md).
 
-The following images show the **0.9.8 candidate components with synthetic
+The following images show the **0.9.8 components with synthetic
 records** in Chromium. They are interface evidence, not live-game capture or
 production wiki submissions. Older tours remain available in What's new.
 

@@ -71,7 +71,7 @@ Old talk-page sheets are not moved or deleted, and destination changes need a
 fresh review. Local PNG copy/save does not upload an image. Ordinary gameplay,
 queueing and screenshots never publish an article edit automatically.
 
-The 0.9.8 candidate adds a separate minimal kill/loot observation outbox. Its
+Version 0.9.8 adds a separate minimal kill/loot observation outbox. Its
 clearly labeled Settings option defaults on and controls collection and upload.
 While enabled, fresh structured events are retained in bounded atomic private
 storage; while the app runs and the user is logged in, due batches can be sent
