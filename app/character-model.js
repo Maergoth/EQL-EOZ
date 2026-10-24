@@ -129,7 +129,16 @@ function normalizeAugments(values){
     return result.sort((a,b)=>a.index-b.index);
 }
 function augmentBaseline(value){
-    return value&&typeof value==='object'&&['included','excluded','unknown'].includes(value.mode)?{mode:value.mode,emptyKnown:value.emptyKnown===true,augments:normalizeAugments(value.augments)}:null;
+    return value&&typeof value==='object'&&['included','excluded','unknown'].includes(value.mode)?{mode:value.mode,emptyKnown:value.emptyKnown===true,augments:normalizeAugments(value.augments),uncertain:value.uncertain===true,overrides:normalizeCharacterStats(value.overrides)}:null;
+}
+function augmentContribution(augments,key){
+    let total=0;for(const augment of augments){const value=has(augment.stats,key)?augment.stats[key]:augment.statsComplete?0:null;if(value===null)return null;total+=value;}return total;
+}
+function originalAugmentContribution(baseline,key){
+    if(has(baseline.overrides,key))return baseline.overrides[key];
+    if(baseline.uncertain)return null;
+    if(baseline.mode==='excluded')return 0;
+    return baseline.emptyKnown?augmentContribution(baseline.augments,key):null;
 }
 const automaticObservation=value=>Boolean(value&&((value.kind==='ocr'||value.source==='ocr')&&(!value.subject?.kind||value.subject.kind==='item')||Array.isArray(value.fields)&&value.subject?.kind==='item'));
 function normalizeCandidate(value={}) {
@@ -223,18 +232,27 @@ export function characterItemStats(candidate) {
     if(preview&&item.augmentStatus==='included'){complete=false;uncertainAll=true;warnings.push('Catalog preview does not establish the effects included in the captured augmented item.');}
     if(item.augmentBaseline){
         const baseline=item.augmentBaseline,originals=new Map(baseline.augments.map(augment=>[augment.index,augment])),current=new Map(item.augments.map(augment=>[augment.index,augment]));
-        const additive=!observed||baseline.mode==='excluded',baseComplete=observed?item.observedStatsComplete:item.baseStatsComplete&&item.tier!==null;
-        for(const index of new Set([...originals.keys(),...current.keys()])){
+        const additive=!observed||baseline.mode==='excluded',baseComplete=observed?item.observedStatsComplete:item.baseStatsComplete&&item.tier!==null,originalValues={...stats};
+        if(observed&&baseline.uncertain){for(const key of new Set([...Object.keys(stats),...item.augments.flatMap(augment=>Object.keys(augment.stats))]))stats[key]=null;complete=false;uncertainAll=true;}
+        else for(const index of new Set([...originals.keys(),...current.keys()])){
             const before=originals.get(index),after=current.get(index);
             if(!additive&&JSON.stringify(before)===JSON.stringify(after))continue;
             if(additive&&!after)continue;
             for(const key of new Set([...Object.keys(stats),...Object.keys(before?.stats||{}),...Object.keys(after?.stats||{})])){
+                if(observed&&has(baseline.overrides,key))continue;
                 const base=has(stats,key)?stats[key]:baseComplete?0:null;
                 const old=additive?0:before?(has(before.stats,key)?before.stats[key]:before.statsComplete?0:null):baseline.emptyKnown?0:null;
                 const next=after?(has(after.stats,key)?after.stats[key]:after.statsComplete?0:null):0;
                 stats[key]=base===null||old===null||next===null?null:base-old+next;
             }
             if(!additive&&!before&&!baseline.emptyKnown||before&&!before.statsComplete||after&&!after.statsComplete){complete=false;uncertainAll=true;}
+        }
+        if(observed)for(const [key,old]of Object.entries(baseline.overrides)){
+            // A protected/manual or not-reread number still belongs to its
+            // earlier socket basis. Do not reinterpret it as the new capture.
+            if(!has(originalValues,key)){delete stats[key];continue;}
+            const value=originalValues[key],next=augmentContribution(item.augments,key);
+            stats[key]=value===null||old===null||next===null?null:value-old+next;
         }
         if(uncertainAll)warnings.push('An original socket contribution is unknown; the augment adjustment remains partial.');
     }else if (item.augmentStatus === 'excluded') {
@@ -539,7 +557,25 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     function socketBaseline(current){
         if(current.augmentBaseline)return clone(current.augmentBaseline);
         const excluded=!Object.keys(current.observedStats).length||['none','excluded'].includes(current.augmentStatus);
-        return {mode:excluded?'excluded':current.augmentStatus==='included'?'included':'unknown',emptyKnown:excluded||current.augmentSlots!==null&&current.emptyAugmentSlots!==null&&current.emptyAugmentSlots+current.augments.length===current.augmentSlots,augments:clone(current.augments)};
+        return {mode:excluded?'excluded':current.augmentStatus==='included'?'included':'unknown',emptyKnown:excluded||current.augmentSlots!==null&&current.emptyAugmentSlots!==null&&current.emptyAugmentSlots+current.augments.length===current.augmentSlots,augments:clone(current.augments),uncertain:false,overrides:{}};
+    }
+    function recapturedSocketBaseline(current,source,mergedStatKeys){
+        if(!current.augmentBaseline||!mergedStatKeys.length)return current.augmentBaseline;
+        const previous=current.augmentBaseline,raw=parseItemAugmentSlots(source.rawStatBlock),capacity=socketCount(source.augmentSlots)??raw.augmentSlotCount,empty=socketCount(source.emptyAugmentSlots)??raw.emptyAugmentSlots;
+        const incoming=Array.isArray(source.augments)?source.augments:raw.augments,known=[...current.augments,...previous.augments],occupied=[],indices=new Set();
+        let verified=capacity!==null&&empty!==null&&incoming.length+empty===capacity;
+        for(const entry of incoming){
+            const index=entry?.index,name=characterBaseItemName(entry?.name).normalize('NFKC').toLowerCase(),suffix=String(entry?.name||'').match(/\+(10|[0-9])\s*$/),tier=fullTier(entry?.tier)??(suffix?Number(suffix[1]):0);
+            const match=known.find(augment=>augment.index===index&&characterEquipmentEligibility(augment).known&&characterBaseItemName(augment.name).normalize('NFKC').toLowerCase()===name&&augment.tier===tier);
+            if(!Number.isInteger(index)||index<0||index>=capacity||indices.has(index)||!match)verified=false;
+            indices.add(index);if(match)occupied.push(clone(match));
+        }
+        const fresh=new Set(mergedStatKeys),overrides={};
+        for(const key of Object.keys(current.observedStats))if(!fresh.has(key))overrides[key]=originalAugmentContribution(previous,key);
+        // Fresh measured values may already include the configured augment.
+        // Only fully enumerated, known sockets establish that new inclusion
+        // basis. Otherwise the adjustment is unknown instead of adding twice.
+        return verified?{mode:'included',emptyKnown:true,augments:occupied,uncertain:false,overrides}:{...clone(previous),uncertain:true,overrides};
     }
     function setAugmentSlots(id,count){
         const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
@@ -584,6 +620,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             observedStats[key]=value;mergedStatKeys.push(key);
         }
         const patch={observedStats},editedFields=new Set(current.editedFields);
+        if(current.augmentBaseline)patch.augmentBaseline=recapturedSocketBaseline(current,source,mergedStatKeys);
         if(automaticObservation(observation)&&Object.keys(incoming).length){patch.observedTier=fullTier(source.tier);patch.observedFraction=tierFraction(source.fraction,patch.observedTier);}
         const slots=characterSlotKinds(source.slots);
         if(slots.length&&!editedFields.has('slots')){

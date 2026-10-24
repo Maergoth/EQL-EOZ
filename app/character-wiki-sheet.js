@@ -72,7 +72,7 @@ export function buildCharacterWikiSheet(snapshot){
     return normalizeCharacterWikiSheet({schemaVersion:CHARACTER_WIKI_SHEET_SCHEMA,metadata:{name:metadata.name||'',server:metadata.server||'',level:metadata.level??null,race:metadata.race||'',classes:metadata.classes||[],aaCount:metadata.aaCount??null},totals,equipment});
 }
 
-const literal=value=>String(value).replace(/[&<>"'{}|\[\]~]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','{':'&#123;','}':'&#125;','|':'&#124;','[':'&#91;',']':'&#93;','~':'&#126;'}[character]));
+const literal=value=>String(value).replace(/[&<>"'{}|\[\]~_]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','{':'&#123;','}':'&#125;','|':'&#124;','[':'&#91;',']':'&#93;','~':'&#126;','_':'&#95;'}[character]));
 const numericText=(value,complete=true)=>value===null?'?':`${value}${complete?'':' *'}`;
 const statLines=(value,complete)=>Object.entries(value).map(([key,value])=>`${literal(characterStatLabel(key))}: ${numericText(value,complete)}`).join('<br>');
 /** Only fixed parameter names and generated numeric/stat markup enter source.

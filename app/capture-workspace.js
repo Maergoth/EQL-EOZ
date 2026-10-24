@@ -170,10 +170,13 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     async function stopCapture(mode){if(!capture)throw Error('Screen reading requires the desktop app.');if(!publishing)invalidatePlan();captureState=await capture.stop(mode?{mode}:undefined);renderCapture();}
     async function importScreenshot(mode,{source='file',equipSlotId=null,isCurrent=()=>true}={}){
         if(!capture)throw Error('Screenshot reading requires the desktop app.');
-        if(!Number.isSafeInteger(captureState.generation)){captureState=await capture.status();if(disposed)return;renderCapture();}
+        const epoch=walkthroughEpoch,profileId=profiles.activeId(),current=()=>!disposed&&isCurrent()&&(!equipSlotId||augmentDialog.open)&&(mode!=='character'||epoch===walkthroughEpoch&&profileId===profiles.activeId());
+        if(!current())return;
+        if(!Number.isSafeInteger(captureState.generation)){const next=await capture.status();if(!current())return;captureState=next;renderCapture();}
+        if(!current())return;
         const flow=walkthrough.snapshot(),sessionId=mode==='character'?(flow.active?flow.sessionId:captureState.characterSessionId||(captureState.owner==='character'&&captureState.sessionId)||(offlineCharacterSessionId||=globalThis.crypto.randomUUID())):undefined;
         const token=mode==='character'?{sessionId,equipSlotId,at:Date.now(),epoch:walkthroughEpoch,eligible:!flow.active||CHARACTER_ITEM_READ_STEPS.includes(flow.step),inactive:!flow.active,baseEligible:!equipSlotId&&flow.active&&flow.step==='base',baseAfterAt:flow.baseAfterAt,captureGeneration:captureState.generation,captureSourceId:captureState.source?.id||null,captureSessionId:captureState.sessionId||''}:null;if(token)manualItemRead=token;
-        try{const result=await capture.importImage({mode,source,...(sessionId?{sessionId}:{})});if(disposed||result.cancelled||token&&token.epoch!==walkthroughEpoch)return;
+        try{const result=await capture.importImage({mode,source,...(sessionId?{sessionId}:{})});if(!current()||result.cancelled)return;
             if(equipSlotId&&isCurrent()&&token?.epoch===walkthroughEpoch&&CHARACTER_SLOTS.some(slot=>slot.id===equipSlotId)){
                 const generation=token.captureGeneration;
                 for(const observation of result.records||[]){
@@ -338,7 +341,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         const card=character.snapshot().candidates.find(item=>item.id===id);if(!card)return;
         hideItemTooltip();augmentCatalog?.dispose();augmentCatalog=null;augmentDialog.onpaste=null;
         const epoch=walkthroughEpoch,activeId=profiles.activeId(),picker=++pickerEpoch;
-        const current=()=>!disposed&&picker===pickerEpoch&&epoch===walkthroughEpoch&&activeId===profiles.activeId()&&character.snapshot().candidates.some(item=>item.id===id);
+        const current=()=>!disposed&&augmentDialog.open&&picker===pickerEpoch&&epoch===walkthroughEpoch&&activeId===profiles.activeId()&&character.snapshot().candidates.some(item=>item.id===id);
         augmentDialog.innerHTML=`<div class="panel-heading"><h2>${index===null?'Augment slots':`Augment slot ${index+1}`} · ${escape(characterItemLabel(card))}</h2><button type="button" class="text-button" data-augment-close>Close</button></div>${index===null?`<form data-augment-capacity-form><label>Number of augment slots<input name="capacity" type="number" min="0" max="8" step="1" value="${card.augmentSlots??''}" required></label><button class="primary-button">Save slots</button></form>`:'<section data-augment-catalog></section>'}`;
         augmentDialog.querySelector('[data-augment-close]').onclick=()=>augmentDialog.close();
         if(index===null){augmentDialog.querySelector('form').onsubmit=event=>{event.preventDefault();if(!current())return augmentDialog.close();const result=character.setAugmentSlots(id,Number(event.target.elements.capacity.value));if(result.ok){augmentDialog.close();commitSocketChange(result,id);}else warning(result.error);};}
@@ -354,7 +357,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function openEquipmentPicker(slotId){
         if(publishing)return;const slot=CHARACTER_SLOTS.find(slot=>slot.id===slotId);if(!slot)return;
         hideItemTooltip();augmentCatalog?.dispose();augmentCatalog=null;augmentDialog.onpaste=null;
-        const epoch=walkthroughEpoch,activeId=profiles.activeId(),picker=++pickerEpoch,current=()=>!disposed&&picker===pickerEpoch&&epoch===walkthroughEpoch&&activeId===profiles.activeId();
+        const epoch=walkthroughEpoch,activeId=profiles.activeId(),picker=++pickerEpoch,current=()=>!disposed&&augmentDialog.open&&picker===pickerEpoch&&epoch===walkthroughEpoch&&activeId===profiles.activeId();
         augmentDialog.innerHTML=`<div class="panel-heading"><h2>Add item · ${escape(slot.label)}</h2><button type="button" class="text-button" data-augment-close>Close</button></div><div class="capture-actions"><button type="button" class="secondary-button" data-equipment-paste>Paste screenshot</button><button type="button" class="text-button" data-equipment-file>Read screenshot file</button></div><p class="settings-helper">Search your wiki database and choose a tier, or copy an item tooltip screenshot and paste it here (Ctrl+V). Unmatched screen reads stay in Inventory until you choose their wiki match.</p><p data-equipment-read-status role="status"></p><section data-equipment-catalog></section>`;
         augmentDialog.querySelector('[data-augment-close]').onclick=()=>augmentDialog.close();
         const pack=getPack(),items=slot.universal?pack.items:(pack.items||[]).filter(item=>{try{return characterSlotCompatibility(characterCatalogCard(item),slotId).compatible;}catch{return false;}});

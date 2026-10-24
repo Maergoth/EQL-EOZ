@@ -7,6 +7,7 @@
 - Click item augment sockets to select a known item and tier, including weapons in armor. Read explicit socket counts, preserve original examine values and apply augment changes once. Keep Exaltations as effects.
 - Remove fractional progress controls and the Power Source equipment slot. Preserve old Power Source cards in Inventory and keep captured statistics intact.
 - Share a collapsed, interactive Character (Server) sheet on your own wiki talk page. Gear and augments link to their articles; resharing replaces the matching managed sheet while preserving other characters and discussion. Check installed wiki templates/renderer before editing, protect revisions and reconcile uncertain retries without duplicate sections or PNG uploads.
+- Rebase fresh item reads to their observed augment layout without double counting; preserve offline projections and protected manual values. Reject late screenshot actions after switching characters or closing a picker, and keep wiki behavior-switch text literal.
 
 ## 0.9.5 - Keep your inventory and recover missed item reads
 

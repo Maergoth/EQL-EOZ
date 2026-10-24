@@ -103,8 +103,11 @@ and prevent counting an already included augment twice. Explicit clipboard reads
 use the existing local OCR pipeline; capture never polls the clipboard. New
 picker epochs prevent a canceled picker from acting on a later one.
 
-No new wiki/database writes, release or production deployment has been performed
-for this request. Private synthetic evidence is under
+Staging activation passed source/hash, private-backup, revision/create guard,
+live capability and responsive component checks. Its template revisions are
+199101 (helper) and 199102 (main). Production activation and public package
+receipts are tracked in the linked PRs rather than inferred from source pushes.
+Private synthetic evidence is under
 `D:\EQLWiki\.local\validation\eoz-character-sheets-096`.
 
 Wiki review: [EQLWiki PR #58](https://github.com/Maergoth/EQLWiki/pull/58),
@@ -112,3 +115,12 @@ targeting staging at reviewed head `62d7b6bad1a5c46b5cca23368d767805c7120c3f`.
 The final full source suite, dependency audit, catalog relevance, native workspace
 (including canceled/late modal imports), native walkthrough and real canvas
 exports pass locally. Public release and wiki activation remain separate gates.
+
+Production promotion uses only the reviewed component and a narrowly tested
+publisher newline normalization fix: [EQLWiki PR #59](https://github.com/Maergoth/EQLWiki/pull/59).
+App review is [EoZ PR #19](https://github.com/Maergoth/EQL-EOZ/pull/19).
+Final review also covers observed augment recapture rebasing (including offline
+projections and protected manual fields), initial screenshot status replies
+across character/picker cancellation, and literal wiki behavior-switch text.
+The actual serializer/PST roundtrip now passes 186 checks; raw behavior switches
+are a negative control, while escaped caption/identity text stays literal.
