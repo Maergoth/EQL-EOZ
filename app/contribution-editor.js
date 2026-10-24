@@ -1,5 +1,6 @@
 import { normalizeWikiIdentity } from './wiki-identity.js';
 import { contributionQueueInfo } from './contribution-presentation.js';
+import { contributionChoicePickerMarkup } from './contribution-choice-picker.js';
 // Shared, escaped editor markup. Publication still uses an account-bound,
 // revision-guarded complete diff; there are no per-field verification gates.
 export const editorEscape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -11,6 +12,8 @@ const numeric=new Set(['ac','hp','mana','endurance','str','sta','agi','dex','wis
 export function contributionFieldMarkup(key,field,{kind,requireLocation=true}={}){
     if(internal.has(key)||key==='knownLoot'||kind==='item'&&numeric.has(key))return '';
     const array=Array.isArray(field.value),text=array?field.value.join(['statLines','knownNPCs'].includes(key)?'\n':', '):field.value??'',multiline=['statLines','knownNPCs'].includes(key),original=e(JSON.stringify({value:field.value,confirmed:field.confirmed===true}));
+    if(kind==='item'&&['classes','slots'].includes(key))return `<div class="contribution-field contribution-choice-field" data-field-key="${e(key)}" data-original-field="${original}"><span>${e(labels[key])}</span>${contributionChoicePickerMarkup(key,field.value)}</div>`;
+    if(kind==='item'&&key==='iconId')return `<div class="contribution-field contribution-icon-field" data-field-key="iconId" data-original-field="${original}"><label>Icon ID<input data-field-value data-type="${typeof field.value}" type="number" min="0" max="9999999" step="1" value="${e(text)}" placeholder="ex. 5667"></label><div data-contribution-icons></div></div>`;
     return `<label class="contribution-field" data-field-key="${e(key)}" data-original-field="${original}"><span>${e(labels[key]||key.replace(/([a-z])([A-Z])/g,'$1 $2'))}</span>${multiline?`<textarea data-field-value data-array="${array}" rows="${key==='statLines'?7:3}" placeholder="${e('ex. '+(examples[key]||'?'))}">${e(text)}</textarea>`:`<input data-field-value data-type="${typeof field.value}" ${array?'data-array="true"':''} value="${e(text)}" placeholder="${e('ex. '+(examples[key]||'?'))}" ${kind==='npc'&&key==='location'&&requireLocation?'required':''}>`}</label>`;
 }
 export function contributionLootMarkup(candidate){

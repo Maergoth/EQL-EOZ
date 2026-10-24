@@ -197,9 +197,12 @@ required; individual fields no longer need separate Verified checkboxes.
 
 Use the screenshot **+** area to select/paste a PNG, review its caption/license
 and choose whether to publish it with the article. Local OCR is separate from
-uploading. In **Icon Finder**, paste/select a crop containing **just the icon**,
-or browse/search exact artwork IDs. Matching runs locally against the wiki's
+uploading. Item **Classes** and **Equipment slots** use multiselect dropdowns
+with fixed choices. Select several entries; Classes also supports All/None.
+Under **Icon ID**, paste a crop containing **just the icon** into the inline box,
+then select its matching artwork. Matching runs locally against the wiki's
 versioned index; original aliases and IDs are preserved. No icon crop uploads.
+See the [next-release form plan](docs/CONTRIBUTION_ITEM_FORM_PLAN.md).
 
 Log in through the wiki's normal dedicated window when you are ready to submit.
 The app loads the current wiki blueprints, prepares a page plan and shows every

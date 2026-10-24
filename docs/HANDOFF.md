@@ -18,6 +18,12 @@ No updated database/dataset pull was triggered. See the closing ledger for actua
 
 ### Current integration contracts
 
+The next-release [item-form plan](CONTRIBUTION_ITEM_FORM_PLAN.md) covers fixed
+Classes/Slots multiselect dropdowns and paste-only icon matching inside Icon ID.
+`app/contribution-choice-picker.js` preserves untouched legacy draft values;
+`app/icon-finder.js` compact mode retains local fingerprints and exact aliases.
+Source preparation does not publish the feature or modify installed profiles.
+
 - Character uses only confirmed current displayed stats. Equipped-hover tiers,
   catalog cards and Exaltations never change totals. Attached `(Exaltation)`
   aliases are socket-only; unknown capacity falls back to five, retaining

@@ -162,7 +162,11 @@ in-progress edits. A final reviewed multi-page diff is required for publication.
 
 PNG screenshot selection/paste is separate from local OCR and actual upload.
 Caption/license and the intended article link are included in the reviewed plan.
-The local Icon Finder accepts only a bounded crop containing just the icon,
+The item form embeds one paste target inside Icon ID; closest matches appear
+there only after pasting. It has no separate finder section or browse/file/search
+controls. Item Classes and Slots are fixed-choice multiselect dropdowns with
+keyboard navigation. Existing unedited draft values remain intact until changed.
+The local icon matcher accepts only a bounded crop containing just the icon,
 reuses the wiki's algorithm-6 fingerprint code and versioned static catalog,
 and preserves every exact item artwork alias/ID. It fetches metadata/catalog/
 fingerprint index only as needed and proxies bounded first-party thumbnails;
