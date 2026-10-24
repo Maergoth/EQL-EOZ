@@ -1,13 +1,14 @@
-import { characterSlotKinds, normalizeCharacterStats, safeCharacterIcon } from './character-model.js';
+import { characterBaseItemName, characterSlotKinds, normalizeCharacterStats, safeCharacterIcon } from './character-model.js';
 import { scaleItemStat } from './item-scaling.js';
 import { isItemStatModified } from './item-stat-presentation.js';
 
 // Character-local catalog access. No capture, remote request or global item-tier
 // setting is used. Selecting a catalog record never fabricates examine evidence.
-export const CHARACTER_CATALOG_LIMITS=Object.freeze({results:24,maximumResults:60,records:100000,query:160});
+export const CHARACTER_CATALOG_LIMITS=Object.freeze({results:24,maximumResults:60,records:100000,query:160,matches:8});
 const text=value=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,240);
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const folded=value=>text(value).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+const itemName=value=>folded(characterBaseItemName(value));
 const statsLabel=key=>({MP:'Mana',END:'Endurance',WT:'Weight',DMG:'Damage',DMG_BONUS:'Damage bonus',SV_CORRUPTION:'Void resist',ATTACK_SPEED:'Attack speed %'}[key]||key.replace(/_/g,' '));
 const number=value=>value===null?'?':Number.isInteger(value)?String(value):String(Math.round(value*1000)/1000);
 function progress(options={}){
@@ -36,14 +37,51 @@ export function searchCharacterCatalog(pack,query='',{limit=CHARACTER_CATALOG_LI
     return{items:matches.slice(0,bounded).map(match=>match.item),total:matches.length,incomplete,query:normalized,status:matches.length?'ready':'no-match'};
 }
 
+function oneEdit(a,b) {
+    if(a===b)return 'exact';
+    // A glyph confusion is one bounded operation, not a global replacement.
+    for(const [from,to]of [['rn','m'],['m','rn']])for(let at=a.indexOf(from);at>=0;at=a.indexOf(from,at+1))if(a.slice(0,at)+to+a.slice(at+from.length)===b)return 'ocr-glyph';
+    if(Math.abs(a.length-b.length)>1)return null;
+    let left=0,right=0,edits=0;
+    while(left<a.length&&right<b.length){if(a[left]===b[right]){left++;right++;continue;}if(++edits>1)return null;if(a.length>=b.length)left++;if(b.length>=a.length)right++;}
+    return edits+(left<a.length||right<b.length?1:0)===1?'one-edit':null;
+}
+const catalogIndexes=new WeakMap();
+function catalogIndex(source,version) {
+    let index=catalogIndexes.get(source);if(index?.length===source.length&&index.version===version)return index;
+    const records=[],exact=new Map();
+    for(const item of source.slice(0,CHARACTER_CATALOG_LIMITS.records)) {
+        if(!item||typeof item!=='object')continue;
+        const aliases=[...new Set([itemName(item.name),itemName(item.wikiTitle)].filter(Boolean))],identity=text(item.wikiTitle||item.name).normalize('NFKC').replace(/_/g,' ').toLowerCase();
+        if(!identity)continue;
+        records.push({item,aliases,identity});
+        for(const alias of aliases){let matches=exact.get(alias);if(!matches){matches=new Map();exact.set(alias,matches);}matches.set(identity,{item,distance:0,reason:'exact'});}
+    }
+    index={length:source.length,version,records,exact};catalogIndexes.set(source,index);return index;
+}
+/** Full-name identity matching, independent of tier. Exact matches outrank
+ * bounded one-edit/rn↔m proposals. Ties never choose a catalog page. Short names
+ * require an exact match; a partial cache does not establish item absence. */
+export function resolveCharacterCatalog(pack,observedName,{limit=CHARACTER_CATALOG_LIMITS.matches}={}) {
+    const source=Array.isArray(pack?.items)?pack.items:[],query=itemName(String(observedName??'').slice(0,CHARACTER_CATALOG_LIMITS.query)),incomplete=!Array.isArray(pack?.items)||pack?.meta?.sample===true||pack?.meta?.wikiEntitiesComplete!==true||source.length>CHARACTER_CATALOG_LIMITS.records;
+    const index=catalogIndex(source,pack?.meta?.manifestVersion||pack?.meta?.version),exact=index.exact.get(query)||new Map(),fuzzy=new Map(),maximum=Math.max(1,Math.min(CHARACTER_CATALOG_LIMITS.matches,Math.floor(Number(limit)||CHARACTER_CATALOG_LIMITS.matches)));
+    if(query&&!exact.size&&query.replace(/ /g,'').length>=6)for(const {item,aliases,identity}of index.records) {
+        const reason=aliases.map(alias=>Math.abs(alias.length-query.length)<=1&&alias.replace(/ /g,'').length>=6?oneEdit(query,alias):null).find(Boolean);
+        if(reason)fuzzy.set(identity,{item,distance:1,reason});
+    }
+    const matches=[...(exact.size?exact:fuzzy).values()].sort((a,b)=>text(a.item.name||a.item.wikiTitle).localeCompare(text(b.item.name||b.item.wikiTitle))||text(a.item.wikiTitle).localeCompare(text(b.item.wikiTitle)));
+    const unique=matches.length===1,status=!matches.length?'unmatched':!unique?'ambiguous':exact.size?'exact':'fuzzy';
+    return {status,item:unique?matches[0].item:null,candidates:matches.slice(0,maximum),total:matches.length,autoResolved:unique,incomplete,query};
+}
+
 /** A manual physical card from an explicitly selected catalog identity. The
  * selected tier/progress is known; observedStats and capture evidence are empty.
  * Catalog stats remain base values. Augment state needs review unless explicit.
  */
 export function characterCatalogCard(item,options={}){
     if(!item||typeof item!=='object'||!text(item.name||item.wikiTitle))throw Error('Choose a cached item first.');
-    const {tier,fraction}=progress(options),baseStats=normalizeCharacterStats(item.stats),name=text(item.name||item.wikiTitle);
-    return{name,wikiTitle:text(item.wikiTitle||item.name),wikiMatch:'confirmed',iconId:text(item.iconId),icon:safeCharacterIcon(options.icon),
+    const {tier,fraction}=progress(options),baseStats=normalizeCharacterStats(item.stats),name=characterBaseItemName(item.name||item.wikiTitle),wikiTitle=text(item.wikiTitle||item.name);
+    return{name,observedName:'',wikiTitle,wikiMatch:'confirmed',catalogIdentity:{name,wikiTitle,match:'manual'},iconId:text(item.iconId),icon:safeCharacterIcon(options.icon),
         slots:characterSlotKinds(item.slots),tier,fraction,baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,
         unscaledStatKeys:Object.hasOwn(baseStats,'SV_CORRUPTION')?['SV_CORRUPTION']:[],
         observedStats:{},observedStatsComplete:false,augments:[],augmentStatus:item.augmentStatus==='none'?'none':'unknown',

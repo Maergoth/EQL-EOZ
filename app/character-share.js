@@ -1,5 +1,5 @@
 import { appearanceFont, normalizeAppearance } from './appearance.js';
-import { CHARACTER_SLOTS, characterShareSummary, characterStatLabel, safeCharacterIcon } from './character-model.js';
+import { CHARACTER_SLOTS, characterBaseItemName, characterShareSummary, characterStatLabel, safeCharacterIcon } from './character-model.js';
 
 export const CHARACTER_SHARE_LIMITS = Object.freeze({width:1800,minHeight:2400,maxHeight:8192,maxPixels:15000000,maxBytes:12000000,maxIconDimension:256});
 const COLORS = Object.freeze({background:'#070b12',panel:'#0e141e',line:'#66582d',gold:'#d8b75c',heading:'#f0d77f',text:'#e9edf3',muted:'#9ba8b8',warning:'#e6c84c'});
@@ -144,7 +144,7 @@ export async function renderCharacterShare(snapshot,{document=globalThis.documen
             const image=iconCache.get(iconSource);
             if(image) ctx.drawImage(image,x+18,y+43,48,48);
             else {ctx.strokeStyle=COLORS.line;ctx.strokeRect(x+18,y+43,48,48);text('?',x+35,y+55,{color:COLORS.muted});}
-            const nameRows=wrap(item.name,w-111,{bold:true});
+            const nameRows=wrap(characterBaseItemName(item.name),w-111,{bold:true});
             // A bounded 240-character title could exceed the normal card title
             // region. Refuse instead of producing a clipped/overlapping image.
             if(nameRows.length>2) throw new Error('An item title is too long for the share card. Review the extracted name before exporting.');

@@ -6,6 +6,22 @@ OCR, authentication, clipboard/save and own-talk submission belong to their
 separate services. These modules never open a source, read game memory, submit a
 wiki edit, load remote artwork or interpret an item's text as markup.
 
+## Character module map
+
+| Module | Responsibility |
+| --- | --- |
+| `app/capture-workspace.js/css` | Guided flow integration, source/status controls, compact inventory interaction, match picker, editable proposals and share actions. |
+| `app/character-inventory-view.js` | Escaped identity/AA and stat markup, 23-slot compact equipment rows, loose physical-card icons, one tier label and item details. No capture or model mutation. |
+| `app/character-walkthrough.js` | Resumable phase/session/source/time windows, fresh-base cutoff, bounded same-copy aliases, ignores and completion/cancellation. |
+| `app/character-catalog.js` | Local token search and tier preview, exact/bounded fuzzy identity resolution and explicit catalog-card creation. |
+| `app/character-model.js` | Bounded physical cards/evidence, known-only assignment, legacy identity reconciliation, separate observations and equipped estimates. |
+| `app/character-share.js` | Bounded deterministic canvas layout and local PNG encoding from assigned gear. |
+
+The current 0.9.4 inventory contract is indexed in
+[Character inventory and catalog identity](../CHARACTER_INVENTORY_REVIEW.md).
+Remove/equip/unequip and slot confirmation all use the model boundary; the view
+cannot make an unresolved read eligible by changing markup or a checkbox.
+
 The 0.9.3 intake layer in `app/character-walkthrough.js` retains at most 32
 item-reading windows with phase start/end, selected source and capture
 generation. `syncCapture(status)` binds them to the explicitly started source;
@@ -34,16 +50,21 @@ and [the prior capture follow-up](../TOOLTIP_CAPTURE.md) for evidence.
 ```js
 import {
   CHARACTER_SLOTS, createCharacterModel, characterObservationInput,
-  characterItemStats, characterSlotCompatibility, characterShareSummary
+  characterItemStats, characterSlotCompatibility, characterShareSummary,
+  characterEquipmentEligibility, characterLooseCandidates
 } from './character-model.js';
 import { renderCharacterShare } from './character-share.js';
 
 const character = createCharacterModel({ storage: localStorage, onWarning });
 const result = character.intake(observation, {
   wikiItem: matchingCachedItem, // optional; its stats are catalog base values
-  icon: cachedPack.icons[matchingCachedItem.iconId] // optional raster data URL
+  catalogMatch: 'exact', // or 'fuzzy' from the bounded local resolver
+  icon: matchingCachedItem ? cachedPack.icons[matchingCachedItem.iconId] : undefined
 });
-character.assign(result.candidate.id, 'finger1');
+// An unresolved card remains loose; even an override cannot equip it.
+if (result.ok && result.candidate && characterEquipmentEligibility(result.candidate).canEquip) {
+  character.assign(result.candidate.id, 'finger1');
+}
 character.setStatSnapshot('base', {
   stats: characterObservationInput(statObservation).stats,
   evidence: statObservation, confirmed: false
@@ -62,18 +83,24 @@ Pass `storage:null` for an isolated fixture. Reads and snapshots are copies.
 
 | Method/export | Contract |
 | --- | --- |
-| `snapshot()` | Version-1 JSON state: metadata, candidates, equipment, statSnapshots and updatedAt. Keep this local. |
-| `intake(observation, {wikiItem?, icon?})` | Returns `{ok,candidate,deduplicated,saved}`. A removed replay returns `{ok:true,ignored:true,deduplicated:true,candidate:null}`. Accepts `observation.item` or capture parser field-array proposals. |
-| `updateCandidate(id, patch)` | Edits reviewed fields, without replacing the physical-copy ID or evidence. |
-| `mergeObservation(id, observation, {wikiItem?,icon?})` | Explicit same-copy recapture selected by the walkthrough, including active same-session recovery. Other-session replay uses exact observation IDs. Returns candidate plus `mergedStatKeys`/`preservedStatKeys`; appends bounded evidence, merges only new unedited observed fields, and preserves the exact card/assignment. |
+| `snapshot()` | Version-1 JSON state: metadata, candidates, equipment, statSnapshots, bounded legacy `pendingEquipment` and replay metadata. Keep this local. |
+| `intake(observation, {wikiItem?, icon?, catalogMatch?})` | Returns `{ok,candidate,deduplicated,saved}`. `wikiItem` must come from the local catalog; `catalogMatch` is `exact` or `fuzzy`. A removed replay returns `{ok:true,ignored:true,deduplicated:true,candidate:null}`. Accepts `observation.item` or capture parser field-array proposals. |
+| `updateCandidate(id, patch)` | Edits reviewed fields, without replacing the physical-copy ID, original observed name or evidence. An identity-changing name/title edit invalidates catalog eligibility and unassigns that copy. Typed match fields cannot establish catalog identity. |
+| `mergeObservation(id, observation, {wikiItem?,icon?,catalogMatch?})` | Explicit same-copy recapture selected by the walkthrough, including active same-session recovery. Other-session replay uses exact observation IDs. Returns candidate plus `mergedStatKeys`/`preservedStatKeys`; appends bounded evidence, merges only new unedited observed fields, and preserves the exact card/assignment. |
+| `resolveCatalog(id,item,{match?,icon?})` | Explicit trusted local record selection; `match` is `manual` (default), `exact` or `fuzzy`. Sets canonical identity and refreshes catalog base cache; preserves observed name/stats/text/evidence, tier/progress and physical ID. |
+| `invalidateCatalog(id)` | Clears identity eligibility and moves the physical card out of equipment without deleting it. |
+| `reconcileCatalog(resolve)` | Calls `resolve(candidate)` against the current pack. Only exact matches can recover bounded legacy placements; fuzzy/ambiguous/missing cards remain loose. Optional `result.icon` is validated. Existing reviewed base values remain intact; no physical copies are merged. |
 | `duplicateCandidate(id)` | Explicitly creates another physical copy with its own ID and no claimed capture evidence. |
 | `removeCandidate(id)` | Removes a card and its assignment. |
-| `assign(id, slotId, {replace?,allowIncompatible?})` | Moves the same copy between slots. Occupied/incompatible/unknown slots return `needsConfirmation:true` until the caller explicitly enables the relevant override. |
+| `assign(id, slotId, {replace?,allowIncompatible?})` | Requires catalog-known identity, then moves the same copy between slots. Occupied/incompatible/unknown slots return `needsConfirmation:true` until explicitly overridden. No override permits an unknown catalog item. |
 | `unassign(slotId)` | Clears the slot and keeps the inventory card. |
 | `setMetadata(patch)` | Name, server, level, race, up to three distinct classes, nullable nonnegative integer `aaCount`, named session. Unknown numeric values remain null. AA count is descriptive; it does not determine AA bonuses. |
 | `beginSnapshot(metadataPatch?)` | One save clears equipment assignments and the No Equipment baseline, merges metadata, and retains all inventory cards, removal markers and legacy equipped observations. |
-| `autoAssign(id)` | Uses the current edited card. Returns `{ok,assigned,slot,reason,choices,saved?}`. Already-assigned copies remain in place. Free paired slots use canonical order; unknown/ANY/multiple kinds or occupied slots defer without displacement. |
+| `autoAssign(id)` | Uses the current edited card. Returns `{ok,assigned,slot,reason,choices,saved?}`. Unknown identity defers with `reason:'unknown-catalog'`; known already-assigned copies remain in place. Free paired slots use canonical order; unknown/ANY/multiple kinds or occupied slots defer without displacement. |
 | `characterAutoAssignment(snapshot,id)` | Pure placement decision with the same result fields; does not mutate the snapshot. |
+| `characterEquipmentEligibility(candidate)` | Returns `{known,canEquip,reason}` from persisted catalog identity, not `wikiMatch` or a manually typed title. |
+| `characterLooseCandidates(snapshot)` | Copy of the cards whose physical IDs are not equipped. Equal names/tiers do not remove another loose copy. |
+| `characterBaseItemName(name)` | Removes only complete repeated trailing `+0` through `+10` decorations; does not infer a numeric tier. Shared by walkthrough identity and PNG display. |
 | `setStatSnapshot('base' \| 'equipped', value)` | Value is `{stats,confirmed?,evidence?,at?,notes?,label?}`. Null clears a capture. `base` means observed **No Equipment**. |
 | `totals()` | Separate captured `base`/legacy `equipped`, `derived` gear sums, `computed` equipped estimates with provenance/caveats, empty slots and warnings. |
 | `reset()` | Clears character state and retains bounded replay-removal markers. UI should offer clear confirmation/recovery as appropriate. |
@@ -90,14 +117,16 @@ Each has an English label and catalog slot kind. The UI can use exactly the same
 assign operation for drag/drop and keyboard-accessible card + slot selects.
 Replacement returns the displaced card ID; that card remains in inventory.
 Pass `{autoAssign:true}` as an intake option to place a new captured card when
-safe. Replayed evidence does not move a manually unassigned card. `ANY` remains
+safe and its catalog identity is known. Replayed evidence does not move a
+manually unassigned card. `ANY` remains
 an explicit slot kind and can be placed manually after review; it always defers
 automatic placement. A card with several meaningful slot kinds also defers even
 if only one of those slots is free.
 
 ## Item and observation semantics
 
-Each card retains name, wiki title/match state, exact icon ID, compatible slot
+Each card retains its base display name (canonical when resolved), original
+`observedName`, catalog identity, wiki title/match state, exact icon ID, compatible slot
 kinds, nullable tier, fractional tier progress, required level, catalog base
 stats, observed examine stats, completeness flags, augments and bounded evidence.
 Fractional progress is nullable: an unread value stays null, while an explicitly
@@ -109,8 +138,39 @@ tier adjustment lacks required context. Those derived values stay null above
 tier zero; direct observed examine stats still take precedence. The Character
 catalog currently uses this for conditional SV Void scaling. See
 [catalog search and base recovery](../CHARACTER_CATALOG_BASE_RECOVERY.md).
-`wikiMatch` is `suggested`, `confirmed` or `unmatched`; passing a known catalog
-record suggests a match for review and does not claim human confirmation.
+`catalogIdentity` contains bounded canonical `name`, `wikiTitle` and match method
+(`exact`, `fuzzy` or `manual`). It is separate from observed stats and from the
+`wikiMatch` presentation field. Fuzzy matches remain `wikiMatch:'suggested'`;
+exact/manual identity selection uses `confirmed`. None of these fields verifies
+item statistics or authorizes wiki publication. A typed title/checkbox cannot
+create `catalogIdentity` through ordinary editing.
+
+`resolveCharacterCatalog(pack,name,{limit?})` in the catalog module matches full
+base names/wiki titles before considering a single insertion/deletion/substitution
+or one `rn`/`m` glyph confusion. It returns status, nullable selected `item`,
+`autoResolved`, `incomplete`, total and at most eight
+`candidates:[{item,distance,reason}]`. Exact matches outrank fuzzy proposals;
+multiple matches and names shorter than six non-space characters never receive
+an automatic fuzzy selection. Root UI canonicalizes eligible reads before
+same-copy/ambiguity checks, preserving original aliases and removal checks.
+Repeated trailing tier labels are removed for display only. Conflicting written
+tiers remain a warning; observed or edited numeric tier/progress is unchanged.
+
+Loose inventory shows unresolved cards with a red outline/yellow warning and a
+selectable match picker. Known equipment uses the compact named-slot grid.
+Equipping hides only that physical ID from loose inventory; unequipping or
+replacement returns it. Catalog resolution never deletes saved equal-name copies.
+Legacy equipment without trusted identity is excluded immediately from sums/share
+and retained as bounded `pendingEquipment` until catalog reconciliation. Exact
+legacy matches can recover their prior slot once without displacement; fuzzy or
+missing legacy matches require selection. Known identities remain available while
+the pack is unavailable; reconciliation runs when a usable pack arrives/changes.
+
+Capture guidance is to unequip/re-equip slowly and wait for each card before
+moving on. Keep the complete tooltip/examine name, metadata and footer visible.
+Slots/Review keep reading missing items until completion/cancellation. Catalog
+matching adds no exception to the source/session/generation, phase-time, manual
+import or fresh-baseline guards above.
 
 Captured cards default to unknown augment inclusion. Set `augmentStatus` after
 review:
@@ -219,7 +279,7 @@ verified numeric stats, outgoing wiki `statLines`, HTML or script. It persists
 locally and is excluded from share JSON and PNGs along with private evidence.
 
 Saving an item records bounded local `editedStatKeys` (up to 96) and
-`editedFields` for slots, tier/progress, required level and raw text. Reviewing
+`editedFields` for name/title, slots, tier/progress, required level and raw text. Reviewing
 an observed stat block protects its explicit values and deliberate removals;
 newly read, previously unedited keys can still fill gaps. `mergeObservation`
 allows an explicit unedited null conflict to clear an earlier number, while an
@@ -228,9 +288,12 @@ numerator unless the new read provides compatible progress. Manual tier/progress
 edits are protected together. A known new compatibility read may update the card
 but never moves its existing assignment; the UI can expose any mismatch.
 
-Recapture keeps the name, identity, augments, notes and manual fields. Optional
-catalog metadata fills missing catalog base/identity only and never manufactures
-observed numbers. Cards without prior capture evidence preserve old manual stat
+Recapture can canonicalize an unedited identity using the resolved local record,
+but retains deliberate name/title corrections, augments, notes and manual fields.
+Catalog metadata fills missing base values without replacing an existing reviewed
+base block and never manufactures observed numbers. Explicit `resolveCatalog`
+selection refreshes the selected record's base cache, independently of observed
+stats. Cards without prior capture evidence preserve old manual stat
 values conservatively across recapture/restart. Edit tracking starts with edits
 made under this contract; earlier captured cards do not encode which old values
 were manually changed. This method is explicitly selected by the walkthrough for
@@ -249,7 +312,9 @@ has a 1,500,000-character local-storage budget; oldest unassigned cards are
 evicted first. Equipped cards are protected; extreme protected-only payloads
 expire older evidence and cached icon pixels while preserving IDs and gear.
 Damaged state is normalized and
-duplicate assignments are removed on restore. Storage failure leaves the
+duplicate assignments are removed on restore. Legacy placement metadata is
+bounded by the same 23 slots and is cleared after reconciliation or a new
+snapshot. Assignment/removal clears the affected pending links. Storage failure leaves the
 current in-memory review usable and visibly warns once.
 
 Icons keep original IDs and allow only bounded PNG/JPEG/WebP base64 data URLs.
@@ -281,6 +346,16 @@ authenticated service after its explicit preview/upload action. These modules
 do not contain credentials, issue upload requests or select a wiki user.
 
 ## Observed validation
+
+The 0.9.4 focused catalog/model/walkthrough suites passed synthetic regressions
+for exact precedence, bounded one-edit/rn-m resolution, ambiguous and short-name
+rejection, retained original spelling/numeric uncertainty, typed-title/override
+placement blocking, exact-only legacy slot recovery, distinct physical copies,
+loose/equipped restoration, protected manual edits and share-summary tier cleanup.
+Syntax and diff checks passed. These observations concern source/unit contracts;
+they do not claim final 0.9.4 native UI, platform packages, installed-player or
+production-wiki acceptance. The records below remain evidence for their stated
+earlier source versions.
 
 On 2026-10-23, the guided snapshot model checks passed synthetic regressions for
 metadata/AA count persistence, independently labeled AC/ATK components, full raw

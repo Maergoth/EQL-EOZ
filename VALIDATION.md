@@ -1,4 +1,40 @@
-# Validation report — v0.9.3
+# Validation report — v0.9.4
+
+## 0.9.4 compact Character inventory
+
+The scoped source/model/view checks and isolated native walkthrough passed.
+The walkthrough exercises canonical names, one displayed tier, ambiguous match
+selection with evidence preservation, known-only assignment, loose/equipped
+physical identity, metadata and AA persistence, dynamic estimates and an actual
+legacy unknown assignment excluded from totals. Compact 1024px and 20px-font
+layout checks pass. Two actual synthetic screenshots were visually reviewed and
+archived under 0.9.4; historical images remain unchanged.
+
+Independent review found a mixed AC/ATK fallback issue: each stat family now
+suppresses its generic value only when its own detailed components are present.
+Unit regressions cover both partial-baseline directions. The compact resource
+summary also selects one HP/Mana/Endurance row when maximum values are known.
+
+The full `npm test` suite and dependency audit passed locally. The full-main
+workspace fixture also passed against 0.9.4: offline PNG import, Character
+matching/copies and persistence, sharing, reviewed loopback wiki plans and
+partial retry. Additional full-app 13/20px screenshots were visually inspected;
+fixture framing was corrected without changing production behavior.
+
+Initial Linux CI exposed an older Modern OCR fixture that assigned bare OCR
+cards without catalog identity. Its name/stat pixel assertions had passed.
+The fixture now first confirms that rejection, explicitly selects independent
+golden catalog records and checks observed text/stats/evidence/progress remain
+unchanged before assigning. Both source and assembled-runtime Modern pixel
+checks passed locally after the fixture correction; production code is unchanged.
+
+Final changed-head Windows/Linux native/package CI and public-download
+verification are required before publication is reported complete.
+Exact results belong to the release PR and private publication ledger. Fixtures
+do not establish all game skins, transient live tooltip throughput, production
+wiki authentication/writes or native Wayland. The installed player profile is
+untouched; no user/game pixels or new game artwork enter the repository.
+
 
 ## 0.9.3 live item recovery
 

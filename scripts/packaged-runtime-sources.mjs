@@ -15,6 +15,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/styles.css',
     'app/app.js',
     'app/capture-workspace.js',
+    'app/character-inventory-view.js',
     'app/capture-workspace.css',
     'app/contribution-queue.js',
     'app/contribution-model.js',

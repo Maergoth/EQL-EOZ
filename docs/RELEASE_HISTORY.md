@@ -1,5 +1,12 @@
 # Browsable release history
 
+Version 0.9.4 adds two actual synthetic Character captures: the dense equipment
+sheet and an unmatched-item wiki picker. Both come from the native walkthrough
+with a disposable profile, fake capture/share APIs and synthetic item records,
+at 20px. They were visually inspected before archiving. Raw game/player frames
+remain private; all prior release images and hashes remain immutable.
+
+
 The manual **What's new** action opens a release selector with version-specific
 notes, a walkthrough and the screenshots actually captured for that version.
 Opening EoZ does not open the viewer automatically. The selector keeps old
