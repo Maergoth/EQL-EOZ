@@ -2,6 +2,69 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
   {
+    "version": "0.9.7",
+    "title": "Import equipped inventory and record observed stats",
+    "changes": [
+      "Import equipped gear from /outputfile inventory with automatic character-file detection and a file-picker fallback. Keep every item equipped.",
+      "Open Inventory, scroll down, and click off buffs before reading your equipped stat panel. Character totals use only the reviewed game reading, including all Additional Modifiers.",
+      "Exaltation export rows fill their parent augment sockets. Missing wiki items leave empty slots; submit them through Contribute and re-export after the wiki updates.",
+      "Collect durable unknown item, monster and zone drafts from logs, with observed loot sources and populations. Record a reviewed spawn /loc, paste an item examine, select an icon, and iterate the queue.",
+      "Run optional OCR at one frame per second for stable panes. Preserve capture ownership, freshness checks, saved inventories, source recovery and explicit Clear inventory."
+    ],
+    "steps": [
+      {
+        "title": "Import equipped inventory",
+        "image": "0.9.7/character-inventory-export",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Keep all gear equipped. Type /outputfile inventory in EverQuest. Eye of Zomm detects a fresh matching character export in your game folder, or lets you choose it. Missing wiki items leave their exported slots empty.",
+        "alt": "Import equipped inventory using synthetic character records in the actual Eye of Zomm component.",
+        "caption": "Actual native Character component at 13px in an isolated synthetic profile, with fake capture and file APIs. No player or game pixels.",
+        "imageSha256": "409ab0998d6cb9eed7bf53765c056060edf453d647ede7e6f9340531a54ae65d"
+      },
+      {
+        "title": "Prepare the recorded stat panel",
+        "image": "0.9.7/character-recorded-stats",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Open your Inventory. Scroll down to show the full stat panel and Additional Modifiers. Click off your buffs. Keep all gear equipped, choose the game window and read its displayed stats.",
+        "alt": "Prepare the recorded stat panel using synthetic character records in the actual Eye of Zomm component.",
+        "caption": "Actual native Character component at 13px in an isolated synthetic profile, with fake capture and file APIs. No player or game pixels.",
+        "imageSha256": "272b8580467e232492565d7ad5a44fdd42c2c3252ece65a557aebc6bec774820"
+      },
+      {
+        "title": "Share recorded character totals",
+        "image": "0.9.7/character-imported-inspect",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Review one equipped total panel. Item, augment, tier and old baseline values are never added to it. Save your known gear and recorded stats or share an interactive Character (Server) sheet on your wiki talk page.",
+        "alt": "Share recorded character totals using synthetic character records in the actual Eye of Zomm component.",
+        "caption": "Actual native Character component at 13px in an isolated synthetic profile, with fake capture and file APIs. No player or game pixels.",
+        "imageSha256": "c5ea70f4c5e8f5f3920ee81889cc19a7041ef9fca2f2b48df3524fc63f64b23e"
+      },
+      {
+        "title": "Work through log discoveries",
+        "image": "0.9.7/contribution-log-discoveries",
+        "view": "contribute",
+        "action": "Open Contribute",
+        "copy": "Unknown monsters, items and zones accumulate in Contribute while logs are followed, even with screen reading off. Review sources, loot and population evidence. For a monster, stand at its spawn, click Record next /loc, and type /loc in the game; verify the proposal before submission.",
+        "alt": "Work through log discoveries in the actual main app with synthetic log observations.",
+        "caption": "Actual main window/preload at 13px using isolated synthetic logs and local screenshot OCR. Icon 42 is a synthetic placeholder. No player pixels or production wiki writes.",
+        "imageSha256": "89c897cf69b9dc260871f5f389145a44e0bd3e198ec4dbbcb40a676ceaae122b"
+      },
+      {
+        "title": "Finish item evidence in Contribute",
+        "image": "0.9.7/contribution-item-evidence",
+        "view": "contribute",
+        "action": "Open Contribute",
+        "copy": "Open an item examine and paste its screenshot or choose a PNG here. A tiered read enriches the existing base-item discovery. Select its icon, check potential wiki matches, and preview the reviewed wiki changes. Drafts and evidence survive restarts.",
+        "alt": "Finish item evidence in Contribute in the actual main app with synthetic log observations.",
+        "caption": "Actual main window/preload at 13px using isolated synthetic logs and local screenshot OCR. Icon 42 is a synthetic placeholder. No player pixels or production wiki writes.",
+        "imageSha256": "11e8230336c0fc80b870838fe3bdbebbfa6390ab9d88abcb2ef2007c5fea9b51"
+      }
+    ]
+  },
+  {
     "version": "0.9.6",
     "title": "Inspect your character and share it on the wiki",
     "changes": [

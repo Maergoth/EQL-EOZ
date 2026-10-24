@@ -1,5 +1,20 @@
 # Capture, wiki contributions and character snapshots
 
+## Current v0.9.7 execution
+
+Use [the inventory-export plan](INVENTORY_EXPORT_CHARACTER_PLAN.md) and
+[the persistent contribution-evidence contract](CONTRIBUTION_EVIDENCE_PLAN.md).
+Character keeps all gear equipped, imports `/outputfile inventory`, then records
+only the equipped, unbuffed displayed stat panel. Item OCR belongs to Contribute.
+Unknown exported items leave empty equipment/socket positions until the wiki is
+updated and the character is exported again. Logs collect unknown item, monster
+and zone drafts independently of optional screen reading. Reviewed relationships,
+explicit next-`/loc` proposals, screenshot imports and icon selection complete the
+contribution workflow. Exact-head release acceptance is tracked in VALIDATION.md.
+
+## Historical capture implementation
+
+
 Character sharing in 0.9.6 uses a reviewed interactive `Character_sheet` upsert on
 the authenticated user's own talk page, rather than uploading another PNG. Local
 PNG export remains available. Template/module capability, account assertions,

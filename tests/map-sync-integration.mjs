@@ -151,6 +151,7 @@ for(const change of ['log','root','both','mode-only']){
     h.context.queueViewerSync=operation=>{const gate=deferred();queued.push({operation,gate});return gate.promise;};
     vm.runInContext(between(source,'function queueLatestLocationSync(', 'async function waitForViewerApi('),h.context);
     const older=h.context.queueLatestLocationSync({x:1,y:2,z:3});h.context.bridgeInfo.logPath='eqlog_Another_example.txt';h.context.clearSourceLocation();
+    assert.equal(h.parser.zone,'','A replacement source cannot inherit the old character zone');h.parser.zone='Mistmoore Castle';
     h.parser.location={x:10,y:20,z:30};h.context.queueLatestLocationSync(h.parser.location);
     const retired=queued.shift();assert.equal(await retired.operation(),false);retired.gate.resolve(false);await older;
     const current=queued.shift();assert.ok(current,'the replacement pending sample is requeued under the current source');assert.equal(await current.operation(),true);current.gate.resolve(true);await Promise.resolve();

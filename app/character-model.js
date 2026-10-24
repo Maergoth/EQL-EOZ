@@ -4,11 +4,11 @@ import { parseItemAugmentSlots } from './screen-read-parser.js';
 // Local, versioned data only. This module has no DOM, capture, network or wiki
 // write dependency. One candidate represents one physical copy, not a title.
 export const CHARACTER_STORAGE_KEY = 'eql-eye-of-zomm-character-v1';
-export const CHARACTER_LIMITS = Object.freeze({ candidates:120, evidence:6, stats:48, augments:8, observationRefs:6000, removedObservations:1000, removedInstances:100, storageBytes:1500000, iconBytes:24000, rawStatBlock:8192, rawStatLines:60 });
-export const CHARACTER_STAT_KEYS = Object.freeze(['AC','AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','HP','MP','END','ATK','ATK_OFFENSE','ATK_ACCURACY','STR','STA','AGI','DEX','WIS','INT','CHA','SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE','HP_REGEN','MANA_REGEN','END_REGEN','HASTE']);
+export const CHARACTER_LIMITS = Object.freeze({ candidates:1000, evidence:6, stats:48, augments:8, observationRefs:6000, removedObservations:1000, removedInstances:100, storageBytes:1500000, iconBytes:24000, rawStatBlock:8192, rawStatLines:60 });
+export const CHARACTER_STAT_KEYS = Object.freeze(['AC','AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','HP','MP','END','ATK','ATK_OFFENSE','ATK_ACCURACY','STR','STA','AGI','DEX','WIS','INT','CHA','SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE','HP_REGEN','MANA_REGEN','END_REGEN','HASTE','ACCURACY','AVOIDANCE','COMBAT_EFFECTS','STRIKETHROUGH','STUN_RESIST','DAMAGE_SHIELD','DAMAGE_SHIELD_MITIGATION','DOT_SHIELDING','MELEE_SHIELDING','SPELL_SHIELDING']);
 const STAT_LABELS=Object.freeze({MP:'Mana',END:'Endurance',ATK:'Attack',AC_MITIGATION:'Mitigation AC',AC_MITIGATION_SOFTCAP:'AC softcap',AC_EVASION:'Evasion AC',
     ATK_OFFENSE:'Offense',ATK_ACCURACY:'Accuracy',SV_MAGIC:'Magic resist',SV_FIRE:'Fire resist',SV_COLD:'Cold resist',SV_POISON:'Poison resist',SV_DISEASE:'Disease resist',
-    SV_CORRUPTION:'Void resist',ATTACK_SPEED:'Attack speed %',DMG_BONUS:'Damage bonus',BACKSTAB_DMG:'Backstab dmg',HP_REGEN:'HP regen',MANA_REGEN:'Mana regen',END_REGEN:'End. regen'});
+    SV_CORRUPTION:'Void resist',ATTACK_SPEED:'Attack speed %',DMG_BONUS:'Damage bonus',BACKSTAB_DMG:'Backstab dmg',HP_REGEN:'HP regen',MANA_REGEN:'Mana regen',END_REGEN:'End. regen',ACCURACY:'Accuracy bonus',AVOIDANCE:'Avoidance',COMBAT_EFFECTS:'Combat effects',STRIKETHROUGH:'Strikethrough',STUN_RESIST:'Stun resist',DAMAGE_SHIELD:'Damage shield',DAMAGE_SHIELD_MITIGATION:'Damage shield mitigation',DOT_SHIELDING:'DoT shielding',MELEE_SHIELDING:'Melee shielding',SPELL_SHIELDING:'Spell shielding'});
 export const characterStatLabel=key=>STAT_LABELS[key] || String(key||'').replace(/_/g,' ');
 export const CHARACTER_SLOTS = Object.freeze([
     ['charm','Charm','CHARM'],['ear1','Left ear','EAR'],['head','Head','HEAD'],['face','Face','FACE'],['ear2','Right ear','EAR'],
@@ -53,6 +53,25 @@ export function characterEquipmentEligibility(candidate) {
     return {known,canEquip:known,reason:known?'':'Choose a known cached item match before equipping this copy.'};
 }
 
+const INVENTORY_SLOTS=new Set(CHARACTER_SLOTS.filter(slot=>slot.id!=='charm').map(slot=>slot.id));
+const INVENTORY_GROUPS=new Set(['equipment','inventory','bank','shared-bank','held','augment','keyring']);
+function inventoryOrigin(value){
+    if(!value||typeof value!=='object'||!INVENTORY_GROUPS.has(value.group)||typeof value.key!=='string'||!value.key||value.key.length>600||!Number.isSafeInteger(value.itemId)||value.itemId<=0||value.itemId>2147483647||!Number.isInteger(value.count)||value.count<1||value.count>1e9||fullTier(value.tier)===null)return null;
+    const location=clean(value.location,180),name=clean(value.name),baseName=clean(value.baseName),slot=INVENTORY_SLOTS.has(value.slot)?value.slot:null;
+    return location&&name&&baseName?{key:value.key,location,name,baseName,itemId:value.itemId,tier:value.tier,count:value.count,group:value.group,slot,importedAt:atTime(value.importedAt)}:null;
+}
+function inventoryFile(value){
+    if(!value||typeof value!=='object')return null;
+    return {name:clean(String(value.name||'').split(/[\\/]/).at(-1)),bytes:Number.isSafeInteger(value.bytes)&&value.bytes>=0?value.bytes:null,modifiedAt:atTime(value.modifiedAt),sha256:/^[a-f\d]{64}$/i.test(value.sha256||'')?value.sha256.toLowerCase():''};
+}
+function inventoryExportRecord(value){
+    if(!value||value.schemaVersion!==1)return null;
+    return {schemaVersion:1,importedAt:atTime(value.importedAt),file:inventoryFile(value.file),rowCount:Number.isSafeInteger(value.rowCount)?value.rowCount:0,equipmentSlotCount:23,candidateIds:list(value.candidateIds).slice(0,CHARACTER_LIMITS.candidates).map(value=>clean(value,100)).filter(Boolean),
+        emptyEquipmentCount:Number.isInteger(value.emptyEquipmentCount)?value.emptyEquipmentCount:0,inventoryCount:Number.isInteger(value.inventoryCount)?value.inventoryCount:0,
+        keyring:list(value.keyring).slice(0,CHARACTER_LIMITS.candidates).map(entry=>({...inventoryOrigin(entry),known:entry?.known===true,wikiTitle:clean(entry?.wikiTitle),iconId:clean(entry?.iconId,120)})).filter(entry=>entry.key),
+        rejectedItems:list(value.rejectedItems).slice(0,12000).map(entry=>({name:clean(entry?.name),baseName:clean(entry?.baseName),tier:fullTier(entry?.tier),itemId:Number.isSafeInteger(entry?.itemId)?entry.itemId:null,location:clean(entry?.location,180),...(INVENTORY_SLOTS.has(entry?.slot)?{slot:entry.slot}:{}),reason:clean(entry?.reason,100)})).filter(entry=>entry.name&&entry.location),warnings:list(value.warnings).slice(0,30).map(value=>clean(value,300)).filter(Boolean)};
+}
+
 export function normalizeCharacterStats(value) {
     const result = {};
     if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
@@ -87,7 +106,8 @@ const OBSERVATION_STATS = Object.freeze({ac:'AC',acMitigation:'AC_MITIGATION',ac
     attackOffense:'ATK_OFFENSE',attackAccuracy:'ATK_ACCURACY',hp:'HP',mana:'MP',endurance:'END',str:'STR',sta:'STA',agi:'AGI',dex:'DEX',wis:'WIS',int:'INT',cha:'CHA',
     resistPoison:'SV_POISON',resistMagic:'SV_MAGIC',resistDisease:'SV_DISEASE',resistFire:'SV_FIRE',resistCold:'SV_COLD',resistCorruption:'SV_CORRUPTION',
     weight:'WT',damage:'DMG',damageBonus:'DMG_BONUS',backstabDamage:'BACKSTAB_DMG',delay:'DELAY',hpCurrent:'HP_CURRENT',hpMaximum:'HP_MAXIMUM',manaCurrent:'MP_CURRENT',manaMaximum:'MP_MAXIMUM',
-    enduranceCurrent:'END_CURRENT',enduranceMaximum:'END_MAXIMUM',attack:'ATK',attackMelee:'ATK_MELEE',attackRanged:'ATK_RANGED',attackSpeed:'ATTACK_SPEED',haste:'HASTE',hpRegen:'HP_REGEN',manaRegen:'MANA_REGEN',enduranceRegen:'END_REGEN'});
+    enduranceCurrent:'END_CURRENT',enduranceMaximum:'END_MAXIMUM',attack:'ATK',attackMelee:'ATK_MELEE',attackRanged:'ATK_RANGED',attackSpeed:'ATTACK_SPEED',haste:'HASTE',hpRegen:'HP_REGEN',manaRegen:'MANA_REGEN',enduranceRegen:'END_REGEN',
+    accuracy:'ACCURACY',avoidance:'AVOIDANCE',combatEffects:'COMBAT_EFFECTS',strikeThrough:'STRIKETHROUGH',stunResist:'STUN_RESIST',damageShield:'DAMAGE_SHIELD',damageShieldMitigation:'DAMAGE_SHIELD_MITIGATION',dotShielding:'DOT_SHIELDING',meleeShielding:'MELEE_SHIELDING',spellShielding:'SPELL_SHIELDING',velocity:'VELOCITY',primaryDps:'PRIMARY_DPS',secondaryDps:'SECONDARY_DPS',rangedDps:'RANGED_DPS'});
 
 /** Adapt the capture parser's immutable field proposals to editable character
  * inputs. Unknown fields stay in the original observation/journal, not in sums.
@@ -117,7 +137,7 @@ function metadata(value={}) {
 }
 function augmentRecord(value={},index=0) {
     value=value&&typeof value==='object'?value:{};
-    return {index,name:clean(value.name),wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),id:clean(value.id,120),iconId:clean(value.iconId,120),icon:safeCharacterIcon(value.icon),tier:fullTier(value.tier),stats:normalizeCharacterStats(value.stats),statsComplete:value.statsComplete===true||value.complete===true};
+    return {index,sourceSlot:Number.isInteger(value.sourceSlot)&&value.sourceSlot>0&&value.sourceSlot<=1e6?value.sourceSlot:null,inventoryOrigin:inventoryOrigin(value.inventoryOrigin),name:clean(value.name),wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),id:clean(value.id,120),iconId:clean(value.iconId,120),icon:safeCharacterIcon(value.icon),tier:fullTier(value.tier),stats:normalizeCharacterStats(value.stats),statsComplete:value.statsComplete===true||value.complete===true};
 }
 function normalizeAugments(values){
     const result=[],used=new Set();
@@ -147,7 +167,7 @@ function normalizeCandidate(value={}) {
     const observedTier=has(value,'observedTier')?fullTier(value.observedTier):captured&&!list(value.editedFields).some(key=>key==='tier'||key==='fraction')?tier:null;
     const block=rawStatBlock(value.rawStatBlock ?? value.statBlockText ?? list(value.statLines).join('\n')),sockets=parseItemAugmentSlots(block),augments=normalizeAugments(Array.isArray(value.augments)?value.augments:sockets.augments);
     const augmentSlots=value.augmentSlots!==undefined?socketCount(value.augmentSlots):value.augmentSlotCount!==undefined?socketCount(value.augmentSlotCount):sockets.augmentSlotCount;
-    return { id:clean(value.id,100), instanceKey:clean(value.instanceKey,200), name:characterBaseItemName(value.name), observedName:has(value,'observedName')?clean(value.observedName):list(value.evidence).some(record=>record?.observationId||record?.text)?clean(value.name):'', wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),
+    return { id:clean(value.id,100), instanceKey:clean(value.instanceKey,200), inventoryOrigin:inventoryOrigin(value.inventoryOrigin),name:characterBaseItemName(value.name), observedName:has(value,'observedName')?clean(value.observedName):list(value.evidence).some(record=>record?.observationId||record?.text)?clean(value.name):'', wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),
         origin:['automatic','manual'].includes(value.origin)?value.origin:captured?'automatic':'manual',legacyManualStats:value.legacyManualStats===true||!has(value,'origin')&&!captured,lastObservedAt:atTime(value.lastObservedAt)??evidence.reduce((latest,record)=>record.at!==null?Math.max(latest??0,record.at):latest,null),lastObservedSequence:journalSequence(value.lastObservedSequence),
         observedTier,observedFraction:tierFraction(has(value,'observedFraction')?value.observedFraction:value.fraction,observedTier),statBasis:value.statBasis==='catalog-tier-preview'?'catalog-tier-preview':'observed',previewWarning:clean(value.previewWarning,300),slotReadWarning:clean(value.slotReadWarning,300),
         wikiMatch:['confirmed','suggested','unmatched'].includes(value.wikiMatch) ? value.wikiMatch : 'unmatched',
@@ -169,7 +189,7 @@ function statSnapshot(value) {
         notes:clean(value.notes,600), evidence:evidenceRecord(value.evidence || value), confirmed:value.confirmed === true};
 }
 function emptyState() {
-    return {schemaVersion:1, sequence:0, metadata:metadata(), candidates:[], equipment:{}, pendingEquipment:{}, statSnapshots:{base:null,equipped:null}, observationRefs:[],observationFloor:0,removedObservations:[],removedInstances:[],updatedAt:null};
+    return {schemaVersion:1, sequence:0, metadata:metadata(), candidates:[], equipment:{}, pendingEquipment:{},inventoryExport:null,statSnapshots:{base:null,equipped:null,current:null}, observationRefs:[],observationFloor:0,removedObservations:[],removedInstances:[],updatedAt:null};
 }
 function normalizeState(value) {
     const result = emptyState();
@@ -186,12 +206,15 @@ function normalizeState(value) {
         const id = clean(value.equipment?.[slot.id],100);
         if (seen.has(id) && !assigned.has(id)) {
             const candidate=result.candidates.find(item=>item.id===id);
-            (characterSlotCompatibility(candidate,slot.id).compatible?result.equipment:result.pendingEquipment)[slot.id]=id; assigned.add(id);
+            if(characterSlotCompatibility(candidate,slot.id).compatible)result.equipment[slot.id]=id;
+            else if(!candidate.inventoryOrigin)result.pendingEquipment[slot.id]=id;
+            assigned.add(id);
         }
         const pendingId=clean(value.pendingEquipment?.[slot.id],100);
-        if(!result.equipment[slot.id]&&!result.pendingEquipment[slot.id]&&seen.has(pendingId)&&!assigned.has(pendingId)){result.pendingEquipment[slot.id]=pendingId;assigned.add(pendingId);}
+        if(!result.equipment[slot.id]&&!result.pendingEquipment[slot.id]&&seen.has(pendingId)&&!assigned.has(pendingId)&&!result.candidates.find(candidate=>candidate.id===pendingId)?.inventoryOrigin){result.pendingEquipment[slot.id]=pendingId;assigned.add(pendingId);}
     }
-    result.statSnapshots = {base:statSnapshot(value.statSnapshots?.base),equipped:statSnapshot(value.statSnapshots?.equipped)};
+    result.statSnapshots = {base:statSnapshot(value.statSnapshots?.base),equipped:statSnapshot(value.statSnapshots?.equipped),current:statSnapshot(value.statSnapshots?.current)};
+    result.inventoryExport=inventoryExportRecord(value.inventoryExport);
     result.observationFloor=journalSequence(value.observationFloor)||0;
     const references=new Map();
     for(const record of list(value.observationRefs)) {
@@ -305,63 +328,18 @@ export function characterLooseCandidates(snapshot) {
     return state.candidates.filter(candidate=>!assigned.has(candidate.id));
 }
 
-const ADDITIVE_ESTIMATE_KEYS=new Set(['HP','MP','END','STR','STA','AGI','DEX','WIS','INT','CHA',
-    'SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE','SV_CORRUPTION','HP_REGEN','MANA_REGEN','END_REGEN']);
-const RESOURCE_GEAR_KEYS=Object.freeze({HP_MAXIMUM:'HP',MP_MAXIMUM:'MP',END_MAXIMUM:'END'});
-const FORMULA_COMPONENT_KEYS=new Set(['AC','AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','ATK','ATK_OFFENSE','ATK_ACCURACY','ATK_MELEE','ATK_RANGED','HASTE','ATTACK_SPEED']);
-
-// These estimates intentionally have a smaller claim than a client stat
-// calculator. A No Equipment observation supplies the baseline, not the server
-// rules, AA ranks, skill values, worn effects, softcaps or resource multipliers.
-function equippedEstimates(base,derived,assignedCount) {
-    const baseline=base?.stats||{},keys=[...new Set([...Object.keys(derived),...Object.keys(baseline)])],computed={};
-    for(const key of keys) {
-        const gearKey=RESOURCE_GEAR_KEYS[key]||key,gear=derived[gearKey]||{value:0,complete:assignedCount===0,unknownCandidates:[]};
-        const baseValue=has(baseline,key)?baseline[key]:null,record={value:null,complete:false,method:'unknown',baseKey:key,baseValue,baseConfirmed:base?.confirmed===true,
-            gearKey,gearValue:gear.value,unknownCandidates:[...gear.unknownCandidates],caveats:[]};
-        if(baseValue===null)record.caveats.push('No Equipment baseline is unknown.');
-        if(!gear.complete)record.caveats.push('Some assigned item values or augment inclusion are unknown.');
-        if(assignedCount===0 && baseValue!==null) {
-            record.value=baseValue;record.complete=true;record.method='observed-baseline';
-        } else if(ADDITIVE_ESTIMATE_KEYS.has(key)||has(RESOURCE_GEAR_KEYS,key)) {
-            record.method='base-plus-gear';
-            if(baseValue!==null)record.value=baseValue+gear.value;
-            record.complete=baseValue!==null&&gear.complete;
-            record.caveats.push('Additive estimate; caps, buffs, worn effects and server modifiers are not applied.');
-            if(['HP','MP','END'].includes(gearKey))record.caveats.push('Attribute-derived resource changes and percentage AA bonuses are not calculated.');
-            if(key==='AGI')record.caveats.push('Encumbrance changes are not calculated.');
-        } else if(/_CURRENT$/.test(key)) {
-            record.method='current-resource-unknown';record.gearKey=null;record.gearValue=null;
-            record.caveats.push('Current resources cannot be predicted from equipment.');
-        } else {
-            record.method=FORMULA_COMPONENT_KEYS.has(key)?'formula-unknown':'unsupported';
-            if(['AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','ATK_OFFENSE','ATK_ACCURACY'].includes(key)) {record.gearKey=null;record.gearValue=null;}
-            record.caveats.push(FORMULA_COMPONENT_KEYS.has(key)?'Client component formula, stacking, skills or cap context is unavailable; gear is not added to this component.':'No equipped-total formula is supported for this field.');
-        }
-        computed[key]=record;
-    }
-    return computed;
-}
-
+/** Character totals are a single reviewed, fully equipped observation.
+ * Item tiers, augments, catalog stats and legacy baselines never enter totals.
+ */
 export function characterTotals(snapshot) {
-    const state = normalizeState(snapshot), assigned = CHARACTER_SLOTS.filter(slot => state.equipment[slot.id]);
-    const byId = new Map(state.candidates.map(candidate => [candidate.id,candidate]));
-    const gear = assigned.map(slot => ({slot:slot.id,candidateId:state.equipment[slot.id],...characterItemStats(byId.get(state.equipment[slot.id]))}));
-    const keys = [...new Set([...CHARACTER_STAT_KEYS,...gear.flatMap(item=>Object.keys(item.stats)),
-        ...Object.keys(state.statSnapshots.base?.stats || {}),...Object.keys(state.statSnapshots.equipped?.stats || {})])];
-    const derived = {};
-    for (const key of keys) {
-        let value=0; const unknown=[];
-        for (const item of gear) {
-            if (has(item.stats,key) && item.stats[key] !== null) value+=item.stats[key];
-            if (item.uncertainAll || (has(item.stats,key) ? item.stats[key] === null : !item.complete)) unknown.push(item.candidateId);
-        }
-        derived[key]={value,complete:unknown.length===0,unknownCandidates:unknown};
+    const state=normalizeState(snapshot),current=clone(state.statSnapshots.current),computed={};
+    const keys=new Set([...CHARACTER_STAT_KEYS,...Object.keys(current?.stats||{})]);
+    for(const key of keys){
+        const value=current?.confirmed===true&&has(current.stats,key)?current.stats[key]:null;
+        computed[key]={value,complete:value!==null,method:value===null?'unknown':'observed-equipped',caveats:value===null?['Current equipped statistic has not been read and reviewed.']:[]};
     }
-    return {base:clone(state.statSnapshots.base),equipped:clone(state.statSnapshots.equipped),derived,
-        computed:equippedEstimates(state.statSnapshots.base,derived,assigned.length),assignedCount:assigned.length,
-        emptySlots:CHARACTER_SLOTS.filter(slot=>!state.equipment[slot.id]).map(slot=>slot.id),
-        warnings:gear.flatMap(item=>item.warnings.map(message=>({candidateId:item.candidateId,slot:item.slot,message})))};
+    return {current,observed:clone(current),computed,derived:{},assignedCount:Object.keys(state.equipment).length,
+        emptySlots:CHARACTER_SLOTS.filter(slot=>!state.equipment[slot.id]).map(slot=>slot.id),warnings:[]};
 }
 
 /** intake accepts {id,sessionId,source,at,confidence,text,item:{...}}. Pass a
@@ -471,7 +449,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     }
     function invalidateCatalog(id) {
         const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
-        current.catalogIdentity=null;current.wikiMatch='unmatched';detach(id);return result(current);
+        current.catalogIdentity=null;current.wikiMatch='unmatched';if(!characterEquipmentEligibility(current).canEquip)detach(id);return result(current);
     }
     /** Recheck against the current local pack. Only exact legacy identities can
      * recover their old slot; fuzzy/ambiguous/missing cards remain loose. */
@@ -481,11 +459,88 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         const exact=new Set();
         state.candidates=state.candidates.map((candidate,index)=>{
             const resolution=resolutions[index],patch=resolution?.status==='exact'&&resolution.item?catalogPatch(resolution.item,{match:candidate.catalogIdentity?.match||'exact',icon:resolution.icon}):null;
-            if(!patch){detach(candidate.id);return normalizeCandidate({...candidate,catalogIdentity:null,wikiMatch:'unmatched'});}
+            if(!patch){const next=normalizeCandidate({...candidate,catalogIdentity:null,wikiMatch:'unmatched'});if(!characterEquipmentEligibility(next).canEquip)detach(candidate.id);return next;}
             exact.add(candidate.id);return normalizeCandidate({...candidate,...patch,...(Object.keys(candidate.baseStats).length?{baseStats:candidate.baseStats,baseStatsComplete:candidate.baseStatsComplete,unscaledStatKeys:candidate.unscaledStatKeys}:{}),slots:candidate.slots.length?candidate.slots:resolution.item.slots});
         });
         for(const [slot,id]of Object.entries(state.pendingEquipment))if(exact.has(id)&&characterSlotCompatibility(get(id),slot).compatible&&!state.equipment[slot]&&!Object.values(state.equipment).includes(id))state.equipment[slot]=id;
         state.pendingEquipment={};return {ok:true,saved:save()};
+    }
+    /** Commit a complete parsed /outputfile inventory result. The parser and
+     * exact local catalog resolver supply data, never filesystem paths. All
+     * validation/resolution/storage checks finish before replacing live state.
+     */
+    function applyInventoryExport(parsed,{resolveItem=()=>null,file}={}) {
+        const fail=message=>({ok:false,saved:false,error:message});
+        try{
+            if(parsed?.schemaVersion!==1||parsed.kind!=='eql-inventory-export'||!Array.isArray(parsed.equipment)||parsed.equipment.length!==23||parsed.equipmentSlotCount!==23||!Array.isArray(parsed.inventory)||!Array.isArray(parsed.keyring)||parsed.inventory.length>CHARACTER_LIMITS.candidates||parsed.keyring.length>CHARACTER_LIMITS.candidates||!Number.isSafeInteger(parsed.rowCount)||parsed.rowCount<23+parsed.inventory.length+parsed.keyring.length||parsed.rowCount>20000||typeof resolveItem!=='function')return fail('A complete supported inventory export is required. Existing inventory was kept.');
+            const slots=new Set(),locations=new Set(),occurrences=new Map(),entries=[];
+            const validate=(entry,group,slot=null)=>{
+                if(!entry||typeof entry!=='object'||typeof entry.location!=='string'||!entry.location.trim()||entry.location.length>180||typeof entry.name!=='string'||entry.name.length>240||typeof entry.baseName!=='string'||entry.baseName.length>240||/[\u0000-\u001f\u007f]/.test(entry.location+entry.name+entry.baseName)||!Number.isSafeInteger(entry.itemId)||entry.itemId<0||entry.itemId>2147483647||!Number.isInteger(entry.count)||entry.count<0||entry.count>1e9||fullTier(entry.tier)===null)throw Error('The inventory export contains an invalid item row.');
+                const suffix=/\s+\+(10|[0-9])$/u.exec(entry.name),baseName=suffix?entry.name.slice(0,suffix.index).trimEnd():entry.name;
+                if(entry.baseName!==baseName||entry.tier!==(suffix?Number(suffix[1]):0))throw Error('The inventory export contains inconsistent item tiers.');
+                if(entry.empty===true){if(!slot||entry.itemId!==0||entry.count!==0||entry.name&&entry.name!=='Empty')throw Error('The inventory export contains an invalid empty slot.');return null;}
+                if(!entry.itemId||!entry.count||!entry.name.trim()||entry.name==='Empty')throw Error('The inventory export contains an invalid occupied item.');
+                if(!slot&&group!=='augment'&&group!=='keyring'){const locationKey=group+'|'+entry.location;if(locations.has(locationKey))throw Error('The inventory export repeats a storage location.');locations.add(locationKey);}
+                const identity=JSON.stringify([slot||group,entry.location,entry.itemId,entry.tier]),occurrence=occurrences.get(identity)||0;occurrences.set(identity,occurrence+1);
+                const result={...entry,group,slot,key:JSON.stringify([slot||group,entry.location,entry.itemId,entry.tier,occurrence])};
+                if(entry.augments!==undefined||entry.augmentSlots!==undefined){
+                    if(!Array.isArray(entry.augments)||entry.augments.length>CHARACTER_LIMITS.augments||entry.augmentSlots!==entry.augments.length)throw Error('The inventory export contains an unsupported augment layout.');
+                    const used=new Set();result.augments=entry.augments.map((child,index)=>{
+                        if(child?.index!==index||!Number.isInteger(child.sourceSlot)||child.sourceSlot<1||child.sourceSlot>1e6||used.has(child.sourceSlot)||child.augments!==undefined)throw Error('The inventory export contains an invalid augment location.');used.add(child.sourceSlot);
+                        validate(child,'augment','socket');return {...child,group:'augment',slot:null,key:JSON.stringify([result.key,'socket',child.sourceSlot,child.itemId,child.tier])};
+                    });
+                }
+                return result;
+            };
+            for(const entry of parsed.equipment){if(!INVENTORY_SLOTS.has(entry?.slot)||slots.has(entry.slot))throw Error('The inventory export must contain each of the 23 equipment slots once.');slots.add(entry.slot);const valid=validate(entry,'equipment',entry.slot);if(valid)entries.push(valid);}
+            if([...INVENTORY_SLOTS].some(slot=>!slots.has(slot))||parsed.emptyEquipmentCount!==23-entries.length)throw Error('The inventory export has an incomplete equipment table.');
+            for(const entry of parsed.inventory){if(!['inventory','bank','shared-bank','held','augment'].includes(entry?.group))throw Error('The inventory export contains an unsupported storage group.');entries.push(validate(entry,entry.group));}
+            const keyring=parsed.keyring.map(entry=>{if(!['keyring','augment'].includes(entry?.group))throw Error('The inventory export contains an unsupported keyring group.');return validate(entry,entry.group);});
+            const draft=clone(state),byKey=new Map();
+            for(const candidate of draft.candidates)if(candidate.inventoryOrigin){const key=candidate.inventoryOrigin.key;if(byKey.has(key))throw Error('Saved inventory contains ambiguous export bindings. Existing cards were kept.');byKey.set(key,candidate);}
+            const at=timestamp(),candidateIds=[],equipment={},rejectedItems=[];
+            const resolve=entry=>{
+                const resolution=resolveItem(clone(entry)),item=resolution?.item;
+                const exact=value=>String(value??'').normalize('NFKC').replace(/_/g,' ').replace(/\s+/gu,' ').trim().toLowerCase();
+                return item&&[item.name,item.wikiTitle].some(name=>exact(name)===exact(entry.baseName))?catalogPatch(item,{match:'exact',icon:resolution.icon}):null;
+            };
+            const reject=(entry,reason='wiki-item-missing',slot=entry.slot)=>rejectedItems.push({name:entry.name,baseName:entry.baseName,tier:entry.tier,itemId:entry.itemId,location:entry.location,...(slot?{slot}:{}),reason});
+            const resolvedEntries=entries.map(entry=>({entry,patch:resolve(entry)}));
+            const missing=resolvedEntries.filter(({entry,patch})=>patch&&!byKey.has(entry.key)).length;
+            if(draft.candidates.length+missing>CHARACTER_LIMITS.candidates)return fail(`This export exceeds the ${CHARACTER_LIMITS.candidates}-card inventory bound. Existing cards were kept; clear unused inventory before importing.`);
+            for(const {entry,patch} of resolvedEntries){
+                const prior=byKey.get(entry.key);
+                if(!patch){
+                    reject(entry);for(const child of entry.augments||[])if(!child.empty)reject(child,'parent-item-missing',entry.slot);
+                    if(prior){prior.catalogIdentity=null;prior.wikiTitle='';prior.wikiMatch='unmatched';}
+                    continue;
+                }
+                const origin={...entry,importedAt:at},slot=entry.slot?SLOT_BY_ID.get(entry.slot):null;
+                let id=prior?.id;if(!id){do{id=`character-${++draft.sequence}`;}while(draft.candidates.some(candidate=>candidate.id===id));}
+                const socketPatch={};
+                if(entry.augments){
+                    socketPatch.augmentSlots=entry.augmentSlots;socketPatch.augments=[];
+                    for(const child of entry.augments.filter(child=>!child.empty)){
+                        const known=resolve(child),old=prior?.augments.find(augment=>augment.inventoryOrigin?.key===child.key);
+                        if(!known){reject(child,'wiki-item-missing',entry.slot);continue;}
+                        socketPatch.augments.push(augmentRecord({...old,index:child.index,sourceSlot:child.sourceSlot,inventoryOrigin:{...child,importedAt:at},name:known.name,wikiTitle:known.wikiTitle,catalogIdentity:known.catalogIdentity,iconId:known.iconId||old?.iconId||'',icon:known.icon||old?.icon||'',tier:child.tier,stats:old?.stats||{},statsComplete:old?.statsComplete===true},child.index));
+                    }
+                    socketPatch.emptyAugmentSlots=entry.augmentSlots-socketPatch.augments.length;
+                    socketPatch.augmentStatus=socketPatch.augments.length?'included':'none';
+                    if(prior?.observedStats&&Object.keys(prior.observedStats).length)socketPatch.augmentBaseline={mode:'unknown',emptyKnown:false,augments:[],uncertain:true};
+                }
+                const candidate=normalizeCandidate({...prior,...patch,id,name:patch?.name||entry.baseName,wikiTitle:patch?.wikiTitle||'',catalogIdentity:patch?.catalogIdentity||null,wikiMatch:patch?'confirmed':'unmatched',inventoryOrigin:origin,
+                    ...socketPatch,origin:prior?.origin||'manual',tier:entry.tier,fraction:0,slots:slot?[slot.universal?'ANY':slot.kind]:prior?.slots||[],createdAt:prior?.createdAt??at,updatedAt:at});
+                if(prior)draft.candidates[draft.candidates.indexOf(prior)]=candidate;else draft.candidates.push(candidate);
+                candidateIds.push(id);if(slot)equipment[slot.id]=id;
+            }
+            const exportedKeyring=keyring.map(entry=>{const patch=resolve(entry);if(!patch)reject(entry);return {...entry,importedAt:at,known:Boolean(patch),wikiTitle:patch?.wikiTitle||'',iconId:patch?.iconId||''};});
+            draft.equipment=equipment;draft.pendingEquipment={};draft.statSnapshots.current=null;
+            draft.inventoryExport=inventoryExportRecord({schemaVersion:1,importedAt:at,file,candidateIds,rowCount:parsed.rowCount,equipmentSlotCount:23,emptyEquipmentCount:parsed.emptyEquipmentCount,inventoryCount:parsed.inventory.length,keyring:exportedKeyring,rejectedItems,warnings:parsed.warnings});draft.updatedAt=at;
+            const serialized=JSON.stringify(draft);if(new TextEncoder().encode(serialized).length>CHARACTER_LIMITS.storageBytes)return fail('This export exceeds the bounded Character storage. Existing inventory was kept.');
+            try{storage?.setItem(CHARACTER_STORAGE_KEY,serialized);}catch{return fail('The inventory export could not be saved. Existing inventory was kept.');}
+            state=draft;return {ok:true,saved:true,importedCount:candidateIds.length,equippedCount:Object.keys(equipment).length,keyringCount:exportedKeyring.length,unknownCount:rejectedItems.length,rejectedCount:rejectedItems.length,inventoryExport:clone(draft.inventoryExport)};
+        }catch(error){return fail(error?.message||'The inventory export could not be applied. Existing inventory was kept.');}
     }
     function intake(observation={},options={}) {
         const source=characterObservationInput(observation);
@@ -673,10 +728,10 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         return outcome.ok ? {...decision,saved:outcome.saved} : {...decision,ok:false,assigned:false,slot:null,error:outcome.error};
     }
     return {intake,lookupObservation,updateCandidate,mergeObservation,setTierPreview,setObservedBasis,setAugmentSlots,setAugment,removeAugment,resolveCatalog,invalidateCatalog,reconcileCatalog,assign,autoAssign,
-        snapshot:()=>clone(state), totals:()=>characterTotals(state),
+        snapshot:()=>clone(state), totals:()=>characterTotals(state),applyInventoryExport,
         duplicateCandidate(id) { const source=get(id);if(!source)return {ok:false,error:'Item card no longer exists.'};
             if(state.candidates.length>=CHARACTER_LIMITS.candidates)return capacityError();const beforeAddition=clone(state);
-            const candidate=normalizeCandidate({...source,id:nextId(),origin:'manual',instanceKey:'',evidence:[],seenCount:1,createdAt:timestamp(),updatedAt:timestamp()});
+            const candidate=normalizeCandidate({...source,id:nextId(),origin:'manual',instanceKey:'',inventoryOrigin:null,evidence:[],seenCount:1,createdAt:timestamp(),updatedAt:timestamp()});
             state.candidates.push(candidate);return addedResult(candidate,beforeAddition); },
         removeCandidate(id) { if (!get(id)) return {ok:false,error:'Item card no longer exists.'};rememberRemoval(get(id));
             state.candidates=state.candidates.filter(candidate=>candidate.id!==id);
@@ -684,8 +739,10 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             return {ok:true,saved:save()}; },
         unassign(slotId) { if(!SLOT_BY_ID.has(slotId))return {ok:false,error:'Unknown equipment slot.'};delete state.equipment[slotId];delete state.pendingEquipment[slotId];return {ok:true,saved:save()}; },
         setMetadata(patch) { state.metadata=metadata({...state.metadata,...patch});return {ok:true,saved:save()}; },
-        beginSnapshot(patch={}) {state.metadata=metadata({...state.metadata,...patch});state.equipment={};state.pendingEquipment={};state.statSnapshots.base=null;return {ok:true,saved:save()};},
-        setStatSnapshot(kind,value) { if(!['base','equipped'].includes(kind))return {ok:false,error:'Stat snapshot must be base or equipped.'};
+        beginSnapshot(patch={}) {state.metadata=metadata({...state.metadata,...patch});state.statSnapshots.current=null;return {ok:true,saved:save()};},
+        clearCurrentStats(){state.statSnapshots.current=null;return {ok:true,saved:save()};},
+        clearInventory(){for(const candidate of state.candidates)rememberRemoval(candidate);state.candidates=[];state.equipment={};state.pendingEquipment={};state.inventoryExport=null;state.statSnapshots.current=null;return {ok:true,saved:save()};},
+        setStatSnapshot(kind,value) { if(!['base','equipped','current'].includes(kind))return {ok:false,error:'Stat snapshot must be current, base or equipped.'};
             state.statSnapshots[kind]=statSnapshot(value);return {ok:true,saved:save()}; },
         reset() { for(const candidate of state.candidates)rememberRemoval(candidate);const {removedObservations,removedInstances,observationRefs,observationFloor}=state;state={...emptyState(),removedObservations,removedInstances,observationRefs,observationFloor};return {ok:true,saved:save()}; }
     };
@@ -697,12 +754,10 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
 export function characterShareSummary(snapshot) {
     const state=normalizeState(snapshot),totals=characterTotals(state),byId=new Map(state.candidates.map(item=>[item.id,item]));
     return {schemaVersion:1,kind:'eoz-character-snapshot',metadata:clone(state.metadata),updatedAt:state.updatedAt,
-        stats:{base:state.statSnapshots.base ? {stats:state.statSnapshots.base.stats,confirmed:state.statSnapshots.base.confirmed} : null,
-            equipped:state.statSnapshots.equipped ? {stats:state.statSnapshots.equipped.stats,confirmed:state.statSnapshots.equipped.confirmed} : null,
-            derived:totals.derived,computed:totals.computed},
+        stats:{current:totals.current?{stats:totals.current.stats,confirmed:totals.current.confirmed,at:totals.current.at}:null,computed:totals.computed},
         equipment:CHARACTER_SLOTS.map(slot=>{const item=byId.get(state.equipment[slot.id]);return {slot:slot.id,label:slot.label,item:item ? {
             name:item.name,wikiTitle:item.wikiTitle,wikiMatch:item.wikiMatch,iconId:item.iconId,tier:item.tier,fraction:item.fraction,observedTier:item.observedTier,observedFraction:item.observedFraction,statBasis:item.statBasis,level:item.level,
             slots:item.slots,observedStats:item.observedStats,baseStats:item.baseStats,...characterItemStats(item),
             augments:clone(item.augments),augmentSlots:item.augmentSlots,augmentStatus:item.augmentStatus,slotWarning:characterSlotCompatibility(item,slot.id).warning} : null};}),
-        caveat:'Equipped estimates add No Equipment + gear; caps, buffs, worn effects and attribute-derived resource changes are omitted. AC/ATK components need unavailable formulas. Prior equipped captures stay separate.'};
+        caveat:'Character totals are the reviewed equipped statistics. Individual gear, tier and augment values never change the observed totals.'};
 }

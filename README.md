@@ -4,42 +4,41 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.6 adds a compact character inspect and interactive wiki sharing.**
-Use one equipment total panel with maximum HP, mana and endurance. Click an empty
-slot to search cached wiki items, choose a tier, or paste an item screenshot for
-local screen reading. Click augment sockets to choose any known item, including
-weapons in armor; captured socket counts and existing item values are retained.
-Character uses 24 equipment slots including two Any slots. Existing Power Source
-gear returns to Inventory. Item tiers stay editable without fractional progress.
+**0.9.7 imports equipped gear from the game's inventory export and records the
+displayed character stats.** Keep all gear on. Enter character details, type
+`/outputfile inventory`, then let EoZ detect the fresh matching export in your
+chosen game folder. Next, **Open your Inventory → Scroll down → Click off your
+buffs**, select the game window and review its fully equipped, unbuffed stats.
+Character totals use only that reviewed reading; item/catalog values and older
+baselines are never added. Character does not collect gear by item OCR.
 
-Character Select keeps separate **Character (Server)** saves. Use an equipped
-item’s X or drag it back into Inventory to unequip. Tier-adjusted wiki previews
-appear in green. Wiki sharing uses a collapsed `Character_sheet` with clickable
-gear and augments, replacing that character’s prior managed sheet while keeping
-other characters and talk-page discussion. The wiki templates and renderer must
-be installed before sharing; see the [implementation and activation plan](docs/CHARACTER_SHEETS_PLAN.md).
+Missing wiki items and augments leave public slots/sockets empty. Use Contribute
+to supply missing details, sync the accepted wiki data and export inventory again.
+Optional local stat/examine reading uses a lower **1 FPS** cadence for stable
+panes. See [the inventory-export flow](docs/CHARACTER_WALKTHROUGH.md) and
+[implementation plan](docs/INVENTORY_EXPORT_CHARACTER_PLAN.md). Version 0.9.7 is
+unreleased until its final native, platform and package checks complete.
 
-Automatic screen reads update the saved item instead of adding copies. Use
-**Second copy** for another physical item. Unequip slowly and keep each complete
-Default Modern tooltip visible until its card appears. **Rescan removed items**
-allows a fresh read after removing a bad capture; stale queued reads stay blocked.
-See the [persistence and capture audit](docs/CHARACTER_INVENTORY_PERSISTENCE.md)
-and [guided walkthrough](docs/CHARACTER_WALKTHROUGH.md).
+The compact inspect and interactive wiki sharing introduced in 0.9.6 remain:
+24 equipment slots including two Any slots, clickable known gear/augments, PNG
+copy/save and an explicitly reviewed own-talk share. Character Select preserves
+separate **Character (Server)** saves. The wiki contract and activation boundary
+are documented in [the cross-repository plan](docs/CHARACTER_SHEETS_PLAN.md).
 
-![Character inspect with one total panel and compact equipment](app/assets/whats-new/0.9.6/character-total-inspect.png)
+The following images show the **released 0.9.6 UI with synthetic records**; they
+are historical illustrations, not evidence of the new inventory-export flow.
 
-![Empty-slot Add item with wiki search, tier slider and screenshot paste](app/assets/whats-new/0.9.6/character-empty-slot-picker.png)
+![0.9.6 character inspect with one total panel and compact equipment](app/assets/whats-new/0.9.6/character-total-inspect.png)
 
-In **Settings → Screen reading**, start an explicitly selected source. Optionally use
-**Calibrate OCR area** to draw around a complete examine or Inventory/stat pane.
-Screen reading currently requires the **Default Modern (`default_modern`)
-game UI skin**. Other skins remain unverified until their layouts are supported.
-Ordinary log parsing works independently of the game UI skin.
-Keyboard percentage fields and **Full frame** are available too. Areas are saved
-per source and capture mode and reset if the frame size changes. OCR proposes
-editable fields; unresolved values remain unknown.
+![0.9.6 empty-slot item picker with wiki search](app/assets/whats-new/0.9.6/character-empty-slot-picker.png)
 
-![OCR area calibration with a synthetic preview](app/assets/whats-new/0.9.0/ocr-calibration.png)
+In **Settings → Screen reading**, explicitly select the source you want to read.
+The supported calibration is **Default Modern (`default_modern`)**; other game
+skins remain unverified. Calibration can select a complete stat or examine pane,
+and **Full frame** resets it. Original source/session/generation and timestamp
+checks still apply. Ordinary log parsing does not require screen reading.
+
+![Historical OCR area calibration with a synthetic preview](app/assets/whats-new/0.9.0/ocr-calibration.png)
 
 ## Get started
 
@@ -189,61 +188,49 @@ assumptions or selected values invalidates that review.
 
 ### Build and share a character snapshot
 
-In **Character**, enter name, server, classes, level and AA count, then start the
-walkthrough. Select the game window inline; Default Modern is the calibrated
-skin. Remove ANY-slot equipment first and show each item's hover tooltip or
-examine window while unequipping. Obvious slots fill automatically. Keep each
-item visible until its card appears; if reading is catching up, pause on the
-next tooltip rather than moving through more items. Reading remains local and
-temporary frame queuing is bounded. Use Second copy for two physically
-identical items. Each inventory card has a
-top-right × to remove it. Read an item screenshot and manual cards remain in
-Equipment and captured items.
+1. In **Character**, enter name, server, race, classes, level and AA count. Saved
+   characters are labeled **Character (Server)**; a new draft is registered only
+   after its details are valid.
+2. **Keep every item equipped.** Type `/outputfile inventory` in EverQuest.
+   While the inventory step is open, EoZ watches the chosen game folder for a
+   fresh matching `Name_server-Inventory.txt` and imports it automatically.
+   **Check now** and **Choose inventory file…** are available when needed. EoZ
+   never sends the game command itself. Bags, bank and keyring entries do not
+   become worn equipment.
+3. **Open your Inventory. Scroll down. Click off your buffs.** Keep the whole
+   Default Modern stat panel, including Additional Modifiers and the Inventory
+   heading, visible. Select your game window and choose **Read character stats**.
+   Review the proposal, correct uncertain values and use the reviewed stats.
+   Optional screen reading runs at 1 FPS; it is not a promise to catch brief
+   hover tooltips.
+4. Review the inspect before copying/saving a PNG or sharing it. Totals are the
+   recorded equipped, unbuffed values only, with maximum HP/Mana/Endurance,
+   distinct AC and ATK components, and the observed modifiers. Accuracy bonus
+   is separate from ATK Accuracy. Missing values stay unknown; changing gear,
+   catalog tiers or item previews does not recalculate character totals.
 
-![Character tooltip-reading instructions, item cards and queued reading status](app/assets/whats-new/0.9.2/character-tooltip-capture.png)
+Unknown items/augments are rejected from public equipment and leave empty
+slots/sockets. Use **Contribute to Wiki** to review missing item details, then
+sync accepted wiki data and generate a new inventory export. Item examine OCR
+belongs to Contribute, not Character gear intake. No missing item publishes
+automatically. The red **Clear inventory** action affects only the selected
+character's gear/import evidence and now-invalid stat reading, retaining identity
+and other saved characters.
 
-After confirming all equipment is off, review one fresh **No Equipment** block.
-Mitigation AC, AC softcap, evasion AC, offense and accuracy are separate values.
-Manual corrections survive later OCR reads. Re-equip ordinary items first and
-ANY items last, examine anything missed, then confirm ambiguous slots together.
-Source loss offers Resume or Choose game window without losing the current step.
+PNG copy/save stays local. Wiki sharing requires login and one explicit review;
+it updates only the authenticated account's own talk page, replacing that
+Character (Server)'s managed sheet while preserving other characters and
+discussion. The app checks template/renderer support first. Raw OCR, export
+paths, source IDs, private inventory and current resource counters are not
+published. See [the current walkthrough](docs/CHARACTER_WALKTHROUGH.md).
 
-**Search for item** uses the cached wiki catalog. Select an item and preview its
-tier with changed values in green, then **Add to inventory**. Repeated
-adds create distinct copies. Catalog bases stay separate from observed examine
-stats. Unsupported calculations remain unavailable rather than being guessed.
+The current Character flow and log-based contribution queue are browsable in
+**What's new**, alongside every earlier release. These are actual component
+captures with synthetic records and an isolated profile.
 
-![Character catalog search with tier-adjusted stats and separate item copies](app/assets/whats-new/0.9.0/character-catalog.png)
-
-![Guided snapshot review and synthetic equipment layout](app/assets/whats-new/0.9.1/character-walkthrough-review.png)
-
-Hover equipped or loose gear and click an augment socket to choose a wiki item
-and its tier. Weapons can be augments in armor. The item reader captures explicit
-socket counts; Set augment slots also supports older saved items. Existing
-examine values are preserved and augment changes are applied once.
-Equipped estimates update from the reviewed baseline and assigned gear; a second
-equipped-stat capture is unnecessary. Additive estimates exclude caps and buffs.
-AC/ATK component conversions and exact Haste stacking remain unknown where the
-server formula is unavailable. The written item block retains unparsed text;
-correct an explicit Haste percentage and Save item to reparse it.
-
-![Written item text with editable Haste and retained unparsed content](app/assets/whats-new/0.9.1/character-item-stat-review.png)
-
-Use **Preview current snapshot** to review the interactive inspect. Click items
-and augments to open their wiki articles. PNG copy/save remains available locally.
-Successful copy/save or wiki share completes the walkthrough; canceling Save
-keeps reading. Wiki sharing requires login and one explicit confirmation. It
-updates only the authenticated account’s own talk page with one collapsed section
-per Character (Server), preserving other characters and unrelated discussion.
-Only assigned known gear, augments and totals are shared; raw OCR and loose
-inventory stay private. The app checks template/renderer support before editing.
-
-These captures and local checks use synthetic records. The combined UI fixture
-exercises real local OCR import, disposable PNG save/clipboard handling and
-guarded writes to a loopback wiki. It does not establish live-game OCR accuracy,
-production login/edit/upload acceptance, foreground game composition or native
-Wayland behavior. The [current release plan](docs/CHARACTER_WALKTHROUGH.md) records
-the checked platforms and remaining manual acceptance limits.
+![Export equipped inventory](app/assets/whats-new/0.9.7/character-inventory-export.png)
+![Prepare the equipped character stat reading](app/assets/whats-new/0.9.7/character-recorded-stats.png)
+![Review log discoveries and spawn locations](app/assets/whats-new/0.9.7/contribution-log-discoveries.png)
 
 ## Your files stay local
 

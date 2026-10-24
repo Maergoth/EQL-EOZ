@@ -11,6 +11,7 @@ assert.equal(captureOcrScale({width:900,height:8192}),1,'tall PNGs cannot exceed
 assert.equal(captureOcrScale({width:1500,height:2500}),2);
 assert.equal(captureOcrScale({width:1500,height:3000}),1);
 const origin='http://127.0.0.1:53147';
+const CHARACTER_TEXT='Character Stats\nInventory\nHP 330/398\nSTR 90';
 assert.equal(preferredCaptureSource([{id:'screen:1',name:'EverQuest'},{id:'window:wiki',name:'EverQuest - Mozilla Firefox'}]),null,'a display or browser title is never an automatic game recommendation');
 assert.equal(preferredCaptureSource([{id:'window:game',name:'EverQuest'},{id:'window:launcher',name:'EverQuest LaunchPad'}]),'window:game');
 assert.equal(preferredCaptureSource([{id:'window:game',name:'EverQuest Legends'},{id:'window:other',name:'EverQuest (Synthetic)'}]),null,'multiple game windows require a choice');
@@ -33,7 +34,7 @@ function fixture(){
     return {host,main,event:{sender:contents,senderFrame:contents.mainFrame},journal,ocr,observations,copies,handlers,crops,submitted,
         tick(){now+=100;},advance(ms){now+=ms;},frame(id='one',width=100,height=40){return {bytes:png(id,width,height),width,height,capturedAt:now,captureGeneration:host.generation,owner:host.owner,sessionId:host.sessionId,sourceId:host.source?.id};},
         reject(error=Error('Transient synthetic OCR timeout.')){const pending=ocrPending;ocrPending=null;pending.reject(error);},
-        resolve(text='Item: Synthetic Blade\nAC 12\nHP 45'){const pending=ocrPending;ocrPending=null;pending.resolve({text,confidence:85,words:[]});},
+        resolve(text){text??=host.owner==='character'?CHARACTER_TEXT:'Item: Synthetic Blade\nAC 12\nHP 45';const pending=ocrPending;ocrPending=null;pending.resolve({text,confidence:85,words:[]});},
         async waitForRead(){for(let attempt=0;attempt<200;attempt++){if(ocrPending)return;await new Promise(resolve=>setTimeout(resolve,10));}throw Error('Synthetic read did not start.');}};
 }
 const f=fixture();
@@ -55,9 +56,9 @@ try{
     assert.equal(f.host.getStatus().queuedFrames,2,'brief distinct frames survive while the first OCR is busy');
     for(let index=0;index<3;index++){await f.waitForRead();f.resolve();await new Promise(resolve=>setImmediate(resolve));}await f.host.processing;
     assert.equal(f.ocr.calls,4,'one cancelled and all three distinct queued jobs were run');
-    assert.equal(f.observations.length,1,'unchanged semantic item readings deduplicate');assert.equal(f.observations[0].owner,'character');
+    assert.equal(f.observations.length,1,'unchanged semantic character-stat readings deduplicate');assert.equal(f.observations[0].owner,'character');assert.equal(f.observations[0].subject.kind,'character');
     const same=f.observations[0];
-    assert.equal(await f.host.saveObservation({...same,fields:same.fields.map(field=>({...field,confidence:field.confidence-10,raw:` ${field.raw}`}))}),null,'OCR confidence/whitespace jitter cannot create duplicate equipment cards');
+    assert.equal(await f.host.saveObservation({...same,fields:same.fields.map(field=>({...field,confidence:field.confidence-10,raw:` ${field.raw}`}))}),null,'OCR confidence/whitespace jitter cannot create duplicate character-stat evidence');
     await f.host.stop({mode:'character'});assert.equal(f.host.owner,'contribution','explicit character Stop restores prior contribution');
     await f.host.start({mode:'character',sourceId:'window:game',sessionId:'character-second'});
     await f.host.stop({mode:'contribution'});await f.host.stop({mode:'character'});
@@ -109,17 +110,42 @@ assert.equal(f.handlers.size,0,'shutdown unregisters both exact-frame IPC handle
         assert.equal(reading.host.enabled,false);assert.equal(reading.host.owner,null);assert.equal(reading.host.phase,'disabled','source enumeration cannot restart after explicit Stop');
     }finally{await reading.host.dispose();}
 }
+{
+    const recovered=fixture();let destroyed=0;
+    try{
+        await recovered.host.listSources();await recovered.host.start({mode:'character',sourceId:'window:game',sessionId:'baseline-recovery'});
+        const contents=new EventEmitter();contents.mainFrame={url:`${origin}/capture-source.html`};
+        const window={webContents:contents,isDestroyed:()=>false,destroy(){destroyed++;}};
+        recovered.host.captureWindow=window;const sourceEvent={sender:contents,senderFrame:contents.mainFrame};
+        await readFrame(recovered,'preview-before-held-acquisition');const count=recovered.observations.length;
+        recovered.tick();recovered.host.submitFrame(recovered.frame('old-active'));await recovered.waitForRead();
+        const changing=recovered.host.setRegion({sourceId:'window:game',sessionId:'baseline-recovery',referenceSize:{width:100,height:40},region:{x:0,y:0,width:.5,height:1}});
+        assert.equal(recovered.host.getStatus().reconfiguring,true,'the OCR cancellation hold is exposed immediately');assert.equal(recovered.host.getStatus().reading,false);
+        const heldConfiguration=recovered.host.handleSource(sourceEvent,'configuration');
+        const advertised=await recovered.host.handleSource(sourceEvent,'configuration');assert.equal(advertised.intervalMs,1000);assert.equal(advertised.encodeIntervalMs,1000);assert.equal(advertised.heartbeatMs,1000);
+        assert(recovered.main.webContents.sent.some(([channel,value])=>channel==='eye-of-zomm:capture-status'&&value.reconfiguring===true),'the main renderer receives the reconfiguring state before cancellation awaits');
+        assert.equal((await changing).reconfiguring,false,'the IPC result cannot overwrite the final status event with the old hold state');assert.equal((await heldConfiguration).capture,null);assert.equal(recovered.host.getStatus().reconfiguring,false);assert.equal(recovered.observations.length,count,'pre-calibration OCR remains cancelled');
+        const calibrationGeneration=recovered.host.generation;
+        recovered.tick();const retiredFrame=recovered.frame('late-stalled-source');recovered.host.submitFrame(recovered.frame('active-at-source-stall'));await recovered.waitForRead();
+        await recovered.host.handleSource(sourceEvent,'error','Screen capture stalled while preparing a frame. Resume capture or restart screen reading to continue.');
+        assert.equal(destroyed,1,'an acquisition deadline retires the stalled source renderer');assert.equal(recovered.host.captureWindow,null);assert.equal(recovered.host.getStatus().resumable,true);assert.equal(recovered.host.phase,'error');assert.match(recovered.host.getStatus().error,/stalled.*Resume/);assert.equal(recovered.host.getStatus().queuedFrames,0);assert.equal(recovered.observations.length,count);
+        await recovered.host.start({mode:'character',sourceId:'window:game',sessionId:'baseline-recovery',region:null,referenceSize:null});
+        assert.equal(recovered.host.phase,'running');assert.equal(recovered.host.sessionId,'baseline-recovery');assert.equal(recovered.host.region,null);assert.ok(recovered.host.generation>calibrationGeneration);
+        assert.equal(recovered.host.submitFrame(retiredFrame).stale,true,'the recovered session rejects pixels encoded by the retired generation');assert.equal((await recovered.host.handleSource(sourceEvent,'frame',retiredFrame)).accepted,false,'retired renderer IPC cannot reach the replacement');
+        await readFrame(recovered,'fresh-full-frame-baseline');assert.equal(recovered.observations.length,count+1);assert.equal(recovered.observations.at(-1).sessionId,'baseline-recovery');assert.equal(recovered.observations.at(-1).input.captureGeneration,recovered.host.generation);assert.deepEqual(recovered.observations.at(-1).input.region,{x:0,y:0,width:100,height:40});
+    }finally{await recovered.host.dispose();}
+}
 const imported=fixture(),temporary=await mkdtemp(join(tmpdir(),'eoz-capture-import-'));
 try{
     const target=join(temporary,'synthetic.png');await writeFile(target,png());
     imported.host.electron.dialog={showOpenDialog:async()=>({filePaths:[target],canceled:false})};
     const pending=imported.host.importImage({mode:'character',sessionId:'offline-character'});
-    await imported.waitForRead();imported.resolve();
+    await imported.waitForRead();imported.resolve(CHARACTER_TEXT);
     const result=await pending;
     assert.equal(result.records[0].owner,'character');assert.equal(result.records[0].sessionId,'offline-character');
     assert.equal(result.records[0].input.captureGeneration,imported.host.generation,'a manual result carries the exact import generation for phase-invocation review');assert.equal(result.records[0].input.sourceId,null,'an imported PNG never claims a live source');
     assert.equal(imported.host.enabled,false,'an offline Character screenshot never enables persistent capture');
-    imported.tick();const repeated=imported.host.importImage({mode:'character',sessionId:'offline-character'});await imported.waitForRead();imported.resolve();const repeatedResult=await repeated;
+    imported.tick();const repeated=imported.host.importImage({mode:'character',sessionId:'offline-character'});await imported.waitForRead();imported.resolve(CHARACTER_TEXT);const repeatedResult=await repeated;
     assert.equal(repeatedResult.records.length,1,'an explicit second review of the same PNG is not suppressed by live-screen TTL dedup');assert.equal(repeatedResult.records[0].input.frameId,result.records[0].input.frameId);
     assert.ok(repeatedResult.records[0].sequence>result.records[0].sequence);assert.ok(Date.parse(repeatedResult.records[0].capturedAt)>Date.parse(result.records[0].capturedAt));assert.ok(Date.parse(repeatedResult.records[0].capturedAt)-Date.parse(result.records[0].capturedAt)<3000);
     assert.ok(repeatedResult.records[0].input.captureGeneration>result.records[0].input.captureGeneration);assert.equal(repeatedResult.records[0].sessionId,'offline-character');assert.equal(repeatedResult.records[0].kind,'manual');assert.equal(imported.host.enabled,false);assert.equal(imported.host.owner,null,'explicit offline reviews never take over the persistent capture owner');
@@ -129,10 +155,11 @@ try{
     const review=imported.host.importImage({mode:'character',sessionId:'second-character'});
     for(let attempt=0;attempt<200&&!imported.host.hold;attempt++)await new Promise(resolve=>setTimeout(resolve,10));
     assert.equal(imported.host.hold,true);assert.equal(imported.host.submitFrame(imported.frame('held')).accepted,false);
-    await running;await imported.waitForRead();imported.resolve();
+    await running;await imported.waitForRead();imported.resolve(CHARACTER_TEXT);
     assert.equal((await review).records[0].owner,'character');assert.equal(imported.host.owner,'contribution');
     assert.equal(imported.host.phase,'running');assert.equal(imported.host.hold,false,'a manual review releases its exclusive worker hold');
     assert.equal(imported.observations.length,3,'only three explicit manual reviews emit; cancelled live OCR cannot leak into the manual character review');
+    const itemOnly=imported.host.importImage({mode:'character',sessionId:'character-does-not-read-items'});await imported.waitForRead();imported.resolve('Item: Synthetic Unwanted Gear\nSlot: HEAD\nHP 999');assert.equal((await itemOnly).records.length,0,'Character screenshot review cannot create gear records from an item-only pane');assert.equal(imported.observations.length,3);
 }finally{await imported.host.dispose();await rm(temporary,{recursive:true,force:true});}
 async function readFrame(fixture,id,width=100,height=40){fixture.tick();assert.equal(fixture.host.submitFrame(fixture.frame(id,width,height)).accepted,true);await fixture.waitForRead();fixture.resolve();await fixture.host.processing;}
 {
@@ -201,7 +228,7 @@ async function readFrame(fixture,id,width=100,height=40){fixture.tick();assert.e
 {
     const queued=fixture(),captured=[];
     try{
-        await queued.host.listSources();await queued.host.start({mode:'character',sourceId:'window:game',sessionId:'brief-tooltips'});
+        await queued.host.listSources();await queued.host.start({mode:'contribution',sourceId:'window:game',sessionId:'brief-tooltips'});
         for(const id of ['amber','beryl','coral']){queued.tick();const frame=queued.frame(id);captured.push(frame.capturedAt);assert.equal(queued.host.submitFrame(frame).accepted,true);if(id==='amber')await queued.waitForRead();}
         assert.equal(queued.host.getStatus().queuedFrames,2);assert.equal(queued.host.getStatus().reading,true);
         assert.equal(queued.host.submitFrame(queued.frame('beryl')).duplicate,true,'an already queued PNG does not consume another slot');
@@ -235,7 +262,7 @@ async function readFrame(fixture,id,width=100,height=40){fixture.tick();assert.e
 for(const change of ['stop','owner','crop','size']){
     const changed=fixture();
     try{
-        await changed.host.listSources();await changed.host.start({mode:'character',sourceId:'window:game',sessionId:'old-window'});changed.tick();changed.host.submitFrame(changed.frame('active'));await changed.waitForRead();changed.tick();changed.host.submitFrame(changed.frame('queued-old'));const oldToken=changed.frame('encoded-before-change'),generation=changed.host.generation;
+        await changed.host.listSources();await changed.host.start({mode:'contribution',sourceId:'window:game',sessionId:'old-window'});changed.tick();changed.host.submitFrame(changed.frame('active'));await changed.waitForRead();changed.tick();changed.host.submitFrame(changed.frame('queued-old'));const oldToken=changed.frame('encoded-before-change'),generation=changed.host.generation;
         if(change==='stop')await changed.host.stop();
         if(change==='owner')await changed.host.start({mode:'character',sourceId:'screen:one',sessionId:'new-window'});
         if(change==='crop')await changed.host.setRegion({sourceId:'window:game',sessionId:'old-window',region:{x:0,y:0,width:.5,height:1},referenceSize:{width:100,height:40}});
@@ -247,7 +274,7 @@ for(const change of ['stop','owner','crop','size']){
 {
     const resized=fixture(),pane={selectionKind:'visual-item',visualKey:'0123456789abcdef',itemRegion:{x:0,y:0,width:1,height:1}};
     try{
-        await resized.host.listSources();await resized.host.start({mode:'character',sourceId:'window:game',sessionId:'resized-pane'});
+        await resized.host.listSources();await resized.host.start({mode:'contribution',sourceId:'window:game',sessionId:'resized-pane'});
         resized.tick();resized.host.submitFrame({...resized.frame('before-resize'),...pane});await resized.waitForRead();
         const oldGeneration=resized.host.generation;
         resized.tick();const fresh=resized.frame('after-resize',200,40),admission=resized.host.submitFrame({...fresh,...pane});
@@ -279,7 +306,7 @@ function visualFrame(f,id,key){return {...f.frame(id),selectionKind:'visual-item
 {
     const moving=fixture(),times=[];
     try{
-        await moving.host.listSources();await moving.host.start({mode:'character',sourceId:'window:game',sessionId:'moving-world'});
+        await moving.host.listSources();await moving.host.start({mode:'contribution',sourceId:'window:game',sessionId:'moving-world'});
         const initial=moving.host.submitFrame({...moving.frame('animated-active'),selectionKind:'scene'});
         assert.equal(initial.accepted,true);assert.equal(moving.ocr.calls,0,'frame admission returns before native preparation or OCR starts');await moving.waitForRead();
         for(const [index,name]of ['Amber','Beryl','Coral'].entries()){
@@ -303,7 +330,7 @@ function visualFrame(f,id,key){return {...f.frame(id),selectionKind:'visual-item
 {
     const guard=fixture();
     try{
-        await guard.host.listSources();await guard.host.start({mode:'character',sourceId:'window:game'});guard.host.submitFrame(visualFrame(guard,'active','1'));await guard.waitForRead();
+        await guard.host.listSources();await guard.host.start({mode:'contribution',sourceId:'window:game'});guard.host.submitFrame(visualFrame(guard,'active','1'));await guard.waitForRead();
         for(let n=0;n<12;n++){guard.tick();guard.host.submitFrame(visualFrame(guard,`item-${n}`,(n+2).toString(16)));}
         assert.equal(guard.host.submitFrame({...guard.frame('low-priority-world'),selectionKind:'scene'}).lowPriority,true,'a new world scene cannot evict a queued item');assert.equal(guard.host.getStatus().queuedFrames,12);
         guard.advance(16000);guard.host.prunePending();assert.equal(guard.host.getStatus().queuedFrames,12,'short item proposals survive a measured 11-second active scene plus serial work');
@@ -324,7 +351,7 @@ function visualFrame(f,id,key){return {...f.frame(id),selectionKind:'visual-item
 {
     const shared=fixture();
     try{
-        await shared.host.listSources();await shared.host.start({mode:'character',sourceId:'window:game'});shared.host.submitFrame({...visualFrame(shared,'same-pane','1'),sceneFallback:true});await shared.waitForRead();
+        await shared.host.listSources();await shared.host.start({mode:'contribution',sourceId:'window:game'});shared.host.submitFrame({...visualFrame(shared,'same-pane','1'),sceneFallback:true});await shared.waitForRead();
         assert.equal(shared.host.pending.filter(frame=>frame.kind==='scene').length,1);shared.advance(5100);
         const next={...visualFrame(shared,'new-world-same-pane','1'),sceneFallback:true};assert.equal(shared.host.submitFrame(next).sceneAccepted,true,'an active duplicate item still refreshes fallback without losing any new candidate');
         const scene=shared.host.pending.find(frame=>frame.kind==='scene');assert.equal(scene.capturedAt,next.capturedAt);assert.equal(scene.region,null);assert.equal(scene.png,shared.host.lastFrame.png,'fallback is a reference to the exact same immutable full PNG');assert.equal(shared.host.queuedBytes,scene.png.length,'replacement accounting remains exact');
@@ -332,11 +359,11 @@ function visualFrame(f,id,key){return {...f.frame(id),selectionKind:'visual-item
     }finally{await shared.host.dispose();}
 }
 {
-    const canceled=fixture();try{await canceled.host.listSources();await canceled.host.start({mode:'character',sourceId:'window:game'});canceled.host.submitFrame(visualFrame(canceled,'deferred','1'));await canceled.host.stop();assert.equal(canceled.ocr.calls,0,'Stop before the deferred pump starts cannot revive OCR');assert.equal(canceled.host.queuedBytes,0);}finally{await canceled.host.dispose();}
+    const canceled=fixture();try{await canceled.host.listSources();await canceled.host.start({mode:'contribution',sourceId:'window:game'});canceled.host.submitFrame(visualFrame(canceled,'deferred','1'));await canceled.host.stop();assert.equal(canceled.ocr.calls,0,'Stop before the deferred pump starts cannot revive OCR');assert.equal(canceled.host.queuedBytes,0);}finally{await canceled.host.dispose();}
 }
 {
     const fair=fixture();try{
-        await fair.host.listSources();await fair.host.start({mode:'character',sourceId:'window:game'});fair.host.submitFrame({...visualFrame(fair,'first','1'),sceneFallback:true});await fair.waitForRead();for(let n=2;n<=4;n++){fair.tick();fair.host.submitFrame(visualFrame(fair,`next-${n}`,String(n)));}
+        await fair.host.listSources();await fair.host.start({mode:'contribution',sourceId:'window:game'});fair.host.submitFrame({...visualFrame(fair,'first','1'),sceneFallback:true});await fair.waitForRead();for(let n=2;n<=4;n++){fair.tick();fair.host.submitFrame(visualFrame(fair,`next-${n}`,String(n)));}
         for(let n=1;n<=3;n++){assert.equal(fair.host.activeFrameHash,`pane:${String(n).padStart(16,'0')}`);fair.resolve(`Item: Synthetic Fair ${n}\nHP ${n}`);await new Promise(resolve=>setImmediate(resolve));await fair.waitForRead();}
         assert.match(fair.host.activeFrameHash,/^frame:/,'a full-scene job runs after three candidates even when more items remain');fair.resolve('Character Stats\nHP 330/398\nSTR 90');await new Promise(resolve=>setImmediate(resolve));await fair.waitForRead();assert.equal(fair.host.activeFrameHash,'pane:0000000000000004');fair.resolve('Item: Synthetic Fair Four\nHP 4');await fair.host.processing;
     }finally{await fair.host.dispose();}
@@ -353,10 +380,10 @@ console.log('Capture host: animated-world scene replacement, item-priority ROI/F
         pasted.host.electron.clipboard.readImage=()=>{clipboardReads++;return{isEmpty:()=>false,getSize:()=>({width:8192,height:8192}),toPNG:()=>{throw Error('Must reject dimensions before encoding');}};};
         await assert.rejects(pasted.host.importImage({source:'clipboard'}),/16 megapixels/);assert.equal(pasted.ocr.calls,0);
         pasted.host.electron.clipboard.readImage=()=>{clipboardReads++;return pasted.host.electron.nativeImage.createFromBuffer(png('clipboard-item'));};
-        const pending=pasted.host.importImage({mode:'character',sessionId:'explicit-paste',source:'clipboard'});
+        const pending=pasted.host.importImage({mode:'contribution',sessionId:'explicit-paste',source:'clipboard'});
         await pasted.waitForRead();pasted.resolve('Item: Synthetic Clipboard Helm +3\nSlot: HEAD\nAC 12\nHP 45\n5 empty slots');
         const result=await pending;assert(result.records.length>0);assert.equal(dialogs,0,'Explicit paste does not open the file picker');
-        for(const record of result.records){assert.equal(record.kind,'manual');assert.equal(record.owner,'character');assert.equal(record.sessionId,'explicit-paste');assert.equal(record.input.sourceId,null);assert.equal(record.input.captureGeneration,1);}
+        for(const record of result.records){assert.equal(record.kind,'manual');assert.equal(record.owner,'contribution');assert.equal(record.sessionId,'explicit-paste');assert.equal(record.input.sourceId,null);assert.equal(record.input.captureGeneration,1);}
         assert.equal(pasted.host.hold,false,'Capture is released after pasted-image OCR');
     }finally{await pasted.host.dispose();}
 }

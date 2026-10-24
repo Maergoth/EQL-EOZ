@@ -9,3 +9,6 @@ eye-of-zomm-config.json
 eye-of-zomm-pack-state.json
 app/workers/recast-route.worker.js
 app/zoneviewer/ZoneViewerApp.js
+
+# Synthetic native/CI captures are archived explicitly per release.
+ci-screenshots/

@@ -74,6 +74,19 @@ export function resolveCharacterCatalog(pack,observedName,{limit=CHARACTER_CATAL
     return {status,item:unique?matches[0].item:null,candidates:matches.slice(0,maximum),total:matches.length,autoResolved:unique,incomplete,query};
 }
 
+/** Inventory import establishes exact article presence even without rich stats.
+ * Fuzzy proposals stay manual. Presence never supplies invented equipment stats. */
+export function resolveInventoryCatalog(pack,name){
+    const match=resolveCharacterCatalog(pack,name);
+    if(match.status==='exact')return {item:match.item,icon:pack?.icons?.[match.item.iconId]};
+    const key=value=>text(value).normalize('NFKC').replace(/_/g,' ').replace(/\s+/gu,' ').toLowerCase(),query=key(characterBaseItemName(name));
+    for(const record of [...(pack?.wikiEntities?.items||[]),...(pack?.wikiEntities?.titles||[])]){
+        const title=typeof record==='string'?record:record?.wikiTitle||record?.title||record?.name;
+        if(title&&[title,record?.name].some(value=>value&&key(value)===query))return {item:{name:characterBaseItemName(name),wikiTitle:title,slots:[],stats:{}}};
+    }
+    return {};
+}
+
 /** A manual physical card from an explicitly selected catalog identity. The
  * selected tier is known; observedStats and capture evidence are empty.
  * Catalog stats remain base values. Augment state needs review unless explicit.

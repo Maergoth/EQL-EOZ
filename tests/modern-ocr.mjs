@@ -13,7 +13,7 @@ async function verify({root,profile,diagnostics}){
         const runtimeRoot=path.join(root,'.generated','ocr-runtime'),ocr=new OcrService({...(packaged?{runtimeRoot,workerPath:path.join(runtimeRoot,'ocr-worker.cjs')}:{}),workerExecArgv:['--require',deny]});
         try{
             const read=await recognizeCaptureImage({ocr,image,nativeImage});
-            const records=parseScreenRead({...read.result,owner:'character',sessionId:'synthetic-modern-pixels',input:read.input});
+            const records=parseScreenRead({...read.result,owner:'contribution',sessionId:'synthetic-modern-pixels',input:read.input});
             if(diagnostics){const fs=require('node:fs/promises');await fs.mkdir(diagnostics,{recursive:true});await fs.writeFile(path.join(diagnostics,packaged?'modern-assembled.json':'modern-source.json'),JSON.stringify({read,records},null,2));}
             const fields=record=>Object.fromEntries(record.fields.map(field=>[field.key,field.value]));
             const items=records.filter(record=>record.subject.kind==='item'),character=records.find(record=>record.subject.kind==='character');
@@ -30,6 +30,12 @@ async function verify({root,profile,diagnostics}){
             assert.ok(c.hpRegen===undefined||c.hpRegen===11,'A regen digit must match its pixels or remain unknown');
             assert.equal(w.str,undefined,'Inventory/other-item Strength cannot bleed into the weapon');assert.equal(b.hpCurrent,undefined,'Inventory resource labels cannot bleed into item values');
             assert(records.length<=4&&records.every(record=>record.fields.length<=100&&record.evidence.text.length<=16384));assert(read.input.ocrPasses.length<=3,'Bounded scene plus refinement passes');
+            // Reuse the exact first-pass OCR over these immutable synthetic
+            // pixels; the Character refinement itself still runs real OCR.
+            let characterCalls=0;const characterRead=await recognizeCaptureImage({image,nativeImage,characterOnly:true,ocr:{recognize(png,settings){return ++characterCalls===1?Promise.resolve(read.result):ocr.recognize(png,settings);}}});
+            const currentRecords=parseScreenRead({...characterRead.result,owner:'character',sessionId:'synthetic-modern-current',input:characterRead.input});assert.equal(currentRecords.length,1);assert.equal(currentRecords[0].subject.kind,'character');
+            assert.deepEqual(characterRead.input.ocrPasses.map(pass=>pass.role),['scene','character-stats'],'Character capture never spends OCR passes on item names or stat blocks');
+            const current=fields(currentRecords[0]);assert.equal(current.hpMaximum,901);assert.equal(current.manaMaximum,703);assert.equal(current.enduranceMaximum,509);assert.doesNotMatch(currentRecords[0].evidence.text,/Synthetic Ember Boots|Synthetic Quartz Blade/);
             // Catalog identity is a separate explicit selection after every OCR
             // assertion above. Golden names/slots/base values are independent
             // of the OCR output; differing bases must not replace read values.
@@ -46,7 +52,7 @@ async function verify({root,profile,diagnostics}){
                 assert.equal(selected.candidate.fraction,null,'Character no longer imports per-item progress; original parser evidence remains intact');assert.equal(selected.candidate.observedName,original.subject.name);assert.deepEqual(observation,original,'Catalog selection cannot mutate the original parsed OCR record');
                 assert.equal(model.assign(selected.candidate.id,slot).ok,true);
             }
-            console.log(`Modern synthetic pixel OCR ${packaged?'assembled runtime':'source dependencies'}: two names, split item stats, slots/progress, right-hand Inventory current/max/attributes/resists, no field bleed and usable Character cards passed.`);
+            console.log(`Modern synthetic pixel OCR ${packaged?'assembled runtime':'source dependencies'}: Contribution item identity/stats, independent Character-only current/max/components, bounded passes and no field bleed passed.`);
         }finally{await ocr.stop();}
     }
     app.quit();

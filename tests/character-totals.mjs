@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {createCharacterModel,characterObservationInput} from '../app/character-model.js';
+import {characterTotalGroups} from '../app/character-totals.js';
+
+const model=createCharacterModel({storage:null});
+model.setStatSnapshot('base',{stats:{HP_MAXIMUM:1000,AC_MITIGATION:500},confirmed:true});
+model.setStatSnapshot('equipped',{stats:{HP_MAXIMUM:9000,AC_MITIGATION:900},confirmed:true});
+let rows=characterTotalGroups(model.totals()).flatMap(group=>group.rows);
+assert(rows.every(row=>row.value===null),'Neither saved baseline nor old equipped snapshot becomes current totals');
+model.setStatSnapshot('current',{stats:{HP_CURRENT:34,HP_MAXIMUM:230,MP_CURRENT:5,MP_MAXIMUM:101,END_CURRENT:8,END_MAXIMUM:202,AC_MITIGATION:47,AC_EVASION:null,ATK_OFFENSE:63,STR:85,SV_CORRUPTION:0},confirmed:true});
+rows=characterTotalGroups(model.totals()).flatMap(group=>group.rows);
+for(const [key,value]of Object.entries({HP_MAXIMUM:230,MP_MAXIMUM:101,END_MAXIMUM:202,AC_MITIGATION:47,AC_EVASION:null,ATK_OFFENSE:63,STR:85,SV_CORRUPTION:0}))assert.equal(rows.find(row=>row.key===key)?.value,value);
+assert(!rows.some(row=>/_CURRENT$/.test(row.key)),'Only maximum resource values appear in the total panel');
+assert(!rows.some(row=>row.key==='AC'||row.key==='ATK'),'Explicit components do not invent generic conversions');
+model.setStatSnapshot('current',{stats:{HP:300,AC:10,ATK:20},confirmed:true});
+rows=characterTotalGroups(model.totals()).flatMap(group=>group.rows);
+assert.equal(rows.find(row=>row.key==='HP')?.value,300);assert(!rows.some(row=>row.key==='HP_MAXIMUM'),'A legacy maximum key does not override the new observed shape');
+assert.equal(rows.find(row=>row.key==='AC')?.value,10);assert.equal(rows.find(row=>row.key==='ATK')?.value,20);
+const modifierInput={accuracy:1,avoidance:2,combatEffects:3,strikeThrough:4,stunResist:5,damageShield:6,damageShieldMitigation:7,dotShielding:8,meleeShielding:9,spellShielding:10,velocity:11,primaryDps:12,secondaryDps:13,rangedDps:14};
+const modifierStats=characterObservationInput({fields:Object.entries(modifierInput).map(([key,value])=>({key,value}))}).stats;
+model.setStatSnapshot('current',{stats:modifierStats,confirmed:true});rows=characterTotalGroups(model.totals()).flatMap(group=>group.rows);
+for(const [key,value]of Object.entries(modifierStats))assert.equal(rows.find(row=>row.key===key)?.value,value,'Every observed modifier has its own display field');assert.equal(characterTotalGroups(model.totals()).length,2,'The full observed panel retains the two-column share contract');
+model.setStatSnapshot('current',{stats:{HP_MAXIMUM:700},confirmed:false});
+assert(characterTotalGroups(model.totals()).flatMap(group=>group.rows).every(row=>row.value===null),'Unreviewed proposals are not saved character totals');
+console.log('Character totals: observed-current only, legacy non-promotion, maximum resources, explicit components and unknown fields passed.');

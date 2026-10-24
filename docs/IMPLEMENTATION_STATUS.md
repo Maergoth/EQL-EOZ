@@ -1,5 +1,19 @@
 # Eye of Zomm implementation status
 
+## Current 0.9.7 inventory-export contract
+
+Keep all gear equipped. Enter metadata, generate a fresh `/outputfile inventory`
+and auto-import the matching file, then **Open Inventory → Scroll down → Click
+off buffs** for a reviewed fully equipped stat reading. Optional screen reading
+uses 1 FPS. Totals come only from confirmed current stats, never item/catalog,
+augment or old baseline addition. Character item OCR is retired; Contribute owns
+item examine evidence. Missing wiki items/augments leave public slots/sockets
+empty until reviewed contribution, wiki sync and re-export. See
+[the active plan](INVENTORY_EXPORT_CHARACTER_PLAN.md). Final new native/platform/
+package acceptance remains pending; prior receipts certify only their releases.
+
+### Earlier released context
+
 0.9.6 adds a compact total-only character inspect, clickable indexed augment
 sockets, filtered empty-slot Add item with a tier slider and explicit screenshot
 paste, and reviewed interactive wiki sheets. Power Source and Character
@@ -32,14 +46,14 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 
 Last updated: 2026-10-24
 
-Code baseline: 0.9.6; inspect follow-up tracked in [CHARACTER_SHEETS_PLAN.md](CHARACTER_SHEETS_PLAN.md)
+Code baseline: 0.9.7 candidate; active work tracked in [INVENTORY_EXPORT_CHARACTER_PLAN.md](INVENTORY_EXPORT_CHARACTER_PLAN.md)
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
 | Vision area | Status | Evidence | Next condition |
 |---|---|---|---|
 | Optional capture and wiki contributions | Implemented; Windows/Linux X11 source/native baseline passed | Local OCR/journal, log-first candidates, current Help blueprints, hardened wiki login, reviewed multi-page changes and persisted partial retry; [execution plan](CAPTURE_CONTRIBUTIONS.md) | Final changed-head CI/package checks; real game skins, production CAPTCHA/2FA and native Wayland remain manual |
-| Character snapshots | Implemented; guided native fixture passed | One details-to-save walkthrough, inline source, auto-slots/ANY review, durable raw-text/Haste edits and inventory X, computed equipped estimates, separate AC/ATK components, offline imports and guarded sharing | Final changed-head checks; preserve OCR uncertainty and unsupported server-formula limits |
+| Character snapshots | 0.9.7 inventory-export/current-stat implementation in progress; final acceptance pending | Fresh selected-character export, atomic known-only worn gear, equipped/unbuffed current-stat review, ten modifiers, clear and existing guarded sharing; [plan](INVENTORY_EXPORT_CHARACTER_PLAN.md) | Complete current source/native/profile/platform/package gates; do not infer live-game accuracy or reuse old baseline/gear acceptance |
 | Font preferences | Implemented; native Windows/Linux CI passed | Shared main/overlay family and bounded base size, retained panel multipliers, process persistence/reset, canvas labels and compact Trigger sizing; [evidence](../VALIDATION.md) | Retain physical DPI/compositor acceptance |
 | Linux desktop | Implemented; Ubuntu 22.04/X11 package/runtime CI passed | Same source/version, AppImage/deb, actual packaged binary/log/panels smoke, selected-folder paths and verified package handoff | Native Wayland, other desktops and complete installed upgrades remain manual acceptance |
 | 0.6 usable loop | Implemented | Folder/log/zone/`/loc` readiness, persistent mode/destination, relevant item defaults, live tier details, non-modal recovery; `npm test` | Retain all [Windows/manual gates](WINDOWS_MANUAL_TEST.md) |
@@ -60,8 +74,8 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 
 ## Current highest-priority task
 
-Complete the authorized 0.9.5 Character inventory release using
-[CHARACTER_INVENTORY_PERSISTENCE.md](CHARACTER_INVENTORY_PERSISTENCE.md). Revalidate the final changed head, then verify
+Complete the authorized 0.9.7 inventory-export/current-stat release using
+[INVENTORY_EXPORT_CHARACTER_PLAN.md](INVENTORY_EXPORT_CHARACTER_PLAN.md). Revalidate the final changed head, then verify
 the unified Windows/Linux publication. Screen reading defaults off; existing
 combat/map/trigger functionality continues to use logs. Preserve all existing
 map acceptance requirements and explicit wiki review boundaries.

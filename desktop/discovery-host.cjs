@@ -28,7 +28,7 @@ class DiscoveryHost {
                 typeof value.name !== 'string' || !value.name.trim() || value.name.length > 240) throw new Error('Invalid wiki discovery.');
             if (this.queue.some(item => item.id === value.id)) return { ok:true, queued:true };
             if (this.queue.length >= 20) return { ok:false, queued:false, error:'The wiki suggestion list is full.' };
-            this.queue.push({ id:value.id, kind:value.kind, name:value.name, zone:String(value.zone || '').slice(0, 240) });
+            this.queue.push({ id:value.id, kind:value.kind, name:value.name, zone:String(value.zone || '').slice(0, 240),...(typeof value.hint==='string'?{hint:value.hint.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,400)}:{}) });
             return { ok:true, queued:true };
         }
         if (!this.allowed(event)) throw new Error('Wiki discovery action is unavailable.');

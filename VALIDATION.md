@@ -1,4 +1,41 @@
-# Validation report — v0.9.5
+# Validation report — v0.9.7
+
+## 0.9.7 candidate: inventory export and observed stats
+
+The current flow replaces the unreleased baseline-retry story: keep gear on,
+import a fresh `/outputfile inventory`, then Open Inventory, Scroll down and
+Click off buffs before reviewing the fully equipped stat panel. Totals are
+recorded current values only; no gear/base/catalog addition or Character item
+OCR. Optional reading uses 1 FPS. Missing wiki gear/augments leave public
+slots/sockets empty and need reviewed contribution, sync and re-export.
+
+The complete local `npm test` and dependency audit pass (zero vulnerabilities).
+Actual native source/4K priority/Default Modern/hover/offline OCR suites pass with
+1 FPS capture and Character stats-only purpose. Real main/preload workspace checks
+pass fresh/malformed inventory IPC, known-only import, maximum resources with no
+gear addition, approved wiki fixtures and PNG export. Actual isolated game-log
+following with OCR disabled creates zone/NPC/item evidence; next-/loc proposals,
+base-loot to tiered screenshot dedup, icon selection, previous/next review and
+verified/edited field preservation pass without automatic wiki writes. Native
+Character checks cover preparation, stale file handling, profiles, cancellation,
+the retired-poll handoff and isolated Clear inventory. Three-process persistence
+passes actual same-origin restart/cache upgrade/occupied-port fallback for all
+four keys, with foreign-frame denial.
+
+Exact-head Windows/Linux CI, installer and public artifact acceptance remain
+release gates. Actual live-game accuracy of the new full scrolled stat pane,
+foreground composition, OS-wide DPI and native Wayland remain manual. Synthetic
+and saved-frame checks do not establish those live observations.
+
+The separately prepared wiki display-only modifier update passed 41 unsaved
+MediaWiki parser checks and a 590-check actual current app serializer roundtrip
+with synthetic records, including recorded-only HP despite old baseline/gear,
+all ten modifiers, distinct accuracy fields, unknown/zero values and dense known
+augments. Its isolated component rendering passed at desktop/360 CSS px. This
+is not a live-game or new package pass; template activation is separately held
+for release coordination.
+
+## Prior 0.9.6 inspect acceptance
 
 The 0.9.6 character inspect work passes the full source suite, catalog relevance,
 native walkthrough, deterministic real-canvas PNG export, and actual main/preload

@@ -1,4 +1,107 @@
-# Guided Character capture
+# Character inventory export and stat review
+
+## Current 0.9.7 contract
+
+The current flow is **details → inventory → stats → review → complete**.
+Keep all gear equipped throughout. Character imports the game's inventory file;
+it does not ask users to unequip, capture a No Equipment baseline, or read items
+with OCR. The unreleased baseline-retry proposal was replaced, not shipped.
+See [the execution plan](INVENTORY_EXPORT_CHARACTER_PLAN.md).
+
+### 1. Character details
+
+Enter character name, server, race, classes, level and AA count. Character Select
+registers a saved **Character (Server)** after the first valid step; same names
+on different servers remain independent. Switching profiles stops Character
+capture and invalidates pending work. Selecting a character never restarts it.
+
+### 2. Equipped inventory export
+
+Keep every item equipped and type `/outputfile inventory` in the game. EoZ
+automatically looks for the fresh matching `Name_server-Inventory.txt` under the
+configured game folder while this explicit step is active. An older export does
+not satisfy a newly started import. **Check now** and the native file chooser
+provide recovery without giving renderer code arbitrary filesystem access.
+
+The parser validates the complete worn table before an atomic replacement.
+Preserve counts, IDs, exact worn locations, paired slots and physical duplicates.
+General bags, nested storage, Held, Bank, SharedBank and the separate KeyRing
+table do not become equipped gear. The file's Slots column is not proof of
+augment capacity. Malformed/stale results or a profile switch cannot partially
+overwrite the selected character. Export contents and paths stay private.
+
+### 3. Recorded equipped, unbuffed stats
+
+The preparation instructions must be prominent:
+
+1. **Open your Inventory.**
+2. **Scroll down.** Show the whole stat panel, including Additional Modifiers;
+   keep its Inventory heading visible.
+3. **Click off your buffs.** Keep all gear equipped.
+
+Use the supported Default Modern (`default_modern`) UI, explicitly select the
+game window and choose **Read character stats**. Optional acquisition is a lower
+1 FPS for a stable stat pane. It does not guarantee brief tooltip recall. Review
+the proposed numbers and correct unread fields before **Use these stats and
+review**. An explicit reread replaces the draft; deliberate edits are retained
+until that action. Source/session/generation, capture time and profile epochs
+must match; stale or foreign results cannot overwrite the review.
+
+Only confirmed `statSnapshots.current` values feed the total panel, PNG and wiki
+sheet. HP/Mana/Endurance use maximum values once. Preserve mitigation AC, softcap,
+evasion AC, offense and ATK Accuracy independently. Additional Modifiers include
+Accuracy bonus (not ATK Accuracy), Avoidance, Combat effects, Strikethrough,
+Stun resist, Damage shield, Damage shield mitigation, DoT shielding, Melee
+shielding and Spell shielding. Missing values stay unknown. Do not add gear,
+augment, catalog, old baseline or legacy equipped values; item previews never
+change character totals.
+
+### 4. Review and share
+
+Review imported equipment, known augments and the recorded stat panel. Public
+gear requires a known canonical wiki identity. Unknown item/augment names do not
+create red-link gear: leave those slots/sockets empty. Use Contribute to review
+missing details, sync accepted wiki data, then export inventory again. Item
+examine OCR belongs to Contribute and cannot create Character gear.
+
+Preview/copy/save a local PNG or explicitly share the reviewed interactive sheet
+to the authenticated user's own talk page. Sharing replaces only that Character
+(Server)'s managed block and preserves other characters/discussion. Capability,
+revision and permission checks remain; no automatic publication or image upload
+is implied. A successful completion stops Character reading. Cancel/source loss
+does not fabricate stats or restart capture without the user's action.
+
+## Persistence and clear
+
+The atomic private Character roster retains identity, imported inventory,
+equipment, stat reading and flow independently of renderer cache/local port.
+Legacy cards and base/equipped evidence remain recoverable privately, but cannot
+be promoted to current totals. Older active flows migrate to inventory import.
+The red **Clear inventory** action clears only the selected character's imported
+gear/evidence and mismatched current stats, retaining identity and other profiles.
+
+## Source ownership and acceptance
+
+The main process reads the bounded inventory file; the renderer parses/imports
+only returned text and public metadata. `app/inventory-export.js` separates worn
+and nonworn tables, `desktop/inventory-file-host.cjs` restricts paths, and
+`app/character-model.js` commits the complete import/current stats. The walkthrough
+and `capture-workspace.js` own phase/profile guards. `character-totals.js` supplies
+the same observed-only values to the inspect, PNG and normalized wiki payload.
+
+Final 0.9.7 source/native/Windows/Linux/package checks remain pending release-owner
+acceptance. Test fresh/stale exports, malformed input, paired/Any slots, missing
+wiki items/sockets, profile changes during imports, lower-rate stat capture,
+scroll/buff preparation, edited values, all modifiers and clear/relaunch. Live
+game skin/scale/compositing, production authentication and native Wayland remain
+separate manual limits. No installed-player profile or private pixels belong in
+fixtures. Older receipts below certify only their original versions.
+
+## Historical released contracts and receipts (0.9.1–0.9.6)
+
+The remainder preserves earlier design decisions and evidence. Its unequip,
+baseline, item-OCR and calculated-total instructions are retired for 0.9.7; use
+the current contract above. Historical passing checks do not certify the new flow.
 
 Version 0.9.6 uses one total-stat inspect with maximum resources and 24 equipment
 slots (two Any, no Power Source). The tier slider remains immediately editable;
@@ -25,7 +128,7 @@ without deleting it, preserve explicit physical copies and keep it loose across
 held rereads. Add item opens and focuses the wiki catalog query immediately;
 searching does not create a blank inventory card.
 
-## Current 0.9.5 contract
+### Historical 0.9.5 contract
 
 The owner requests a single start-to-finish Character walkthrough rather than
 separate capture/editor forms: identity, source setup inside the flow, unequip
@@ -73,7 +176,7 @@ The current follow-up starts from published 0.9.4 source
 No installed-player profile is a test fixture. No production wiki test writes,
 private game captures or account data in Git. Preserve unrelated EQLWiki dirt.
 
-## Critical context after compaction
+### Critical context after compaction
 
 - `app/capture-workspace.js/css`: shared contribution/capture settings, calibration,
   guided Character intake, inventory interaction, match picker and share dialog.
@@ -101,7 +204,7 @@ private game captures or account data in Git. Preserve unrelated EQLWiki dirt.
 - `docs/RELEASE_HISTORY.md`: new versions require reviewed synthetic screenshots,
   browsable What's New and exact packaged-source/image checks.
 
-## Ownership
+### Ownership
 
 | Owner | Files/work |
 | --- | --- |
@@ -115,7 +218,7 @@ files. Keep UI/source state resumable and ensure old asynchronous callbacks
 cannot stop or overwrite a replacement walkthrough. No periodic automatic
 capture starts outside an explicit user-started walkthrough.
 
-## Intended flow
+### Intended flow
 
 1. **Character details**: name, server, class combination, level, AA count; retain
    optional race for calculations. One clear Start/Continue entry point.
@@ -160,7 +263,7 @@ journal rereads can update one uniquely matched saved item; exact IDs remain
 idempotent and deliberately removed/expired records stay blocked. Multiple
 physical copies require review rather than a guessed merge or extra card.
 
-## Catalog identity and physical copies
+### Catalog identity and physical copies
 
 Names display their tier once. Complete repeated trailing `+0` through `+10`
 decorations are removed from the base name; the independently observed or edited
@@ -197,7 +300,7 @@ establish its identity. Manually typing a wiki title or checking a match field
 does not bypass this rule. These identity changes do not relax capture ownership,
 phase windows or fresh No Equipment timestamp/sequence checks.
 
-## Tier controls, removal passes and relaunch
+### Tier controls, removal passes and relaunch
 
 The selected item's tier/progress controls are outside Edit captured values.
 Their immediate updates preserve the focused control and scroll position.
@@ -223,7 +326,7 @@ port is busy. Starting a new walkthrough deliberately clears layout/baseline
 while retaining all inventory IDs. Corrupt files are preserved/write-blocked and
 warn visibly; no old browser-origin scan or silent private-data replacement runs.
 
-## Acceptance gates
+### Acceptance gates
 
 - Unit checks for stage transitions/resume/cancel/completion, stage-scoped base
   intake, auto-slot/ANY ambiguity, repeated observations and durable inventory X.
@@ -248,7 +351,7 @@ warn visibly; no old browser-origin scan or silent private-data replacement runs
 - Update guides/README/illustrated release history, full appropriate source and
   exact-head Windows/Linux/package checks before any new publication.
 
-## Current and historical validation
+### Historical validation
 
 The 0.9.5 local source suite, zero-vulnerability dependency audit, production
 catalog and both native Character/workspace gates passed. The separate
@@ -264,7 +367,7 @@ unknown-placement, copy-view and legacy-recovery regressions. This source eviden
 does not establish current native layout, installed-player or release acceptance;
 the release owner records those checks in the inventory plan and release ledger.
 
-### Earlier 0.9.1 acceptance
+#### Earlier 0.9.1 acceptance
 
 The earlier implementation completed the 0.9.1 follow-up to published 0.9.0. The owner
 explicitly authorizes publication after these fixes. Keep 0.9.0 and all older

@@ -62,9 +62,24 @@ assert.equal(first.deduplicated,false);assert.equal(second.deduplicated,false);a
 assert.equal(characterItemStats(first.candidate).stats.HP,130,'catalog stats scale exactly once at the selected whole tier');assert.equal(characterItemStats(first.candidate).stats.SV_CORRUPTION,null);
 for(const [candidate,slot]of [[first.candidate,'finger1'],[second.candidate,'finger2']]){model.updateCandidate(candidate.id,{augmentStatus:'none'});assert.equal(model.assign(candidate.id,slot).ok,true);}
 model.setStatSnapshot('base',{stats:{HP_MAXIMUM:450},confirmed:true});model.setStatSnapshot('equipped',{stats:{HP_MAXIMUM:812},confirmed:true});
-const restored=createCharacterModel({storage}),total=restored.totals();assert.equal(total.derived.HP.value,260);assert.equal(total.derived.HP.complete,true);assert.equal(total.derived.SV_CORRUPTION.complete,false);assert.deepEqual(restored.snapshot().candidates[0].unscaledStatKeys,['SV_CORRUPTION']);assert.equal(total.base.stats.HP_MAXIMUM,450);assert.equal(total.equipped.stats.HP_MAXIMUM,812);
+assert.equal(model.totals().computed.HP_MAXIMUM,undefined,'Legacy snapshots and catalog gear do not create a current maximum-resource total');
+model.setStatSnapshot('current',{stats:{HP_CURRENT:53,HP_MAXIMUM:997,SV_CORRUPTION:null},confirmed:true});
+const restored=createCharacterModel({storage}),total=restored.totals();assert.deepEqual(total.derived,{});assert.equal(total.current.stats.HP_MAXIMUM,997);assert.equal(total.computed.HP_MAXIMUM.value,997);assert.equal(total.computed.SV_CORRUPTION.value,null);assert.deepEqual(restored.snapshot().candidates[0].unscaledStatKeys,['SV_CORRUPTION']);assert.equal(restored.snapshot().statSnapshots.base.stats.HP_MAXIMUM,450);assert.equal(restored.snapshot().statSnapshots.equipped.stats.HP_MAXIMUM,812);
+const observedTotals=structuredClone(total.computed);
+assert.equal(restored.setTierPreview(first.candidate.id,{tier:6}).ok,true);assert.equal(characterItemStats(restored.snapshot().candidates.find(candidate=>candidate.id===first.candidate.id)).stats.HP,160,'Per-item wiki tier preview remains available');
+assert.equal(restored.setAugmentSlots(first.candidate.id,1).ok,true);assert.equal(restored.setAugment(first.candidate.id,0,characterCatalogCard(weapon,{tier:2})).ok,true);assert.equal(characterItemStats(restored.snapshot().candidates.find(candidate=>candidate.id===first.candidate.id)).stats.HP,184,'The item tooltip can preview its chosen augment independently');
+assert.deepEqual(restored.totals().computed,observedTotals,'Tier and augment previews never rescale or add to observed character totals');
+restored.removeAugment(first.candidate.id,0);restored.unassign('finger1');assert.deepEqual(restored.totals().computed,observedTotals,'Removing a modeled augment or equipped item never subtracts from observed totals');assert(restored.assign(first.candidate.id,'finger1').ok);
+assert.deepEqual(createCharacterModel({storage}).totals().computed,observedTotals,'Observed totals retain their exact values through persistence and layout edits');
 const summary=characterShareSummary(restored.snapshot());assert.equal(summary.equipment.find(slot=>slot.slot==='finger1').item.stats.SV_CORRUPTION,null);assert.equal(summary.equipment.find(slot=>slot.slot==='finger1').item.baseStats.SV_CORRUPTION,9);
 const observed={...first.candidate,observedStats:{SV_CORRUPTION:19,HP:150},observedStatsComplete:true,augmentStatus:'included'};assert.equal(characterItemStats(observed).stats.SV_CORRUPTION,19,'actual observed stats override unsupported catalog adjustment without scaling');
 assert.equal(JSON.stringify(pack),before,'preview and Add never edit the catalog');
 console.log('Character catalog: flexible local search, bounded/incomplete results, whole-tier preview, modified stats, exact identity and distinct cards passed.');
-console.log('Catalog provenance: base values retained; no fabricated examine stats/augment state; unsupported Void adjustment stays unknown through persistence, sums and sharing.');
+console.log('Catalog provenance: per-item values stay separate; observed character totals survive tier, augment and equipment edits without arithmetic; unsupported Void adjustment remains unknown.');
+
+const {resolveInventoryCatalog}=await import('../app/character-catalog.js');
+const presenceOnly={meta:{wikiEntitiesComplete:true},items:[],wikiEntities:{items:['Synthetic Known Crown'],titles:[{title:'Synthetic Known Rune (Exaltation)'}]}};
+assert.equal(resolveInventoryCatalog(presenceOnly,'Synthetic Known Crown +4').item.wikiTitle,'Synthetic Known Crown');
+assert.equal(resolveInventoryCatalog(presenceOnly,'Synthetic Known Rune (Exaltation)').item.wikiTitle,'Synthetic Known Rune (Exaltation)');
+assert.deepEqual(resolveInventoryCatalog(presenceOnly,'Synthetic Krown'),{},'Presence lookup never autochooses fuzzy name');
+assert.deepEqual(resolveInventoryCatalog(presenceOnly,'Unknown'),{});

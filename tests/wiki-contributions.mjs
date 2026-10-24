@@ -19,6 +19,39 @@ const zone=buildContributionDraft({kind:'zone',name:'Synthetic Vale',era:'Classi
 assert.match(zone.text,/Name in \/who\n\| Unknown/);assert.doesNotMatch(zone.text,/Name in \/who\n\| Synthetic Vale/,'the article title is not evidence of its internal /who name');
 const whoCandidate={kind:'zone',name:'Synthetic Vale',era:'Classic Era',playerText:'A synthetic zone used for local tests.',fields:{whoName:{value:'syntheticshort',confirmed:false}}};
 assert.match(buildContributionDraft(whoCandidate,blueprints).text,/Name in \/who\n\| Unknown/);assert.match(buildContributionDraft({...whoCandidate,fields:{whoName:{value:'syntheticshort',confirmed:true}}},blueprints).text,/Name in \/who\n\| syntheticshort/);
+// Reviewed relationships use the live zone blueprint's two existing table rows.
+// A log proposal alone cannot establish a population, item origin or raid split.
+const reviewedZone={kind:'zone',name:'Synthetic Vale',era:'Classic Era',instance:'unknown',fields:{knownNPCs:{value:['a synthetic guardian','Vicar M`Kari (Raid)','a_synthetic_guardian'],confirmed:true},knownLoot:{value:['Synthetic Guard',"Guardian's Token & Charm",'Synthetic_Guard'],confirmed:true}}};
+const populatedZone=buildContributionDraft(reviewedZone,blueprints);
+assert.deepEqual(populatedZone.blockers,[],'reviewed facts do not require invented zone introduction prose');
+assert.match(populatedZone.text,/class="zoneTopTable"\n! Notable NPCs\n\| \[\[a synthetic guardian\]\]<br>\n\[\[Vicar M`Kari \(Raid\)\]\]\n\|-\n! Unique Items\n\| \{\{:Synthetic Guard\}\}<br>\n\{\{:Guardian's Token & Charm\}\}\n\|-\n! Name in \/who/);
+assert.equal((populatedZone.text.match(/\[\[a synthetic guardian\]\]/g)||[]).length,1);
+assert.equal((populatedZone.text.match(/\{\{:Synthetic Guard\}\}/g)||[]).length,1);
+assert.match(populatedZone.text,/\[\[Category:Zones\]\]/);
+assert.doesNotMatch(populatedZone.text,/Raid Encounters|Raid Instance|Normal Zone|Loc\||File:|Level of Monsters|Special:DynamicZoneList/,'population names do not establish instance, spawn points, artwork or unobserved levels');
+assert.ok(populatedZone.warnings.some(value=>value.includes('introduction is empty')));
+assert.ok(populatedZone.warnings.some(value=>value.includes('page membership separately')));
+const proposedZone=buildContributionDraft({...reviewedZone,fields:{knownNPCs:{...reviewedZone.fields.knownNPCs,confirmed:false},knownLoot:{...reviewedZone.fields.knownLoot,confirmed:false}}},blueprints);
+assert.doesNotMatch(proposedZone.text,/guardian|Synthetic Guard|Vicar|Unique Items|Notable NPCs/);
+assert.ok(proposedZone.blockers.some(value=>value.includes('zone introduction')));
+assert.equal(proposedZone.warnings.filter(value=>value.includes('relationships are excluded')).length,2);
+const onlyNpc=buildContributionDraft({...reviewedZone,fields:{knownNPCs:reviewedZone.fields.knownNPCs}},blueprints),onlyLoot=buildContributionDraft({...reviewedZone,fields:{knownLoot:reviewedZone.fields.knownLoot}},blueprints);
+assert.deepEqual(onlyNpc.blockers,[]);assert.doesNotMatch(onlyNpc.text,/Unique Items/);assert.deepEqual(onlyLoot.blockers,[]);assert.doesNotMatch(onlyLoot.text,/Notable NPCs/);
+const prose='Player-authored zone note with [[Existing Place]] and ordinary formatting.';
+assert.ok(buildContributionDraft({...reviewedZone,playerText:prose,fields:{dynamicZoneSupported:{value:true,confirmed:true}}},blueprints).text.includes(prose));
+assert.match(buildContributionDraft({...reviewedZone,fields:{dynamicZoneSupported:{value:true,confirmed:true}}},blueprints).text,/\{\{Special:DynamicZoneList\/Synthetic Vale\}\}/);
+assert.doesNotMatch(buildContributionDraft({...reviewedZone,fields:{dynamicZoneSupported:{value:true,confirmed:false}}},blueprints).text,/Special:DynamicZoneList/);
+for(const unsafe of ['Gem|description={{Injected}}','Template:Injected','<script>alert(1)</script>','~~~~','Gem\nInjected']){
+    const rejected=buildContributionDraft({...reviewedZone,fields:{knownNPCs:{value:[unsafe,'a safe guardian'],confirmed:true},knownLoot:{value:[unsafe,'Safe Guard'],confirmed:true}}},blueprints);
+    assert.ok(rejected.blockers.some(value=>value.includes('article titles')));assert.match(rejected.text,/\[\[a safe guardian\]\]/);assert.match(rejected.text,/\{\{:Safe Guard\}\}/);assert.doesNotMatch(rejected.text,/Injected|<script>|~~~~/);
+}
+assert.ok(buildContributionDraft({...reviewedZone,fields:{knownNPCs:{value:'a synthetic guardian',confirmed:true}}},blueprints).blockers.some(value=>value.includes('one article title per line')));
+const cappedZone=buildContributionDraft({...reviewedZone,fields:{knownNPCs:{value:Array.from({length:101},(_,i)=>`Synthetic Guardian ${i}`),confirmed:true}}},blueprints);
+assert.match(cappedZone.text,/\[\[Synthetic Guardian 99\]\]/);assert.doesNotMatch(cappedZone.text,/Guardian 100/);assert.ok(cappedZone.warnings.some(value=>value.includes('first 100')));
+const factualNpc=buildContributionDraft({kind:'npc',name:'a synthetic guardian',era:'Classic Era',zone:'Synthetic Vale',instance:'normal',fields:{level:{value:14,confirmed:true},knownLoot:{value:['Synthetic Guard','Synthetic_Guard'],confirmed:true}}},blueprints);
+assert.deepEqual(factualNpc.blockers,[],'reviewed factual NPC fields do not require made-up description prose');assert.match(factualNpc.text,/description = \n/);assert.match(factualNpc.text,/level = 14/);assert.equal((factualNpc.text.match(/\{\{:Synthetic Guard\}\}/g)||[]).length,1);assert.ok(factualNpc.warnings.some(value=>value.includes('description is empty')));
+assert.doesNotMatch(buildContributionDraft({kind:'npc',name:'a synthetic guardian',era:'Classic Era',zone:'Synthetic Vale',fields:{knownLoot:{value:['Unverified Guard'],confirmed:false}}},blueprints).text,/Unverified Guard/);
+const literalStats=buildContributionDraft({...item,fields:{statLines:{value:['HP: 5 __NOINDEX__ ~~~~'],confirmed:true}}},blueprints);assert.doesNotMatch(literalStats.text,/__NOINDEX__|~~~~/);assert.match(literalStats.text,/&#95;&#95;NOINDEX&#95;&#95; &#126;&#126;&#126;&#126;/);
 const matches=findPotentialMatches('Vicar M Kari',[{title:'Vicar M`Kari',pageId:1},{title:'a goblin alchemist',pageId:2}]);assert.equal(matches[0].pageId,1);
 const page=`{{Classic Era}}\n<!-- {{Namedmobpage|known_loot={{:Fake}}}} -->\n{{Namedmobpage\n|description = Keep {{Loc|Synthetic Vale|1, 2|a place}} and [[Two|label]].\n| known_loot =\n<ul><li>{{:Existing Item}} <span class='drare'>(Rare)</span></li></ul>\n| common_loot =\n<ul><li>{{:Old Gem}}</li></ul>\n| factions = [[Synthetic Faction]]\n}}\n[[Category:Synthetic Vale]]\n`;
 assert.equal(contributionTemplates(page,'Namedmobpage').length,1);

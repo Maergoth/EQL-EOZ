@@ -1,5 +1,14 @@
 # Browsable release history
 
+Version 0.9.7 archives five visually reviewed native captures: inventory export,
+prominent equipped/unbuffed stat preparation, recorded-only character inspect,
+log discoveries with a reviewed spawn-location proposal, and item screenshot/icon
+controls. Character component captures use fake capture/file APIs and an isolated
+synthetic profile; contribution captures use the actual main/preload/parser and
+isolated synthetic logs with local screenshot OCR. No player pixels or production
+wiki writes are included. All older images/hashes remain unchanged. Final package
+and public asset checks remain release gates.
+
 Version 0.9.6 adds six reviewed synthetic screenshots: the compact one-total
 inspect, empty-slot item picker, augment picker, share review, wiki item inspect
 and independent collapsed characters. The four app captures use the actual main
@@ -51,8 +60,8 @@ Version 0.9.1 adds five actual synthetic Character captures: inline source,
 20px base review, written item/Haste editing, final guided review and computed
 equipped estimates. These were captured by `test-character-walkthrough.mjs`
 with a disposable profile and fake capture/share boundaries, and visually
-inspected before copying. Historical 0.9.0 images remain intact. The current
-guide describes the changed baseline-only flow; older entries describe their
+inspected before copying. Historical 0.9.0 images remain intact. Those 0.9.1 captures retain their original baseline/gear flow; the current
+guide describes inventory export and observed stats. Older entries describe their
 original controls. A sixth capture shows the actual unlocked native Parse and
 its resize grip, bringing the archive to 39 images across 30 browsable versions.
 

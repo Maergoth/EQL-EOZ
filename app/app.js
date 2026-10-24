@@ -497,7 +497,8 @@ function mapSourceContextMatches(context) {
 }
 
 function clearSourceLocation() {
-    parser.location = null;
+    parser.resetSourceContext();
+    clearActiveRoute({clearViewer:false});
     pendingViewerLocation = null;
     partialLine = '';
     mapDataRevision++;
@@ -2361,8 +2362,8 @@ const appUpdatesUi = mountAppUpdates({
 const whatsNew = mountWhatsNew({ button:$('#open-whats-new'), navigate:view => setView(view),getVersion:()=>bridgeInfo?.version });
 let captureWorkspace={consumeLog(){},refresh(){},dispose(){}};
 const characterStorage=await createCharacterStorage({onWarning:message=>showNotice(message,{tone:'warning'})});
-captureWorkspace = mountCaptureWorkspace({characterStorage,getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
-    getAppearance:()=>settings.appearance,notify:showNotice});
+captureWorkspace = mountCaptureWorkspace({characterStorage,contributionStorage:characterStorage,getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
+    getAppearance:()=>settings.appearance,notify:showNotice,navigate:view=>setView(view)});
 window.addEventListener('pagehide', () => { captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();

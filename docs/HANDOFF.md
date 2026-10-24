@@ -1,5 +1,19 @@
 # Eye of Zomm contributor handoff
 
+## Current 0.9.7 inventory-export contract
+
+Keep all gear equipped. Enter metadata, generate a fresh `/outputfile inventory`
+and auto-import the matching file, then **Open Inventory → Scroll down → Click
+off buffs** for a reviewed fully equipped stat reading. Optional screen reading
+uses 1 FPS. Totals come only from confirmed current stats, never item/catalog,
+augment or old baseline addition. Character item OCR is retired; Contribute owns
+item examine evidence. Missing wiki items/augments leave public slots/sockets
+empty until reviewed contribution, wiki sync and re-export. See
+[the active plan](INVENTORY_EXPORT_CHARACTER_PLAN.md). Final new native/platform/
+package acceptance remains pending; prior receipts certify only their releases.
+
+### Earlier released context
+
 0.9.6 adds a compact total-only character inspect, clickable indexed augment
 sockets, filtered empty-slot Add item with a tier slider and explicit screenshot
 paste, and reviewed interactive wiki sheets. Power Source and Character
@@ -68,7 +82,7 @@ local log parser and versioned release; application validation runs in GitHub CI
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.9.5**, extending released 0.9.4. Four independent native windows provide Parse, Map, Zone & loot and Triggers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
+Current code baseline: **0.9.7 candidate**, extending released 0.9.6. Four independent native windows provide Parse, Map, Zone & loot and Triggers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
 
 [Overlay workspace follow-up](OVERLAY_MAP_WORKSPACE.md) is the 0.8.5 continuation
 index. Native Map has a collapsing control header and Map/Top/First cycle;
@@ -228,7 +242,7 @@ The app is read-only with respect to EverQuest. It may consume `/loc` lines prod
 
 ## Exact next work
 
-Complete the final 0.9.5 source and full-app fixture checks, then require the
+Complete the 0.9.7 inventory-export/current-stat flow in [INVENTORY_EXPORT_CHARACTER_PLAN.md](INVENTORY_EXPORT_CHARACTER_PLAN.md), including source, native walkthrough and profile-isolation checks. Then require the
 reviewed head's Windows/Linux native/package gates before merge. Verify the
 published installer, AppImage and deb against that source, archived images,
 offline OCR inventory and one fresh shared bootstrap. Record actual run IDs
@@ -260,7 +274,7 @@ Do not start durable history or upgrade scoring from 0.9 until this matrix passe
 ## Release path
 
 - Every change must keep `npm test` green. Catalog-affecting changes must also pass `npm run test:catalog` against the verified production pack. Fetch the pack before packaging: `node scripts/fetch-bootstrap-pack.mjs --required`; `npm run test:artifact` requires a production-scale schema-v3 bootstrap with bytes identical to that fetched source, and logs its versions and record counts.
-- Pushes to `main` run CI and the Windows build workflow. After all gates, the first successful build for each new `0.x` package version creates a versioned GitHub prerelease; later commits with that same version preserve its tag and only upload the temporary Actions artifact. A matching `vX.Y.Z` tag runs the explicit release workflow, which also classifies `0.x` and semantic prerelease versions as prereleases. Both Windows workflows inspect the built ASAR with `npm run test:artifact`; never publish an installer that has not passed that package/source/version check.
+- Pushes to `main` run CI and the unified release workflow. Windows and Linux consume one verified fresh bootstrap; all native/package gates must pass before the shared prerelease publishes. Candidate workflows build artifacts without independent publication. Matching published releases preserve their tag and asset bytes. Verify installer, AppImage and deb runtime/source/media/OCR/dataset checks; never execute installers as a routine validation step.
 - Keep `package.json`, `package-lock.json`, CHANGELOG, validation notes, and installer filename expectations on the same version.
 - Trusted Authenticode signing is required for 1.0. Until certificates are configured, workflows may produce a clearly identified unsigned 0.x installer.
 - Before promoting a build, complete [`WINDOWS_MANUAL_TEST.md`](WINDOWS_MANUAL_TEST.md). Repository tests cannot validate proprietary zone textures, stacked-floor placement, label alignment, or subjective route quality.
