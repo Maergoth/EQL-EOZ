@@ -1,5 +1,10 @@
 # Eye of Zomm contributor handoff
 
+The next-release [wiki item hover plan](WIKI_ITEM_HOVERS_PLAN.md) covers the
+original wiki Itembox frame and inline stat layout, reusable Character/share
+presentation, and explicit one-button User-page sharing. This is a PR candidate;
+0.9.9 remains the published version until a separate release.
+
 0.9.9 follows the completed 0.9.8 baseline. Read [the active execution plan](RELEASE_099_PLAN.md) for contribution matching, targeted reciprocal updates, filtered gap browsing and Character hover/tier polish. Source/native checks and publication have distinct receipts. No new dataset or wiki schema change is required.
 
 ## Completed 0.9.8 release plan

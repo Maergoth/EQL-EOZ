@@ -261,8 +261,13 @@ automatically. The red **Clear inventory** action affects only the selected
 character's gear/import evidence and now-invalid stat reading, retaining identity
 and other saved characters.
 
-PNG copy/save stays local. Wiki sharing requires login and one explicit review;
-it updates only the authenticated account's own **User page**, replacing that
+The [next-release item-card plan](docs/WIKI_ITEM_HOVERS_PLAN.md) documents the
+original wiki frame and compact inline presentation used by Character hovers and
+sharing previews, with editable tiers and linked effects.
+
+PNG copy/save stays local. Review the character, then click **Share on my User page**
+once to publish; sharing requires login and has no additional confirmation checkbox. It
+updates only the authenticated account's own **User page**, replacing that
 Character (Server)'s managed sheet while preserving other characters and
 content. Old talk-page sheets remain intact; a destination change needs a fresh
 review. The app checks template/renderer support first. Raw OCR, export
