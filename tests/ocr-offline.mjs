@@ -8,14 +8,15 @@ for(const test of cases){
     const service=new OcrService({...test.options,workerExecArgv:['--require',deny]});
     try{
         const result=await service.recognize(await readFile(join(root,'tests','fixtures','screen-read','item.png')));
-        const [item]=parseScreenRead(result),fields=Object.fromEntries(item.fields.map(field=>[field.key,field.value]));
+        const [item]=parseScreenRead({...result,owner:'contribution'}),fields=Object.fromEntries(item.fields.map(field=>[field.key,field.value]));
         assert.equal(item.subject.name,'Synthetic Test Blade +3');assert.equal(fields.ac,12);assert.equal(fields.hp,45);assert.equal(fields.tier,3);
         assert.equal(fields.requiredLevel,15);assert.equal(fields.delay,24);assert.ok(result.words.length>20,'actual word geometry must be returned');
         await assert.rejects(service.recognize(await readFile(join(root,'tests','fixtures','screen-read','item.png')),{layout:'untrusted'}),/layout/);
         const blockResult=await service.recognize(await readFile(join(root,'tests','fixtures','screen-read','item.png')),{layout:'block'});
-        assert.equal(parseScreenRead(blockResult)[0].subject.name,'Synthetic Test Blade +3','bounded block layout uses the same offline worker');
+        assert.equal(parseScreenRead({...blockResult,owner:'contribution'})[0].subject.name,'Synthetic Test Blade +3','bounded block layout uses the same offline worker');
+        assert.deepEqual(parseScreenRead({...result,owner:'character'}),[],'Item screen reading belongs to Contribute, never Character capture');
         const characterResult=await service.recognize(await readFile(join(root,'tests','fixtures','screen-read','character.png')));
-        const character=parseScreenRead(characterResult).find(entry=>entry.subject.kind==='character');assert.ok(character);
+        const characterRecords=parseScreenRead({...characterResult,owner:'character',characterOnly:true}),character=characterRecords.find(entry=>entry.subject.kind==='character');assert.ok(character);assert.equal(characterRecords.length,1);
         const stats=Object.fromEntries(character.fields.map(field=>[field.key,field.value]));assert.equal(stats.hpCurrent,330);assert.equal(stats.hpMaximum,398);assert.equal(stats.str,90);
         console.log(`Offline OCR ${test.label}: item name/tier/AC/HP/level/delay and character current/max/STR recognized; worker reused.`);
     }finally{await service.stop();}

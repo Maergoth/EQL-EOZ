@@ -10,12 +10,34 @@ export const contributionNameKey = value => clean(value, 240).normalize('NFKC').
 export function contributionTitle(value) {
     if (/[\r\n\t]/.test(String(value ?? ''))) throw new Error('Enter a single-line article title.');
     const title = clean(value, 240).replace(/_/g, ' ').replace(/\s+/g, ' ');
-    if (!title || /[\[\]{}<>|#\r\n:]/.test(title) || title.startsWith('.') || title.length > 230) throw new Error('Enter an article title without wiki markup or a namespace.');
+    if (!title || /[\[\]{}<>|#~\r\n:]/.test(title) || title.startsWith('.') || title.length > 230) throw new Error('Enter an article title without wiki markup or a namespace.');
     return title;
 }
-export const literalWikiText = value => clean(value, 16000).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\|/g, '&#124;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;').replace(/\[/g, '&#91;').replace(/\]/g, '&#93;');
+export const literalWikiText = value => clean(value, 16000).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\|/g, '&#124;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;').replace(/\[/g, '&#91;').replace(/\]/g, '&#93;').replace(/~/g, '&#126;').replace(/_/g, '&#95;');
 const link = title => `[[${contributionTitle(title)}]]`;
+const itemTransclusion = title => `{{:${contributionTitle(title)}}}`;
 const category = title => `[[Category:${contributionTitle(title)}]]`;
+
+function reviewedTitles(candidate, key, label, warnings, blockers) {
+    const field = candidate.fields[key];
+    if (!field?.confirmed) {
+        if (Array.isArray(field?.value) && field.value.length) warnings.push(`Unconfirmed ${label} relationships are excluded.`);
+        return [];
+    }
+    if (!Array.isArray(field.value)) {
+        blockers.push(`Review ${label} as one article title per line.`);
+        return [];
+    }
+    const titles = new Set();
+    for (const value of field.value.slice(0, 100)) {
+        try {
+            if (typeof value !== 'string') throw new Error();
+            titles.add(contributionTitle(value));
+        } catch { blockers.push(`Review the ${label} article titles; unsupported wiki markup was excluded.`); }
+    }
+    if (field.value.length > 100) warnings.push(`Only the first 100 ${label} relationships are included. Review the remaining entries separately.`);
+    return [...titles];
+}
 
 export function normalizeContributionCandidate(input = {}) {
     if (!TYPES.has(input.kind)) throw new Error('Choose item, npc or zone.');
@@ -100,20 +122,31 @@ export function buildContributionDraft(input, blueprints) {
         text = `${era}<onlyinclude>{{Itempage\n|itemname = ${candidate.title}\n|lucy_img_ID = ${icon === undefined ? '' : Number(icon)}\n|statsblock =\n${lines.join('<br>\n')}\n|focus_effect = ${literalWikiText(field('focusEffect') || '')}\n|notes = ${[candidate.playerText,recovery.ok?literalWikiText(recovery.note):''].filter(Boolean).join('\n\n')}\n|dropsfrom =\n${drops}\n}}</onlyinclude>\n`;
     } else if (candidate.kind === 'npc') {
         if (!candidate.zone) blockers.push('Confirm the NPC zone.');
-        if (!candidate.playerText) blockers.push('Write a factual NPC description in your own words.');
+        if (!candidate.playerText) warnings.push('The NPC description is empty; add player-written details when known.');
         const entries = [`name = ${candidate.title}`, `zone = ${candidate.zone ? link(candidate.zone) : ''}`, `description = ${candidate.playerText}`];
         const npcFields = { race:'race', class:'class', level:'level', location:'location', respawn_time:'respawnTime', AC:'AC', HP:'HP', special:'special' };
         for (const [parameter, key] of Object.entries(npcFields)) if (field(key) !== undefined) entries.push(`${parameter} = ${literalWikiText(field(key))}`);
-        const loot = (Array.isArray(field('knownLoot')) ? field('knownLoot') : []).slice(0, 100).map(item => `<li>{{:${contributionTitle(item)}}}</li>`);
+        const loot = reviewedTitles(candidate, 'knownLoot', 'NPC loot', warnings, blockers).map(item => `<li>${itemTransclusion(item)}</li>`);
         entries.push(`known_loot = ${loot.length ? `<ul>\n${loot.join('\n')}\n</ul>` : 'Unknown'}`, 'factions = Unknown', 'opposing_factions = Unknown', 'related_quests = Unknown');
         if (candidate.instance === 'raid') categories.add('Raid Encounters');
         text = `${era}{{Namedmobpage\n\n| ${entries.join('\n\n| ')}\n\n}}\n`;
     } else {
-        if (!candidate.playerText) blockers.push('Write the zone introduction in your own words.');
         categories.add('Zones');
         const whoName=field('whoName');
         if(!whoName)warnings.push('No verified /who zone name; that field remains Unknown.');
-        text = `${era}${candidate.playerText}\n\n{| class="zoneTopTable"\n! Name in /who\n| ${literalWikiText(whoName || 'Unknown')}\n|}\n`;
+        const npcs = reviewedTitles(candidate, 'knownNPCs', 'zone population', warnings, blockers);
+        const loot = reviewedTitles(candidate, 'knownLoot', 'zone loot', warnings, blockers);
+        if (!candidate.playerText) {
+            if (npcs.length || loot.length) warnings.push('The zone introduction is empty; add player-written details when known.');
+            else blockers.push('Write a zone introduction or confirm its observed NPCs or loot.');
+        }
+        const rows = [
+            ...(npcs.length ? [`! Notable NPCs\n| ${npcs.map(link).join('<br>\n')}`] : []),
+            ...(loot.length ? [`! Unique Items\n| ${loot.map(itemTransclusion).join('<br>\n')}`] : []),
+            `! Name in /who\n| ${literalWikiText(whoName || 'Unknown')}`
+        ];
+        text = `${era}${candidate.playerText}\n\n{| class="zoneTopTable"\n${rows.join('\n|-\n')}\n|}\n`;
+        if (npcs.length || loot.length) warnings.push('Zone references do not add the zone category to those NPC or item pages; review their page membership separately.');
         if (field('dynamicZoneSupported') === true) text += `\n== What's in this zone? ==\n{{Special:DynamicZoneList/${candidate.title}}}\n`;
         else warnings.push('A new zone may need a wiki DynamicZoneList allowlist update; no nonworking list was inserted.');
     }

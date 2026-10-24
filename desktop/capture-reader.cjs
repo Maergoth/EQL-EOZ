@@ -15,18 +15,18 @@ function componentThreshold(pixels){
     return pixels;
 }
 
-async function recognizeCaptureImage({ocr,image,region=null,referenceSize=null,isCurrent=()=>true,nativeImage}={}){
+async function recognizeCaptureImage({ocr,image,region=null,referenceSize=null,isCurrent=()=>true,nativeImage,characterOnly=false}={}){
     const prepared=prepareCaptureImage({image,region,referenceSize}),input={...prepared.input,ocrPasses:[]};
     const cancelled=()=>({result:{text:'',confidence:0,words:[]},input,warning:prepared.warning,cancelled:true});
     if(!isCurrent())return cancelled();
-    const result=await ocr.recognize(prepared.png);
+    const recognized=await ocr.recognize(prepared.png),result={...recognized,...(characterOnly===true?{characterOnly:true}:{})};
     if(!isCurrent())return cancelled();
     input.ocrPasses.push({role:'scene',region:input.region,scale:input.scale,layout:'sparse',preprocessing:'color',confidence:result.confidence});
     if(!Array.isArray(result.words)||!result.words.length||!nativeImage?.createFromBitmap)return {result,input,warning:prepared.warning};
     const {screenReadRefinementRegions}=await parser;
     if(!isCurrent())return cancelled();
     const refinements=[];
-    for(const proposed of screenReadRefinementRegions(result).slice(0,2)){
+    for(const proposed of screenReadRefinementRegions({...result,characterOnly:characterOnly===true}).slice(0,2)){
         if(!isCurrent())return cancelled();
         const selected=input.region;
         const crops=(proposed.tiles||[proposed]).slice(0,4).map(tile=>{

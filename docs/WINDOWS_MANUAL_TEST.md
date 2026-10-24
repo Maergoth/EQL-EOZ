@@ -1,5 +1,44 @@
 # Eye of Zomm Windows/game-client acceptance test
 
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.7-x64.exe`.
+
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.7` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
+
+## 0.9.7 inventory export and observed stat acceptance
+
+This is the current Character matrix. Earlier versioned Character procedures
+below are historical: do not unequip or use item OCR for the 0.9.7 flow.
+
+1. Validate name/server/race/classes/level/AA, keeping gear equipped. Type
+   `/outputfile inventory` yourself. Verify the fresh matching file auto-imports;
+   older exports wait, the chooser is explicit, and malformed/partial/wrong-
+   character imports leave saved gear intact. Check paired/Any slots, literal
+   tiers and duplicate worn copies; bags/bank/Held/KeyRing cannot become gear.
+2. Follow the prominent **Open Inventory → Scroll down → Click off buffs**
+   instructions. Keep all gear equipped and the Inventory heading/full stat panel
+   with Additional Modifiers visible. Explicitly select Default Modern capture,
+   read at the lower 1 FPS cadence and review unread numbers. Verify stale source,
+   generation/profile and pending-file results cannot become the new proposal.
+3. Confirm only recorded current stats appear: maximum HP/Mana/Endurance once,
+   distinct AC/ATK components, Accuracy bonus versus ATK Accuracy, all ten
+   modifiers, zeros and unknowns. Changing an item/tier/catalog preview must not
+   recalculate these totals. Legacy base/equipped evidence must not replace them.
+4. Unknown wiki gear/augments must leave public slots/sockets empty, not red-link
+   items. Review missing-item details in Contribute, sync accepted wiki data and
+   re-export. An item tooltip must not create Character gear. Clear inventory
+   affects only this character's imported gear/evidence/current stats; identity
+   and other characters remain. Repeat restart/profile-switch/async-cancellation.
+5. Review PNG and own-talk share. Use an authorized test account only for an
+   explicitly coordinated actual edit; ordinary regression checks use loopback
+   writes or unsaved parsing. Verify capability/revision guards and other
+   characters/discussion remain. Record actual game UI scale, source resolution,
+   missing fields and limitations privately; no new live-game pass is claimed.
+
+New source/native/Windows/Linux/package gates remain pending release-owner
+acceptance. Earlier receipts and screenshots do not certify these changes.
+
+## Historical Character acceptance through 0.9.6
+
 0.9.6 uses a single equipment total panel, maximum resources, indexed augment
 pickers and empty-slot Add item with wiki search, a tier slider and explicit
 screenshot paste. Interactive own-talk sharing replaces the matching Character
@@ -46,10 +85,6 @@ archive audit, acceptance and limits.
    No class artwork is invented; text initials are the fallback. Validate actual
    game throughput separately from synthetic native walkthrough checks.
 
-
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.6-x64.exe`.
-
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.6` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
 
 ## 0.9.3 live item recovery
 

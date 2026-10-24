@@ -1,5 +1,5 @@
 // OCR proposals only: never scale an item, infer drop sources or publish a fact.
-export const SCREEN_READ_PARSER_VERSION = 7;
+export const SCREEN_READ_PARSER_VERSION = 8;
 const clean = value => String(value ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim();
 const number = value => Number(String(value).replace(/,/g,''));
 const statNames = {
@@ -10,8 +10,14 @@ const statNames = {
     'SV Cold':'resistCold', 'SV Corruption':'resistCorruption', 'SV Void':'resistCorruption',
     'HP Regen':'hpRegen', 'Mana Regen':'manaRegen', 'End Regen':'enduranceRegen', 'Endurance Regen':'enduranceRegen', 'Attack Speed':'attackSpeed', Haste:'haste', Range:'range',
     'Required Level':'requiredLevel', 'Recommended Level':'recommendedLevel', 'Base Dmg':'damage','Backstab Dmg':'backstabDamage','Dmg Bon':'damageBonus','Damage Bonus':'damageBonus',Attack:'attack',
-    'SV. Poison':'resistPoison','SV. Magic':'resistMagic','SV. Disease':'resistDisease','SV. Fire':'resistFire','SV. Cold':'resistCold','SV. Void':'resistCorruption'
+    'SV. Poison':'resistPoison','SV. Magic':'resistMagic','SV. Disease':'resistDisease','SV. Fire':'resistFire','SV. Cold':'resistCold','SV. Void':'resistCorruption',
+    Velocity:'velocity','Primary DPS':'primaryDps','Secondary DPS':'secondaryDps','Ranged DPS':'rangedDps',
+    Accuracy:'accuracy',Avoidance:'avoidance','Combat Effects':'combatEffects','Strike Through':'strikeThrough',Strikethrough:'strikeThrough','Stun Resist':'stunResist',
+    'Damage Shielding':'damageShield','Damage Shield':'damageShield','Damage Shield Mitigation':'damageShieldMitigation','Damage Shield Mitiga':'damageShieldMitigation',
+    'DoT Shielding':'dotShielding','Melee Shielding':'meleeShielding','Spell Shielding':'spellShielding'
 };
+const modernPairedStats=new Set(['str','sta','int','wis','agi','dex','cha','hp','mana','endurance','resistPoison','resistMagic','resistDisease','resistFire','resistCold','resistCorruption',
+    'accuracy','avoidance','combatEffects','strikeThrough','stunResist','damageShield','damageShieldMitigation','dotShielding','meleeShielding','spellShielding']);
 const escaped = value => value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 function distance(a,b){let row=Array.from({length:b.length+1},(_,i)=>i);for(let i=1;i<=a.length;i++){const next=[i];for(let j=1;j<=b.length;j++)next[j]=Math.min(next[j-1]+1,row[j]+1,row[j-1]+(a[i-1]===b[j-1]?0:1));row=next;}return row[b.length];}
 const descriptionLabel=value=>distance(clean(value).toLowerCase(),'description')<=3;
@@ -161,7 +167,7 @@ function stats(text, confidence, { character = false, modern = false } = {}) {
         if(key==='haste'&&/^(?:Click|Worn|Focus|Proc) Effect\s*:/i.test(text.slice(0,match.index).split('\n').at(-1).trim()))continue;
         // Modern attributes/resources are displayed as explicit pairs. A lone
         // "1510" may be a lost slash/current value, not a four-digit attribute.
-        if(character&&modern&&(['str','sta','int','wis','agi','dex','cha','hp','mana','endurance','resistPoison','resistMagic','resistDisease','resistFire','resistCold','resistCorruption'].includes(key)&&match[2]===undefined||['attack','ac'].includes(key)))continue;
+        if(character&&modern&&(modernPairedStats.has(key)&&match[2]===undefined||['attack','ac'].includes(key)))continue;
         if (character && ['hp','mana','endurance'].includes(key) && match[2] !== undefined) {
             fields.push(field(`${key}Current`,match[0],number(match[1]),confidence));
             fields.push(field(`${key}Maximum`,match[0],number(match[2]),confidence));
@@ -217,6 +223,8 @@ function itemName(lines) {
 }
 export function screenReadRefinementRegions(input={}) {
     const words=Array.isArray(input.words)?input.words.slice(0,2000):[],panes=itemRegions(words),regions=[],tables=[];
+    const characterOnly=input.characterOnly===true||input.owner==='character';
+    if(characterOnly){const region=characterRefinement(words,panes);return region?[region]:[];}
     for(const pane of panes){const rows=wordRows(wordsInPane(words,pane)),identity=paneName(words,pane),nameRow=rows.find(row=>nameWithoutChrome(row.words.map(word=>word.text).join(' '))===identity.name&&row.y>(pane.description?.bbox.y1??-Infinity));
         if(pane.hover&&pane.nameBand){regions.push({role:'item-name',...pane.nameBand,preprocessing:'color',layout:'line'});}
         else if(panes.length===1&&nameRow){const bounds=nameRow.words.map(word=>word.bbox),height=Math.max(...bounds.map(box=>box.y1))-Math.min(...bounds.map(box=>box.y0));
@@ -235,8 +243,13 @@ export function screenReadRefinementRegions(input={}) {
     // it with another character pass makes an otherwise valid item disappear.
     // An Inventory-only baseline still receives its ordinary refinement.
     const hoverIdentity=panes.some(pane=>pane.hover)&&regions.some(region=>region.role==='item-name');
-    if(character&&(!hoverIdentity||regions.length<2)){if(regions.length===2)regions.shift();const base={x:character.x,y:character.y,width:character.right-character.x,height:character.bottom-character.y},components=modernComponentRegions(words,character);regions.push({role:'character-stats',...(components.length?{tiles:[base,...components]}:base),preprocessing:'inverted',layout:components.length?'sparse':'block',scale:3});}
+    if(character&&(!hoverIdentity||regions.length<2)){if(regions.length===2)regions.shift();regions.push(characterRefinement(words,panes,character));}
     return regions.slice(0,2);
+}
+function characterRefinement(words,panes,character=characterRegion(words,panes)){
+    if(!character)return null;
+    const base={x:character.x,y:character.y,width:character.right-character.x,height:character.bottom-character.y},available=words.filter(word=>!panes.some(pane=>wordsInPane([word],pane).length)),components=modernComponentRegions(available,character);
+    return {role:'character-stats',...(components.length?{tiles:[base,...components]}:base),preprocessing:'inverted',layout:components.length?'sparse':'block',scale:3};
 }
 function characterRegion(words,panes){
     const available=words.filter(word=>word.bbox&&!panes.some(pane=>word.bbox.x0>=pane.x&&word.bbox.x1<=pane.right&&word.bbox.y0>=pane.y&&word.bbox.y0<pane.bottom));
@@ -250,7 +263,20 @@ function characterRegion(words,panes){
     }
     const font=Math.max(3,vitals.bbox.y1-vitals.bbox.y0),heading=available.find(word=>/^Stats$/i.test(clean(word.text))&&word.bbox.x0>vitals.bbox.x0&&Math.abs(word.bbox.y0-vitals.bbox.y0)<font);
     if(!heading)return null;
-    return {x:Math.max(0,vitals.bbox.x0-font*.5),y:Math.max(0,vitals.bbox.y0-font*.5),right:heading.bbox.x0+font*24,bottom:vitals.bbox.y0+font*25,font};
+    const x=Math.max(0,vitals.bbox.x0-font*.5),y=Math.max(0,vitals.bbox.y0-font*.5),
+        // Both observed headings locate the two equal-width Modern columns.
+        // This avoids extending the crop into the adjacent bag/Weight pane.
+        right=Math.min(heading.bbox.x0+font*24,heading.bbox.x0+(heading.bbox.x0-vitals.bbox.x0)+font*1.5),
+        rows=wordRows(available.filter(word=>word.bbox.x0>=x&&word.bbox.x1<=right&&word.bbox.y0>=y&&word.bbox.y0<=vitals.bbox.y0+font*48));
+    let bottom=vitals.bbox.y0+font*25;
+    for(const row of rows){
+        const text=row.words.map(word=>clean(word.text)).join(' '),left=row.words[0]?.bbox.x0;
+        // Lower sections are anchored by their visible headings/known numeric
+        // rows. Missing or unread values remain absent; geometry adds no stats.
+        if(Math.abs(left-vitals.bbox.x0)<=font*2&&/^Additional\s+Information$/i.test(text))bottom=Math.max(bottom,row.y+row.height+font*5);
+        else if(/^Additional\s+Modifiers$/i.test(text)||/^(?:Accuracy|Avoidance|Combat Effects|Strike ?Through|Stun Resist|Damage Shield(?:ing| Mitiga(?:tion)?)?|DoT Shielding|Melee Shielding|Spell Shielding)\b/i.test(text))bottom=Math.max(bottom,row.y+row.height+font*.6);
+    }
+    return {x,y,right,bottom:Math.min(bottom,vitals.bbox.y0+font*48),font};
 }
 function modernComponentRegions(words,character){
     const rows=wordRows(words.filter(word=>word.bbox&&word.bbox.x0>=character.x&&word.bbox.x1<=character.right&&word.bbox.y0>=character.y&&word.bbox.y1<=character.bottom&&word.bbox.y1-word.bbox.y0<=character.font*1.8));
@@ -332,7 +358,7 @@ function numericDisagreements(base,read,options={}){
     return conflicts;
 }
 export function parseScreenRead(input = {}) {
-    const raw = clean(input.text).slice(0,16384),baseWords=Array.isArray(input.words)?input.words.slice(0,2000):[],words = refinedWords(input,baseWords);
+    const characterOnly=input.characterOnly===true||input.owner==='character',raw = clean(input.text).slice(0,16384),baseWords=Array.isArray(input.words)?input.words.slice(0,2000):[],words = characterOnly?baseWords:refinedWords(input,baseWords);
     const confidence = Math.max(0,Math.min(100,Number(input.confidence) || 0));
     if (!raw) return [];
     const metadata = { kind:input.kind === 'manual' ? 'manual':'ocr', owner:input.owner || 'contribution', sessionId:input.sessionId || '',
@@ -341,7 +367,7 @@ export function parseScreenRead(input = {}) {
     // Word geometry is always used when available, including an Inventory pane
     // to the right of any number of item panes. Sparse OCR text order is not row
     // order and must never join a label with a different item's numeric value.
-    for(const [paneIndex,region] of (panes.length?panes:[null]).entries()){
+    for(const [paneIndex,region] of (characterOnly?[]:panes.length?panes:[null]).entries()){
     const itemText=region?wordLines(wordsInPane(words,region)):raw,identity=region?paneName(words,region):{name:itemName(raw.split(/\r?\n/).map(clean)),title:''};
     const lines=itemText.split(/\r?\n/).map(clean).filter(Boolean),name=identity.name.slice(0,240);
     if (name && name.length > 2) {
@@ -392,12 +418,13 @@ export function parseScreenRead(input = {}) {
     }
     // A visible inventory/stat heading is required; item-only panes cannot become
     // an authoritative character total. Geometry excludes the examine region.
-    const character=characterRegion(words,panes),characterWords=character?words.filter(word=>word.bbox&&word.bbox.x0>=character.x&&word.bbox.x1<=character.right&&word.bbox.y0>=character.y&&word.bbox.y1<=character.bottom&&word.bbox.y1-word.bbox.y0<=character.font*1.8):[],characterText=character?wordLines(characterWords):words.length?wordLines(words.filter(word=>!panes.some(pane=>wordsInPane([word],pane).length))):raw;
-    if (character||!words.length&&/\bInventory\b|^Character Stats\b/im.test(characterText)) {
-        const modern=!!character&&character.modern!==false,fields = stats(characterText,confidence,{character:true,modern}),conflicts=new Set(),evidence=[characterText];
-        for(const pass of (Array.isArray(input.refinements)?input.refinements:[]).slice(0,2).filter(pass=>pass.role==='character-stats')){const ordinary=(pass.words||[]).filter(word=>!word.component&&(!character||word.bbox&&word.bbox.y1-word.bbox.y0<=character.font*1.8)),mapped=alignedTableWords(characterWords,ordinary),text=wordLines(mapped)||String(pass.text||'');evidence.push(wordLines(pass.words||[])||String(pass.text||''));
+    const character=characterRegion(words,panes),withinCharacter=word=>Boolean(word.bbox&&word.bbox.x0>=character.x&&word.bbox.x1<=character.right&&word.bbox.y0>=character.y&&word.bbox.y1<=character.bottom&&word.bbox.y1-word.bbox.y0<=character.font*1.8&&!panes.some(pane=>wordsInPane([word],pane).length)),characterWords=character?words.filter(withinCharacter):[],characterText=character?wordLines(characterWords):words.length?wordLines(words.filter(word=>!panes.some(pane=>wordsInPane([word],pane).length))):raw;
+    const textModern=!words.length&&/\bCharacter[ \t]+Vitals\b/i.test(characterText)&&/\bStats[ \t]+and[ \t]+Resists\b/i.test(characterText),textCharacter=!words.length&&(characterOnly?textModern||/^Character Stats\b/im.test(characterText):/\bInventory\b|^Character Stats\b/im.test(characterText));
+    if (character||textCharacter) {
+        const modern=!!character&&character.modern!==false||characterOnly&&textModern,fields = stats(characterText,confidence,{character:true,modern}),conflicts=new Set(),evidence=[characterText];
+        for(const pass of (Array.isArray(input.refinements)?input.refinements:[]).slice(0,2).filter(pass=>pass.role==='character-stats')){const selected=(pass.words||[]).filter(word=>!character||withinCharacter(word)),ordinary=selected.filter(word=>!word.component),mapped=alignedTableWords(characterWords,ordinary),text=wordLines(mapped)||(!character?String(pass.text||''):'');evidence.push(wordLines(selected)||(!character?String(pass.text||''):''));
             for(const key of numericDisagreements(characterWords,ordinary,{character:true,modern})){conflicts.add(key);const index=fields.findIndex(entry=>entry.key===key);if(index>=0)fields.splice(index,1);}
-            for(const entry of [...stats(text,Math.min(confidence,Number(pass.confidence)||0),{character:true,modern}),...refinedCharacterComponents(pass.words||[],confidence)]){
+            for(const entry of [...stats(text,Math.min(confidence,Number(pass.confidence)||0),{character:true,modern}),...refinedCharacterComponents(selected,confidence)]){
                 if(entry.key.startsWith('resist')&&(pass.words||[]).some(word=>String(word.text).includes(`${entry.value}/`)&&Number(word.confidence)<95))continue;
                 const existing=fields.findIndex(value=>value.key===entry.key);if(existing<0&&!conflicts.has(entry.key))fields.push(entry);else if(existing>=0&&fields[existing].value!==entry.value){conflicts.add(entry.key);fields.splice(existing,1);}}
         }

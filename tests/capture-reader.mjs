@@ -69,4 +69,15 @@ assert.equal(calls,3,'A full-size mixed frame preserves the existing scene plus 
 assert.deepEqual(fullFrameMixed.input.ocrPasses.map(pass=>pass.role),['scene','item-name','item-stats'],'Inventory cannot consume the tooltip identity pass');
 const mixedItem=parseScreenRead({...fullFrameMixed.result,input:fullFrameMixed.input}).find(record=>record.subject.kind==='item');assert(mixedItem);assert.equal(mixedItem.subject.name,'Synthetic Recovered Needle +3');
 assert.equal(mixedItem.fields.some(field=>field.key==='hp'),false,'Preserving identity does not choose between conflicting numeric readings');assert.match(mixedItem.evidence.text,/HP: 73/);assert.match(mixedItem.evidence.text,/HP: 75/);assert.match(mixedItem.evidence.text,/Conflicting OCR values left unknown: hp/);assert.doesNotMatch(mixedItem.evidence.text,/3591840|143\/511/,'Inventory evidence stays separate from the recovered item');
+calls=0;operations.length=0;
+const characterRead=await recognizeCaptureImage({image:new Image(3840,2088),nativeImage,characterOnly:true,ocr:{async recognize(){calls++;return calls===1?hoverBesideInventory:{text:'No new readable character values',words:[],confidence:88};}}});
+assert.equal(calls,2,'Character capture spends only the scene pass and character refinement');assert.equal(characterRead.result.characterOnly,true);assert.deepEqual(characterRead.input.ocrPasses.map(pass=>pass.role),['scene','character-stats']);
+assert(parseScreenRead({...characterRead.result,input:characterRead.input}).every(record=>record.subject.kind==='character'),'Purpose survives the reader so Character frames cannot emit item observations');
+for(const operation of operations.filter(value=>value.bitmap))assert(operation.bitmap.width*operation.bitmap.height<=4*1024*1024,'Character-only refinement keeps the existing pixel budget');
+calls=0;
+const characterItemOnly=await recognizeCaptureImage({image,nativeImage,characterOnly:true,ocr:{async recognize(){calls++;return scene;}}});
+assert.equal(calls,1,'An item-only Character frame is not refined');assert.deepEqual(parseScreenRead(characterItemOnly.result),[]);
+calls=0;
+const wordlessCharacter=await recognizeCaptureImage({image,nativeImage,characterOnly:true,ocr:{async recognize(){calls++;return {text:'Character Stats\nHP 10/100\nMana 20/200',confidence:90,words:[]};}}});
+assert.equal(calls,1);assert.equal(wordlessCharacter.result.characterOnly,true);assert.equal(parseScreenRead(wordlessCharacter.result)[0].subject.kind,'character','Early reader return retains the character-only purpose');
 console.log('Capture reader: normalized region bounds/resize reset, single-pass negatives, bounded mapped refinements and cancellation passed.');

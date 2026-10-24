@@ -49,6 +49,10 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         console.error('EOZ_NATIVE_FAILURE_PIXELS='+JSON.stringify({directory,prefix,results:results.map(result=>result.status==='fulfilled'?'saved':String(result.reason?.message||result.reason))}));
     }
     const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),until=async(predicate,label,timeout=20000)=>{const end=Date.now()+timeout;while(Date.now()<end){if(predicate())return;await wait(40);}throw Error(`${label}: ${JSON.stringify(diagnostics())}`);};
+    // Native video and source sampling each run at1FPS on independent clocks:
+    // nearly2s is legitimate before a changed native frame can be sampled.
+    // Allow500ms scheduling headroom while holding each examine pane3.5s.
+    const examineExposureMs=3500,maximumChangedCaptureMs=2500;
     const commit=()=>game.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
     const previousClipboard={text:electron.clipboard.readText(),html:electron.clipboard.readHTML(),rtf:electron.clipboard.readRTF()};
     const previousImage=electron.clipboard.readImage();if(!previousImage.isEmpty())previousClipboard.image=previousImage;
@@ -57,9 +61,9 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         const sources=await host.listSources(),source=sources.find(source=>source.name==='EverQuest Synthetic Capture Fixture');
         if(!source)throw new Error('The synthetic native source could not be enumerated.');
         console.log('Synthetic capture source selected.');
-        await host.start({mode:'character',sourceId:source.id,sessionId:'native-synthetic'});
+        await host.start({mode:'contribution',sourceId:source.id,sessionId:'native-synthetic'});
         const record=await Promise.race([observation,new Promise((_,reject)=>setTimeout(()=>reject(new Error(`Native capture timed out: ${JSON.stringify(host.getStatus())}`)),25000))]);
-        if(record.subject.name!=='Synthetic Test Blade +3'||record.owner!=='character')throw new Error('Unexpected native OCR observation.');
+        if(record.subject.name!=='Synthetic Test Blade +3'||record.owner!=='contribution')throw new Error('Unexpected native OCR observation.');
         const preview=host.preview();
         if(!preview.dataUrl.startsWith('data:image/png;base64,')||preview.sourceSize.width<100||!host.getStatus().hasPreview)throw new Error('Current-frame calibration preview is unavailable.');
         const nextObservation=new Promise(done=>{resolveObservation=done;});
@@ -70,7 +74,8 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         await host.captureScreenshot({sourceId:source.id});
         if(electron.clipboard.readImage().isEmpty())throw new Error('The synthetic screenshot was not copied.');
         // Hold the first real OCR invocation while the authorized native stream
-        // sees three short-lived hover tooltips. No pixel fixture is sent by IPC.
+        // sees three stable examine tooltips at the production 1FPS cadence.
+        // No pixel fixture is sent by IPC.
         await host.pause();await game.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(hoverHtml));game.showInactive();await commit();
         renderGeometry=await game.webContents.executeJavaScript('({innerWidth,innerHeight,devicePixelRatio,canvas:document.querySelector("canvas").getBoundingClientRect().toJSON()})');
         if(renderGeometry.innerWidth<960||renderGeometry.innerHeight<652)throw Error(`The full-size synthetic tooltip canvas must fit the actual viewport: ${JSON.stringify(diagnostics())}`);
@@ -78,18 +83,21 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         gateNext=true;const held=new Promise(resolve=>{gateStarted=resolve;});await host.resume();await Promise.race([held,wait(5000).then(()=>{throw Error('The hover source did not reach its first real OCR job.');})]);
         const hoverGeneration=host.generation,names=['Copperleaf Coat +4','Synthetic Needle +3','Synthetic Amber Band +2'];
         frameRate=await host.captureWindow.webContents.executeJavaScript('document.querySelector("video").srcObject.getVideoTracks()[0].getSettings().frameRate');
+        if(!Number.isFinite(frameRate)||frameRate<=0||frameRate>1.1)throw Error(`The native track did not honor the1FPS capture limit: ${frameRate}`);
         await until(()=>admissions.some(frame=>frame.generation===hoverGeneration&&frame.stage===1),'Initial committed tooltip pixels did not cross the native stream',1500);
         const firstAdmission=admissions.find(frame=>frame.generation===hoverGeneration&&frame.stage===1);stages.push({...firstAdmission,drawAt:firstDrawAt,drawToAdmissionMs:firstAdmission.admittedAt-firstDrawAt});
+        await wait(Math.max(0,examineExposureMs-(Date.now()-firstDrawAt)));
         for(const stage of [2,3]){
             const drawnAt=await game.webContents.executeJavaScript(`window.drawStage(${JSON.stringify({name:names[stage-1],weapon:stage===2})},${stage})`);await commit();
             stages.at(-1).visibleForMs=drawnAt-stages.at(-1).drawAt;
             // The frame's timestamp measures sampling. IPC/PNG delivery on a
             // busy runner may arrive later and must not masquerade as a missed
-            // source frame. Retain a strict 500ms changed-pixel capture bound,
+            // source frame. Retain a strict2500ms changed-pixel capture bound,
             // with a separate bounded wait for its native acknowledgment.
             await until(()=>admissions.some(frame=>frame.generation===hoverGeneration&&frame.stage===stage&&frame.capturedAt>=drawnAt),`Tooltip ${stage} pixels did not reach native admission`,5000);
-            const admitted=admissions.find(frame=>frame.generation===hoverGeneration&&frame.stage===stage&&frame.capturedAt>=drawnAt);stages.push({...admitted,drawAt:drawnAt,drawToAdmissionMs:admitted.admittedAt-drawnAt});await wait(700);
-            if(admitted.capturedAt-drawnAt>500)throw Error(`Tooltip ${stage} changed pixels were not sampled within500ms: ${JSON.stringify(diagnostics())}`);
+            const admitted=admissions.find(frame=>frame.generation===hoverGeneration&&frame.stage===stage&&frame.capturedAt>=drawnAt);stages.push({...admitted,drawAt:drawnAt,drawToAdmissionMs:admitted.admittedAt-drawnAt});
+            if(admitted.capturedAt-drawnAt>maximumChangedCaptureMs)throw Error(`Tooltip ${stage} changed pixels were not sampled within${maximumChangedCaptureMs}ms: ${JSON.stringify(diagnostics())}`);
+            await wait(Math.max(0,examineExposureMs-(Date.now()-drawnAt)));
         }
         await until(()=>host.getStatus().queuedFrames>=2,'Brief hover frames were not retained while OCR was held',5000);
         // Remove the final tooltip before draining OCR. A later heartbeat must
@@ -102,13 +110,14 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         const queuedRecord=(name,stage)=>records.find(record=>record.subject.name===name&&record.owner===stage.owner&&record.sessionId===stage.sessionId&&record.input?.sourceId===stage.sourceId&&record.input?.captureGeneration===stage.generation&&admissions.some(frame=>frame.stage===stage.stage&&frame.owner===stage.owner&&frame.sessionId===stage.sessionId&&frame.sourceId===stage.sourceId&&frame.generation===stage.generation&&frame.capturedAt>=stage.drawAt&&frame.capturedAt<stage.drawAt+stage.visibleForMs&&frame.capturedAt<releasedAt&&frame.hash===record.input?.frameId&&frame.capturedAt===Date.parse(record.capturedAt)));
         await until(()=>names.every((name,index)=>queuedRecord(name,stages[index])),'Real OCR did not recover all queued hover identities with an exact acknowledged PNG, original timestamp and context inside each visible stage');
         const hoverRecords=names.map((name,index)=>queuedRecord(name,stages[index]));
-        for(const record of hoverRecords){if(record.owner!=='character'||record.sessionId!=='native-synthetic'||record.input.sourceId!==source.id||Date.parse(record.capturedAt)>=releasedAt)throw Error(`Queued hover evidence lost its original source/session/time provenance: ${JSON.stringify({expected:{owner:'character',sessionId:'native-synthetic',sourceId:source.id,generation:hoverGeneration,capturedBefore:releasedAt},records:hoverRecords.map(item=>({name:item.subject.name,owner:item.owner,sessionId:item.sessionId,sourceId:item.input?.sourceId,generation:item.input?.captureGeneration,capturedAt:Date.parse(item.capturedAt),frameId:item.input?.frameId,selection:item.input?.captureSelection})),...diagnostics()})}`);}
+        for(const record of hoverRecords){if(record.owner!=='contribution'||record.sessionId!=='native-synthetic'||record.input.sourceId!==source.id||Date.parse(record.capturedAt)>=releasedAt)throw Error(`Queued hover evidence lost its original source/session/time provenance: ${JSON.stringify({expected:{owner:'contribution',sessionId:'native-synthetic',sourceId:source.id,generation:hoverGeneration,capturedBefore:releasedAt},records:hoverRecords.map(item=>({name:item.subject.name,owner:item.owner,sessionId:item.sessionId,sourceId:item.input?.sourceId,generation:item.input?.captureGeneration,capturedAt:Date.parse(item.capturedAt),frameId:item.input?.frameId,selection:item.input?.captureSelection})),...diagnostics()})}`);}
         const cadence=admissions.filter(frame=>frame.generation===hoverGeneration&&frame.capturedAt<releasedAt).map(frame=>frame.capturedAt);
-        if(cadence.length<3)throw Error('The actual native stream did not admit three brief tooltip frames.');
+        if(cadence.length<3)throw Error('The actual native stream did not admit three stable tooltip frames.');
+        const acquisitions=[...new Set(cadence)].sort((a,b)=>a-b);if(acquisitions.some((at,index)=>index&&at-acquisitions[index-1]<1000))throw Error('The native source exceeded one PNG acquisition per second.');
         captureStages=false;const devicePixelRatio=await game.webContents.executeJavaScript('devicePixelRatio');
-        console.log('EOZ_TRANSIENT_CAPTURE='+JSON.stringify({ok:true,tooltips:3,realWindowStream:true,offlineOcr:true,heldFirstRead:true,queuedBeforeRelease:cadence.length,originalCaptureTime:true,ownerAndGeneration:true,requestedFrameRate:8,actualFrameRate:frameRate,requestedScaleFactor:scaleFactor,devicePixelRatio,stages,maximumChangedTooltipDrawToCaptureMs:500,nativeAcknowledgmentTimeoutMs:5000,maximumPngRate:4,maximumQueuedFrames:12,maximumQueuedBytes:48*1024*1024,ocrCalls:ocrTimes.length,ocrMeanMs:Math.round(ocrTimes.reduce((sum,value)=>sum+value,0)/ocrTimes.length),ocrMaxMs:Math.max(...ocrTimes)}));
+        console.log('EOZ_TRANSIENT_CAPTURE='+JSON.stringify({ok:true,purpose:'contribution-stable-examine',tooltips:3,stableExamineExposureMs:examineExposureMs,timingBudgetReason:'two independent1FPS clocks plus500ms scheduling headroom',realWindowStream:true,offlineOcr:true,heldFirstRead:true,queuedBeforeRelease:cadence.length,originalCaptureTime:true,ownerAndGeneration:true,requestedFrameRate:1,actualFrameRate:frameRate,requestedScaleFactor:scaleFactor,devicePixelRatio,stages,maximumChangedTooltipDrawToCaptureMs:maximumChangedCaptureMs,nativeAcknowledgmentTimeoutMs:5000,maximumPngRate:1,maximumQueuedFrames:12,maximumQueuedBytes:48*1024*1024,ocrCalls:ocrTimes.length,ocrMeanMs:Math.round(ocrTimes.reduce((sum,value)=>sum+value,0)/ocrTimes.length),ocrMaxMs:Math.max(...ocrTimes)}));
         await host.pause();await game.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(baselineHtml));await commit();
-        await host.resume();const baselineGeneration=host.generation;
+        await host.start({mode:'character',sourceId:source.id,sessionId:'native-character-stats'});const baselineGeneration=host.generation;
         await until(()=>records.some(record=>record.subject.kind==='character'&&record.input?.captureGeneration===baselineGeneration),'Initial NoEquipment stat frame was not recognized');const phaseCutoff=Date.now();
         // A retained pre-cutoff frame can spend seven seconds in Windows IPC,
         // then finish OCR before the three-second hash TTL starts. Allow that
@@ -116,7 +125,8 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
         // substitute delivery/completion time for the original capture time.
         await until(()=>records.some(record=>record.subject.kind==='character'&&record.input?.captureGeneration===baselineGeneration&&Date.parse(record.capturedAt)>phaseCutoff),'Unchanged NoEquipment pixels did not refresh after the phase cutoff',20000);
         const freshBase=records.find(record=>record.subject.kind==='character'&&record.input?.captureGeneration===baselineGeneration&&Date.parse(record.capturedAt)>phaseCutoff);
-        if(freshBase.input.sourceId!==source.id||freshBase.fields.find(field=>field.key==='hpMaximum')?.value!==901)throw Error('Refreshed baseline lost its source or observed maximum.');
+        if(freshBase.owner!=='character'||freshBase.input.sourceId!==source.id||freshBase.input.captureSelection!=='scene'||freshBase.fields.find(field=>field.key==='hpMaximum')?.value!==901)throw Error('Refreshed character stats lost their source, scene selection or observed maximum.');
+        if(records.some(record=>record.input?.captureGeneration===baselineGeneration&&record.subject.kind==='item')||freshBase.input.ocrPasses.some(pass=>!['scene','character-stats'].includes(pass.role)))throw Error('Character-only capture unexpectedly read an item or used an item refinement.');
         console.log('EOZ_UNCHANGED_BASELINE='+JSON.stringify({ok:true,realWindowStream:true,samePixels:true,freshCaptureAfterPhase:true,ownerAndGeneration:true,screenDedupMs:3000}));
         await host.stop({mode:'character'});
         if(host.captureWindow||host.ocr.worker||host.owner)throw new Error('Capture Stop retained a source or OCR worker.');

@@ -1,6 +1,24 @@
 # Capture and observation pipeline
 
-Status: 0.9.3 live capture recovery, 2026-10-23. Owner: `capture_pipeline_089`.
+The 0.9.7 [inventory-export flow](../INVENTORY_EXPORT_CHARACTER_PLAN.md) keeps
+gear equipped: Character imports `/outputfile inventory`, then reads the fully
+equipped, unbuffed stat panel. **Open Inventory → Scroll down → Click off buffs**
+must precede the explicit stat read. Character totals use reviewed current stats
+only; item OCR is for Contribute and cannot populate Character gear.
+
+Optional acquisition now requests **1 FPS**, with one-second sampling/encoding
+for stable stat/examine panes. Prior 0.9.2/0.9.3 high-rate/brief-tooltip measurements
+below are historical receipts, not a current recall guarantee. The immutable
+frozen-frame/worker pipeline, bounded queues, privacy and source/session/generation
+guards remain. A stuck bitmap acquisition retains its original 15-second deadline
+across context changes, then releases the renderer and reports recoverable loss.
+Calibration reports reconfiguration truthfully; stale work cannot restart capture.
+The obsolete unreleased baseline-retry UI is not part of this release.
+
+New 0.9.7 source/native/platform/package acceptance remains pending. Preserve
+historical evidence below without treating it as certification of the new flow.
+
+Historical implementation/calibration ledger: 0.9.3 live capture recovery, 2026-10-23. Owner: `capture_pipeline_089`.
 Parent plan: [Capture, wiki contributions and character snapshots](../CAPTURE_CONTRIBUTIONS.md).
 Current acceptance and ownership: [live capture recovery](../LIVE_CAPTURE_RECOVERY.md).
 Prior evidence: [brief item tooltip capture](../TOOLTIP_CAPTURE.md).
@@ -43,8 +61,8 @@ the existing capture owner/source. A failed or cancelled import cannot leak an
 old result into the new review session.
 Manual observations carry `input.captureGeneration` for that exact import. The
 Character workspace separately checks the initiating phase/context before using
-such a file as a No Equipment proposal; its completion timestamp cannot prove
-that an older image was captured after a phase change. Explicit manual imports
+such a file as a current-stat proposal; its completion timestamp cannot prove
+that an older image belongs to the new phase/profile. Explicit manual imports
 are not suppressed by live-screen semantic dedup; selecting the same PNG again
 returns a new review record with its own sequence, time and import generation.
 
@@ -289,7 +307,9 @@ the game or read the game's process memory.
 | Character identity/level/classes | The selected character's self `/who` row; level-up text | Context for a character session. The parser does not currently establish race or all stat fields. |
 | Player coordinates | Supported `/loc` variants emit normalized world X/Y/Z from logged Y/X/Z | Keep the coordinate basis and observation time. A player's location is not a mob's spawn location. |
 | General population | No general NPC `/who` population grammar exists in the current parser | Visible names can become observations, not an exhaustive zone population. Add a proven log grammar only if private evidence establishes it. |
-| Item examine details, augment/tier display, equipped slots, character stat panes | Not present in the supported log grammar | Local OCR plus contributor review. Prefer exact known catalog records over OCR reconstruction. |
+| Equipped gear and worn/augment locations | Fresh selected-character `/outputfile inventory` | Import the validated worn table. Unknown wiki items/augments remain missing; no Character item OCR. |
+| Item examine details | Optional selected-source OCR | Contribute review only; prefer known canonical wiki identities and preserve evidence. |
+| Fully equipped, unbuffed character stats | Reviewed current stat-pane OCR/manual proposal | Character current snapshot only; no gear/base addition. Keep the Inventory heading and scrolled Additional Modifiers visible. |
 
 `app/app.js::consumeText` distinguishes initial/reset tails from live input,
 checks log timestamps before transient UI, and supplies the shared timer engine.
@@ -519,17 +539,17 @@ The host processes one offline OCR job at a time, with at least 250 ms between
 scene starts. Its queue retains at most 12 compressed PNGs and 48 MiB. Item and
 configured-area proposals precede one replaceable, latest-only fallback scene.
 Fallback cannot evict an item proposal. After three completed priority reads,
-a waiting scene gets a turn so baseline evidence cannot starve. Candidate frames expire after 60 seconds;
+a waiting scene gets a turn so character-stat evidence cannot starve. Candidate frames expire after 60 seconds;
 ordinary scenes after 15 seconds. Capacity eviction removes fallback first,
 then the oldest candidate. Native image decode waits until the serial read
 slot. Submission acknowledges before the deferred serial OCR pump performs
 native preparation. Pane visual keys coalesce repeated pixels even when the
 full PNG changes outside that area; full-scene hashes remain exact.
 Completed screen hashes and OCR semantic duplicates expire after three seconds,
-allowing unchanged Inventory pixels to produce fresh baseline evidence after a
+allowing unchanged Inventory pixels to produce fresh stat evidence after a
 walkthrough transition. Game-log identity/cursor deduplication does not expire
-with this screen-specific window. Repeated items merge into their existing
-physical card under the existing Character rules.
+with this screen-specific window. Repeated item proposals belong to the contribution queue; Character gear is
+now sourced only from the inventory export.
 Overflow updates a visible warning/count;
 busy game backgrounds can still exceed throughput. The player should keep each
 complete item tooltip visible until its editable card appears. Queued pixels
@@ -543,7 +563,7 @@ telemetry or an automatic recording/export. Strict source/session/generation,
 dimension and normalized-region validation remains at the IPC boundary.
 
 For valid compact tooltips, the two refinement slots retain item-name and
-item-stat passes when Inventory is visible. Inventory-only baseline scenes still
+item-stat passes when Inventory is visible. Inventory-only stat scenes still
 receive the character refinement. Scene plus two refinements remains the bound;
 name/number uncertainty and conflicting-value handling are unchanged.
 
@@ -553,8 +573,8 @@ four identities. Each queued frame snapshots its crop/reference dimensions.
 Stop, pause, source/owner changes, imports and area/size changes invalidate all
 stale queued/in-flight work. Timeout/crash handling terminates the failed worker
 and retains the existing bounded retry policy. Stop cannot wait indefinitely
-for recognition. Character item intake uses its original capture-phase window;
-No Equipment still requires a new frame after the player's confirmation.
+for recognition. Current Character stat proposals must match their explicit
+stat phase/profile boundary; item OCR does not become Character gear.
 
 Initial full-source analysis finds visible item/stat panes; subsequent work uses
 stable recognized or user-adjusted regions and change hashes. A user can choose
@@ -702,7 +722,7 @@ The original context/design audit preceded implementation. The ledger at the top
 records what was subsequently exercised; proposed sections do not override its
 explicit limitations.
 
-## Character walkthrough follow-up: written item text and Modern components
+## Historical item-text/Modern calibration and retained parser behavior
 
 Parser version 5 adds `rawStatBlock`, a separate item observation field containing
 at most 8,192 characters and 60 lines. It preserves the observed metadata/stat

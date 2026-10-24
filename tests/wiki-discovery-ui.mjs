@@ -69,3 +69,5 @@ assert.match(retry.root.innerHTML,/currently available/);
 retry.event('click'); await flush(); assert.match(retry.root.innerHTML,/New window/,'Screenshot can re-enumerate after a source disappears');
 retry.ui.dispose();
 console.log('Inline wiki notices: shared queue, visible 15-second deadlines, hover/focus/capture holds, safe choices, clipboard success and stale-source recovery passed.');
+
+assert.match(discoveryNoticeMarkup({...hostile,prompt:{name:'Synthetic mob',kind:'monster',hint:'Saved in Contribute: spawn /loc <script>'}}),/Saved in Contribute: spawn \/loc &lt;script&gt;/);

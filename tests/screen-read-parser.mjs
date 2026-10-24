@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import {parseScreenRead,screenReadRefinementRegions,parseItemStatBlock,parseItemAugmentSlots} from '../app/screen-read-parser.js';
 const text=`Item Name: Synthetic Test Blade +3\nDescription\nSynthetic Test Blade +3\nNo Trade\nClass: WAR / PAL\nRace: ALL\nSlot: PRIMARY / SECONDARY\nTier 3 / 10\nAC 12\nHP 45\nMana 20\nSTR 8\nDMG 9 Delay 24\nWeight 2.5\nRequired Level 15\nModified\nWorn Effect: Synthetic Haste\nFocus Exaltation: empty\nRune Exaltation: Synthetic Rune`;
-const [item]=parseScreenRead({text,confidence:85,owner:'character',sessionId:'synthetic'});
+const [item]=parseScreenRead({text,confidence:85,owner:'contribution',sessionId:'synthetic'});
 const fields=Object.fromEntries(item.fields.map(field=>[field.key,field.value]));
-assert.equal(item.subject.name,'Synthetic Test Blade +3');assert.equal(item.owner,'character');
+assert.equal(item.subject.name,'Synthetic Test Blade +3');assert.equal(item.owner,'contribution');
 assert.equal(fields.tier,3);assert.equal(fields.hp,45);assert.equal(fields.damage,9);assert.equal(fields.delay,24);
 assert.equal(fields.requiredLevel,15);assert.equal(fields.weight,2.5);assert.equal(fields.modified,undefined,'an unchecked Modern Modified checkbox label is not a state');
 assert.deepEqual(fields.slots,['PRIMARY','SECONDARY']);assert.equal(fields.augmentNames,undefined,'Intrinsic Exaltations are effects, not socketed items');assert(fields.effects.includes('Rune Exaltation: Synthetic Rune'));
@@ -156,6 +156,41 @@ assert.equal(parseScreenRead(mixedMissingName).filter(record=>record.subject.kin
 assert.deepEqual(screenReadRefinementRegions(mixedMissingName).map(region=>region.role),['item-name','item-stats'],'Visible Inventory must not replace the only opportunity to recover the compact item identity');
 const mixedRecovered=parseScreenRead({...mixedMissingName,refinements:[nameRefinement]}).find(record=>record.subject.kind==='item');assert.equal(mixedRecovered.subject.name,'Brightneedle +3');assert.equal(mixedRecovered.fields.find(field=>field.key==='hp').value,73);assert.doesNotMatch(mixedRecovered.evidence.text,/330\/398|296\/296/,'Character text cannot enter the item evidence');
 assert.deepEqual(screenReadRefinementRegions({words:inventoryBesideHover}).map(region=>region.role),['character-stats'],'A baseline with no item still receives the character refinement');
+for(const purpose of [{characterOnly:true},{owner:'character'}]){
+    assert.deepEqual(screenReadRefinementRegions({...mixedMissingName,...purpose}).map(region=>region.role),['character-stats'],'Character capture spends no refinement pass on item identity or item stats');
+    const characterRecords=parseScreenRead({...mixedMissingName,...purpose,refinements:[nameRefinement]});assert.equal(characterRecords.length,1);assert.equal(characterRecords[0].subject.kind,'character');
+    assert.deepEqual(parseScreenRead({text,words:[],...purpose}),[],'An examine tooltip never emits an item from Character capture');
+    assert.deepEqual(screenReadRefinementRegions({words:hoverWords,...purpose}),[],'An item-only frame uses no additional OCR passes during Character capture');
+    assert.deepEqual(parseScreenRead({text:'Inventory\nItem: Synthetic Item\nHP 999\nSTR 99\nAC 99',...purpose}),[],'Wordless Inventory text plus item stats cannot establish equipped totals');
+}
+
+// Synthetic fully scrolled Default Modern panel. The Additional Modifiers
+// section is below the old fixed 25-line crop; adjacent bag stats are unrelated.
+const fullPanel=[word('Inventory',400,0,100),word('Character',100,100,100),word('Vitals',210,100,60),word('Stats',400,100,60),word('and',470,100,35),word('Resists',515,100,80),
+    word('HP',100,140,30),word('123/456',260,140,100),word('Strength',400,140,100),word('120/510',610,140,90),
+    word('Mana',100,170,50),word('20/300',260,170,90),word('End',100,200,45),word('40/600',260,200,90),
+    word('AC',100,230,30),word('100/200|300',240,230,120),word('Attack',100,260,70),word('400|500',260,260,100),
+    word('Velocity',100,290,90),word('7',330,290,20,20,96),word('Primary',100,320,80),word('DPS',190,320,40),word('12.5',300,320,60),
+    word('Additional',100,650,110),word('Modifiers',220,650,100),word('Additional',100,850,110),word('Information',220,850,110),
+    word('Bind',100,900,50),word('Synthetic',530,900,90),word('Town',630,900,70),word('Deity',100,930,60),word('Synthetic',530,930,90),
+    word('Weight',800,200,70),word('999/999',880,200,100),word('HP',100,1150,30),word('9999/9999',260,1150,120)];
+const modifierRows=[['Accuracy','accuracy',12,150],['Avoidance','avoidance',13,100],['Combat Effects','combatEffects',14,100],['Strike Through','strikeThrough',15,35],['Stun Resist','stunResist',16,35],
+    ['Damage Shielding','damageShield',17,35],['Damage Shield Mitiga','damageShieldMitigation',18,25],['DoT Shielding','dotShielding',19,35],['Melee Shielding','meleeShielding',20,35],['Spell Shielding','spellShielding',21,35]];
+for(let n=0;n<modifierRows.length;n++){const [name,,value,cap]=modifierRows[n],x=n<5?100:400,y=680+(n%5)*30;fullPanel.push(word(name,x,y,210),word(`${value}/${cap}`,x+230,y,70));}
+const fullPanelRead=parseScreenRead({words:fullPanel,text:'Synthetic scrolled full stat panel',confidence:96}).find(entry=>entry.subject.kind==='character'),fullFields=Object.fromEntries(fullPanelRead.fields.map(field=>[field.key,field.value]));
+for(const [,key,value,cap]of modifierRows){assert.equal(fullFields[key],value,`${key} is retained below the old crop`);assert.match(fullPanelRead.fields.find(field=>field.key===key).raw,new RegExp(`${value}/${cap}`),'The original current/cap pair remains evidence');}
+assert.equal(fullFields.hpCurrent,123);assert.equal(fullFields.hpMaximum,456);assert.equal(fullFields.manaCurrent,20);assert.equal(fullFields.manaMaximum,300);assert.equal(fullFields.enduranceCurrent,40);assert.equal(fullFields.enduranceMaximum,600);
+assert.equal(fullFields.attackAccuracy,500);assert.equal(fullFields.accuracy,12,'The item Accuracy modifier remains distinct from attack Accuracy');assert.equal(fullFields.velocity,7);assert.equal(fullFields.primaryDps,12.5);assert.equal(fullFields.secondaryDps,undefined,'A blank DPS display remains unknown');
+assert.equal(fullFields.weight,undefined);assert(!fullPanelRead.fields.some(field=>/bind|origin|deity/i.test(field.key)));
+assert.doesNotMatch(fullPanelRead.evidence.text,/9999|999\/999/,'Adjacent bag and below-panel numbers do not bleed into character evidence');
+const fullRegion=screenReadRefinementRegions({words:fullPanel}).find(region=>region.role==='character-stats'),baseRegion=fullRegion.tiles?.[0]||fullRegion;
+assert(baseRegion.y+baseRegion.height>=840,'Refinement includes the complete observed Additional Modifiers section');assert(baseRegion.x+baseRegion.width<800,'Refinement excludes the adjacent weight/bag panel');assert(baseRegion.width*baseRegion.height<=1024*1024,'Full observed stat pane fits the bounded source crop');
+const ambiguousModifiers=fullPanel.map(value=>value.text==='12/150'?{...value,text:'12150'}:value);
+assert.equal(parseScreenRead({text:'Synthetic ambiguous modifier pair',words:ambiguousModifiers,confidence:96}).find(entry=>entry.subject.kind==='character').fields.some(field=>field.key==='accuracy'),false,'Missing modifier delimiters remain unknown rather than becoming a merged number');
+const unknownModifier=parseScreenRead({text:'Synthetic Character-only unknown modifier',words:ambiguousModifiers,confidence:96,characterOnly:true,refinements:[{role:'character-stats',text:'Accuracy 12/150',words:[],confidence:99}]}).find(entry=>entry.subject.kind==='character');
+assert.equal(unknownModifier.fields.some(field=>field.key==='accuracy'),false,'A refinement without observed in-pane geometry cannot manufacture a missing modifier');
+const coveredStats=parseScreenRead({text:'Synthetic item covering part of the character panel',words:[...fullPanel,...modernPane(0,500,'Synthetic Covering Boots +2','Feet',2,999,888)],owner:'character',confidence:96});
+assert.equal(coveredStats.length,1);assert.equal(coveredStats[0].subject.kind,'character');assert.equal(coveredStats[0].fields.find(field=>field.key==='hpMaximum').value,456);assert.doesNotMatch(coveredStats[0].evidence.text,/Covering Boots|HP: 888/,'Item panes covering the character rectangle stay outside character evidence');
 // The Class glyph's ink height is not the title's line box. Linux/Windows
 // fallback fonts and native caption offsets must not cut an observed title.
 const shortClassInk=hoverPane(0,27).map(entry=>entry.text==='Brightneedle +3'?{...entry,bbox:{...entry.bbox,y1:entry.bbox.y0+23}}:/^(?:Class|Race):/.test(entry.text)?{...entry,bbox:{...entry.bbox,y1:entry.bbox.y0+14}}:entry);

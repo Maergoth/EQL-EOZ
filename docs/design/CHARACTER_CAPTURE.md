@@ -1,4 +1,97 @@
-# Character capture data and share image
+# Character inventory, observed stats and sharing
+
+## Current 0.9.7 data contract
+
+Character uses **details → inventory → stats → review → complete**, with all gear
+kept equipped. The game's `/outputfile inventory` file supplies equipment; local
+OCR supplies only the displayed fully equipped, unbuffed character stat panel.
+No item-screen-read intake, No Equipment baseline or gear-derived character
+calculation belongs to the current flow. See [the execution plan](../INVENTORY_EXPORT_CHARACTER_PLAN.md)
+and [walkthrough](../CHARACTER_WALKTHROUGH.md).
+
+### Inventory authority
+
+- `desktop/inventory-file-host.cjs` reads the matching file under the selected
+  game root or an explicitly chosen native file. Renderer paths are not accepted.
+- `app/inventory-export.js` validates the complete worn table and classifies
+  General/bag/bank/Held/KeyRing data separately. Keep physical duplicates, IDs,
+  counts and exact worn locations; do not infer socket capacity from Slots.
+- `applyInventoryExport` replaces the selected profile's import atomically only
+  after validation. Fresh-file time, selected profile/session and action epoch
+  must still match after asynchronous reads. A bad/stale import preserves saved
+  data. Re-exporting after a wiki sync is the normal way to add resolved gear.
+- Known canonical wiki gear/augments alone enter public equipment. Missing names
+  and unresolved IDs leave public slots/sockets empty and can produce reviewed
+  Contribute evidence, never an automatically published page or red-link item.
+
+### Single observed stat source
+
+The saved reading is `statSnapshots.current`. Only reviewed/confirmed values are
+used by `characterTotals`, `characterTotalGroups`, the compact inspect, PNG and
+wiki serializer. `base` and legacy `equipped` evidence remain private historical
+data and are never promoted automatically. Item/catalog/augment previews remain
+item details, not additions to global stats. Unknown values remain null/`?`.
+
+Resource rows select observed maximum HP/Mana/Endurance once. AC mitigation,
+softcap and evasion, and ATK offense/accuracy stay independent. Additional
+Modifiers use `ACCURACY` (Accuracy bonus), `AVOIDANCE`, `COMBAT_EFFECTS`,
+`STRIKETHROUGH`, `STUN_RESIST`, `DAMAGE_SHIELD`, `DAMAGE_SHIELD_MITIGATION`,
+`DOT_SHIELDING`, `MELEE_SHIELDING`, `SPELL_SHIELDING`; `ACCURACY` never replaces
+`ATK_ACCURACY`. The selected observed Attack speed precedes legacy Haste.
+No server formula, cap, buff removal or gear-sum inference is performed.
+
+### Stat capture and profile safety
+
+Preparation is **Open your Inventory → Scroll down → Click off your buffs**.
+Keep the entire Default Modern stat pane, Additional Modifiers and Inventory
+heading visible while keeping all gear on. Explicit window selection starts
+optional local capture at 1 FPS. Source/session/generation, original timestamp,
+sequence, phase and selected profile epochs guard live and imported proposals.
+The user reviews unread values; a fresh read can replace a draft, while deliberate
+edits are preserved until an explicit reread. Character does not admit item OCR.
+Contribute owns item examine evidence instead.
+
+Character Select retains independent Character (Server) models/flows. Switching
+stops Character capture and cancels pending reads without automatic restart.
+Private file-authoritative storage, corruption preservation, current-origin
+migration and bounded roster writes remain. Clear inventory removes only the
+selected model's imported gear/evidence/current stats, retaining identity and
+other profiles. Old active walks migrate to inventory rather than asking users
+to repeat the retired unequip procedure.
+
+### Sharing and component map
+
+| Module | Current responsibility |
+| --- | --- |
+| `inventory-file-host.cjs` + main/preload | Bounded selected-root/native-file access, public file metadata, no renderer-provided paths. |
+| `inventory-export.js` | Pure tabular parse, worn/nonworn classification and literal identity/tier preservation. |
+| `character-model.js` | Atomic imports, physical records, current stat snapshot and selected-profile clear. |
+| `character-walkthrough.js` + `capture-workspace.js/css` | Details/export/stats/review phases, fresh import/proposal guards and explicit user review. |
+| `character-totals.js` | One observed-only value/label contract for inspect, PNG and wiki. |
+| `character-share.js` + `character-wiki-sheet.js` | Local PNG and bounded public known-only gear/current-stat payload; no private export paths/raw OCR. |
+| `character-profiles.js`, storage adapter/host | Per-character durable roster and asynchronous isolation. |
+
+Wiki sharing remains one explicit reviewed own-talk upsert with capability,
+authentication and revision guards. Schema1 template parameters add ten optional
+modifier rows; they display supplied values without calculation. The new wiki
+template update is separately coordinated; Git deployment alone does not publish
+database content. Local PNG copy/save stays available without wiki login.
+
+### Validation status
+
+The new 0.9.7 native/source/platform/package gates remain pending final release
+acceptance. Isolated fixtures must cover exact exports, unknown item rejection,
+current-only stats, profile switching, late/stale reads, all modifiers, persistence
+and clear. New live-game OCR accuracy, foreground compositor behavior, OS-wide
+DPI, production login/2FA and native Wayland are not certified by old receipts.
+No private player data, game pixels, credentials or installed profile mutations
+are test fixtures. Historical evidence below remains unchanged and version-scoped.
+
+## Historical released design and receipts (through 0.9.6)
+
+This appendix preserves earlier contracts and acceptance history. Its item-OCR,
+unequip/baseline, gear-derived estimates and old walkthrough API semantics are
+retired for 0.9.7; they are not instructions for the current implementation.
 
 For current 0.9.6 inspect/wiki sharing, see [the cross-repository plan](../CHARACTER_SHEETS_PLAN.md).
 Character uses 24 slots without Power Source. `setTierPreview(id,{tier})` uses
@@ -33,7 +126,7 @@ OCR, authentication, clipboard/save and own-talk submission belong to their
 separate services. These modules never open a source, read game memory, submit a
 wiki edit, load remote artwork or interpret an item's text as markup.
 
-## Character module map
+### Character module map
 
 | Module | Responsibility |
 | --- | --- |
@@ -77,7 +170,7 @@ complete. Unreviewed proposals clear when their context expires; manual edits
 remain available. See [the live recovery follow-up](../LIVE_CAPTURE_RECOVERY.md)
 and [the prior capture follow-up](../TOOLTIP_CAPTURE.md) for evidence.
 
-## UI contract
+### UI contract
 
 ```js
 import {
@@ -166,7 +259,7 @@ one with missing normal-slot data; unknown identities cannot equip there. A card
 with several meaningful slot kinds also defers even
 if only one of those slots is free.
 
-## Item and observation semantics
+### Item and observation semantics
 
 Each card retains its base display name (canonical when resolved), original
 `observedName`, catalog identity, wiki title/match state, exact icon ID, compatible slot
@@ -358,7 +451,7 @@ were manually changed. Current automatic lookup and an explicit copy choice use
 the same method after admission/ignore guards. Exact references remain idempotent
 across source sessions; multiple physical copies require a current choice.
 
-### Selected tier and effective stat basis
+#### Selected tier and effective stat basis
 
 The selected item's slider/progress and Use captured stats action sit above the
 advanced editor. Inputs remain mounted during updates, preserving keyboard focus
@@ -374,7 +467,7 @@ cannot generate equipped catalog values. `setObservedBasis` restores the latest
 retained observed tier/progress and captured numbers. Augment uncertainty remains
 visible; a preview cannot certify the effects included in an examined item.
 
-## Bounds and persistence
+### Bounds and persistence
 
 The model key is `eql-eye-of-zomm-character-v1`; the walkthrough key is
 `eql-eye-of-zomm-character-walkthrough-v1`. Up to 120 cards
@@ -419,7 +512,7 @@ decode and accepts icons up to 256 × 256 pixels. Missing/invalid artwork uses a
 placeholder, never invented replacement art. Cached source artwork is drawn
 unchanged.
 
-## Renderer and sharing
+### Renderer and sharing
 
 `renderCharacterShare(snapshot, {document?,appearance?,resolveIcon?})` returns a
 promise for `{canvas,dataUrl,blob,summary,width,height}`. The width is fixed at
@@ -441,7 +534,7 @@ For an own-talk upload, hand `blob`/`dataUrl` and the reviewed summary to the
 authenticated service after its explicit preview/upload action. These modules
 do not contain credentials, issue upload requests or select a wiki user.
 
-## Observed validation
+### Observed validation
 
 The 0.9.5 local full source suite, dependency audit (zero vulnerabilities),
 production catalog and both native Character/workspace gates passed. Focused
@@ -541,7 +634,7 @@ inspected PNG SHA-256 is
 This is a synthetic pixel regression, not evidence of another skin, production
 wiki writes, native Wayland support or universal live-game OCR accuracy.
 
-### 0.9.0 platform and Character acceptance audit
+#### 0.9.0 platform and Character acceptance audit
 
 On 2026-10-22, the workflow jobs, their actual logs and uploaded artifact metadata
 were independently inspected for feature head `5b967c564bc39197fc68b27b1c992e06dabb292d`.

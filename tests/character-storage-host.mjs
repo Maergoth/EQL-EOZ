@@ -3,9 +3,10 @@ import {mkdtemp,readFile,writeFile,rm,readdir,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,dirname,basename,resolve} from 'node:path';
 import {createRequire} from 'node:module';
-const {CharacterStorage,CHARACTER_STORAGE_KEYS,MAX_VALUE_BYTES,MAX_ROSTER_BYTES,MAX_FILE_BYTES,CHANNEL}=createRequire(import.meta.url)('../desktop/character-storage.cjs');
+const {CharacterStorage,CHARACTER_STORAGE_KEYS,MAX_VALUE_BYTES,MAX_ROSTER_BYTES,MAX_CONTRIBUTION_BYTES,MAX_FILE_BYTES,CHANNEL}=createRequire(import.meta.url)('../desktop/character-storage.cjs');
 const ROSTER='eql-eye-of-zomm-character-profiles-v1';
-assert.deepEqual(CHARACTER_STORAGE_KEYS,['eql-eye-of-zomm-character-v1','eql-eye-of-zomm-character-walkthrough-v1',ROSTER]);assert.equal(MAX_VALUE_BYTES,1500000);assert.equal(MAX_ROSTER_BYTES,8000000);assert.equal(MAX_FILE_BYTES,66004096,'The outer file admits the worst escaped sum of the three fixed limits');
+const CONTRIBUTIONS='eql-eye-of-zomm-contributions-v1';
+assert.deepEqual(CHARACTER_STORAGE_KEYS,['eql-eye-of-zomm-character-v1','eql-eye-of-zomm-character-walkthrough-v1',ROSTER,CONTRIBUTIONS]);assert.equal(MAX_VALUE_BYTES,1500000);assert.equal(MAX_ROSTER_BYTES,8000000);assert.equal(MAX_CONTRIBUTION_BYTES,1800000);assert.equal(MAX_FILE_BYTES,76804096,'The outer file admits the worst escaped sum of the four fixed limits');
 const directory=await mkdtemp(join(tmpdir(),'eoz-character-storage-unit-'));
 try{
     const warnings=[],handlers=new Map(),main={isDestroyed:()=>false,webContents:{mainFrame:{url:'http://127.0.0.1:1234/'}}};
@@ -20,13 +21,17 @@ try{
     await assert.rejects(store.write({key:CHARACTER_STORAGE_KEYS[1],value:'x'.repeat(MAX_VALUE_BYTES+1)}),/Invalid/);
     await assert.rejects(store.write({key:ROSTER,value:'x'.repeat(MAX_ROSTER_BYTES+1)}),/Invalid/);
     await assert.rejects(store.write({key:ROSTER,value:'界'.repeat(2666667)}),/Invalid/,'The roster cap is a UTF-8 byte cap');
+    await assert.rejects(store.write({key:CONTRIBUTIONS,value:'x'.repeat(MAX_CONTRIBUTION_BYTES+1)}),/Invalid/);
+    await assert.rejects(store.write({key:CONTRIBUTIONS,value:'界'.repeat(600001)}),/Invalid/,'The contribution cap is UTF-8 bytes');
     await assert.rejects(store.write({key:CHARACTER_STORAGE_KEYS[0],value:'x',extra:true}),/Invalid/);
     const roster=JSON.stringify({schemaVersion:1,padding:'a'.repeat(MAX_ROSTER_BYTES-JSON.stringify({schemaVersion:1,padding:''}).length)});assert.equal(Buffer.byteLength(roster),MAX_ROSTER_BYTES);await store.write({key:ROSTER,value:roster});
+    const contributionQueue=JSON.stringify({schemaVersion:1,candidates:[],padding:'a'.repeat(MAX_CONTRIBUTION_BYTES-JSON.stringify({schemaVersion:1,candidates:[],padding:''}).length)});assert.equal(Buffer.byteLength(contributionQueue),MAX_CONTRIBUTION_BYTES);await store.write({key:CONTRIBUTIONS,value:contributionQueue});
     const work=Array.from({length:30},(_,n)=>store.write({key:CHARACTER_STORAGE_KEYS[n%2],value:JSON.stringify({schemaVersion:1,n})}));
     await Promise.all(work);const finalWrite=store.write({key:CHARACTER_STORAGE_KEYS[0],value:JSON.stringify({schemaVersion:1,n:30})});await Promise.all([finalWrite,store.close()]);assert.equal(handlers.has(CHANNEL),false);
     const restored=new CharacterStorage({directory});await restored.initialize();
     assert.equal(JSON.parse(restored.read().values[CHARACTER_STORAGE_KEYS[0]]).n,30,'Immediate close drains the accepted in-flight write');assert.equal(JSON.parse(restored.read().values[CHARACTER_STORAGE_KEYS[1]]).n,29);
     assert.equal(restored.read().values[ROSTER],roster,'A full bounded roster survives an actual file close/reopen beside both drafts');
+    assert.equal(restored.read().values[CONTRIBUTIONS],contributionQueue,'The independent contribution queue survives close/reopen beside a full roster and both drafts');
     await restored.write({key:CHARACTER_STORAGE_KEYS[0],value:null});await restored.close();
     const tombstone=new CharacterStorage({directory});await tombstone.initialize();assert(Object.hasOwn(tombstone.read().values,CHARACTER_STORAGE_KEYS[0]));assert.equal(tombstone.read().values[CHARACTER_STORAGE_KEYS[0]],null);await tombstone.close();
     const original=await readFile(join(directory,'eye-of-zomm-character-storage.json'),'utf8');
@@ -38,5 +43,5 @@ try{
     const oversizedDirectory=join(directory,'oversized-roster');await mkdir(oversizedDirectory);const oversizedFile=join(oversizedDirectory,'eye-of-zomm-character-storage.json'),oversized=JSON.stringify({schemaVersion:1,values:{[ROSTER]:roster+' '}});await writeFile(oversizedFile,oversized);const oversizedStore=new CharacterStorage({directory:oversizedDirectory});assert((await oversizedStore.initialize()).error);await assert.rejects(oversizedStore.write({key:ROSTER,value:null}),/could not be read/);await assert.rejects(oversizedStore.close(),/could not be read/);assert.equal(await readFile(oversizedFile,'utf8'),oversized,'An oversized roster in a valid outer envelope is preserved, never replaced');
     const failure=join(directory,'write-failure');await mkdir(failure);const failed=new CharacterStorage({directory:failure,warn:value=>warnings.push(value)});await failed.initialize();await mkdir(failed.file);
     await assert.rejects(failed.write({key:CHARACTER_STORAGE_KEYS[0],value:'synthetic'}),/could not be saved/);assert(warnings.some(value=>value.includes('could not be saved')));assert.equal(dirname(resolve(failed.file)),resolve(failure));await rm(failed.file,{recursive:true});await failed.flush();await failed.close();
-    console.log('Character storage: exact-main IPC, three-key allowlist/8MB roster bounds, coalesced atomic writes/restart, authoritative tombstones, preserved corruption/recovery and retryable failures passed.');
+    console.log('Character/contribution storage: exact-main four-key IPC, independent 8MB roster/1.8MB queue bounds, atomic writes/restart, tombstones, preserved corruption and retryable failures passed.');
 }finally{assert.equal(dirname(resolve(directory)),resolve(tmpdir()));assert.ok(basename(directory).startsWith('eoz-character-storage-unit-'));await rm(directory,{recursive:true,force:true});}

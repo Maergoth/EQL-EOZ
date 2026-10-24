@@ -38,8 +38,11 @@ async function run({root,temporary,screenshots}){
             const source={id:'window:fixture',label:'EverQuest Synthetic Calibration',type:'window',recommended:true},calls=[],starts=[],notices=[];
             const emit=patch=>{state={...state,...patch};listener(state);};
             const api={status:async()=>state,sources:async()=>[{...source,name:source.label}],onStatus:fn=>{listener=fn;return()=>{listener=()=>{};};},onObservation:()=>()=>{},read:async()=>({records:[]}),preview:async()=>({dataUrl:canvas.toDataURL(),sourceSize:state.sourceSize,sourceId:state.source.id,owner:state.owner,sessionId:state.sessionId,region:state.region,referenceSize:state.referenceSize}),setRegion:async value=>{calls.push(value);emit({region:value.region,referenceSize:value.region?value.referenceSize:null,calibrationWarning:null});return state;},start:async value=>{starts.push(value);emit({enabled:true,phase:'running',source,owner:value.mode,sessionId:value.sessionId||`fixture-${starts.length}`,sourceSize:{width:1600,height:900},region:value.region||null,referenceSize:value.referenceSize||null,hasPreview:true});return state;}};
-            const mount=()=>mountCaptureWorkspace({capture:api,wiki:null,share:null,notify:value=>notices.push(value)});
-            window.fixture={api,source,calls,starts,notices,emit,mount,get state(){return state;},workspace:mount()};
+            const inventoryReads=[],labels=['Any Slot','Ear','Head','Face','Ear','Neck','Shoulders','Arms','Back','Wrist','Wrist','Range','Hands','Primary','Secondary','Fingers','Fingers','Chest','Legs','Feet','Waist','Any Slot','Ammo'];
+            const inventoryText=['Location\tName\tID\tCount\tSlots',...labels.map(label=>label+'\tEmpty\t0\t0\t0')].join('\n');
+            const inventory={read:async value=>{inventoryReads.push(value);return{ok:true,text:inventoryText,file:{name:'Synthetic Calibration_Example Realm-Inventory.txt',bytes:inventoryText.length,modifiedAt:Date.now(),sha256:'a'.repeat(64)}};}};
+            const mount=()=>mountCaptureWorkspace({capture:api,inventory,wiki:null,share:null,notify:value=>notices.push(value)});
+            window.fixture={api,source,calls,starts,notices,inventoryReads,emit,mount,get state(){return state;},workspace:mount()};
         });
         assert.equal(await execute(()=>document.querySelector('[data-capture-calibrate]').disabled),true);
         await execute(()=>fixture.emit({enabled:true,phase:'running',source:fixture.source,owner:'contribution',sessionId:'initial',sourceSize:{width:1600,height:900},hasPreview:true}));
@@ -55,8 +58,16 @@ async function run({root,temporary,screenshots}){
         await until(()=>execute(()=>fixture.starts.length===1),'restored area start');
         assert.deepEqual(await execute(()=>fixture.starts[0].region),{x:.1,y:.2,width:.3,height:.4});
         await execute(()=>{const form=document.querySelector('[data-character-metadata]');for(const[key,value]of Object.entries({name:'Synthetic Calibration',server:'Example Realm',classes:'WAR',level:10,aaCount:0}))form.elements[key].value=String(value);form.requestSubmit();});
-        await until(()=>execute(()=>document.querySelector('[data-walkthrough-source-select]')?.value==='window:fixture'),'Character inline recommended source');
-        await click('[data-walkthrough-start-source]');await until(()=>execute(()=>fixture.starts.length===2),'character start');
+        await until(()=>execute(()=>Boolean(document.querySelector('[data-inventory-read]'))),'Character inventory export step');
+        assert.equal(await execute(()=>fixture.starts.length),1,'Character metadata does not start screen reading');
+        await click('[data-inventory-read]');
+        await until(()=>execute(()=>document.querySelector('[data-walkthrough-source-select]')?.value==='window:fixture'),'Character inline recommended source after complete fresh inventory export');
+        assert.deepEqual(await execute(()=>fixture.inventoryReads[0]),{name:'Synthetic Calibration',server:'Example Realm'});
+        const imported=await execute(()=>JSON.parse(localStorage.getItem('eql-eye-of-zomm-character-v1')).inventoryExport);
+        assert.equal(imported.equipmentSlotCount,23);assert.equal(imported.emptyEquipmentCount,23);
+        assert.equal(await execute(()=>fixture.starts.length),1,'Importing equipped inventory does not start screen reading');
+        await click('[data-walkthrough-read-stats]');await until(()=>execute(()=>fixture.starts.length===2),'explicit Character current-stat start');
+        assert.equal(await execute(()=>fixture.starts[1].mode),'character');
         assert.equal(await execute(()=>Boolean(fixture.starts[1].region)),false,'Calibration is scoped to the capture owner');
         await open();
         await percent({x:90,width:30});await click('[data-area-save]');assert.equal(await execute(()=>fixture.calls.length),1,'Invalid rectangles never reach capture');
@@ -112,7 +123,7 @@ async function run({root,temporary,screenshots}){
         await execute(()=>{fixture.api.preview=()=>new Promise(resolve=>fixture.releasePreview=resolve);});await click('[data-capture-calibrate]');await until(()=>execute(()=>Boolean(fixture.releasePreview)),'delayed preview');
         await execute(()=>{fixture.workspace.dispose();fixture.releasePreview({dataUrl:'data:image/png;base64,AAAA',sourceSize:{width:1,height:1}});});
         assert.equal(await execute(()=>document.querySelector('.ocr-area-dialog')),null,'Dispose cannot restore an asynchronous preview');
-        console.log('OCR area calibration: native modal/pointer and percent controls, queued-close reopening and rapid Save cycles, bounded proportional preview, source/owner persistence, full frame, invalid rectangle, source resize, pending Save/preview Stop/source races, Escape/Cancel and dispose privacy passed.');
+        console.log('OCR area calibration: native modal/pointer and percent controls, queued-close reopening and rapid Save cycles, bounded proportional preview, fresh 23-slot inventory to explicit current-stat capture, source/owner persistence, full frame, invalid rectangle, source resize, pending Save/preview Stop/source races, Escape/Cancel and dispose privacy passed.');
     }finally{window.destroy();await new Promise(done=>server.close(done));app.quit();}
 }
 try{

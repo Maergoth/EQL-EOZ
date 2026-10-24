@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import './character-totals.mjs';
+import './character-inventory-import.mjs';
 import { CHARACTER_SLOTS, CHARACTER_LIMITS, CHARACTER_STORAGE_KEY, createCharacterModel, characterAutoAssignment, characterBaseItemName, characterEquipmentEligibility, characterLooseCandidates, characterItemStats, characterObservationInput, characterShareSummary, characterSlotCompatibility, characterStatLabel, normalizeCharacterStats, safeCharacterIcon } from '../app/character-model.js';
 import {characterCatalogCard,resolveCharacterCatalog} from '../app/character-catalog.js';
 import { CHARACTER_SHARE_LIMITS, characterShareLayout } from '../app/character-share.js';
@@ -87,7 +89,7 @@ const ambiguousRead=automaticRead('automatic-ambiguous','session-d',4000,6,0),am
 assert.equal(ambiguousLookup.status,'ambiguous');assert.equal(ambiguousLookup.candidateId,null);assert.equal(ambiguousIntake.ambiguous,true);assert.equal(ambiguousIntake.candidate,null);assert.equal(ambiguousIntake.choices.length,3);assert.equal(automaticRestart.snapshot().candidates.length,3,'Multiple explicit copies cannot create a guessed fourth card');
 const selectedRead=automaticRestart.mergeObservation(explicitAdd.id,ambiguousRead,{wikiItem:automaticCatalog});assert.equal(selectedRead.ok,true);assert.equal(selectedRead.candidate.observedStats.HP,80,'An explicitly selected manual catalog copy can receive genuine captured values');
 automaticRestart.removeCandidate(firstAutomatic.id);assert.equal(automaticRestart.intake(automaticRead('automatic-first','session-a',1000,2,1),{wikiItem:automaticCatalog}).ignored,true,'Exact removed evidence is checked before item-name reuse');
-const preservedCopies=automaticRestart.snapshot().candidates;automaticRestart.beginSnapshot({name:'Synthetic next walkthrough'});assert.deepEqual(automaticRestart.snapshot().candidates,preservedCopies);assert.deepEqual(automaticRestart.snapshot().equipment,{});assert.equal(createCharacterModel({storage:automaticStorage}).snapshot().candidates.length,2,'New walkthroughs never delete stored manual/automatic cards');
+const preservedCopies=automaticRestart.snapshot().candidates,preservedLayout=automaticRestart.snapshot().equipment;automaticRestart.beginSnapshot({name:'Synthetic next walkthrough'});assert.deepEqual(automaticRestart.snapshot().candidates,preservedCopies);assert.deepEqual(automaticRestart.snapshot().equipment,preservedLayout);assert.equal(createCharacterModel({storage:automaticStorage}).snapshot().candidates.length,2,'New walkthroughs never delete stored manual/automatic cards');automaticRestart.unassign('any1');
 const unknownSlot=automaticRestart.intake({item:{name:'Synthetic Known Slotless'}},{wikiItem:{name:'Synthetic Known Slotless'}}).candidate;
 assert.equal(automaticRestart.assign(unknownSlot.id,'head',{allowIncompatible:true}).ok,false);assert.equal(automaticRestart.assign(unknownSlot.id,'any1').ok,true,'A universal slot accepts a known item with unknown normal-slot metadata');
 assert.equal(automaticRestart.autoAssign(unknownSlot.id).reason,'already-assigned');automaticRestart.unassign('any1');assert.equal(automaticRestart.autoAssign(unknownSlot.id).reason,'unknown-slots');
@@ -130,13 +132,14 @@ assert.deepEqual(modernStats,{STR:9,STA:10,AGI:11,DEX:12,WIS:13,INT:14,CHA:15,SV
 assert.equal(modernStats.HP,undefined,'Resource maximum does not replace an independently observed HP total');
 modernModel.setStatSnapshot('base',{stats:modernStats,confirmed:true});
 modernModel.setStatSnapshot('equipped',{stats:{...modernStats,HP_MAXIMUM:250},confirmed:true});
+modernModel.setStatSnapshot('current',{stats:{...modernStats,HP_MAXIMUM:333,MP_MAXIMUM:144,END_MAXIMUM:255},confirmed:true});
 const modernRestored=createCharacterModel({storage:modernStorage}),modernSummary=characterShareSummary(modernRestored.snapshot());
-assert.equal(modernSummary.stats.base.stats.HP_MAXIMUM,100);assert.equal(modernSummary.stats.equipped.stats.HP_MAXIMUM,250);
-assert.equal(modernSummary.stats.derived.HP.value,69,'Derived gear sums remain separate from observed current/maximum values');
+assert.equal(modernSummary.stats.current.stats.HP_MAXIMUM,333);assert.equal(modernSummary.stats.computed.HP_MAXIMUM.value,333);
+assert.equal(modernSummary.stats.base,undefined);assert.equal(modernSummary.stats.equipped,undefined);assert.equal(modernSummary.stats.derived,undefined,'Legacy baselines and item sums are not public character totals');
 for(const slot of ['feet','primary','finger1']){const entry=modernSummary.equipment.find(entry=>entry.slot===slot);assert.equal(entry.item.fraction,null);assert.equal(entry.item.stats.ATK,77);assert.equal(entry.item.stats.ATTACK_SPEED,12);assert.equal(entry.item.stats.DMG_BONUS,4);assert.equal(entry.item.stats.DMG,9);assert.equal(entry.item.stats.DELAY,24);assert.equal(entry.item.stats.HP,23);}
 assert(characterShareLayout(modernRestored.snapshot()).height<=CHARACTER_SHARE_LIMITS.maxHeight,'Modern keys remain within the complete share layout');
 assert.equal(characterObservationInput(proposal('legacy-tier','item',{tier:10})).fraction,undefined,'A tier alone never invents fractional progress');
-const [fractionEvidence]=parseScreenRead({text:'Item: Synthetic Written Progress +6\nClass: ALL\nSlot: Feet\nTier 6 18/64\nHP 23',owner:'character',sessionId:'synthetic-fraction'}),untouchedFractionEvidence=structuredClone(fractionEvidence);
+const [fractionEvidence]=parseScreenRead({text:'Item: Synthetic Written Progress +6\nClass: ALL\nSlot: Feet\nTier 6 18/64\nHP 23',owner:'contribution',sessionId:'synthetic-fraction'}),untouchedFractionEvidence=structuredClone(fractionEvidence);
 assert.equal(fractionEvidence.fields.find(field=>field.key==='fraction').value,18,'Shared parser retains original written evidence for independent consumers');
 const fractionEvidenceCard=modernModel.intake(fractionEvidence).candidate;assert.equal(fractionEvidenceCard.fraction,null);assert.equal(fractionEvidenceCard.observedFraction,null);assert.equal(fractionEvidenceCard.observedStats.HP,23);assert.match(fractionEvidenceCard.rawStatBlock,/18\/64/);assert.deepEqual(fractionEvidence,untouchedFractionEvidence);
 assert.equal(characterObservationInput({kind:'ocr',item:{name:'Synthetic direct OCR',tier:6,fraction:18,fractionMaximum:64,stats:{HP:23}}}).fraction,undefined,'Older direct OCR envelope cannot restore removed Character progress capture');
@@ -144,7 +147,7 @@ assert.equal(characterObservationInput({kind:'ocr',item:{name:'Synthetic direct 
 // Real hover geometry goes through the producer, adapter and public summary.
 // Weapon damage and backstab damage are independent observed quantities.
 const hoverWord=(text,x,y,width=80)=>({text,confidence:96,bbox:{x0:x,y0:y,x1:x+width,y1:y+20}});
-const hoverDamage=parseScreenRead({owner:'character',sessionId:'synthetic-hover-damage',text:'Synthetic compact hover',words:[
+const hoverDamage=parseScreenRead({owner:'contribution',sessionId:'synthetic-hover-damage',text:'Synthetic compact hover',words:[
     hoverWord('Needlefern +3',100,10,300),hoverWord('Lore Equipped, No Trade',100,35,300),hoverWord('Class:',100,60,55),hoverWord('ROG',165,60),hoverWord('Race:',100,85,55),hoverWord('ALL',165,85),hoverWord('Primary',100,110),hoverWord('Secondary',190,110,100),hoverWord('Size:',20,160,50),hoverWord('SMALL',130,160,75),hoverWord('HP:',250,160,40),hoverWord('73',350,160,30),hoverWord('Weight',20,185,70),hoverWord('1.4',150,185,30),hoverWord('Base Dmg:',250,185,100),hoverWord('18',380,185,30),hoverWord('Backstab Dmg:',250,210,130),hoverWord('15',400,210,30),hoverWord('Hold RMB or ALT+LMB to inspect or upgrade item',20,420,520)
 ]})[0];
 assert(hoverDamage);assert.equal(hoverDamage.fields.find(field=>field.key==='damage').value,18);assert.equal(hoverDamage.fields.find(field=>field.key==='backstabDamage').value,15);
@@ -153,15 +156,15 @@ assert.equal(hoverCard.observedStats.DMG,18);assert.equal(hoverCard.observedStat
 hoverModel.assign(hoverCard.id,'primary');hoverModel.setStatSnapshot('base',{stats:{DMG:2,BACKSTAB_DMG:1},confirmed:true});
 const hoverSummary=characterShareSummary(hoverModel.snapshot()),hoverShared=hoverSummary.equipment.find(entry=>entry.slot==='primary').item;
 assert.equal(hoverShared.stats.DMG,18);assert.equal(hoverShared.stats.BACKSTAB_DMG,15,'Backstab damage is not folded into base weapon damage');
-assert.equal(hoverSummary.stats.computed.BACKSTAB_DMG.value,null);assert.equal(hoverSummary.stats.computed.BACKSTAB_DMG.method,'unsupported','An observed backstab value does not invent an equipped damage formula');
+assert.equal(hoverSummary.stats.computed.BACKSTAB_DMG,undefined,'An item backstab value never becomes a character-total formula');
 hoverModel.updateCandidate(hoverCard.id,{observedStats:{...hoverCard.observedStats,BACKSTAB_DMG:17}});
 const hoverRestored=createCharacterModel({storage:hoverStorage});assert.equal(hoverRestored.snapshot().candidates[0].observedStats.BACKSTAB_DMG,17);
 hoverRestored.mergeObservation(hoverCard.id,{...hoverDamage,id:'hover-damage-b'});
 const correctedHover=characterShareSummary(hoverRestored.snapshot()).equipment.find(entry=>entry.slot==='primary').item;
 assert.equal(correctedHover.stats.DMG,18);assert.equal(correctedHover.stats.BACKSTAB_DMG,17,'A persisted deliberate backstab correction survives a later OCR read');
 
-// Guided Character work uses a no-equipment observation, not a mandatory
-// equipped capture. These fresh numbers/strings are entirely synthetic.
+// Current Character totals use only one reviewed equipped observation.
+// These numbers and strings are entirely synthetic.
 const guidedStorage=memory(),guided=createCharacterModel({storage:guidedStorage,now:()=>12345});
 guided.setMetadata({name:'Synthetic Guide',server:'Synthetic Server',classes:['WAR','CLR','WAR'],level:47,aaCount:123});
 assert.deepEqual(guided.snapshot().metadata.classes,['WAR','CLR']);assert.equal(guided.snapshot().metadata.aaCount,123);
@@ -176,7 +179,9 @@ assert.deepEqual(Object.fromEntries(['AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC
     {AC_MITIGATION:82,AC_MITIGATION_SOFTCAP:141,AC_EVASION:116,ATK_OFFENSE:73,ATK_ACCURACY:99,HASTE:0});
 assert.deepEqual(['AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','ATK_OFFENSE','ATK_ACCURACY'].map(characterStatLabel),['Mitigation AC','AC softcap','Evasion AC','Offense','Accuracy']);
 guided.setStatSnapshot('base',{stats:componentInput.stats,confirmed:true});
-assert.equal(guided.totals().computed.AC_MITIGATION.value,82,'No assigned gear retains the observed baseline');
+assert.equal(guided.totals().computed.AC_MITIGATION.value,null,'A legacy baseline cannot become current equipped statistics');
+guided.setStatSnapshot('current',{stats:componentInput.stats,confirmed:true});
+assert.equal(guided.totals().computed.AC_MITIGATION.value,82);
 const syntheticRaw='Description\nSynthetic Guide Ring\nClass: ALL\nFingers\nHP 17\nUnknown effect: synthetic only';
 const guidedObservation=proposal('guided-ring-a','item',{slots:['Fingers'],hp:17,mana:6,endurance:8,str:3,agi:2,resistFire:4,ac:9,attack:5,haste:12,rawStatBlock:syntheticRaw});
 const guidedCatalog={name:'Synthetic Modern piece',slots:['FINGER']};
@@ -200,25 +205,23 @@ const any=guided.snapshot().candidates.find(card=>card.slots.includes('ANY'));
 assert.equal(characterSlotCompatibility(any,'head').compatible,true,'ANY remains available for explicit manual review');
 assert.equal(characterAutoAssignment(guided.snapshot(),'missing').ok,false);
 const guidedTotals=guided.totals();
-assert.equal(guidedTotals.equipped,null,'An equipped capture is not needed to calculate estimates');
-assert.equal(guidedTotals.computed.HP_MAXIMUM.value,269);assert.equal(guidedTotals.computed.HP_MAXIMUM.gearKey,'HP');
-assert.equal(guidedTotals.computed.MP_MAXIMUM.value,122);assert.equal(guidedTotals.computed.END_MAXIMUM.value,196);
-assert.equal(guidedTotals.computed.STR.value,67);assert.equal(guidedTotals.computed.SV_FIRE.value,19);assert.equal(guidedTotals.computed.STR.complete,true);
-assert.equal(guidedTotals.computed.HP_CURRENT.value,null,'Gear never predicts current HP');assert.equal(guidedTotals.computed.HP_CURRENT.baseValue,115);
+assert.equal(guidedTotals.current.stats.HP_MAXIMUM,235);
+assert.equal(guidedTotals.computed.HP_MAXIMUM.value,235);assert.equal(guidedTotals.computed.HP_MAXIMUM.method,'observed-equipped');
+assert.equal(guidedTotals.computed.MP_MAXIMUM.value,110);assert.equal(guidedTotals.computed.END_MAXIMUM.value,180);
+assert.equal(guidedTotals.computed.STR.value,61);assert.equal(guidedTotals.computed.SV_FIRE.value,11);assert.equal(guidedTotals.computed.STR.complete,true);
+assert.equal(guidedTotals.computed.HP_CURRENT.value,115,'Current and maximum values retain their separate observed meanings');
 for(const key of ['AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','ATK_OFFENSE','ATK_ACCURACY','HASTE']){
-    assert.equal(guidedTotals.computed[key].value,null,`${key} is not a base+item-stat conversion`);assert.equal(guidedTotals.computed[key].method,'formula-unknown');
+    assert.equal(guidedTotals.computed[key].value,componentInput.stats[key],`${key} is the observed component, without item conversions`);assert.equal(guidedTotals.computed[key].method,'observed-equipped');
 }
-assert.equal(guidedTotals.computed.AC_MITIGATION.baseValue,82);assert.equal(guidedTotals.derived.AC.value,18);assert.equal(guidedTotals.derived.ATK.value,10);
-assert(guidedTotals.computed.HP_MAXIMUM.caveats.some(text=>text.includes('percentage AA')));
+assert.deepEqual(guidedTotals.derived,{});assert.equal(guidedTotals.computed.HP_MAXIMUM.baseValue,undefined);
 guided.updateCandidate(guidedB.candidate.id,{augmentStatus:'unknown'});
-assert.equal(guided.totals().computed.HP_MAXIMUM.complete,false);assert.equal(guided.totals().computed.HP_MAXIMUM.value,269,'Known additive subtotal remains visibly partial');
-assert.deepEqual(guided.totals().computed.HP_MAXIMUM.unknownCandidates,[guidedB.candidate.id]);
-guided.removeCandidate(guidedB.candidate.id);assert.equal(guided.totals().computed.HP_MAXIMUM.value,252,'Removing gear immediately updates the estimate');
+assert.equal(guided.totals().computed.HP_MAXIMUM.complete,true);assert.equal(guided.totals().computed.HP_MAXIMUM.value,235,'Unknown item stats never alter a reviewed character observation');
+guided.removeCandidate(guidedB.candidate.id);assert.equal(guided.totals().computed.HP_MAXIMUM.value,235,'Removing a modeled item never recalculates observed totals');
 guided.unassign('finger1');assert.equal(guided.totals().computed.HP_MAXIMUM.value,235);assert.equal(guided.totals().computed.ATK_OFFENSE.value,73);
 guided.autoAssign(guidedA.candidate.id);
 guided.setStatSnapshot('equipped',{stats:{HP_MAXIMUM:999},confirmed:true});
 const guidedRestored=createCharacterModel({storage:guidedStorage}),guidedSummary=characterShareSummary(guidedRestored.snapshot());
-assert.equal(guidedSummary.stats.computed.HP_MAXIMUM.value,252);assert.equal(guidedSummary.stats.equipped.stats.HP_MAXIMUM,999,'Optional prior capture stays independent');
+assert.equal(guidedSummary.stats.computed.HP_MAXIMUM.value,235);assert.equal(guidedSummary.stats.equipped,undefined,'Legacy equipped evidence is not promoted');
 assert.equal(guidedRestored.snapshot().candidates.find(card=>card.id===guidedA.candidate.id).rawStatBlock,syntheticRaw,'Complete scoped text survives persistence');
 assert.equal(JSON.stringify(guidedSummary).includes('Unknown effect: synthetic only'),false,'Private raw OCR block is not included in share JSON');
 const oversizedRaw=Array.from({length:100},(_,index)=>`${index} ${'x'.repeat(200)}`).join('\n');
@@ -226,7 +229,7 @@ guided.updateCandidate(guidedA.candidate.id,{rawStatBlock:oversizedRaw});
 const boundedRaw=guided.snapshot().candidates.find(card=>card.id===guidedA.candidate.id).rawStatBlock;
 assert(boundedRaw.length<=8192&&boundedRaw.split('\n').length<=60,'Editable raw text has independent line and character bounds');
 const beforeBegin=guided.snapshot(),begin=guided.beginSnapshot({name:'Synthetic next guide'}),afterBegin=guided.snapshot();
-assert.equal(begin.ok,true);assert.deepEqual(afterBegin.equipment,{});assert.equal(afterBegin.statSnapshots.base,null);
+assert.equal(begin.ok,true);assert.deepEqual(afterBegin.equipment,beforeBegin.equipment);assert.deepEqual(afterBegin.statSnapshots.base,beforeBegin.statSnapshots.base);assert.equal(afterBegin.statSnapshots.current,null);
 assert.deepEqual(afterBegin.candidates,beforeBegin.candidates,'Starting a fresh guided snapshot keeps the inventory and edited raw text');
 assert.deepEqual(afterBegin.removedObservations,beforeBegin.removedObservations);assert.deepEqual(afterBegin.statSnapshots.equipped,beforeBegin.statSnapshots.equipped);
 assert.equal(afterBegin.metadata.name,'Synthetic next guide');assert.equal(afterBegin.metadata.aaCount,0);
@@ -391,11 +394,9 @@ assert.equal(epochRestart.snapshot().statSnapshots.equipped.at,null,'Invalid dat
 model.setStatSnapshot('base',{stats:{HP:100,MP:null},confirmed:true,evidence:{text:'PRIVATE_BASE_CAPTURE'}});
 model.setStatSnapshot('equipped',{stats:{HP:450,MP:300},confirmed:true});
 const totals=model.totals();
-assert.equal(totals.base.stats.HP,100);assert.equal(totals.equipped.stats.HP,450);assert.equal(totals.derived.HP.value,10);
-assert.equal(totals.derived.HP.complete,true);
-assert.notEqual(totals.equipped.stats.HP,totals.base.stats.HP+totals.derived.HP.value,'no observed total is replaced with base + gear');
-assert.equal(totals.base.stats.MP,null,'unknown remains unknown');
-model.setStatSnapshot('equipped',null);assert.equal(model.totals().equipped,null,'captured values can be cleared');
+assert.equal(totals.computed.HP.value,null);assert.equal(totals.current,null);assert.deepEqual(totals.derived,{},'Neither a baseline nor legacy equipped evidence produces current totals');
+model.setStatSnapshot('current',{stats:{HP_MAXIMUM:450,MP_MAXIMUM:null},confirmed:true});assert.equal(model.totals().computed.HP_MAXIMUM.value,450);assert.equal(model.totals().computed.MP_MAXIMUM.value,null,'Unknown remains unknown');
+model.clearCurrentStats();assert.equal(model.totals().current,null,'Current statistics can be cleared independently of legacy evidence');
 assert.equal(model.setStatSnapshot('invented',{}).ok,false);
 
 const catalog={name:'Catalog Blade',wikiTitle:'Catalog Blade',iconId:'42',slots:['PRIMARY'],stats:{HP:100,STR:5,DMG:10,RANGE:20}};
@@ -410,7 +411,7 @@ assert.equal(characterItemStats({...excluded,augmentStatus:'unknown'}).uncertain
 // Actual numbered sockets accept any known catalog identity independently of
 // the ingredient's equipment kind. Displayed item totals remain immutable.
 const socketStorage=memory(),socketModel=createCharacterModel({storage:socketStorage,now:()=>5000});
-const [emptySocketRead]=parseScreenRead({text:'Item: Synthetic Socket Boots +2\nClass: ALL\nSlot: Feet\nTier 2\nHP 100\nSTR 10\n2 empty slots\nFocus Exaltation: Synthetic Intrinsic Effect',owner:'character',sessionId:'socket-session',capturedAt:new Date(1000).toISOString()});emptySocketRead.id='socket-original';
+const [emptySocketRead]=parseScreenRead({text:'Item: Synthetic Socket Boots +2\nClass: ALL\nSlot: Feet\nTier 2\nHP 100\nSTR 10\n2 empty slots\nFocus Exaltation: Synthetic Intrinsic Effect',owner:'contribution',sessionId:'socket-session',capturedAt:new Date(1000).toISOString()});emptySocketRead.id='socket-original';
 const socketOriginal=structuredClone(emptySocketRead),socketCard=socketModel.intake(emptySocketRead,{wikiItem:{name:'Synthetic Socket Boots',slots:['Feet'],stats:{HP:100,STR:10}}}).candidate;
 assert.equal(socketCard.augmentSlots,2);assert.equal(socketCard.emptyAugmentSlots,2);assert.deepEqual(socketCard.augments,[]);assert.equal(socketCard.augmentStatus,'none');socketModel.updateCandidate(socketCard.id,{observedStatsComplete:true});
 const weaponAugment=characterCatalogCard({name:'Synthetic Weapon Ingredient',wikiTitle:'Item:Synthetic Weapon Ingredient',slots:['Primary'],stats:{HP:20,STR:2}},{tier:3}),handAugment=characterCatalogCard({name:'Synthetic Hand Ingredient',slots:['Hands'],stats:{HP:10,STR:1}},{tier:2}),replacementAugment=characterCatalogCard({name:'Synthetic Charm Ingredient',slots:['Charm'],stats:{HP:40}},{tier:0});
@@ -456,9 +457,7 @@ const protectedFresh=protectedRebaseModel.mergeObservation(protectedRebase.id,re
 assert.equal(characterItemStats({...scaled,tier:null}).stats.HP,null,'unknown tier cannot silently become base/tier zero');
 const incomplete=model.intake(item('Incomplete',{slots:['HEAD'],stats:{HP:5},statsComplete:false,augmentStatus:'unknown'})).candidate;
 model.assign(incomplete.id,'head');
-assert.equal(model.totals().derived.HP.value,15);
-assert.equal(model.totals().derived.HP.complete,false,'unknown augment inclusion marks even known-number sums partial');
-assert.equal(model.totals().derived.MP.complete,false,'absent partial stats are not treated as known zero');
+assert.deepEqual(model.totals().derived,{});assert.equal(model.totals().computed.HP.value,null,'Item and augment values never supply missing character totals');
 
 const snapshot=model.snapshot();snapshot.candidates[0].name='mutated external copy';
 assert.notEqual(model.snapshot().candidates[0].name,snapshot.candidates[0].name);
@@ -509,6 +508,7 @@ export function createCharacterDemo() {
     demo.setMetadata({name:'Synthetic Wayfarer',server:'Fixture server',level:60,race:'Human',classes:['MNK','SHM'],sessionName:'Synthetic capture preview · no player records'});
     demo.setStatSnapshot('base',{stats:{AC:180,HP:1200,MP:600,STR:95,STA:90,AGI:100,DEX:105,WIS:90,INT:80,CHA:75,SV_MAGIC:25,SV_FIRE:20,SV_COLD:20,SV_POISON:15,SV_DISEASE:15},confirmed:true});
     demo.setStatSnapshot('equipped',{stats:{AC:540,HP:2500,MP:940,END:900,ATK:780,STR:170,STA:160,AGI:160,DEX:175,WIS:135,INT:110,CHA:95,SV_MAGIC:90,SV_FIRE:85,SV_COLD:70,SV_POISON:60,SV_DISEASE:65,HASTE:30},confirmed:true});
+    demo.setStatSnapshot('current',{stats:{AC:540,HP:2500,MP:940,END:900,ATK:780,STR:170,STA:160,AGI:160,DEX:175,WIS:135,INT:110,CHA:95,SV_MAGIC:90,SV_FIRE:85,SV_COLD:70,SV_POISON:60,SV_DISEASE:65,HASTE:30},confirmed:true});
     const icon='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAATklEQVR4nGNgGAWjgObg6saw//gwTQwl2zJcGjkEpLFikiwixlBi5LBaQo5riVFHtAWkBN3gtIDiIKJ5JNMlmRJj0YDkarIMHQWjgCQAAOw009RU8GzvAAAAAElFTkSuQmCC';
     for(const [index,slot] of CHARACTER_SLOTS.entries()) {
         if(index===22) continue;
@@ -550,19 +550,19 @@ if(process.argv.includes('--render-demo')) {
             }
             const modern=await window.webContents.executeJavaScript(`(async()=>{const {renderCharacterShare}=await import('/app/character-share.js');const draw=CanvasRenderingContext2D.prototype.fillText,text=[];CanvasRenderingContext2D.prototype.fillText=function(value,...args){text.push(String(value));return draw.call(this,value,...args);};try{const result=await renderCharacterShare(${JSON.stringify(modernSnapshot)}),firstText=text.splice(0);await renderCharacterShare(${JSON.stringify(progressSnapshot)});return {dataUrl:result.dataUrl,text:firstText,legacyProgressText:text,width:result.width,height:result.height,size:result.blob.size,summary:result.summary};}finally{CanvasRenderingContext2D.prototype.fillText=draw;}})()`);
             for(const value of ['Character vitals','Stats and resists','HP','Mana','Endurance','Void resist'])assert(modern.text.includes(value),`Compact share visibly draws ${value}`);
-            for(const [label,key,value]of [['HP','HP_MAXIMUM',169],['Mana','MP_MAXIMUM',40],['Endurance','END_MAXIMUM',50]]){const record=modern.summary.stats.computed[key];assert.equal(record.value,value,'The fixture has its independent expected maximum-resource total');assert.equal(modern.text[modern.text.indexOf(label)+1],String(value)+(record.complete?'':'*'),'The drawn maximum-resource total and estimate marker match its completeness');}
+            for(const [label,key,value]of [['HP','HP_MAXIMUM',333],['Mana','MP_MAXIMUM',144],['Endurance','END_MAXIMUM',255]]){const record=modern.summary.stats.computed[key];assert.equal(record.value,value,'The fixture has its independent observed maximum-resource total');assert.equal(modern.text[modern.text.indexOf(label)+1],String(value),'The drawn total is the reviewed observed value');}
             assert.equal(modern.summary.equipment.length,24);assert(modern.summary.equipment.every(entry=>modern.text.includes(entry.label)),'All24 equipment slots are represented');assert(modern.height<=2048,'Synthetic compact inspect fits its fixed readable layout');
             for(const text of [modern.text,modern.legacyProgressText])assert.deepEqual(text.filter(value=>/CURRENT|MAXIMUM|No Equipment|^Gear(?:\s|$)|partial|incomplete|augment.*unknown|augment presence|fractional|progress\s*\?|Power source/i.test(value)),[],'The image has one maximum-resource totals view without calculation inputs, retired slot, progress or review notices');
             for(const itemStat of ['HP 23','DMG 9','Damage bonus 4','DELAY 24','Attack 77','Attack speed % 12'])assert(!modern.text.includes(itemStat),'Compact item icons do not repeat complete stat blocks');
             await fs.writeFile(path.join(output,'character-modern-interop.png'),Buffer.from(modern.dataUrl.split(',')[1],'base64'));
             console.log(`Rendered modern interoperability: ${modern.width}x${modern.height}, ${modern.size} bytes, maximum-resource totals and24 equipment icons`);
             const guided=await window.webContents.executeJavaScript(`(async()=>{const {renderCharacterShare}=await import('/app/character-share.js');const draw=CanvasRenderingContext2D.prototype.fillText,text=[];CanvasRenderingContext2D.prototype.fillText=function(value,...args){text.push(String(value));return draw.call(this,value,...args);};try{const result=await renderCharacterShare(${JSON.stringify(guidedSnapshot)},{appearance:{fontFamily:'verdana',fontSize:20}});return {dataUrl:result.dataUrl,text,width:result.width,height:result.height,size:result.blob.size,summary:result.summary};}finally{CanvasRenderingContext2D.prototype.fillText=draw;}})()`);
-            for(const value of ['0 AAs','Mitigation AC','AC softcap','Evasion AC','Offense','Accuracy','Equipment totals'])assert.ok(guided.text.some(text=>text.includes(value)),`Guided share visibly draws ${value}`);
-            assert(guided.text.includes('252'),'Calculated maximum HP is drawn from base plus item HP');
-            assert.equal(guided.text[guided.text.indexOf('HP')+1],'252');assert.equal(guided.text[guided.text.indexOf('Mana')+1],'116');assert.equal(guided.text[guided.text.indexOf('Endurance')+1],'188');assert.equal(guided.summary.equipment.length,24);
+            for(const value of ['0 AAs','Mitigation AC','AC softcap','Evasion AC','Offense','Accuracy','Captured equipped statistics'])assert.ok(guided.text.some(text=>text.includes(value)),`Guided share visibly draws ${value}`);
+            assert(guided.text.includes('235'),'Maximum HP comes from the equipped observation alone');
+            assert.equal(guided.text[guided.text.indexOf('HP')+1],'235');assert.equal(guided.text[guided.text.indexOf('Mana')+1],'110');assert.equal(guided.text[guided.text.indexOf('Endurance')+1],'180');assert.equal(guided.summary.equipment.length,24);
             assert(!guided.text.some(value=>/CURRENT|MAXIMUM|No Equipment|^Gear(?:\s|$)|partial|incomplete|augment.*unknown|augment presence|progress/i.test(value)),'Guided PNG keeps inputs and review warnings out of the one totals block');
-            assert.equal(guided.summary.stats.computed.AC_MITIGATION.value,null);assert.equal(guided.summary.stats.computed.AC_MITIGATION.baseValue,82);
-            assert.equal(guided.summary.stats.equipped.stats.HP_MAXIMUM,999,'Legacy equipped evidence remains separate from the drawn estimate');
+            assert.equal(guided.summary.stats.computed.AC_MITIGATION.value,82);assert.equal(guided.summary.stats.computed.AC_MITIGATION.baseValue,undefined);
+            assert.equal(guided.summary.stats.equipped,undefined,'Legacy equipped evidence stays private');
             assert(!guided.text.includes('999'),'Legacy equipped capture does not replace the guided estimate in the PNG');
             assert.equal(guided.text.some(text=>text.includes('Unknown effect: synthetic only')),false,'Private raw pane text is not rendered');
             await fs.writeFile(path.join(output,'character-guided-estimate.png'),Buffer.from(guided.dataUrl.split(',')[1],'base64'));

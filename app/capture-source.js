@@ -2,8 +2,9 @@
 // Cheap change sampling continues independently of the serial main-process OCR.
 let stream=null,stopped=false,timer=null,busy=false,encoding=false,contextRevision=0,lastFrozenAt=-Infinity,lastSampledAt=-Infinity,lastFingerprint=null,lastIdentity='',lastContext='',lastSceneAt=-Infinity;
 const snapshots=[],MAX_PENDING_SNAPSHOTS=2,MAX_PENDING_BYTES=64*1024*1024,MAX_RAW_AGE_MS=15000;
+const CAPTURE_INTERVAL_MS=1000,SCENE_INTERVAL_MS=2000;
 let pendingBytes=0;
-let pngWorker=null,pngJob=null,pngSequence=0;
+let pngWorker=null,pngJob=null,bitmapAcquisition=null,pngSequence=0;
 const paneMemory=new Map();
 const api=window.eyeOfZommCaptureSource,video=document.getElementById('source');
 const comparison=document.createElement('canvas');comparison.width=256;comparison.height=144;
@@ -11,7 +12,7 @@ const visual=document.createElement('canvas');
 function releaseSnapshot(snapshot){snapshot.canvas.width=snapshot.canvas.height=1;}
 function discardSnapshot(index){const [snapshot]=snapshots.splice(index,1);pendingBytes-=snapshot.rawBytes;releaseSnapshot(snapshot);return snapshot;}
 function clearSnapshots(){while(snapshots.length)discardSnapshot(0);}
-function stop(){stopped=true;contextRevision++;clearTimeout(timer);clearSnapshots();closePngWorker();stream?.getTracks().forEach(track=>track.stop());stream=null;lastFingerprint=null;paneMemory.clear();comparison.width=comparison.height=visual.width=visual.height=1;}
+function stop(){stopped=true;contextRevision++;clearTimeout(timer);if(bitmapAcquisition)clearTimeout(bitmapAcquisition.timer);clearSnapshots();closePngWorker();stream?.getTracks().forEach(track=>track.stop());stream=null;lastFingerprint=null;paneMemory.clear();comparison.width=comparison.height=visual.width=visual.height=1;}
 function captureIdentity(capture,width,height){return JSON.stringify([capture.generation,capture.owner,capture.sessionId,capture.sourceId,width,height,capture.region]);}
 function sourceDrop(reason){void api.signal('sample-drop',{reason,count:1}).catch(()=>{});}
 function pruneSnapshots(){for(let n=snapshots.length-1;n>=0;n--)if(Date.now()-snapshots[n].frame.capturedAt>MAX_RAW_AGE_MS){const old=discardSnapshot(n);if(old.frame.selectionKind!=='scene')sourceDrop('age');}}
@@ -19,10 +20,12 @@ function setContext(identity){if(identity===lastContext)return;contextRevision++
 function closePngWorker(reportPending=false){
     const worker=pngWorker;pngWorker=null;
     if(pngJob?.worker===worker){
-        const job=pngJob;pngJob=null;clearTimeout(job.timer);job.cancelled=true;job.error=Error('PNG encoding cancelled.');
+        const job=pngJob;pngJob=null;if(!job.creating||stopped)clearTimeout(job.timer);job.cancelled=true;job.error=Error('PNG encoding cancelled.');
         // Bitmap creation cannot be cancelled. Keep this one serial operation
         // occupied until it settles, rather than accumulating old acquisitions
-        // across source changes. Stop itself never awaits this promise.
+        // across source changes. Keep its original deadline too: a cancelled
+        // acquisition that never settles needs a fresh capture renderer.
+        // Stop itself never awaits this promise.
         if(job.creating&&reportPending){job.error.captureReported=true;sourceDrop('encode');void api.signal('frame-error').catch(()=>{});}
         if(!job.creating)job.reject(job.error);
     }
@@ -44,20 +47,29 @@ function encodePng(snapshot){
     const worker=pngWorker;
     return new Promise((resolve,reject)=>{
         const job={worker,id:++pngSequence,width:snapshot.canvas.width,height:snapshot.canvas.height,resolve,reject,creating:true};
-        pngJob=job;
-        job.timer=setTimeout(()=>{if(pngJob===job&&pngWorker===worker)closePngWorker(true);},MAX_RAW_AGE_MS);
+        pngJob=job;bitmapAcquisition=job;
+        job.timer=setTimeout(()=>{
+            if(stopped)return;
+            if(job.creating&&bitmapAcquisition===job){
+                // Rejecting and retrying here would accumulate uncancellable
+                // browser acquisitions. Stop this renderer instead; the host's
+                // existing error path destroys it, and Resume creates a fresh one.
+                sourceDrop('encode');stop();
+                void api.signal('error','Screen capture stalled while preparing a frame. Resume capture or restart screen reading to continue.').catch(()=>{});
+            }else if(pngJob===job&&pngWorker===worker)closePngWorker(true);
+        },MAX_RAW_AGE_MS);
         // Only this immutable canvas can establish the encoded frame. Never
         // re-read the mutable video or fall back to renderer-thread encoding.
         Promise.resolve().then(()=>job.cancelled?null:createImageBitmap(snapshot.canvas)).then(bitmap=>{
-            job.creating=false;
-            if(job.cancelled){bitmap?.close();job.reject(job.error);return;}
+            job.creating=false;if(bitmapAcquisition===job)bitmapAcquisition=null;
+            if(job.cancelled){clearTimeout(job.timer);bitmap?.close();job.reject(job.error);return;}
             if(pngJob!==job||pngWorker!==worker||stopped||snapshot.stream!==stream||snapshot.revision!==contextRevision){bitmap?.close();if(pngJob===job)closePngWorker();return;}
             try{worker.postMessage({id:job.id,width:job.width,height:job.height,bitmap},[bitmap]);}
             catch(error){bitmap.close();if(pngJob===job&&pngWorker===worker)closePngWorker();return;}
             // Ownership has moved to the worker. Releasing here avoids holding
             // the full original canvas throughout PNG serialization.
             releaseSnapshot(snapshot);
-        }).catch(()=>{job.creating=false;if(job.cancelled)job.reject(job.error);else if(pngJob===job&&pngWorker===worker)closePngWorker();});
+        }).catch(()=>{job.creating=false;if(bitmapAcquisition===job)bitmapAcquisition=null;if(job.cancelled){clearTimeout(job.timer);job.reject(job.error);}else if(pngJob===job&&pngWorker===worker)closePngWorker();});
     });
 }
 async function encodeSnapshots(){
@@ -151,13 +163,13 @@ async function sample(){
     if(stopped||!stream)return;
     // Sampling can retain two bounded raw snapshots while the single PNG/IPC
     // encoder is busy. A slow full-resolution encode cannot hide the next item.
-    timer=setTimeout(sample,125);if(busy)return;busy=true;const selectedStream=stream;let canvas;
+    timer=setTimeout(sample,CAPTURE_INTERVAL_MS);if(busy)return;busy=true;const selectedStream=stream;let canvas;
     try{
         if(video.readyState<2||!video.videoWidth||!video.videoHeight)return;
         const stateAt=Date.now(),state=await api.state(),capture=state.capture;if(stopped||stream!==selectedStream)return;
         if(!capture){setContext('');return;}
         const at=Date.now(),identity=captureIdentity(capture,video.videoWidth,video.videoHeight);setContext(identity);pruneSnapshots();
-        if(at-lastFrozenAt<250)return;
+        if(at-lastFrozenAt<CAPTURE_INTERVAL_MS)return;
         const sourceWidth=video.videoWidth,sourceHeight=video.videoHeight,scale=Math.min(1,4096/sourceWidth,2160/sourceHeight);
         const width=Math.max(1,Math.round(sourceWidth*scale)),height=Math.max(1,Math.round(sourceHeight*scale)),rawBytes=width*height*4;
         if(rawBytes>MAX_PENDING_BYTES){sourceDrop('capacity');return;}
@@ -167,17 +179,22 @@ async function sample(){
         canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
         const capturedAt=Date.now();canvas.getContext('2d',{alpha:false}).drawImage(video,0,0,width,height);lastFrozenAt=capturedAt;
         let pixels,itemRegion=null,visualKey=null,memoryKey=null,sceneFallback=false,selectionKind=capture.region?'configured':'scene';
-        if(capture.region){pixels=fingerprint(canvas,capture.region);if(identity===lastIdentity&&samePixels(pixels,lastFingerprint)&&at-lastSampledAt<750)return;visualKey=pixelKey(pixels);}
-        else{
+        if(capture.region){pixels=fingerprint(canvas,capture.region);if(identity===lastIdentity&&samePixels(pixels,lastFingerprint)&&at-lastSampledAt<CAPTURE_INTERVAL_MS)return;visualKey=pixelKey(pixels);}
+        else if(capture.owner==='character'){
+            // Character gear comes from /outputfile inventory. Only ordinary
+            // stat-pane frames are useful here; item detection and ROI priority
+            // belong to the separately enabled contribution reader.
+            if(at-lastSceneAt<SCENE_INTERVAL_MS)return;
+        }else{
             const candidates=visualPanes(canvas);
             const choices=[];for(const region of candidates){
                 const key=[region.x,region.y,region.width,region.height].map(v=>Math.round(v*1000)).join(':'),next=fingerprint(canvas,region),previous=paneMemory.get(key);
                 if(!previous||!samePixels(next,previous.pixels)||at-previous.at>=5000)choices.push({region,pixels:next,key,at:previous?.at??-Infinity});
             }
-            const choice=choices.sort((a,b)=>a.at-b.at)[0];if(choice){itemRegion=choice.region;pixels=choice.pixels;memoryKey=choice.key;visualKey=pixelKey(pixels);selectionKind='visual-item';sceneFallback=at-lastSceneAt>=5000;}
+            const choice=choices.sort((a,b)=>a.at-b.at)[0];if(choice){itemRegion=choice.region;pixels=choice.pixels;memoryKey=choice.key;visualKey=pixelKey(pixels);selectionKind='visual-item';sceneFallback=at-lastSceneAt>=SCENE_INTERVAL_MS;}
             // A periodic, latest-only scene still covers white names, examine
             // panes and Inventory/zone evidence. Scenery cannot fill the FIFO.
-            if(!itemRegion&&at-lastSceneAt<(candidates.length?5000:1500))return;
+            if(!itemRegion&&at-lastSceneAt<SCENE_INTERVAL_MS)return;
         }
         const duplicate=snapshots.findIndex(snapshot=>selectionKind==='scene'?snapshot.frame.selectionKind==='scene':snapshot.frame.selectionKind===selectionKind&&snapshot.frame.visualKey===visualKey);
         // Retain the first item's acquisition time: a later identical heartbeat
@@ -201,7 +218,7 @@ async function sample(){
 window.startScreenReadCapture=async()=>{
     const state=await api.state();if(!state.allowed||stopped||stream)return false;
     try{
-        stream=await navigator.mediaDevices.getDisplayMedia({audio:false,video:{frameRate:{ideal:8,max:8}}});
+        stream=await navigator.mediaDevices.getDisplayMedia({audio:false,video:{frameRate:{ideal:1,max:1}}});
         if(stopped){stream.getTracks().forEach(track=>track.stop());return false;}
         const selectedStream=stream;
         stream.getVideoTracks()[0]?.addEventListener('ended',()=>{if(stopped||stream!==selectedStream)return;stop();void api.signal('ended').catch(()=>{});},{once:true});

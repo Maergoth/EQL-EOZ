@@ -1,5 +1,49 @@
 # Wiki contribution integration design
 
+## 0.9.7 reviewed log relationships
+
+Live log evidence is retained by the durable queue described in
+[Persistent contribution evidence](../CONTRIBUTION_EVIDENCE_PLAN.md). It remains
+a proposal until the contributor verifies the relevant fields. The pure draft
+builder now handles the same reviewed relationship boundary for all three page
+types:
+
+- Item: confirmed NPC/zone sources populate `dropsfrom` and the zone category.
+- NPC: verified `knownLoot` becomes Itempage transclusions in `known_loot`.
+  Existing reciprocal item-source changes retain their separate reviewed diffs,
+  revision guards and normal/raid checks in the desktop client.
+- Zone: verified `knownNPCs` becomes wiki links in the blueprint's Notable NPCs
+  row; verified `knownLoot` becomes item transclusions in its Unique Items row.
+  Exact duplicate titles are omitted. Each list is bounded to 100 entries;
+  invalid titles block publication and never become executable markup.
+
+A factual NPC draft may leave its description blank with a warning. A zone
+with reviewed NPC or loot references may similarly leave its introduction blank;
+a zone with neither reviewed references nor an introduction remains blocked.
+No description, lore, mechanics, source relationship, full population or raid
+section is generated from an observed name. Player-written prose remains editable.
+Literal extracted fields escape signature and behavior-switch syntax.
+
+Dynamic zone guides query the intersection of a zone category and `NPCs`,
+`Items` or `Quests`. Therefore the relevant **NPC/item/quest page**, not just its
+zone article, must belong to that zone category. A zone draft's explicit links
+do not add categories to those other pages. The extension also keeps an explicit
+supported-zone allowlist: a new category or zone article alone does not make
+`Special:DynamicZoneList` available. The draft includes that transclusion only
+when its support field is verified; other category or relationship edits still
+need separate explicit review. It never derives an NPC's raid identity from a
+zone name or from another NPC's presence.
+
+Public Help:Contents was rechecked read-only on 2026-10-24 and still uses revision
+198282. Its zone blueprint contains these Notable NPCs / Unique Items table rows
+and permits an empty NPC description. Synthetic pure checks passed confirmed
+versus proposed lists, blank-prose boundaries, bounded/deduplicated titles,
+malformed references, and unchanged item/NPC reciprocal behavior. This does not
+establish new live-game wording or a completed authenticated edit. Anonymous,
+unsaved public `action=parse` checks also rendered the generated zone rows and
+blank-description NPC with the current live templates and expected Zones/NPCs
+categories. They created no articles, changed no revisions and uploaded no files.
+
 ## Reviewed base values from an upgraded drop (0.9.0)
 
 Contribute to Wiki can propose base statistics by reversing the shared item

@@ -60,7 +60,7 @@ class CaptureHost {
             event.senderFrame===window.webContents.mainFrame && event.senderFrame?.url===`${this.origin}/capture-source.html`);
     }
     getStatus() {
-        return { enabled:this.enabled,phase:this.phase,owner:this.owner,source:this.source ? {id:this.source.id,label:clean(this.source.name),type:this.source.id.startsWith('screen:')?'display':'window'}:null,
+        return { enabled:this.enabled,phase:this.phase,reconfiguring:Boolean(this.hold),owner:this.owner,source:this.source ? {id:this.source.id,label:clean(this.source.name),type:this.source.id.startsWith('screen:')?'display':'window'}:null,
             sessionId:this.sessionId,characterSessionId:this.owner==='character'?this.sessionId:null,generation:this.generation,generationStartedAt:this.generationStartedAt,ownerStartedAt:this.ownerStartedAt,
             queuedFrames:this.pending.length,queuedBytes:this.queuedBytes,queueLimit:FRAME_QUEUE_LIMIT,queueByteLimit:FRAME_QUEUE_BYTES,
             overflowFrames:this.overflowFrames,queueWarning:this.queueWarning,reading:this.phase==='running'&&!this.hold&&this.activeFrameGeneration===this.generation&&Boolean(this.activeFrameHash),lastFrameAt:this.lastFrame?.at??null,lastReadAt:this.lastReadAt,lastReadItemCount:this.lastReadItemCount,skippedFrames:this.skippedFrames,lastObservationAt:this.lastObservationAt,
@@ -186,7 +186,7 @@ class CaptureHost {
         // authority. Deny it quietly instead of logging a normal Stop race.
         if(this.retiredSources.has(event.sender))return action==='configuration'?{allowed:false,capture:null}:action==='frame'?{accepted:false,stale:true}:{ok:false};
         if (!this.isSource(event) || this.disposed) throw new Error('Capture source is unavailable.');
-        if (action==='configuration') return {allowed:this.enabled&&this.phase==='selecting',intervalMs:125,encodeIntervalMs:250,heartbeatMs:750,
+        if (action==='configuration') return {allowed:this.enabled&&this.phase==='selecting',intervalMs:1000,encodeIntervalMs:1000,heartbeatMs:1000,
             capture:this.enabled&&!this.hold&&['selecting','running'].includes(this.phase)?{generation:this.generation,owner:this.owner,sessionId:this.sessionId,sourceId:this.source?.id,region:this.region}:null};
         if (action==='started') { if(!this.enabled||this.phase!=='selecting')return {ok:false};clearTimeout(this.sourceTimer);this.sourceTimer=null;this.phase='running';this.error=null;this.emitStatus();return {ok:true}; }
         if (action==='frame-error') { if(this.enabled&&this.phase==='running'){this.frameWarning='A capture frame was unavailable. Waiting for the selected game window.';this.emitStatus();}return {ok:true}; }
@@ -234,13 +234,14 @@ class CaptureHost {
         if(this.disposed||this.phase!=='running'||this.hold||!this.lastFrame||sourceId!==this.source?.id||sessionId!==this.sessionId)throw new Error('Capture changed. Open a fresh calibration preview.');
         const selection=normalizeCaptureRegion(region,referenceSize);
         if(selection&&(selection.referenceSize.width!==this.sourceSize?.width||selection.referenceSize.height!==this.sourceSize?.height))throw new Error('Capture size changed. Open a fresh calibration preview.');
-        const revision=++this.revision;this.hold=true;this.advanceGeneration();this.clearPending();
+        const revision=++this.revision;this.hold=true;this.advanceGeneration();this.clearPending();this.emitStatus();
         try{
             await this.ocr.stop();if(this.processing)await this.processing.catch(()=>{});
-            if(revision!==this.revision||this.disposed)return this.getStatus();
-            this.region=selection?.region||null;this.referenceSize=selection?.referenceSize||null;this.calibrationWarning=null;this.seen.clear();
-            return this.getStatus();
+            if(revision===this.revision&&!this.disposed){
+                this.region=selection?.region||null;this.referenceSize=selection?.referenceSize||null;this.calibrationWarning=null;this.seen.clear();
+            }
         }finally{this.hold=false;this.emitStatus();}
+        return this.getStatus();
     }
     submitFrame(value) {
         const submittedAt=Date.now();
@@ -317,7 +318,7 @@ class CaptureHost {
                 if(!isCurrent())continue;this.ocrStartedAt=Date.now();
                 const image=this.electron.nativeImage.createFromBuffer(frame.png),size=image.getSize();
                 if(image.isEmpty()||size.width!==frame.size.width||size.height!==frame.size.height)throw new Error('Invalid capture dimensions.');
-                const read=await recognizeCaptureImage({ocr:this.ocr,image,region:frame.region,referenceSize:frame.referenceSize,nativeImage:this.electron.nativeImage,isCurrent});
+                const read=await recognizeCaptureImage({ocr:this.ocr,image,region:frame.region,referenceSize:frame.referenceSize,nativeImage:this.electron.nativeImage,isCurrent,characterOnly:frame.owner==='character'});
                 if (!isCurrent()) continue;
                 if(read.cancelled)continue;
                 if(read.warning)this.calibrationWarning=read.warning;
@@ -402,7 +403,7 @@ class CaptureHost {
         try{
             await this.ocr.stop();if(this.processing)await this.processing.catch(()=>{});
             if(generation!==this.generation||this.disposed)return {records:[],cancelled:true};
-            const read=await recognizeCaptureImage({ocr:this.ocr,image,nativeImage:this.electron.nativeImage,isCurrent:()=>generation===this.generation&&!this.disposed});
+            const read=await recognizeCaptureImage({ocr:this.ocr,image,nativeImage:this.electron.nativeImage,isCurrent:()=>generation===this.generation&&!this.disposed,characterOnly:owner==='character'});
             if(read.cancelled||generation!==this.generation||this.disposed)return {records:[],cancelled:true};
             const {parseScreenRead}=await this.parseModule;
             const records=[];

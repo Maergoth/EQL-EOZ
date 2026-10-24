@@ -79,7 +79,7 @@ export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis
         if (!index.complete || index.has(kind, name) || ignored.has(key) || seen.has(key)) return null;
         if (current - (cooldowns.get(key) ?? -Infinity) < cooldownMs || pending.size >= MAX_PENDING) return null;
         const id = `wiki-${kind}-${hash(key)}-${++sequence}`;
-        const prompt = { id, kind, name, zone:clean(context.zone || event.zone).slice(0, 160) };
+        const prompt = { id, kind, name, zone:clean(context.zone || event.zone).slice(0, 160),...(event.type==='kill'?{hint:'Saved in Contribute. Record the monster’s spawn /loc there, then review its loot and zone.'}:{}) };
         pending.set(id, { key, prompt }); remember(seen, key, MAX_SEEN); cooldowns.set(key, current);
         if (cooldowns.size > MAX_SEEN) cooldowns.delete(cooldowns.keys().next().value);
         const failed = () => {

@@ -1,5 +1,19 @@
 # Eye of Zomm — Product and UX Vision
 
+## Current 0.9.7 inventory-export contract
+
+Keep all gear equipped. Enter metadata, generate a fresh `/outputfile inventory`
+and auto-import the matching file, then **Open Inventory → Scroll down → Click
+off buffs** for a reviewed fully equipped stat reading. Optional screen reading
+uses 1 FPS. Totals come only from confirmed current stats, never item/catalog,
+augment or old baseline addition. Character item OCR is retired; Contribute owns
+item examine evidence. Missing wiki items/augments leave public slots/sockets
+empty until reviewed contribution, wiki sync and re-export. See
+[the active plan](INVENTORY_EXPORT_CHARACTER_PLAN.md). Final new native/platform/
+package acceptance remains pending; prior receipts certify only their releases.
+
+### Earlier released context
+
 0.9.6 uses a single equipment total panel, maximum resources, indexed augment
 pickers and empty-slot Add item with wiki search, a tier slider and explicit
 screenshot paste. Interactive own-talk sharing replaces the matching Character
@@ -29,7 +43,7 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 [release history](RELEASE_HISTORY.md) and [validation](../VALIDATION.md).
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.9.6, extending released 0.9.5
+Baseline: 0.9.7 candidate, extending released 0.9.6
 Last updated: 2026-10-23
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
@@ -80,7 +94,7 @@ The core experience is reactive, local-first, and glanceable. It must not hook t
 
 - Recreating the entire EQLWiki article experience inside the app.
 - Guessing a live NPC target when the log does not expose one reliably.
-- Screen reading, OCR, process inspection, memory reading, packet inspection, or client modification.
+- Mandatory screen reading for ordinary log/map/combat features; process memory inspection, packet inspection and client modification. Optional stat/contribution OCR stays explicit and local.
 - Sending `/loc`, movement input, targeting input, or any other game command.
 - Route-following automation. Eye of Zomm may calculate and display a route, never drive it.
 - Exposing every diagnostic and rendering control from the upstream Zone Viewer.

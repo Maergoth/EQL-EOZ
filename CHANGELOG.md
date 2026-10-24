@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.7 - Import equipped inventory and record observed stats
+
+- Replace the unreleased baseline-retry flow with character details → fresh `/outputfile inventory` auto-import → equipped, unbuffed stat review → save/share. Keep all gear equipped throughout; EoZ never sends the game command.
+- Read the selected character's bounded inventory file from the chosen game folder, with an explicit file chooser fallback. Preserve physical duplicates and worn locations; bags, bank and keyring entries cannot become equipment. Invalid/stale imports leave saved data intact.
+- Put **Open your Inventory**, **Scroll down** and **Click off your buffs** directly in the stat step. Optional Default Modern screen reading uses a lower 1 FPS cadence and retains source/session/generation and freshness guards.
+- Use only the reviewed current stat reading for totals, with maximum resources, distinct AC/ATK components and ten Additional Modifiers. Never add item, augment, catalog or old baseline values to character totals. Character item OCR is retired; examine reads support Contribute.
+- Leave unknown wiki items/augments out of public equipment and sockets. Supply missing details through reviewed contributions, sync the wiki and export inventory again. Clear inventory resets only the selected character's imported gear and invalidated stats.
+- Retain the bounded encoder watchdog, recoverable source status and private persistence. Updated native/Windows/Linux/package acceptance is required before release; earlier synthetic or live diagnostics do not certify this flow.
+
+- Collect persistent unknown item, monster and zone drafts directly from logs with linked source/population/loot evidence, exact item deduplication, guarded spawn `/loc` requests, direct screenshot reading and visual icon selection in Contribute. Reviewed zone/NPC blueprints retain confirmed relationships.
+
 ## 0.9.6 - Inspect your character and share it on the wiki
 
 - Show one compact character total panel with maximum HP, mana and endurance, and distinct AC/attack components. Keep the same totals in the local PNG and interactive share review.

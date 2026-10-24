@@ -8,8 +8,8 @@ const COLORS={background:'#070b12',panel:'#0e141e',line:'#66582d',gold:'#d8b75c'
 const clean=value=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ');
 const format=value=>value===null||value===undefined?'?':Number.isInteger(value)?String(value):String(Math.round(value*100)/100);
 
-/** Compact inspect: equipped icons and a single totals panel. Calculation
- * inputs, current resources and private observation data are not rendered. */
+/** Compact inspect: equipped icons and a single observed totals panel.
+ * Current resources and private observation/export data are not rendered. */
 export function characterShareLayout(snapshot,{appearance}={}) {
     const summary=characterShareSummary(snapshot),normalized=normalizeAppearance(appearance),groups=characterTotalGroups(summary.stats);
     const size=22*Math.max(1,Math.min(1.3,normalized.fontSize/13)),line=Math.ceil(size*1.55);
@@ -94,8 +94,8 @@ export async function renderCharacterShare(snapshot,{document=globalThis.documen
         text(group.label,x+20,y+18,{color:COLORS.gold,bold:true});
         group.rows.forEach((row,i)=>{const sy=y+66+i*line; text(row.label,x+20,sy,{color:COLORS.muted,scale:.85});const value=format(row.value)+(row.value!==null&&!row.complete?'*':'');ctx.font='700 '+size+'px '+stack;text(value,x+columnWidth-22-ctx.measureText(value).width,sy,{bold:true});});
     });
-    text('Equipment totals · ? unavailable · * estimate',48,height-91,{color:COLORS.gold,scale:.8});
-    text('Caps, buffs, worn effects and unsupported server formulas are not included.',48,height-53,{color:COLORS.muted,scale:.72});
+    text('Captured equipped statistics · ? unavailable',48,height-91,{color:COLORS.gold,scale:.8});
+    text('Read from the character stat panel; changing gear here does not recalculate these values.',48,height-53,{color:COLORS.muted,scale:.72});
     const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('PNG encoding failed.')),'image/png'));
     if(blob.size>CHARACTER_SHARE_LIMITS.maxBytes)throw Error('The share image exceeds the 12 MB limit.');
     const dataUrl=canvas.toDataURL('image/png');if(!dataUrl.startsWith('data:image/png;base64,'))throw Error('PNG encoding returned an unsupported image.');

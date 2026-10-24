@@ -1,11 +1,12 @@
-// Keep Character state independent of the loopback port. Generic browser data
-// (contributions, calibration and UI preferences) retains its existing store.
+// Keep Character and reviewed contribution drafts independent of loopback ports.
+// Calibration and other UI preferences retain their existing browser store.
 import { CHARACTER_STORAGE_KEY } from './character-model.js';
 import { CHARACTER_WALKTHROUGH_KEY } from './character-walkthrough.js';
 
 const PROFILE_STORAGE_KEY='eql-eye-of-zomm-character-profiles-v1';
-const KEYS=new Set([CHARACTER_STORAGE_KEY,CHARACTER_WALKTHROUGH_KEY,PROFILE_STORAGE_KEY]);
-const valueLimit=key=>key===PROFILE_STORAGE_KEY?8000000:1500000;
+const CONTRIBUTION_STORAGE_KEY='eql-eye-of-zomm-contributions-v1';
+const KEYS=new Set([CHARACTER_STORAGE_KEY,CHARACTER_WALKTHROUGH_KEY,PROFILE_STORAGE_KEY,CONTRIBUTION_STORAGE_KEY]);
+const valueLimit=key=>key===PROFILE_STORAGE_KEY?8000000:key===CONTRIBUTION_STORAGE_KEY?1800000:1500000;
 export async function createCharacterStorage({api=globalThis.eyeOfZommCharacterStorage,legacyStorage=globalThis.localStorage,onWarning=()=>{}}={}) {
     const values=new Map(),pending=new Set(),failedKeys=new Set(),blockedKeys=new Set();let hostReady=false,writeWarning=false,localWarning=false;
     const warn=message=>{try{onWarning(message);}catch{/* A warning must not break editing. */}};

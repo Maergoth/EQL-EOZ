@@ -8,7 +8,7 @@ export const CHARACTER_WIKI_SHEET_SLOTS=Object.freeze(CHARACTER_SLOTS.filter(slo
 const SLOTS=new Set(CHARACTER_WIKI_SHEET_SLOTS);
 const ITEM_STATS=new Set([...CHARACTER_STAT_KEYS,'SV_CORRUPTION','WT','DMG','DELAY','DMG_BONUS','BACKSTAB_DMG','ATTACK_SPEED'].filter(key=>!/_CURRENT$|_MAXIMUM$/.test(key)));
 const TOTAL_STATS=new Set([...CHARACTER_STAT_KEYS,'SV_CORRUPTION','ATTACK_SPEED','VELOCITY','PRIMARY_DPS','SECONDARY_DPS','RANGED_DPS'].filter(key=>!/_CURRENT$|_MAXIMUM$/.test(key)));
-const BASES=new Set(['observed-examine','scaled-catalog','catalog-tier-preview']);
+const BASES=new Set(['observed-examine','scaled-catalog','catalog-tier-preview','inventory-export']);
 const object=value=>Boolean(value&&typeof value==='object'&&!Array.isArray(value));
 const finite=value=>typeof value==='number'&&Number.isFinite(value)&&Math.abs(value)<=1e9;
 const size=value=>new TextEncoder().encode(JSON.stringify(value)).length;
@@ -56,16 +56,21 @@ export function normalizeCharacterWikiSheet(input){
     if(size(result)>CHARACTER_WIKI_SHEET_LIMITS.bytes)throw Error('The interactive character sheet exceeds its size limit.');return result;
 }
 
-/** Share only the reviewed public sheet. Raw OCR, source/session IDs, paths,
- * inventory copies, embedded pixels and current resources never leave here. */
+/** Share reviewed equipped items and the observed character totals. Raw OCR,
+ * source/session IDs, export paths, private inventory and current resources
+ * never leave here. Catalog item previews never change the character totals. */
 export function buildCharacterWikiSheet(snapshot){
     const byId=new Map((snapshot?.candidates||[]).map(item=>[item.id,item])),equipment=[];
     for(const slot of CHARACTER_WIKI_SHEET_SLOTS){
-        const item=byId.get(snapshot?.equipment?.[slot]);if(!item||!characterEquipmentEligibility(item).known)continue;
+        const item=byId.get(snapshot?.equipment?.[slot]);if(!item)continue;
+        const eligibility=characterEquipmentEligibility(item),imported=Boolean(item.inventoryOrigin);
+        if(!eligibility.known)continue;
+        // Missing wiki items are intentionally left empty in public snapshots.
+        // Import provenance does not establish an item article or its stats.
         const read=characterItemStats(item),iconId=/^\d{1,7}$/.test(String(item.iconId))?Number(item.iconId):null;
-        const occupied=(item.augments||[]).map((augment,index)=>({...augment,index:Number.isInteger(augment.index)?augment.index:index})),known=occupied.filter(augment=>characterEquipmentEligibility(augment).known);
-        const augments=known.map(augment=>({index:augment.index,title:augment.catalogIdentity.wikiTitle,tier:augment.tier??null,iconId:/^\d{1,7}$/.test(String(augment.iconId))?Number(augment.iconId):null,stats:Object.fromEntries(Object.entries(augment.stats||{}).filter(([key])=>ITEM_STATS.has(key))),complete:augment.statsComplete===true}));
-        equipment.push({slot,title:item.catalogIdentity.wikiTitle,tier:item.tier??null,iconId,level:item.level??null,basis:read.basis,complete:read.complete,stats:Object.fromEntries(Object.entries(read.stats).filter(([key])=>ITEM_STATS.has(key))),augmentSlots:known.length===occupied.length?item.augmentSlots??null:null,augments});
+        const occupied=(item.augments||[]).map((augment,index)=>({...augment,index:Number.isInteger(augment.index)?augment.index:index})),publicAugments=occupied.filter(augment=>characterEquipmentEligibility(augment).known);
+        const augments=publicAugments.map(augment=>({index:augment.index,title:augment.catalogIdentity.wikiTitle,tier:augment.tier??null,iconId:/^\d{1,7}$/.test(String(augment.iconId))?Number(augment.iconId):null,stats:Object.fromEntries(Object.entries(augment.stats||{}).filter(([key])=>ITEM_STATS.has(key))),complete:augment.statsComplete===true}));
+        equipment.push({slot,title:item.catalogIdentity.wikiTitle,tier:item.tier??null,iconId,level:item.level??null,basis:imported?'inventory-export':read.basis,complete:read.complete,stats:Object.fromEntries(Object.entries(read.stats).filter(([key])=>ITEM_STATS.has(key))),augmentSlots:item.augmentSlots??null,augments});
     }
     const totals={};for(const group of characterTotalGroups(characterTotals(snapshot)))for(const row of group.rows){const key=row.key.replace(/_MAXIMUM$/,'');if(TOTAL_STATS.has(key))totals[key]={value:row.value??null,complete:row.complete===true};}
     const metadata=snapshot.metadata||{};

@@ -3,23 +3,28 @@ import {createCharacterStorage} from '../app/character-storage.js';
 import {createCharacterModel,CHARACTER_STORAGE_KEY as KEY} from '../app/character-model.js';
 import {createCharacterWalkthrough,CHARACTER_WALKTHROUGH_KEY as FLOW} from '../app/character-walkthrough.js';
 const ROSTER='eql-eye-of-zomm-character-profiles-v1';
+const CONTRIBUTIONS='eql-eye-of-zomm-contributions-v1';
 const memory=()=>{const values=new Map();return{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};};
 const draft=label=>JSON.stringify({schemaVersion:1,label});
-const legacy=memory(),disk={},writes=[],warnings=[];legacy.setItem(KEY,draft('legacy inventory'));legacy.setItem(FLOW,draft('legacy flow'));legacy.setItem(ROSTER,draft('legacy roster'));
+const legacy=memory(),disk={},writes=[],warnings=[];legacy.setItem(KEY,draft('legacy inventory'));legacy.setItem(FLOW,draft('legacy flow'));legacy.setItem(ROSTER,draft('legacy roster'));legacy.setItem(CONTRIBUTIONS,JSON.stringify({schemaVersion:1,candidates:[{id:'synthetic-draft',kind:'npc',name:'a saved watcher'}]}));
 const api={read:async()=>({values:{...disk},error:null}),write:async({key,value})=>{writes.push({key,value});disk[key]=value;return{ok:true};},flush:async()=>({ok:true})};
 const first=await createCharacterStorage({api,legacyStorage:legacy,onWarning:message=>warnings.push(message)});
 assert.equal(first.getItem(KEY),draft('legacy inventory'));assert((await first.flush()).ok);assert.equal(disk[FLOW],draft('legacy flow'));
 assert.equal(first.getItem(ROSTER),draft('legacy roster'));assert.equal(disk[ROSTER],draft('legacy roster'),'The fixed roster key migrates alongside the original entries');
+assert.equal(disk[CONTRIBUTIONS],legacy.getItem(CONTRIBUTIONS),'Contribution drafts migrate to the same private file without a profile dependency');
 first.setItem(KEY,draft('saved gear'));assert((await first.flush()).ok);assert.equal(disk[KEY],draft('saved gear'));
 first.setItem(ROSTER,draft('saved roster'));assert((await first.flush()).ok);
 const fallbackOrigin=memory();fallbackOrigin.setItem(KEY,draft('old data on another port'));fallbackOrigin.setItem(ROSTER,draft('stale roster on another port'));
 const restored=await createCharacterStorage({api,legacyStorage:fallbackOrigin});assert.equal(restored.getItem(KEY),draft('saved gear'));assert.equal(fallbackOrigin.getItem(KEY),draft('saved gear'));
 assert.equal(restored.getItem(ROSTER),draft('saved roster'));assert.equal(fallbackOrigin.getItem(ROSTER),draft('saved roster'),'A present private roster wins over another origin');
+fallbackOrigin.setItem(CONTRIBUTIONS,JSON.stringify({schemaVersion:1,candidates:[]}));const contributionRestored=await createCharacterStorage({api,legacyStorage:fallbackOrigin});assert.equal(contributionRestored.getItem(CONTRIBUTIONS),legacy.getItem(CONTRIBUTIONS),'A fallback port cannot replace durable contribution drafts with its empty queue');
 restored.removeItem(KEY);assert((await restored.flush()).ok);assert.equal(disk[KEY],null);
 fallbackOrigin.setItem(KEY,draft('stale resurrection'));const tombstone=await createCharacterStorage({api,legacyStorage:fallbackOrigin});assert.equal(tombstone.getItem(KEY),null);assert.equal(fallbackOrigin.getItem(KEY),null);
 restored.removeItem(ROSTER);assert((await restored.flush()).ok);fallbackOrigin.setItem(ROSTER,draft('stale removed roster'));const rosterTombstone=await createCharacterStorage({api,legacyStorage:fallbackOrigin});assert.equal(rosterTombstone.getItem(ROSTER),null);assert.equal(fallbackOrigin.getItem(ROSTER),null,'A roster tombstone prevents stale browser migration');
 assert.throws(()=>first.setItem('other-app-key','x'),/Unsupported/);assert.throws(()=>first.setItem(KEY,'x'.repeat(1500001)),/limit/);assert.throws(()=>first.setItem(KEY,'界'.repeat(500001)),/limit/);
 assert.throws(()=>first.setItem(FLOW,'x'.repeat(1500001)),/limit/,'The original walkthrough cap does not grow with the roster');
+assert.throws(()=>first.setItem(CONTRIBUTIONS,'x'.repeat(1800001)),/limit/);assert.throws(()=>first.setItem(CONTRIBUTIONS,'界'.repeat(600001)),/limit/);
+const exactContributions=JSON.stringify({schemaVersion:1,candidates:[],padding:''}),contributionsAtLimit=JSON.stringify({schemaVersion:1,candidates:[],padding:'a'.repeat(1800000-exactContributions.length)});first.setItem(CONTRIBUTIONS,contributionsAtLimit);assert((await first.flush()).ok);assert.equal(disk[CONTRIBUTIONS],contributionsAtLimit,'A full bounded contribution entry is independent of Character and roster limits');
 const exactRoster=JSON.stringify({schemaVersion:1,padding:''}),rosterAtLimit=JSON.stringify({schemaVersion:1,padding:'a'.repeat(8000000-exactRoster.length)});
 assert.equal(Buffer.byteLength(rosterAtLimit,'utf8'),8000000);first.setItem(ROSTER,rosterAtLimit);assert((await first.flush()).ok);assert.equal(disk[ROSTER],rosterAtLimit,'An eight-megabyte roster is supported independently of original key limits');
 assert.throws(()=>first.setItem(ROSTER,rosterAtLimit+' '),/limit/);assert.throws(()=>first.setItem(ROSTER,'界'.repeat(2666667)),/limit/,'Roster bounds count UTF-8 bytes, not only JS characters');
@@ -32,7 +37,7 @@ const failureWarnings=[],failed=await createCharacterStorage({api:{...api,write:
 failed.setItem(KEY,draft('unsaved edit'));assert.equal((await failed.flush()).ok,false);assert.equal(failed.getItem(KEY),draft('unsaved edit'));assert.equal(failureWarnings.length,1);
 await new Promise(resolve=>setTimeout(resolve,0));assert.equal((await failed.flush()).ok,false,'A settled failed write remains visible');
 assert(warnings.some(message=>message.includes('could not be loaded')));
-for(const key of [KEY,FLOW,ROSTER])for(const original of ['{broken synthetic JSON',JSON.stringify({schemaVersion:2,label:'future version'}),'[]','null',JSON.stringify({label:'missing schema'})])for(const authority of ['host','legacy']){
+for(const key of [KEY,FLOW,ROSTER,CONTRIBUTIONS])for(const original of ['{broken synthetic JSON',JSON.stringify({schemaVersion:2,label:'future version'}),'[]','null',JSON.stringify({label:'missing schema'})])for(const authority of ['host','legacy']){
     const local=memory(),entryWarnings=[],entryWrites=[],hostValues=authority==='host'?{[key]:original}:{};
     local.setItem(key,authority==='legacy'?original:draft('browser value must not replace authoritative corrupt data'));
     const localBefore=local.getItem(key),hostBefore=JSON.stringify(hostValues);
@@ -44,4 +49,4 @@ for(const key of [KEY,FLOW,ROSTER])for(const original of ['{broken synthetic JSO
     assert.equal(local.getItem(key),localBefore,'Blocked writes/removals preserve original browser-only data too');assert.equal(JSON.stringify(hostValues),hostBefore,'Blocked host entries remain byte-for-byte unchanged');assert.equal(entryWrites.length,0);assert.equal((await entry.flush()).ok,false);assert(entryWarnings.some(message=>message.includes('malformed')||message.includes('unsupported')));
 }
 const browserOnly=memory(),browserOriginal='{malformed browser-only draft';browserOnly.setItem(KEY,browserOriginal);const browserBlocked=await createCharacterStorage({api:null,legacyStorage:browserOnly});assert.throws(()=>browserBlocked.setItem(KEY,draft('new')),/preserved/);assert.throws(()=>browserBlocked.removeItem(KEY),/preserved/);assert.equal(browserOnly.getItem(KEY),browserOriginal);
-console.log('Character renderer storage: three fixed keys, 8MB roster/1.5MB draft bounds, port-independent authority, migration, tombstones, per-entry corruption preservation and visible async write failure passed.');
+console.log('Character/contribution renderer storage: four fixed keys, independent queue/roster/draft bounds, port-independent authority, migration, tombstones, corruption preservation and visible async failure passed.');

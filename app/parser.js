@@ -70,12 +70,21 @@ export class EQLogParser {
         this.combatEvents = [];
         this.encounters = [];
         this.nextEncounterId = 1;
+        this.sourceEncounters = new WeakSet();
+        this.currentSourceEvents = new WeakSet();
+        this.eventZones = new WeakMap();
         this.killCounts = new Map();
         this.lootCounts = new Map();
         this.lootLog = [];
         this.lastKill = null;
         this.recentEvents = [];
         this.currentLineAt = null;
+    }
+
+    resetSourceContext() {
+        this.zone = '';this.zoneShortName = '';this.location = null;
+        this.lastKill = null;this.currentFight = null;this.currentLineAt = null;
+        this.sourceEncounters = new WeakSet();this.currentSourceEvents = new WeakSet();
     }
 
     startNewSession(at = Date.now()) {
@@ -134,11 +143,12 @@ export class EQLogParser {
     }
 
     appendEncounterEvent(event) {
-        const gapMs = this.encounterGapSeconds * 1000;
+        const gapMs = this.encounterGapSeconds * 1000, currentSource = this.currentSourceEvents.has(event), eventZone = this.eventZones.get(event) ?? this.zone;
         let encounter = this.encounters[this.encounters.length - 1];
-        if (!encounter || event.at - encounter.lastAt > gapMs) {
+        if (!encounter || this.sourceEncounters.has(encounter) !== currentSource || encounter.zone !== eventZone || event.at - encounter.lastAt > gapMs) {
             encounter = {
                 id: `session-${this.sessionNumber}-encounter-${this.nextEncounterId++}`,
+                zone: eventZone,
                 startAt: event.at,
                 lastAt: event.at,
                 firstTarget: '',
@@ -149,6 +159,7 @@ export class EQLogParser {
                 events: []
             };
             this.encounters.push(encounter);
+            if(currentSource)this.sourceEncounters.add(encounter);
         }
 
         const target = this.encounterTarget(event);
@@ -165,6 +176,7 @@ export class EQLogParser {
 
     rememberCombatEvent(event) {
         const saved = this.rememberEvent(event);
+        this.currentSourceEvents.add(saved);this.eventZones.set(saved,this.zone);
         this.combatEvents.push(saved);
         if (this.combatEvents.length > 5000) this.combatEvents.shift();
         this.appendEncounterEvent(saved);
@@ -200,19 +212,20 @@ export class EQLogParser {
         const parsedItem = parseLootItem(itemName);
         const item = parsedItem.item;
         let source = trimSentence(sourceName)
-            .replace(/^the corpse of\s+/i, '')
+            .replace(/^(?:the\s+)?corpse of\s+/i, '')
             .replace(/'s corpse(?:\s+(?:and|to)\b.*)?$/i, '')
             .replace(/\s+(?:and|to)\b.*$/i, '')
             .trim();
-        let sourceEvidence = { kind:source ? 'explicit-corpse':'unknown' };
+        const corpseSource = /^(?:the\s+)?corpse of\s+/i.test(normalizeName(sourceName)) || /'s corpse(?:\s|$)/i.test(normalizeName(sourceName));
+        let sourceEvidence = { kind:source ? corpseSource ? 'explicit-corpse':'explicit-source':'unknown' };
 
-        if (!source && this.lastKill && at - this.lastKill.at <= Math.max(60, this.encounterGapSeconds * 2) * 1000) {
+        if (!source && this.lastKill && this.lastKill.zone === this.zone && at >= this.lastKill.at && at - this.lastKill.at <= Math.max(60, this.encounterGapSeconds * 2) * 1000) {
             source = this.lastKill.name;
             sourceEvidence = { kind:'recent-kill', timeGapMs:at-this.lastKill.at, sourceAt:this.lastKill.at };
         }
         if (!source) {
             const encounter = this.encounters[this.encounters.length - 1];
-            if (encounter && at - encounter.lastAt <= this.encounterGapSeconds * 1000) {
+            if (encounter && this.sourceEncounters.has(encounter) && encounter.zone === this.zone && at >= encounter.lastAt && at - encounter.lastAt <= this.encounterGapSeconds * 1000) {
                 source = encounter.firstTarget;
                 sourceEvidence = { kind:'encounter-target', timeGapMs:at-encounter.lastAt, sourceAt:encounter.lastAt };
             }
@@ -229,7 +242,7 @@ export class EQLogParser {
             quantity: parsedItem.quantity,
             source: source || 'Unknown',
             sourceEvidence,
-            sourceConfidence:sourceEvidence.kind === 'explicit-corpse' ? 1 : sourceEvidence.kind === 'unknown' ? 0 : 0.25,
+            sourceConfidence:sourceEvidence.kind === 'explicit-corpse' ? 1 : sourceEvidence.kind === 'unknown' ? 0 : sourceEvidence.kind === 'explicit-source' ? 0.5 : 0.25,
             zone: this.zone,
             sourceKey,
             lootKey
