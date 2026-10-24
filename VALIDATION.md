@@ -21,6 +21,13 @@ matching/copies and persistence, sharing, reviewed loopback wiki plans and
 partial retry. Additional full-app 13/20px screenshots were visually inspected;
 fixture framing was corrected without changing production behavior.
 
+Initial Linux CI exposed an older Modern OCR fixture that assigned bare OCR
+cards without catalog identity. Its name/stat pixel assertions had passed.
+The fixture now first confirms that rejection, explicitly selects independent
+golden catalog records and checks observed text/stats/evidence/progress remain
+unchanged before assigning. Both source and assembled-runtime Modern pixel
+checks passed locally after the fixture correction; production code is unchanged.
+
 Final changed-head Windows/Linux native/package CI and public-download
 verification are required before publication is reported complete.
 Exact results belong to the release PR and private publication ledger. Fixtures

@@ -80,3 +80,9 @@ native workspace check also pass, including offline imports/sharing and
 loopback reviewed wiki retries. Exact-head CI/package and public-download checks
 remain required; no new publication is claimed yet. Record their exact IDs in
 the release PR and private publication ledger instead of another main push.
+
+Initial platform CI identified the same old assignment assumption in
+`tests/modern-ocr.mjs`. Corrected only that fixture: OCR alone must be rejected,
+then explicit independent golden catalog selection must preserve observations
+and allow placement. Original pixel/name/stat assertions remain. Run all final
+CI/package gates on the new head; an old run cannot certify the correction.

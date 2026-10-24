@@ -30,7 +30,22 @@ async function verify({root,profile,diagnostics}){
             assert.ok(c.hpRegen===undefined||c.hpRegen===11,'A regen digit must match its pixels or remain unknown');
             assert.equal(w.str,undefined,'Inventory/other-item Strength cannot bleed into the weapon');assert.equal(b.hpCurrent,undefined,'Inventory resource labels cannot bleed into item values');
             assert(records.length<=4&&records.every(record=>record.fields.length<=100&&record.evidence.text.length<=16384));assert(read.input.ocrPasses.length<=3,'Bounded scene plus refinement passes');
-            const model=createCharacterModel({storage:null});for(const [item,slot]of [[boots,'feet'],[blade,'primary']]){const result=model.intake(item);assert.equal(result.ok,true);assert.equal(model.assign(result.candidate.id,slot).ok,true);assert.equal(result.candidate.fraction,fields(item).fraction);}
+            // Catalog identity is a separate explicit selection after every OCR
+            // assertion above. Golden names/slots/base values are independent
+            // of the OCR output; differing bases must not replace read values.
+            const model=createCharacterModel({storage:null}),knownItems=[
+                {observation:boots,slot:'feet',catalog:{name:'Synthetic Ember Boots',wikiTitle:'Synthetic Ember Boots',slots:['FEET'],stats:{AC:20,HP:100,HASTE:8}},expectedHp:147,expectedFraction:5},
+                {observation:blade,slot:'primary',catalog:{name:'Synthetic Quartz Blade',wikiTitle:'Synthetic Quartz Blade',slots:['PRIMARY'],stats:{AC:18,HP:50,DMG:8}},expectedHp:83,expectedFraction:18}
+            ];
+            for(const {observation,slot,catalog,expectedHp,expectedFraction}of knownItems){
+                const original=structuredClone(observation),result=model.intake(observation);assert.equal(result.ok,true);
+                const blocked=model.assign(result.candidate.id,slot);assert.equal(blocked.ok,false);assert.equal(blocked.reason,'unknown-catalog','OCR alone cannot establish trusted equipment identity');
+                const selected=model.resolveCatalog(result.candidate.id,catalog,{match:'manual'});assert.equal(selected.ok,true);assert.equal(selected.candidate.name,catalog.name);
+                assert.deepEqual(selected.candidate.observedStats,result.candidate.observedStats);assert.equal(selected.candidate.observedStats.HP,expectedHp);
+                assert.deepEqual(selected.candidate.baseStats,catalog.stats);assert.equal(selected.candidate.rawStatBlock,result.candidate.rawStatBlock);assert.deepEqual(selected.candidate.evidence,result.candidate.evidence);
+                assert.equal(selected.candidate.fraction,expectedFraction);assert.equal(selected.candidate.observedName,original.subject.name);assert.deepEqual(observation,original,'Catalog selection cannot mutate the original parsed OCR record');
+                assert.equal(model.assign(selected.candidate.id,slot).ok,true);
+            }
             console.log(`Modern synthetic pixel OCR ${packaged?'assembled runtime':'source dependencies'}: two names, split item stats, slots/progress, right-hand Inventory current/max/attributes/resists, no field bleed and usable Character cards passed.`);
         }finally{await ocr.stop();}
     }
