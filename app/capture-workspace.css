@@ -94,3 +94,34 @@
 .character-inspect-slot:hover .character-inspect-item{visibility:visible;opacity:1;pointer-events:auto;transition-delay:350ms}
 .character-inspect-slot:focus-within .character-inspect-item{visibility:visible;opacity:1;pointer-events:auto;transition-delay:0s}
 .character-exaltation-label{color:var(--muted);font-size:.85em}.character-inspect-augments [data-character-exaltation]{margin:7px 0}
+/* Shared EQLWiki Itembox presentation: the original unmodified silver EQ frame,
+   compact inline stat text, and a local tier control directly below the name. */
+.character-item-tooltip{width:min(451px,calc(100vw - 20px));padding:0;border:0;border-radius:0;background:#000;color:#fff}
+.wiki-itembox{box-sizing:border-box;font:calc(12px * var(--ui-font-scale,1))/1.58 Arial,sans-serif;color:#fff;background:#000;overflow-wrap:anywhere}
+.wiki-itembox-title{display:block;box-sizing:border-box;min-height:20px;margin:0;padding:0 23px 0 14px;background:#000 url('./assets/wiki-item-card/Itemtop.gif') top center/100% 100% no-repeat;text-align:center;color:#c0c0c0}
+.wiki-itembox-title strong,.wiki-itembox-title strong a{display:block;margin:0;color:#c0c0c0!important;font:inherit;font-weight:400;line-height:1.58;text-decoration:none}
+.wiki-itembox-title strong a:hover,.wiki-itembox-title strong a:focus-visible{text-decoration:underline;color:#fff!important}
+.wiki-itembox::after{content:'';display:block;clear:both;height:10px;background:#000 url('./assets/wiki-item-card/Itembot.gif') bottom center/100% 10px no-repeat}
+.character-itembox-body{padding:6px 12px 4px;background:#000 url('./assets/wiki-item-card/Itemshot.gif') top center/100% 61px repeat-y}
+.wiki-itembox-data{display:flow-root;min-width:0;color:#fff;font:inherit;text-align:left}
+.wiki-itembox-line{display:block;min-height:1.58em;margin:0;padding:0;font:inherit;line-height:1.58}
+.wiki-itembox-line[data-itembox-section=flags]{margin-bottom:.8em}
+.wiki-itembox-stat{display:inline-block;margin-right:.3em;white-space:nowrap}
+.wiki-itembox-value{font-variant-numeric:normal;font-weight:400;color:#fff}
+.wiki-itembox .is-scaled,.character-itembox-body .is-scaled{color:#55ff55;font-weight:700;text-shadow:0 0 3px #55ff5540}
+.wiki-itembox-ratio{display:inline-block;color:#e0c080;white-space:nowrap}.wiki-itembox-ratio>.wiki-itembox-value{color:#ffd700}.wiki-itembox-ratio>.is-scaled{color:#55ff55}
+.wiki-itembox-stat.is-void,.wiki-itembox-stat.is-void .wiki-itembox-value{color:#b080ff;font-weight:700}.wiki-itembox-stat.is-void .is-scaled{color:#55ff55}
+.wiki-itembox-icon{float:right;display:block;width:40px;height:40px;object-fit:contain;margin:0 16px 3px 12px}
+.wiki-itembox-data a,.character-inspect-augments a{color:#9fb4ff;text-decoration:none}.wiki-itembox-data a:hover,.wiki-itembox-data a:focus-visible,.character-inspect-augments a:hover{text-decoration:underline}
+.wiki-itembox-unread{color:#a8a8a8}.wiki-itembox-basis{clear:both;margin-top:7px!important;font-size:.8em!important;line-height:1.4!important;color:#a8a8a8!important}
+.character-item-tooltip .wiki-itembox [data-tooltip-tier]{position:sticky;top:0;z-index:2;padding:0 12px;background:#000 url('./assets/wiki-item-card/Itemshot.gif') top center/100% 61px repeat-y}
+.wiki-itembox .character-tier-controls{display:block;padding:3px 0 4px;margin:0;background:transparent;border:0;border-radius:0}
+.wiki-itembox .character-tier-controls>label{display:grid!important;grid-template-columns:auto minmax(50px,1fr) 30px;gap:7px;align-items:center;margin:0!important;color:#c0c0c0;font:inherit!important}
+.wiki-itembox .character-tier-controls>label>span{grid-column:1;grid-row:1}.wiki-itembox .character-tier-controls input[type=range]{grid-column:2;grid-row:1;display:block;width:100%;margin:0;padding:0;height:16px;accent-color:#aaa}
+.wiki-itembox .character-tier-controls output{grid-column:3;grid-row:1;float:none;text-align:right;color:#c0c0c0}.wiki-itembox .character-tier-controls .capture-actions{margin-top:2px;line-height:1.2}.wiki-itembox .character-tier-controls .text-button{font-size:.8em;color:#a8a8a8}
+.wiki-itembox .character-augment-section{clear:both;margin:8px 0 2px;padding-top:6px;border-top:1px solid #333;color:#bbb;font:inherit}.wiki-itembox .character-augment-slots{gap:6px;margin-top:4px}.wiki-itembox .character-augment-slot>button:first-child{width:32px;height:32px;background:#080808;border-color:#666}.wiki-itembox .character-augment-remove{background:#111;border-color:#777}.wiki-itembox .character-augment-section .text-button{font-size:.85em;color:#c0c0c0}
+.character-inspect-item.wiki-itembox{width:min(451px,calc(100vw - 20px));padding:0;border:0;border-radius:0;background:#000;color:#fff;max-height:65vh}
+.character-inspect-augments{margin-top:7px;padding-top:5px;border-color:#333}.character-inspect-augments a{display:inline;font:inherit}.character-inspect-augments [data-character-exaltation]{margin:5px 0}.character-inspect-augments .character-exaltation-label{font:inherit;color:#bbb}.wiki-itembox-exaltation-effect{color:#ddd}
+@media(max-width:480px){.wiki-itembox-icon{margin-right:5px}.character-itembox-body{padding-inline:10px}.character-inspect-item.wiki-itembox{width:min(370px,calc(100vw - 20px))}}
+/* Preserve an explicit Settings font choice; the default theme keeps wiki Arial. */
+html[data-font-family]:not([data-font-family="theme"]) .wiki-itembox{font-family:var(--ui-font-family)}
