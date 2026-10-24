@@ -7,7 +7,7 @@
 need separate receipts in [the active release plan](RELEASE_098_PLAN.md).
 
 This extends [the inventory-export Character plan](INVENTORY_EXPORT_CHARACTER_PLAN.md).
-Logs supply observed monster names, considers, kills, acquired items, zone names
+Logs supply monster kills/deaths, acquired items, zone names
 and explicit `/loc` responses. Optional offline item OCR enriches Contribute
 drafts. Character equipment comes from `/outputfile inventory`, and Character
 OCR reads only the displayed fully equipped statistics. Neither path publishes
@@ -24,8 +24,9 @@ wiki changes automatically.
 `queue.consumeLog(event, context)` consumes existing parser events directly. It
 does not depend on screen-reading opt-in, a selected capture source or an OCR
 worker. The context must contain `live: true`, a finite original `at`, current
-`zone`, `logId` and increasing consumed-line `cursor`. Only consider, kill, loot,
-zone and location events are accepted. Older than ten seconds, more than two
+`zone`, `logId` and increasing consumed-line `cursor`. Only kill, loot, zone and location events are accepted. Considers still focus
+Intel, but do not create monster contribution tasks. Nearby casts are excluded.
+Both direct queue intake and desktop journal/replay enforce this boundary. Older than ten seconds, more than two
 seconds in the future, out-of-order live lines and remembered duplicate IDs are
 rejected. Historical journal replay uses the existing `queue.consume(record)`;
 it cannot arm a spawn request or turn a historical kill into a live prompt.
@@ -291,3 +292,34 @@ held-old-poll/profile-switch regression. Focused reruns of `tests/test.mjs`,
 `tests/contribution-evidence.mjs` and `tests/contribution-queue.mjs` passed after
 the fixes; the source provenance test also changes the encounter gap and returns
 to the same zone before checking that an old source remains ineligible.
+
+
+## Next-release discovery review clarification
+
+Read [the discovery execution plan](CONTRIBUTION_DISCOVERY_PLAN.md). Automatic
+monster work requires death evidence; explicit named-corpse loot may supply a
+source relationship. Manual and optional screenshot drafts remain separate.
+Player identities known from /who and the current player, plus generated pets,
+remain excluded. This is conservative classification, not a claim that a log can
+identify every unknown player casualty.
+
+New local game-log evidence retains its actual triggering line (at most 2048
+characters) separately from the structured summary and event type. Review renders
+the line as escaped text. Older captures without that line say it is unavailable;
+the UI never presents a reconstructed summary as the original line. It is private
+queue/journal evidence and is not included in automatic article text or the
+minimal kill/loot telemetry endpoint. No full logs or chat archive is introduced.
+
+Untouched passive consider-only monster tasks are archived. Unsupported passive
+population facts can be removed from an untouched zone task while preserving an
+archived original; killed/corpse-supported facts and loot remain. Reviewed,
+edited, planned, submitted/partial, manual and screenshot-supported work is
+preserved, and a storage failure rolls reconciliation back.
+
+Review identifies exact canonical page-name matches separately from fuzzy
+suggestions and retains explicit destination confirmation. Each proposed change
+names its operation and linked destination. Accumulated loot whose matching
+source/zone/instance is already cached is labeled already recorded and excluded
+from the proposed additions. Bare acquired-in-zone history is not promoted to a
+monster source. These are cached proposals; the guarded live preview still owns
+the final changes, article attribution, and existing formatting.

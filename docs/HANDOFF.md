@@ -1,5 +1,10 @@
 # Eye of Zomm contributor handoff
 
+The next-release [discovery evidence plan](CONTRIBUTION_DISCOVERY_PLAN.md) tracks
+kill/death-only automatic monster discovery, local triggering log lines, direct
+page matches and per-addition destination links. It is a PR candidate, with no
+release, dataset refresh or installed-profile changes in this pass.
+
 0.9.9 follows the completed 0.9.8 baseline. Read [the active execution plan](RELEASE_099_PLAN.md) for contribution matching, targeted reciprocal updates, filtered gap browsing and Character hover/tier polish. Source/native checks and publication have distinct receipts. No new dataset or wiki schema change is required.
 
 ## Completed 0.9.8 release plan
