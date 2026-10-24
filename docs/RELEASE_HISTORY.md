@@ -1,5 +1,7 @@
 # Browsable release history
 
+0.9.9 adds three visually reviewed, version-owned actual Chromium captures: filtered gap browsing, targeted source additions and Character numeric hover tier with its matching equipment badge. All records/APIs are synthetic and isolated; no player pixels, production submissions or historical image replacements. The focused fixture also checks real pointer delay and adjacent-hover cancellation.
+
 The 0.9.8 candidate adds five reviewed actual component captures: equipped-hover
 tier/proc/sockets with recorded-only totals, match/page review, Common/Unique
 loot and the screenshot plus area, selected screenshot/rights/effect fields,

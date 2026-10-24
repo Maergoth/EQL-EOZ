@@ -1,6 +1,48 @@
 // Version-owned captures and reviewed hashes are immutable; see docs/RELEASE_HISTORY.md.
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
+{
+  "version": "0.9.9",
+  "title": "Clearer wiki gap reviews and Character controls",
+  "changes": [
+    "Browse discovery gaps with New Page / Update Page tags and independent category filters. New monsters and items appear before smaller updates.",
+    "Choose an existing page from deduplicated vertical cards. Case-forgiving canonical matching and decorated Exaltation/container identities prevent false gaps while real page collisions still need review.",
+    "Review specific additions on existing pages instead of the full creation form. Drop-source reviews update item, monster and compatible zone lists together, preserving page formatting and revision guards.",
+    "Use a numeric item-tier slider with immediately matching equipment badges. A 350 ms hover pause prevents accidental popups; Exaltations use compact name summaries."
+  ],
+  "steps": [
+    {
+      "title": "Choose which wiki gaps to browse",
+      "image": "0.9.9/contribution-filtered-queue",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Uncheck gap categories to hide them from the queue. New monsters and items stay above source, population and tier-zero updates. Every entry names its page type and whether it creates or updates a page.",
+      "alt": "Synthetic discovery queue with gap filters and clearly tagged new monster, new item and item source update.",
+      "caption": "Actual sandboxed Chromium component at 13px Arial with synthetic records and isolated storage/wiki APIs. Visually reviewed; no player pixels or production wiki writes.",
+      "imageSha256": "7ba998b0a5eca9d9966ecc53fedf97bab8de09a4373d8fe85b2d87af972603a4"
+    },
+    {
+      "title": "Review the exact source addition",
+      "image": "0.9.9/contribution-targeted-source-update",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Use this page appears below each deduplicated page title. Existing-item reviews explain the missing source and the item, monster and zone edits. Other optional changes stay collapsed; Submit opens the final reviewed diff.",
+      "alt": "Actual synthetic item source review with one destination card, compact additions, source selector and optional extra fields.",
+      "caption": "Actual sandboxed Chromium component at 13px Arial with synthetic records and isolated storage/wiki APIs. Visually reviewed; no player pixels or production wiki writes.",
+      "imageSha256": "223939b82c07d2e7e1855131e1f627aa1e98eeb7fb3ac10fc44e862745f26dca"
+    },
+    {
+      "title": "Change tier without losing your place",
+      "image": "0.9.9/character-hover-tier-and-proc",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Hold the pointer over gear briefly to inspect it. The numeric tier slider updates the equipment icon badge immediately, keeps keyboard focus and leaves recorded Character totals unchanged. Exaltation summaries show their names without extra stat blocks.",
+      "alt": "Actual synthetic Character hover with numeric tier-three slider, matching equipped badge and unchanged recorded game totals.",
+      "caption": "Actual sandboxed Chromium component at 13px Arial with synthetic records and isolated storage/wiki APIs. Visually reviewed; no player pixels or production wiki writes.",
+      "imageSha256": "f424ccba80ebde5d83e47c93b2ad4673b0e1e7eb269054d2c17cbe0287550a36"
+    }
+  ]
+},
   {
     "version": "0.9.8",
     "title": "Richer Character cards and reviewed wiki contributions",

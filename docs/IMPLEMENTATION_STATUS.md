@@ -1,5 +1,7 @@
 # Eye of Zomm implementation status
 
+0.9.9 candidate implements deduplicated canonical match cards, decorated-item presence, filtered/ranked gap browsing, compact existing-page update reviews and reciprocal source/zone patches. Character uses numeric tiers, in-place badges and cancellable 350ms hover. See [the release plan](RELEASE_099_PLAN.md) for actual acceptance and publication status; earlier sections are historical.
+
 ## 0.9.8 candidate implementation
 
 Character pure modules, rich card serialization, socket-only Exaltation aliases,

@@ -510,7 +510,8 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
                 const resolution=resolveItem(clone(entry)),item=resolution?.item;
                 const exact=value=>String(value??'').normalize('NFKC').replace(/_/g,' ').replace(/\s+/gu,' ').trim().toLowerCase();
                 const exactName=exact(entry.baseName),socketAlias=entry.group==='augment'&&resolution?.exaltationAlias===true&&/\s*\(Exaltation\)$/i.test(entry.baseName)?exact(entry.baseName.replace(/\s*\(Exaltation\)$/i,'')):null;
-                return item&&[item.name,item.wikiTitle].some(name=>exact(name)===exactName||socketAlias&&exact(name)===socketAlias)?catalogPatch(item,{match:'exact',icon:resolution.icon}):null;
+                const exportAlias=resolution?.exportNameAlias===true&&/[^*]\*$/u.test(entry.baseName)?exact(entry.baseName.slice(0,-1).trim()):null;
+                return item&&[item.name,item.wikiTitle].some(name=>exact(name)===exactName||socketAlias&&exact(name)===socketAlias||exportAlias&&exact(name)===exportAlias)?catalogPatch(item,{match:'exact',icon:resolution.icon}):null;
             };
             const reject=(entry,reason='wiki-item-missing',slot=entry.slot)=>rejectedItems.push({name:entry.name,baseName:entry.baseName,tier:entry.tier,itemId:entry.itemId,location:entry.location,...(slot?{slot}:{}),reason});
             const resolvedEntries=entries.map(entry=>({entry,patch:resolve(entry)}));

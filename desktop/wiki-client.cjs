@@ -130,7 +130,7 @@ class WikiClient {
         return {title:page.title,pageId:page.pageid??null,missing:page.missing===true,redirect:page.redirect===true,content,revision:revision?.revid??null,timestamp:revision?.timestamp??null,startTimestamp:data.curtimestamp||new Date(this.now()).toISOString()};
     }
     async findMatches({ name, kind='item' }={}) {
-        const {contributionTitle,findPotentialMatches}=await models(),title=contributionTitle(name);
+        const {contributionTitle,contributionNameKey,findPotentialMatches}=await models(),title=contributionTitle(name);
         if(!['item','npc','zone','spell'].includes(kind))throw new WikiError('kind','Choose item, npc, zone or spell.');
         const variants=[title,...new Set([title.replace(/[\u2018\u2019`]/g,"'"),title.replace(/[\u2018\u2019']/g,'`')])].slice(0,3);
         const [exact,prefix,search]=await Promise.all([
@@ -140,7 +140,24 @@ class WikiClient {
         ]);
         const records=new Map();
         for(const record of [...(exact.query?.pages||[]).filter(page=>!page.missing),...(prefix.query?.prefixsearch||[]),...(search.query?.search||[])]) if(record.ns===0&&record.pageid)records.set(record.pageid,{pageId:record.pageid,title:record.title});
-        return {matches:findPotentialMatches(title,[...records.values()],20),exact:(exact.query?.pages||[]).map(page=>({title:page.title,pageId:page.pageid??null,missing:page.missing===true})),redirects:exact.query?.redirects||[],normalized:exact.query?.normalized||[],checkedAt:new Date(this.now()).toISOString()};
+        const spellingMatches=[...records.values()].filter(record=>contributionNameKey(record.title)===contributionNameKey(title));
+        let canonical=null;
+        if(spellingMatches.length){
+            canonical=await this.request({action:'query',prop:'info',titles:[...new Set(spellingMatches.map(record=>record.title))].slice(0,36).join('|'),redirects:'1',converttitles:'1'});
+            for(const record of spellingMatches)records.delete(record.pageId);
+            for(const page of canonical.query?.pages||[])if(page.ns===0&&page.pageid&&!page.missing)records.set(page.pageid,{pageId:page.pageid,title:page.title});
+        }
+        return {matches:findPotentialMatches(title,[...records.values()],20),exact:(exact.query?.pages||[]).map(page=>({title:page.title,pageId:page.pageid??null,missing:page.missing===true})),redirects:[...(exact.query?.redirects||[]),...(canonical?.query?.redirects||[])],normalized:[...(exact.query?.normalized||[]),...(canonical?.query?.normalized||[])],checkedAt:new Date(this.now()).toISOString()};
+    }
+    async contributionPage(title,kind){
+        let state=await this.page(title,{resolveRedirects:true});if(!state.missing)return state;
+        const found=await this.findMatches({name:title,kind}),exact=found.matches.filter(match=>match.exact&&match.pageId);
+        if(exact.length>1)throw new WikiError('identity',title+': more than one existing page has this spelling. Choose its canonical page before publishing.');
+        if(exact.length===1)return this.page(exact[0].title,{resolveRedirects:true});
+        // Exported socket labels are not separate articles unless that exact
+        // article exists. Strip the suffix only after its own lookup failed.
+        if(kind==='item'&&/\s*\(Exaltation\)$/i.test(title))return this.contributionPage(title.replace(/\s*\(Exaltation\)$/i,''),'item');
+        return state;
     }
     async blueprints({ force=false }={}) {
         if(!force&&this.blueprintCache&&this.now()-this.blueprintCache.checkedAt<300000)return copy(this.blueprintCache.value);
@@ -155,14 +172,47 @@ class WikiClient {
     digest(plan) {return hash(JSON.stringify({id:plan.id,wikiOrigin:plan.wikiOrigin,expectedUser:plan.expectedUser,blueprintRevision:plan.blueprintRevision,pages:plan.pages.map(page=>({title:page.title,beforeHash:page.beforeHash,afterHash:page.afterHash,baseRevision:page.baseRevision})),...(plan.attachment?{attachment:{id:plan.attachment.id,filename:plan.attachment.filename,sha256:plan.attachment.sha256,caption:plan.attachment.caption,license:plan.attachment.license}}:{}),blockers:plan.blockers,matchesReviewed:plan.matchesReviewed}));}
     async preparePlan({ candidate, relatedPages=[], matchesReviewed=false, editedText=null }={}) {
         await this.load();
-        const {buildContributionDraft,contributionTitle,patchContributionRelationship,patchContributionPrimary,contributionItemEffects,normalizeContributionCandidate,contributionTemplates}=await models();
+        const {buildContributionDraft,contributionTitle,contributionNameKey,patchContributionRelationship,patchContributionPrimary,contributionItemEffects,normalizeContributionCandidate,contributionTemplates}=await models();
         let attachment=null;
         const attachmentId=candidate?.attachment?.id||candidate?.attachment?.attachmentId;
         if(attachmentId){const item=await this.attachments.get(String(attachmentId),candidate.id);attachment={id:item.record.id,filename:`EoZ Contribution ${item.record.id}.png`,sha256:item.record.sha256,caption:String(candidate.attachment.caption||'').slice(0,2000),license:String(candidate.attachment.license||'').slice(0,2000),status:'pending'};candidate={...candidate,attachmentFilename:attachment.filename};}
-        const normalizedCandidate=normalizeContributionCandidate(candidate);
+        let normalizedCandidate=normalizeContributionCandidate(candidate);
         const blueprint=await this.blueprints({force:true}),account=await this.status();
+        const references=new Map(),reference=(title,kind)=>{const key=kind+'|'+title;if(!references.has(key))references.set(key,this.contributionPage(contributionTitle(title),kind));return references.get(key);};
+        if(normalizedCandidate.kind==='item'&&normalizedCandidate.sources.some(source=>source.confirmed&&source.npc&&source.zone)){
+            const sources=await Promise.all(normalizedCandidate.sources.map(async source=>{if(!source.confirmed||!source.npc||!source.zone)return source;const [npc,zone]=await Promise.all([reference(source.npc,'npc'),reference(source.zone,'zone')]);return {...source,npc:npc.missing?source.npc:npc.title,zone:zone.missing?source.zone:zone.title};}));
+            candidate={...candidate,sources};normalizedCandidate=normalizeContributionCandidate(candidate);
+        }
+        if(normalizedCandidate.kind!=='zone'&&normalizedCandidate.zone){const zone=await reference(normalizedCandidate.zone,'zone');if(!zone.missing){candidate={...candidate,zone:zone.title};normalizedCandidate=normalizeContributionCandidate(candidate);}}
+        if(['npc','zone'].includes(normalizedCandidate.kind)){
+            const fields={...candidate.fields};
+            for(const [field,kind]of [['knownLoot','item'],['knownNPCs','npc']]){
+                const values=normalizedCandidate.field(field);if(!Array.isArray(values))continue;
+                const titles=[],kinds={...(fields.lootKinds?.value||{})};
+                for(const observed of values.slice(0,100)){
+                    const state=await reference(observed,kind),title=state.missing?observed:state.title;
+                    if(!titles.includes(title))titles.push(title);
+                    if(field==='knownLoot'&&Object.hasOwn(kinds,observed))kinds[title]=kinds[observed];
+                }
+                fields[field]={...fields[field],value:titles};if(field==='knownLoot'&&fields.lootKinds)fields.lootKinds={...fields.lootKinds,value:kinds};
+            }
+            candidate={...candidate,fields};normalizedCandidate=normalizeContributionCandidate(candidate);
+        }
+        if(normalizedCandidate.kind==='zone'){
+            const relations=[];
+            for(const relation of (Array.isArray(candidate.relations)?candidate.relations:[]).slice(0,100)){
+                if(relation.type!=='drop-source'||relation.evidence!=='explicit-corpse'||!relation.name||!relation.item){relations.push(relation);continue;}
+                const [npc,item]=await Promise.all([reference(relation.name,'npc'),reference(relation.item,'item')]);
+                relations.push({...relation,name:npc.missing?relation.name:npc.title,item:item.missing?relation.item:item.title});
+            }
+            candidate={...candidate,relations};
+        }
         let draft=buildContributionDraft(candidate,blueprint);
-        const matches=await this.findMatches({name:draft.title,kind:draft.kind}),primary=await this.page(draft.title);
+        const matches=await this.findMatches({name:draft.title,kind:draft.kind});let primary=await this.page(draft.title);
+        const exactMatches=matches.matches.filter(match=>match.exact&&match.pageId);
+        // The search response provides the actual case-sensitive title. A
+        // normalized equivalent can never be used to create a duplicate article.
+        if(primary.missing&&normalizedCandidate.intent==='update'&&exactMatches.length===1)primary=await this.page(exactMatches[0].title);
         // MediaWiki normalizes the first title letter. Itempage decides whether
         // to render the article or only a tooltip by exact FULLPAGENAME equality.
         if(primary.title!==draft.title)draft=buildContributionDraft({...candidate,title:primary.title},blueprint);
@@ -172,7 +222,7 @@ class WikiClient {
         if(normalizedCandidate.era&&!plan.blockers.some(message=>message.includes('era template name'))){const era=await this.request({action:'query',prop:'info',titles:`Template:${normalizedCandidate.era}`,redirects:'1'});if(!era.query?.pages?.some(page=>!page.missing&&page.ns===10))plan.blockers.push('The selected era template does not exist on the wiki. Choose a current canonical era template.');}
         if(!account.authenticated)plan.blockers.push('Log in, then prepare this review again before publishing.');
         if(!matchesReviewed)plan.blockers.push('Review potential matches before preparing the final publish plan.');
-        if(!primary.missing&&!updating)plan.blockers.push('The primary title already exists. Select the existing page or use its wiki source editor.');
+        if(!primary.missing&&!updating||primary.missing&&normalizedCandidate.intent!=='update'&&exactMatches.length)plan.blockers.push('This page already exists under an equivalent spelling. Choose its existing destination before preparing an update.');
         if(primary.redirect)plan.blockers.push('Select the canonical destination page before preparing an update.');
         if(primary.missing&&normalizedCandidate.intent==='update')plan.blockers.push('The selected update target no longer exists. Prepare a create review instead.');
         if(attachment&&!account.canUpload)plan.blockers.push('This account cannot upload the selected screenshot.');
@@ -189,22 +239,44 @@ class WikiClient {
         addPage(primary,afterText,'primary');
         if(normalizedCandidate.kind==='item')for(const effect of contributionItemEffects(candidate)){
             const title=contributionTitle(effect.name);if(plan.pages.some(page=>page.title===title))continue;
-            const state=await this.page(title);if(!state.missing)continue;
+            const state=await this.contributionPage(title,'spell');if(!state.missing)continue;
             const effectCandidate={kind:'spell',name:state.title,era:normalizedCandidate.era,playerText:'?',fields:{itemsWithEffect:{value:[primary.title],confirmed:true},castTime:{value:effect.castTime||'?',confirmed:true}}};
             const effectDraft=buildContributionDraft(effectCandidate,blueprint);
             if(effectDraft.blockers.length){plan.warnings.push(`${title}: the effect page requires manual review (${effectDraft.blockers.join(' ')}).`);continue;}
             if(plan.pages.length>=11){plan.warnings.push(`${title}: too many related pages; create this effect separately.`);continue;}
             addPage(state,effectDraft.text,'spell-effect');
         }
-        const relationships=[...(Array.isArray(relatedPages)?relatedPages:[])];
+        const targetedUpdate=normalizedCandidate.intent==='update'&&normalizedCandidate.reasons.some(reason=>['missing-source','missing-population','tier0-verification'].includes(reason));
+        const relationships=(Array.isArray(relatedPages)?relatedPages:[]).filter(related=>!targetedUpdate||normalizedCandidate.reasons.includes('missing-source')||related.edited===true||normalizedCandidate.sources.some(source=>source.edited&&source.npc===(related.npcTitle||related.title)&&source.zone===related.zoneTitle));
+        // Build reciprocal edits in the trusted planner, including when a
+        // renderer omitted relatedPages. Each affected page still has its own
+        // reviewed revision, account-bound result and partial retry state.
+        if(normalizedCandidate.kind==='item')for(const source of normalizedCandidate.sources.filter(source=>source.confirmed&&source.npc&&source.zone&&(normalizedCandidate.intent!=='update'||!normalizedCandidate.reasons.some(reason=>['missing-source','missing-population','tier0-verification'].includes(reason))||normalizedCandidate.reasons.includes('missing-source')||source.edited))){
+            const instance=source.instance==='unknown'?normalizedCandidate.instance:source.instance;
+            if(!['normal','raid'].includes(instance)){plan.warnings.push(source.npc+': choose Normal Zone or Raid Zone before preparing reciprocal drop-source edits.');continue;}
+            relationships.push({title:source.npc,role:'npc-loot',itemTitle:primary.title,npcTitle:source.npc,zoneTitle:source.zone,instance,confirmed:true,required:true});
+            relationships.push({title:source.zone,role:'zone-population',npcTitle:source.npc,zoneTitle:source.zone,instance,confirmed:true});
+            relationships.push({title:source.zone,role:'zone-loot',itemTitle:primary.title,zoneTitle:source.zone,instance,confirmed:true});
+        }
+        if(normalizedCandidate.kind==='npc'&&normalizedCandidate.zone&&['normal','raid'].includes(normalizedCandidate.instance)){
+            if(!updating||normalizedCandidate.reasons.includes('missing-population'))relationships.push({title:normalizedCandidate.zone,role:'zone-population',npcTitle:primary.title,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance,confirmed:true});
+            const loot=normalizedCandidate.field('knownLoot');if(Array.isArray(loot)&&(!updating||!normalizedCandidate.reasons.length||normalizedCandidate.reasons.includes('missing-source')||normalizedCandidate.fields.knownLoot?.edited))for(const itemTitle of new Set(loot.map(contributionTitle)))relationships.push({title:normalizedCandidate.zone,role:'zone-loot',itemTitle,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance,lootKind:normalizedCandidate.fields.lootKinds?.value?.[itemTitle]||'unique',confirmed:true});
+        }
+        if(normalizedCandidate.kind==='zone')for(const relation of Array.isArray(candidate.relations)?candidate.relations:[]){
+            if(relation.type!=='drop-source'||relation.evidence!=='explicit-corpse'||!relation.name||!relation.item)continue;
+            const loot=normalizedCandidate.field('knownLoot');if(!Array.isArray(loot)||!loot.some(title=>contributionNameKey(title)===contributionNameKey(relation.item)))continue;
+            const instance=['normal','raid'].includes(relation.instance)?relation.instance:normalizedCandidate.instance;if(!['normal','raid'].includes(instance))continue;
+            relationships.push({title:relation.item,role:'item-source',npcTitle:relation.name,zoneTitle:primary.title,instance,confirmed:true,required:true});
+            relationships.push({title:relation.name,role:'npc-loot',itemTitle:relation.item,npcTitle:relation.name,zoneTitle:primary.title,instance,lootKind:normalizedCandidate.fields.lootKinds?.value?.[relation.item]||'unique',confirmed:true,required:true});
+        }
         if(normalizedCandidate.kind==='npc'){
             const loot=normalizedCandidate.field('knownLoot');
-            if(Array.isArray(loot)&&loot.length){
+            if(Array.isArray(loot)&&loot.length&&(!updating||!normalizedCandidate.reasons.length||normalizedCandidate.reasons.includes('missing-source')||normalizedCandidate.fields.knownLoot?.edited)){
                 if(!normalizedCandidate.zone||normalizedCandidate.instance==='unknown')plan.warnings.push('Confirm the NPC zone and normal/raid instance before preparing reciprocal item-source edits.');
                 else{
                     const zone=await this.page(contributionTitle(normalizedCandidate.zone));
                     if(zone.missing||zone.redirect)plan.warnings.push(`${normalizedCandidate.zone}: resolve the zone identity on the wiki before preparing reciprocal item-source edits.`);
-                    else for(const itemTitle of new Set(loot.map(contributionTitle)))relationships.push({title:itemTitle,role:'item-source',npcTitle:draft.title,zoneTitle:zone.title,instance:normalizedCandidate.instance,confirmed:true});
+                    else for(const itemTitle of new Set(loot.map(contributionTitle)))relationships.push({title:itemTitle,role:'item-source',npcTitle:draft.title,zoneTitle:zone.title,instance:normalizedCandidate.instance,confirmed:true,required:true});
                 }
             }
         }
@@ -214,7 +286,7 @@ class WikiClient {
             const title=contributionTitle(related.title),instance=['normal','raid'].includes(related.instance)?related.instance:['normal','raid'].includes(normalizedCandidate.instance)?normalizedCandidate.instance:'normal';
             const relationshipConfirmed=related.confirmed===true || normalizedCandidate.sources.some(source=>source.confirmed&&source.npc===(related.npcTitle||title)&&source.zone===related.zoneTitle&&(['normal','raid'].includes(source.instance)?source.instance:normalizedCandidate.instance)===instance);
             if(!relationshipConfirmed){plan.warnings.push(`${title}: an unconfirmed reciprocal drop-source edit was excluded.`);continue;}
-            if(!lookups.has(title))lookups.set(title,await this.page(title,{resolveRedirects:true}));
+            if(!lookups.has(title))try{lookups.set(title,await reference(title,related.role==='npc-loot'?'npc':related.role==='item-source'?'item':'zone'));}catch(error){plan.blockers.push(safeMessage(error.message));continue;}
             const state=lookups.get(title);if(state.missing){plan.warnings.push(`${title} does not exist; its reciprocal edit was excluded.`);continue;}
             const key=state.pageId?`id:${state.pageId}`:`title:${state.title}`;
             let group=groups.get(key);
@@ -226,7 +298,7 @@ class WikiClient {
             if(group.state.revision!==state.revision||group.state.content!==state.content||group.existingPage&&(group.existingPage.baseRevision!==state.revision||group.existingPage.beforeHash!==hash(state.content))){plan.blockers.push(`${state.title} changed while preparing this review. Prepare it again.`);continue;}
             const patchInput={...related,instance,itemTitle:related.role==='item-source'?state.title:related.itemTitle||draft.title,...(related.role==='npc-loot'?{npcTitle:state.title}:{})};
             try{const patch=patchContributionRelationship(group.text,patchInput);if(patch.changed)group.text=patch.text;}
-            catch(error){plan.warnings.push(`${title}: ${safeMessage(error.message)}`);}
+            catch(error){const message=`${title}: ${safeMessage(error.message)}`;if(related.required)plan.blockers.push(message+' The reciprocal source update must be resolved before publishing.');else plan.warnings.push(message);}
         }
         for(const group of groups.values()){
             if(group.existingPage){group.existingPage.afterText=normalizeWikiSubmissionText(group.text);group.existingPage.afterHash=hash(group.existingPage.afterText);}

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {contributionUpdateSummary} from '../app/contribution-update.js';
 import {buildContributionDraft,contributionNameKey,contributionTitle,extractContributionBlueprints,findPotentialMatches,patchContributionRelationship,contributionTemplates,patchContributionPrimary,normalizeContributionCandidate} from '../app/contribution-model.js';
 import {createItemBaseReview,applyItemBaseReview} from '../app/item-base-review.js';
 import {collectTierZeroEvidence,confirmTierZeroVerification,validateTierZeroVerification} from '../app/contribution-tier-zero.js';
@@ -106,4 +107,35 @@ const oldWarning='Base statistics were proposed by reversing a reviewed tier 4 e
 const beforeVerification=`{{Itempage|itemname=Synthetic Base Proof\n|statsblock=HP: 29\n|notes=Keep this historical note.\n${oldWarning}\nThese stats are reverse calculated from a tier 4 item. Please confirm with a tier 0 item and remove this message\n|dropsfrom=?\n}}`;
 const verified=patchContributionPrimary(beforeVerification,JSON.parse(JSON.stringify(base)));assert.match(verified.text,/HP: 30/);assert.doesNotMatch(verified.text,/reverse calculated|inference, not a base-item capture/);assert.match(verified.text,/Keep this historical note/);assert.equal(patchContributionPrimary(verified.text,base).changed,false);
 for(const patch of [{baseVerification:null},{fields:{...base.fields,hp:{value:31}}},{fields:{...base.fields,statLines:{value:['HP: 999'],confirmed:true}}},{title:'A different article'}])assert.throws(()=>patchContributionPrimary(beforeVerification,{...base,...patch}),/tier.zero|base values|base reading|statistic text|accepted/i);
+
+// Canonical duplicates collapse once, while two actual case-sensitive wiki
+// pages remain visible for an explicit destination choice. Generic articles
+// sharing only an article prefix do not crowd out the exact entity.
+const duplicates=findPotentialMatches('A loathing lich',[{title:'A Loathing Lich',pageId:19},{title:'A Loathing Lich',pageId:19},'a loathing lich',{title:'A Hatchling',pageId:20},{title:'A Highland Lion',pageId:21}]);
+assert.deepEqual(duplicates.map(match=>match.pageId),[19]);
+assert.deepEqual(findPotentialMatches('a loathing lich',[{name:'A loathing lich',wikiTitle:'A Loathing Lich',pageId:19},{title:'A Loathing Lich',pageId:19}]).map(match=>match.title),['A Loathing Lich']);
+assert.equal(findPotentialMatches('A loathing lich',[{title:'A Loathing Lich',pageId:19},{title:'A loathing lich',pageId:22}]).length,2,'Genuine separate articles are not silently merged');
+assert.equal(findPotentialMatches('Thomstinger',[{title:'Thornstinger',pageId:23},{title:'A Hatchling',pageId:20}])[0].title,'Thornstinger');
+const gapSummary=contributionUpdateSummary({kind:'item',name:'Synthetic Guard',intent:'update',reasons:['missing-source'],sources:[{npc:'A guardian',zone:'Synthetic Vale',instance:'raid',confirmed:true}]});
+assert.deepEqual(gapSummary.fields,['sources']);assert.equal(gapSummary.sections.stats,false);assert.match(gapSummary.additions[0],/sources.*monster.*zone.*Raid Zone/);
+assert.deepEqual(contributionUpdateSummary({kind:'npc',intent:'update',reasons:['missing-source']}).fields,['knownLoot','lootKinds']);
+assert.deepEqual(contributionUpdateSummary({kind:'zone',intent:'update',reasons:['missing-population']}).fields,['knownNPCs']);
+const zoneSource='{{Classic Era}}\n{| class="zoneTopTable"\n! Notable NPCs\n| [[Old Guardian]] <!-- preserve this note -->\n|-\n! Unique Items\n| {{:Old Gem}}\n|-\n! Name in /who\n| synthetic\n|}\nNormal prose.\n== Raid Instance ==\nRaid prose.\n{| class="zoneTopTable"\n! Notable NPCs\n| ?\n|-\n! Unique Items\n| <!-- {{:New Gem}} --> ?\n|}\n== Map ==\nKeep map text.\n[[Category:Zones]]\n';
+for(const eol of ['\n','\r\n']){
+    const original=zoneSource.replaceAll('\n',eol),relation={role:'zone-loot',itemTitle:'New Gem',instance:'raid'},patched=patchContributionRelationship(original,relation);
+    assert(patched.changed);assert(patched.text.includes('<!-- {{:New Gem}} -->'));assert.match(patched.text.split('== Raid Instance ==')[1],/\{\{:New Gem\}\}/);assert.doesNotMatch(patched.text.split('== Raid Instance ==')[0],/New Gem/);
+    assert(patched.text.includes('Keep map text.'+eol+'[[Category:Zones]]'+eol));assert.equal(patchContributionRelationship(patched.text,relation).changed,false);
+    const population=patchContributionRelationship(patched.text,{role:'zone-population',npcTitle:'New Guardian',instance:'normal'});assert(population.text.includes('[[Old Guardian]] <!-- preserve this note --><br>'+eol+'[[New Guardian]]'));assert.equal(patchContributionRelationship(population.text,{role:'zone-population',npcTitle:'new_guardian',instance:'normal'}).changed,false);
+    const common=patchContributionRelationship(population.text,{role:'zone-loot',itemTitle:'Common Gem',instance:'normal',lootKind:'common'});assert(common.text.includes('! Common Loot'+eol+'| {{:Common Gem}}'));assert.equal(patchContributionRelationship(common.text,{role:'zone-loot',itemTitle:'Common Gem',instance:'normal',lootKind:'common'}).changed,false);
+}
+assert.throws(()=>patchContributionRelationship(zoneSource,{role:'zone-loot',itemTitle:'Wrong scope',instance:'unknown'}),/normal\/raid/);
+assert.throws(()=>patchContributionRelationship('{| class="zoneTopTable"\n! Name in /who\n| synthetic\n|}',{role:'zone-loot',itemTitle:'No raid',instance:'raid'}),/no Raid Instance/);
+assert.throws(()=>patchContributionRelationship('Hand-written prose without a known summary table.',{role:'zone-population',npcTitle:'New Guardian',instance:'normal'}),/no new layout/);
+const targetedNpc=patchContributionPrimary('{{Namedmobpage|name=Guardian|known_loot=?|location=10, 20, 30|HP=999|description=Preserve.}}',{kind:'npc',name:'Guardian',intent:'update',reasons:['missing-source'],instance:'normal',fields:{HP:{value:123,confirmed:true},location:{value:'1, 2, 3',confirmed:true},knownLoot:{value:['New Gem'],confirmed:true}}});
+assert(targetedNpc.text.includes('|location=10, 20, 30|HP=999|description=Preserve.'));assert.match(targetedNpc.text,/New Gem/);
+const targetedZone=patchContributionPrimary(zoneSource,{kind:'zone',name:'Synthetic Vale',intent:'update',reasons:['missing-population'],instance:'normal',fields:{knownNPCs:{value:['New Guardian'],confirmed:true},knownLoot:{value:['Do Not Add'],confirmed:true}}});assert.match(targetedZone.text,/New Guardian/);assert.doesNotMatch(targetedZone.text,/Do Not Add/);
+const multiHome=patchContributionPrimary('{{Namedmobpage|name=Guardian|zone=[[Old Vale]]|description=Preserve.}}',{kind:'npc',name:'Guardian',intent:'update',reasons:['missing-population'],instance:'normal',zone:'New Vale',fields:{location:{value:'1, 2, 3',confirmed:true}}});assert.match(multiHome.text,/\[\[Old Vale\]\]<br>\n\[\[New Vale\]\]/);assert.doesNotMatch(multiHome.text,/location\s*=/);assert.match(multiHome.text,/Category:New Vale/);assert.equal(patchContributionPrimary(multiHome.text,{kind:'npc',name:'Guardian',intent:'update',reasons:['missing-population'],instance:'normal',zone:'new_vale'}).changed,false);
+const commentedZone=patchContributionPrimary('{{Namedmobpage|name=Guardian|zone=<!-- preserve mapping note --> ?\n|description=Existing.}}',{kind:'npc',name:'Guardian',intent:'update',reasons:['missing-population'],instance:'normal',zone:'New Vale'});assert(commentedZone.text.includes('<!-- preserve mapping note -->'));assert.match(commentedZone.text,/\[\[New Vale\]\]/);
 console.log('Wiki contribution model: optional values/location gate, safe fields, active instance scoping, reviewed Common/Unique moves, verified tier-zero patches and idempotence passed.');
+
+assert.doesNotMatch(contributionUpdateSummary({kind:'item',intent:'update',reasons:['missing-source'],sources:[{npc:'Excluded Guardian',zone:'Excluded Vale',confirmed:false,edited:true,sourceEvidence:'explicit-corpse'}]}).additions.join(' '),/Excluded Guardian/,'Excluded sources are absent from promised additions');
