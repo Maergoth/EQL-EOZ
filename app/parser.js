@@ -212,7 +212,7 @@ export class EQLogParser {
         const parsedItem = parseLootItem(itemName);
         const item = parsedItem.item;
         let source = trimSentence(sourceName)
-            .replace(/^the corpse of\s+/i, '')
+            .replace(/^(?:the\s+)?corpse of\s+/i, '')
             .replace(/'s corpse(?:\s+(?:and|to)\b.*)?$/i, '')
             .replace(/\s+(?:and|to)\b.*$/i, '')
             .trim();

@@ -31,3 +31,5 @@ console.log('Loot provenance: explicit corpse versus inferred recent kill and un
     p.parse('[Wed Oct 21 12:00:07 2026] You slash Synthetic Current Keeper for 12 points of damage.');
     const afterCombat=p.parse('[Wed Oct 21 12:00:08 2026] You have looted a Synthetic Current Token.');assert.equal(afterCombat.source,'Synthetic Current Keeper');
 }
+
+const bareCorpse=parser.parse('[Thu Oct 22 17:10:06 2026] You have looted a Synthetic Shield from corpse of a synthetic bat.');assert.equal(bareCorpse.source,'a synthetic bat');assert.equal(bareCorpse.sourceEvidence.kind,'explicit-corpse','Optional article must not become part of the NPC identity');
