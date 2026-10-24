@@ -22,8 +22,8 @@ No dataset regeneration or wiki schema changes are needed.
 - [x] C1 (character_tooltip_polish + root): numeric tier slider only, +# slot badge
   updates in place without destroying focus, 350ms cancellable item hover,
   compact named Exaltations with underlying evidence preserved.
-- [ ] R1 (root): targeted regressions and actual synthetic native UI captures at
-  normal/large font, full required CI gates, illustrated release history/README.
+- [x] R1 (root): targeted regressions and actual synthetic native UI captures at
+  normal/large font, illustrated release history/README. Exact-head CI is R2.
 - [ ] R2 (root): PR, review, exact-head platform checks, merge/release 0.9.9,
   public assets/checksums/update selection verification. No new dataset pull.
 
@@ -72,3 +72,15 @@ test writes, live-game recapture, installed profile edits or dataset producer
 run occurred. Safe untouched old false gaps reconcile automatically on startup;
 edited/partial work remains protected. Ambiguous wiki pages or unsupported zone
 layouts require explicit resolution rather than silently inventing formatting.
+
+Final source review also proves that an omitted Common/Unique choice preserves
+existing loot classification, comments and annotations across item-source,
+primary NPC and zone-corpse submission paths. Only explicit classification
+choices move an existing drop; brand-new associations default to Unique. Focused
+model and HTTP client regressions pass, including the opposite Raid section.
+
+This source plan records implementation acceptance before publication. The
+[PR](https://github.com/Maergoth/EQL-EOZ/pull/23), its exact-head checks and the
+[0.9.9 release](https://github.com/Maergoth/EQL-EOZ/releases/tag/v0.9.9) are the
+authoritative remote publication record. Publication does not require mutating
+the immutable reviewed release source or replacing its artifacts.

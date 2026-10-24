@@ -267,7 +267,7 @@ class WikiClient {
             const loot=normalizedCandidate.field('knownLoot');if(!Array.isArray(loot)||!loot.some(title=>contributionNameKey(title)===contributionNameKey(relation.item)))continue;
             const instance=['normal','raid'].includes(relation.instance)?relation.instance:normalizedCandidate.instance;if(!['normal','raid'].includes(instance))continue;
             relationships.push({title:relation.item,role:'item-source',npcTitle:relation.name,zoneTitle:primary.title,instance,confirmed:true,required:true});
-            relationships.push({title:relation.name,role:'npc-loot',itemTitle:relation.item,npcTitle:relation.name,zoneTitle:primary.title,instance,lootKind:normalizedCandidate.fields.lootKinds?.value?.[relation.item]||'unique',confirmed:true,required:true});
+            relationships.push({title:relation.name,role:'npc-loot',itemTitle:relation.item,npcTitle:relation.name,zoneTitle:primary.title,instance,lootKind:normalizedCandidate.fields.lootKinds?.value?.[relation.item],confirmed:true,required:true});
         }
         if(normalizedCandidate.kind==='npc'){
             const loot=normalizedCandidate.field('knownLoot');
