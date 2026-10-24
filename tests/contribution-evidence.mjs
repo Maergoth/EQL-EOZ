@@ -24,13 +24,13 @@ assert.deepEqual(zone.fields.knownNPCs.value,['a copper watcher']);assert.equal(
 assert(npc.relations.some(relation=>relation.type==='mob-zone'&&relation.evidence==='consider'&&!relation.confirmed));
 
 parser.location={x:999,y:888,z:777};
-const killed=consume('You have slain a copper watcher!');assert.deepEqual(killed.prompt,{candidateId:npc.id,name:'a copper watcher',zone:'Hidden Vale'});
+const killed=consume('You have slain a copper watcher!');assert.deepEqual(killed.prompt,{candidateId:npc.id,name:'a copper watcher',zone:'Hidden Vale',armed:true,expiresAt:clock+300000});
 assert.equal(find('a copper watcher').fields.location,undefined,'A cached player/kill position is never a spawn');
-assert.equal(consume('Your Location is 1, 2, 3').locationCaptured,null,'A /loc before explicit arming cannot establish spawn');
+assert(consume('Your Location is 1, 2, 3').locationCaptured,'The next fresh /loc attaches to the automatically armed unknown kill');
 assert.equal(q.armSpawnLocation(npc.id).ok,true);
 const located=consume('Your Location is -10.5, 20.25, 3');assert.equal(located.locationCaptured.display,'-10.5, 20.25, 3');
 npc=find('a copper watcher');assert.deepEqual(npc.fields.location,{value:'-10.5, 20.25, 3',confirmed:false});assert.equal(npc.spawnRequest.status,'captured');
-const location=npc.relations.find(relation=>relation.type==='spawn-location');assert.deepEqual(location.location,{x:20.25,y:-10.5,z:3});assert.equal(location.evidence,'player-requested-next-loc');assert.equal(location.confirmed,false);
+const location=npc.relations.findLast(relation=>relation.type==='spawn-location');assert.deepEqual(location.location,{x:20.25,y:-10.5,z:3});assert.equal(location.evidence,'player-requested-next-loc');assert.equal(location.confirmed,false);
 assert.equal(consume('Your Location is 100, 200, 300').locationCaptured,null,'One request consumes exactly one fresh location');
 assert.equal(consume('You have slain a copper watcher!').prompt,null,'An existing request is not prompted on every kill');
 
@@ -71,7 +71,7 @@ q.remove(find('a bronze keeper').id);consume('You have slain a bronze keeper!');
 consume('You have entered Known Vale.');assert.equal(consume('You have slain Known Sentinel!').prompt,null,'Existing wiki monsters do not get missing-monster requests');
 assert.equal(find('Known Sentinel'),undefined);
 assert.equal(logContributionObservation({type:'location',location:{x:1,y:2,z:null}},{live:true,at:clock},{now:clock}),null,'Unknown elevation is never zero');
-const partial=createContributionQueue({getPack:()=>({items:[],npcs:[],zones:[]}),now:()=>clock,storage:{getItem:()=>null,setItem(){}}});const uncertain=partial.consumeLog({type:'kill',victim:'a catalog-unknown watcher'},{zone:'Unknown Vale',at:clock,cursor:1,live:true});assert(uncertain.prompt);assert.equal(uncertain.candidate.membership,'unknown','Incomplete absence remains explicitly unknown on a saved log draft');
+const partial=createContributionQueue({getPack:()=>({items:[],npcs:[],zones:[]}),now:()=>clock,storage:{getItem:()=>null,setItem(){}}});const uncertain=partial.consumeLog({type:'kill',victim:'a catalog-unknown watcher'},{zone:'Unknown Vale',at:clock,cursor:1,live:true});assert.equal(uncertain.prompt,null);assert.equal(uncertain.candidate.membership,'unknown','Incomplete absence stays unknown and never emits a missing-page alert');
 
 const broken=new Map([[CONTRIBUTION_QUEUE_KEY,'{broken private synthetic queue']]),warnings=[];
 const corrupt=createContributionQueue({storage:{getItem:key=>broken.get(key),setItem:(key,value)=>broken.set(key,value)},onWarning:message=>warnings.push(message)});

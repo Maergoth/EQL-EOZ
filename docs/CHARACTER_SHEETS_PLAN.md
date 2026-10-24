@@ -1,5 +1,19 @@
 # Character inspect sheets and wiki sharing
 
+## Current 0.9.8 override
+
+The historical 0.9.6 implementation plan below remains as a receipt. Current
+0.9.7+ Character totals use only confirmed recorded fully equipped statistics;
+catalog, tier, Exaltation and legacy baseline values never add to them. The
+0.9.8 candidate adds bounded rich card `details` to the existing schema-1 flat
+parameters, calls sockets Exaltations, defaults unknown capacity to five while
+preserving observed capacity through eight, and targets new interactive shares
+to the authenticated account's **User:Name** page. Old talk-page sheets remain
+untouched; persisted destination changes require fresh review. See
+[the current walkthrough](CHARACTER_WALKTHROUGH.md) and
+[release/activation plan](RELEASE_098_PLAN.md). Source implementation is not proof
+that the updated helper/templates/schema or public package are installed.
+
 ## Request and accepted layout
 
 Use the compact in-game inventory as the reference for Character and its shared

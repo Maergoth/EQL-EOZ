@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.8 - Richer Character cards and reviewed wiki contributions
+
+Candidate: source implementation and focused checks are in progress. App publication,
+wiki schema/templates/API documentation activation and installed-list cleanup have
+separate acceptance receipts in [the release plan](docs/RELEASE_098_PLAN.md).
+
+- Put the equipped item's tier slider directly below its hover name. Keep adjusted preview values green and recorded Character totals unchanged.
+- Prefill known attached `(Exaltation)` export rows using an exact socket-only alias. Default unknown capacity to five sockets while preserving explicit observed capacity and occupied positions through eight; retain original artwork and private export provenance.
+- Reuse bounded rich item details across Character cards, inspect/share and compatible main/overlay tooltips, including real procs, focus effects, cast times and required levels. Thornstinger retains Rampage without adding any item values to recorded totals.
+- Share new interactive Character (Server) sheets to the authenticated account's User page. Preserve other characters/content and existing talk-page sheets; destination changes and old retries need a fresh review.
+- Reconcile contribution identities through one exact typed resolver. Keep missing-source/population and tier-zero tasks on existing pages, archive safe obsolete false positives, preserve edited/partial work and suppress generated pets unless the wiki positively identifies an NPC.
+- Arm one fresh unknown-kill spawn `/loc` request immediately without stealing game focus. Newer kills replace the active target; source/zone/timeout guards and explicit rearming preserve the correct draft.
+- Lead the editor with match/task review, readable optional fields, Classic/Normal defaults, Raid Instance, Common/Unique Loot rows and a final multi-page diff. Preserve background edits, reviewed existing-page patches, partial retry and contributor attribution.
+- Add a screenshot select/paste area and a local Icon Finder that reuses the wiki's algorithm, lazy versioned index and exact artwork aliases. Cropped icon pixels stay local; screenshot publication remains explicit.
+- Simplify tiered base recovery while preserving rounded uncertainty and a visible tier-zero verification warning. Missing item effects can include a spell-blueprint page in the same reviewed plan.
+- Store minimal fresh kill/loot observations in a separate bounded atomic outbox, including known entities. Send due batches at most hourly while running and logged in, with stable IDs, account-bound acknowledgements, offline retention, backoff and a Settings opt-out; this archive does not calculate drop probabilities or publish articles.
+- Link the reusable attributed MediaWiki create/edit/upload and versioned observation contracts from the public API documentation. Wiki code, database pages and schema require separate activation; no dataset refresh is part of this release.
+
 ## 0.9.7 - Import equipped inventory and record observed stats
 
 - Replace the unreleased baseline-retry flow with character details → fresh `/outputfile inventory` auto-import → equipped, unbuffed stat review → save/share. Keep all gear equipped throughout; EoZ never sends the game command.

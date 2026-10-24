@@ -1,4 +1,5 @@
-import { CHARACTER_SLOTS, CHARACTER_STAT_KEYS, characterEquipmentEligibility, characterItemStats, characterTotals, characterStatLabel } from './character-model.js';
+import {normalizeCharacterItemDetails} from './character-item-card.js';
+import { CHARACTER_SLOTS, CHARACTER_STAT_KEYS, characterEquipmentEligibility, characterItemStats, characterExaltationStats, characterTotals, characterStatLabel } from './character-model.js';
 import { characterTotalGroups } from './character-totals.js';
 
 export const CHARACTER_WIKI_SHEET_SCHEMA=1;
@@ -48,9 +49,9 @@ export function normalizeCharacterWikiSheet(input){
             if(!object(augment)||typeof augment.complete!=='boolean')throw Error('Review the character sheet augments.');
             const index=number(augment.index,{integer:true,min:0,max:7});if(index===null||occupied.has(index)||augmentSlots!==null&&index>=augmentSlots)throw Error('Review the character sheet augment socket positions.');occupied.add(index);
             const augmentTitle=text(augment.title,230,{required:true});if(/[\[\]{}<>|#:\r\n]/.test(augmentTitle)||augmentTitle.startsWith('.'))throw Error('A canonical main-namespace augment title is required.');
-            return {index,title:augmentTitle,tier:number(augment.tier,{integer:true,min:0,max:10}),iconId:number(augment.iconId,{integer:true,min:0,max:1000000}),complete:augment.complete,stats:stats(augment.stats,ITEM_STATS)};
+            return {index,title:augmentTitle,tier:number(augment.tier,{integer:true,min:0,max:10}),iconId:number(augment.iconId,{integer:true,min:0,max:1000000}),complete:augment.complete,stats:stats(augment.stats,ITEM_STATS),details:normalizeCharacterItemDetails(augment.details,{strict:true})};
         }).sort((a,b)=>a.index-b.index);
-        bySlot.set(item.slot,{slot:item.slot,title,tier,iconId:number(item.iconId,{integer:true,min:0,max:1000000}),level:number(item.level,{integer:true,min:0,max:125}),basis:item.basis,complete:item.complete,stats:stats(item.stats,ITEM_STATS),augmentSlots,augments});
+        bySlot.set(item.slot,{slot:item.slot,title,tier,iconId:number(item.iconId,{integer:true,min:0,max:1000000}),level:number(item.level,{integer:true,min:0,max:125}),basis:item.basis,complete:item.complete,stats:stats(item.stats,ITEM_STATS),details:normalizeCharacterItemDetails(item.details,{strict:true}),augmentSlots,augments});
     }
     const result={schemaVersion:CHARACTER_WIKI_SHEET_SCHEMA,metadata,totals,equipment:CHARACTER_WIKI_SHEET_SLOTS.filter(slot=>bySlot.has(slot)).map(slot=>bySlot.get(slot))};
     if(size(result)>CHARACTER_WIKI_SHEET_LIMITS.bytes)throw Error('The interactive character sheet exceeds its size limit.');return result;
@@ -69,8 +70,8 @@ export function buildCharacterWikiSheet(snapshot){
         // Import provenance does not establish an item article or its stats.
         const read=characterItemStats(item),iconId=/^\d{1,7}$/.test(String(item.iconId))?Number(item.iconId):null;
         const occupied=(item.augments||[]).map((augment,index)=>({...augment,index:Number.isInteger(augment.index)?augment.index:index})),publicAugments=occupied.filter(augment=>characterEquipmentEligibility(augment).known);
-        const augments=publicAugments.map(augment=>({index:augment.index,title:augment.catalogIdentity.wikiTitle,tier:augment.tier??null,iconId:/^\d{1,7}$/.test(String(augment.iconId))?Number(augment.iconId):null,stats:Object.fromEntries(Object.entries(augment.stats||{}).filter(([key])=>ITEM_STATS.has(key))),complete:augment.statsComplete===true}));
-        equipment.push({slot,title:item.catalogIdentity.wikiTitle,tier:item.tier??null,iconId,level:item.level??null,basis:imported?'inventory-export':read.basis,complete:read.complete,stats:Object.fromEntries(Object.entries(read.stats).filter(([key])=>ITEM_STATS.has(key))),augmentSlots:item.augmentSlots??null,augments});
+        const augments=publicAugments.map(augment=>{const read=characterExaltationStats(augment);return {index:augment.index,title:augment.catalogIdentity.wikiTitle,tier:augment.tier??null,iconId:/^\d{1,7}$/.test(String(augment.iconId))?Number(augment.iconId):null,stats:Object.fromEntries(Object.entries(read.stats).filter(([key])=>ITEM_STATS.has(key))),complete:read.complete,details:normalizeCharacterItemDetails(augment.details)};});
+        equipment.push({slot,title:item.catalogIdentity.wikiTitle,tier:item.tier??null,iconId,level:item.level??null,basis:imported?'inventory-export':read.basis,complete:read.complete,stats:Object.fromEntries(Object.entries(read.stats).filter(([key])=>ITEM_STATS.has(key))),details:normalizeCharacterItemDetails(item.details),augmentSlots:item.augmentSlots??null,augments});
     }
     const totals={};for(const group of characterTotalGroups(characterTotals(snapshot)))for(const row of group.rows){const key=row.key.replace(/_MAXIMUM$/,'');if(TOTAL_STATS.has(key))totals[key]={value:row.value??null,complete:row.complete===true};}
     const metadata=snapshot.metadata||{};
@@ -79,6 +80,7 @@ export function buildCharacterWikiSheet(snapshot){
 
 const literal=value=>String(value).replace(/[&<>"'{}|\[\]~_]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','{':'&#123;','}':'&#125;','|':'&#124;','[':'&#91;',']':'&#93;','~':'&#126;','_':'&#95;'}[character]));
 const numericText=(value,complete=true)=>value===null?'?':`${value}${complete?'':' *'}`;
+const detailLines=value=>normalizeCharacterItemDetails(value,{strict:true}).map(detail=>`${literal(detail.label)}: ${detail.linkTitle?`[[${literal(detail.linkTitle)}|${literal(detail.value)}]]`:literal(detail.value)}`).join('<br>');
 const statLines=(value,complete)=>Object.entries(value).map(([key,value])=>`${literal(characterStatLabel(key))}: ${numericText(value,complete)}`).join('<br>');
 /** Only fixed parameter names and generated numeric/stat markup enter source.
  * User text is entity-escaped before MediaWiki parameter/template parsing. */
@@ -91,8 +93,8 @@ export function serializeCharacterWikiSheet(input,{caption=''}={}){
     const note=normalizeCharacterWikiCaption(caption);if(note)parameters.push(['caption',note.split('\n').map(literal).join('<br>')]);
     for(const [key,record]of Object.entries(sheet.totals))parameters.push([`total_${key.toLowerCase()}`,numericText(record.value,record.complete)]);
     for(const item of sheet.equipment){
-        const prefix=item.slot;parameters.push([`${prefix}_item`,literal(item.title)],[`${prefix}_tier`,numericText(item.tier)],[`${prefix}_icon`,item.iconId===null?'':String(item.iconId)],[`${prefix}_stats`,statLines(item.stats,item.complete)],[`${prefix}_augment_slots`,item.augmentSlots===null?'':String(item.augmentSlots)]);
-        for(const augment of item.augments){const key=`${prefix}_augment_${augment.index+1}`;parameters.push([`${key}_item`,literal(augment.title)],[`${key}_tier`,numericText(augment.tier)],[`${key}_icon`,augment.iconId===null?'':String(augment.iconId)],[`${key}_stats`,statLines(augment.stats,augment.complete)]);}
+        const prefix=item.slot;parameters.push([`${prefix}_item`,literal(item.title)],[`${prefix}_tier`,numericText(item.tier)],[`${prefix}_icon`,item.iconId===null?'':String(item.iconId)],[`${prefix}_stats`,statLines(item.stats,item.complete)],[`${prefix}_details`,detailLines(item.details)],[`${prefix}_augment_slots`,item.augmentSlots===null?'':String(item.augmentSlots)]);
+        for(const augment of item.augments){const key=`${prefix}_augment_${augment.index+1}`;parameters.push([`${key}_item`,literal(augment.title)],[`${key}_tier`,numericText(augment.tier)],[`${key}_icon`,augment.iconId===null?'':String(augment.iconId)],[`${key}_stats`,statLines(augment.stats,augment.complete)],[`${key}_details`,detailLines(augment.details)]);}
     }
     return `{{Character_sheet\n${parameters.map(([key,value])=>`|${key}=${value}`).join('\n')}\n}}`;
 }

@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {EventEmitter} from 'node:events';
+import {createRequire} from 'node:module';
+import {createDiscoveryNoticeQueue} from '../app/wiki-discovery-ui.js';
+const require=createRequire(import.meta.url),{DiscoveryHost,SPAWN_CHANNEL}=require('../desktop/discovery-host.cjs'),origin='http://127.0.0.1:53147';
+const handlers=new Map(),windows=[];
+class Contents extends EventEmitter{constructor(url){super();this.mainFrame={url};this.sent=[];this.session={setPermissionRequestHandler:callback=>this.permission=callback,setPermissionCheckHandler:callback=>this.permissionCheck=callback,webRequest:{onBeforeRequest:(_filter,callback)=>this.before=callback}};}send(...args){this.sent.push(args);}setWindowOpenHandler(callback){this.windowOpen=callback;}}
+class Window extends EventEmitter{constructor(options={}){super();this.options=options;this.webContents=new Contents('about:blank');this.destroyed=false;this.shownInactive=0;this.hidden=0;this.focused=0;this.shown=0;windows.push(this);}isDestroyed(){return this.destroyed;}async loadURL(url){this.webContents.mainFrame.url=url;}setBounds(value){this.bounds=value;}setAlwaysOnTop(...value){this.top=value;}showInactive(){this.shownInactive++;}show(){this.shown++;}focus(){this.focused++;}hide(){this.hidden++;}destroy(){this.destroyed=true;this.emit('closed');}}
+const main=new Window(),timer=new Window();main.webContents.mainFrame.url=`${origin}/`;timer.webContents.mainFrame.url=`${origin}/overlay.html?panel=timers`;
+const frame=window=>({sender:window.webContents,senderFrame:window.webContents.mainFrame}),electron={BrowserWindow:Window,ipcMain:{handle:(key,callback)=>handlers.set(key,callback),removeHandler:key=>handlers.delete(key)},screen:{getCursorScreenPoint:()=>({x:2100,y:900}),getDisplayNearestPoint:()=>({workArea:{x:1920,y:0,width:1280,height:1024}})}};
+const host=new DiscoveryHost({electron,origin,getMainWindow:()=>main,isTimerPanel:event=>event.sender===timer.webContents&&event.senderFrame===timer.webContents.mainFrame});
+const prompt=(id='1')=>({id:`spawn-${id}`,candidateId:id,kind:'monster',name:`Synthetic <monster> ${id}`,zone:'Synthetic Vale',purpose:'spawn-location'});
+await host.handle(frame(main),'show',{id:'ordinary',kind:'item',name:'Ordinary Missing Item'});assert.equal(windows.length,2,'Ordinary notices stay inline');
+await host.handle(frame(main),'show',prompt());const popup=host.spawnWindow;assert(popup);assert.equal(popup.shownInactive,1);assert.equal(main.focused,0);assert.equal(main.shown,0);assert.equal(popup.options.show,false);assert.equal(popup.options.skipTaskbar,true);assert.equal(popup.options.webPreferences.sandbox,true);assert.equal(popup.options.webPreferences.nodeIntegration,false);assert.equal(popup.options.webPreferences.contextIsolation,true);assert.equal(popup.options.webPreferences.partition,'eoz-spawn-prompt');assert.deepEqual(popup.bounds,{x:2808,y:794,width:380,height:218});
+let permission;popup.webContents.permission(null,'clipboard-read',value=>permission=value);assert.equal(permission,false);assert.equal(popup.webContents.permissionCheck(),false);
+for(const url of [`${origin}/spawn-prompt.js`,`${origin}/wiki-discovery-ui.js`]){let result;popup.webContents.before({url},value=>result=value);assert.equal(result.cancel,false);}
+for(const url of [`${origin}/api/config`,'https://eqlwiki.com/','file:///C:/private.txt',`${origin}/spawn-prompt.html?other`]){let result;popup.webContents.before({url},value=>result=value);assert.equal(result.cancel,true);}
+assert.deepEqual(popup.webContents.windowOpen(),{action:'deny'});
+let prevented=false;popup.webContents.emit('will-navigate',{preventDefault(){prevented=true;}},'https://eqlwiki.com/');assert(prevented);
+for(const event of [frame(main),frame(timer),{sender:popup.webContents,senderFrame:{url:`${origin}/spawn-prompt.html`}}])await assert.rejects(host.handleSpawn(event,'get-state'),/unavailable/);
+await assert.rejects(host.handle(frame(popup),'capture',{id:'ordinary'}),/unavailable/,'Spawn preload has no old screenshot bridge');
+await assert.rejects(host.handleSpawn(frame(popup),'capture',{id:'spawn-1'}),/Unknown/);
+assert.deepEqual((await host.handleSpawn(frame(popup),'get-state')).map(value=>value.id),['spawn-1']);
+await host.handle(frame(main),'show',prompt('2'));assert.equal(host.spawnWindow,popup);assert.deepEqual(host.spawnState().map(value=>value.candidateId),['2']);assert(host.state().some(value=>value.id==='ordinary'),'Replacing a spawn request preserves ordinary notices');
+await assert.rejects(host.handleSpawn(frame(popup),'contribute',{id:'spawn-1'}),/expired/);
+await host.handleSpawn(frame(popup),'contribute',{id:'spawn-2'});assert.equal(main.shown,1);assert.equal(main.focused,1);assert(main.webContents.sent.some(([channel,value])=>channel==='eye-of-zomm:discovery-action'&&value.action==='contribute'&&value.candidateId==='2'));assert(popup.hidden);assert.equal(host.spawnState().length,0);
+await host.handle(frame(main),'show',prompt('3'));await host.handleSpawn(frame(popup),'ignore',{id:'spawn-3'});assert.equal(main.focused,1,'Ignore never activates main');assert(main.webContents.sent.some(([,value])=>value.action==='ignore'&&value.candidateId==='3'));
+let clock=0;const notices=createDiscoveryNoticeQueue({now:()=>clock,maxVisible:1});notices.reconcile([prompt('4')]);clock=14000;assert.deepEqual(notices.tick(),[]);notices.hold('spawn-4','hover',true);clock+=60000;assert.deepEqual(notices.tick(),[],'The reused notice clock pauses while hovered');notices.hold('spawn-4','hover',false);clock+=1001;assert.deepEqual(notices.tick(),['spawn-4'],'Fifteen visible seconds expire after hover release');
+host.dispose();assert(popup.destroyed);assert.equal(handlers.has(SPAWN_CHANNEL),false);assert.equal(handlers.has('eye-of-zomm:discovery'),false);
+console.log('Native spawn prompt host: non-activating bottom-right surface, exact-frame restricted IPC, denied resources/permissions, newest-only targeting, explicit main focus and reused hover-paused timeout passed.');

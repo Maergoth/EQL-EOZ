@@ -17,6 +17,9 @@ const { safeMapFile } = require('./overlay-map-policy.cjs');
 const { DiscoveryHost } = require('./discovery-host.cjs');
 const { CaptureHost } = require('./capture-host.cjs');
 const { WikiHost } = require('./wiki-host.cjs');
+const { DropObservationHost } = require('./drop-observation-host.cjs');
+const { IconFinderHost } = require('./icon-finder-host.cjs');
+const { RendererDrain } = require('./renderer-drain.cjs');
 const { ShareHost } = require('./share-host.cjs');
 const { CharacterStorage } = require('./character-storage.cjs');
 const { InventoryFileHost } = require('./inventory-file-host.cjs');
@@ -52,6 +55,10 @@ let overlayHost = null;
 let discoveryHost = null;
 let captureHost = null;
 let wikiHost = null;
+let observationHost = null;
+let iconFinderHost = null;
+let rendererDrain = null;
+let reloading = false;
 let shareHost = null;
 let characterStorage = null;
 let inventoryFileHost = null;
@@ -132,6 +139,16 @@ function showMainWindow(focus = true) {
     if (pendingInitialMaximize) { pendingInitialMaximize=false;windowRef.maximize(); }
     windowRef.show();
     if (focus) windowRef.focus();
+}
+
+async function reloadMainWindow(url=`http://${HOST}:${port}/`) {
+    if(reloading||quitting||!windowRef||windowRef.isDestroyed())return;
+    reloading=true;
+    try{
+        if(rendererDrain && !await rendererDrain.drain()){rendererDrain.resume();dialog.showErrorBox('Eye of Zomm could not save pending observations','The current page has been kept open. Check available disk space, then try again.');return;}
+        await windowRef.loadURL(url);
+    }catch{sessionNeedsReload=true;overlayHost?.markSessionUnavailable();}
+    finally{reloading=false;}
 }
 
 function productionPackPath() {
@@ -793,7 +810,12 @@ function createWindow(config = {}, savedPlacement = {}) {
         if (!url.startsWith(localPrefix)) {
             event.preventDefault();
             openApprovedExternalUrl(url);
+        } else {
+            event.preventDefault();void reloadMainWindow(url);
         }
+    });
+    windowRef.webContents.on('before-input-event',(event,input)=>{
+        if(input.type==='keyDown'&&(input.key==='F5'||((input.control||input.meta)&&input.key.toLowerCase()==='r'))){event.preventDefault();void reloadMainWindow();}
     });
 
     windowRef.once('ready-to-show', () => {
@@ -815,13 +837,16 @@ function createWindow(config = {}, savedPlacement = {}) {
         if (!quitting && overlayHost?.hasVisiblePanels() && overlayHost.hasRecoveryControl()) {
             event.preventDefault();
             windowRef.hide();
+        } else if(!quitting) {
+            event.preventDefault();app.quit();
         }
     });
     const unavailable = () => { sessionNeedsReload = true; overlayHost?.markSessionUnavailable(); };
     windowRef.webContents.on('render-process-gone', unavailable);
+    windowRef.webContents.on('render-process-gone',()=>rendererDrain?.reset());
     windowRef.webContents.on('render-process-gone', () => {discoveryHost?.clear();void captureHost?.stop().catch(()=>{});});
     windowRef.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-        if (isMainFrame && !isInPlace) {discoveryHost?.clear();void captureHost?.stop().catch(()=>{});}
+        if (isMainFrame && !isInPlace) {rendererDrain?.reset();discoveryHost?.clear();void captureHost?.stop().catch(()=>{});}
     });
     windowRef.webContents.on('unresponsive', unavailable);
     windowRef.webContents.on('responsive', () => { sessionNeedsReload = false; });
@@ -865,7 +890,18 @@ async function bootstrap() {
     inventoryFileHost = new InventoryFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig});
     captureHost = new CaptureHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     wikiHost = new WikiHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
-        stateDir:path.join(userDataDir(),'wiki-contributions'),version:APP_VERSION});
+        stateDir:path.join(userDataDir(),'wiki-contributions'),version:APP_VERSION,
+        onStatus:status=>{void observationHost?.accountChanged(status);if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:wiki-state',status);},
+        onAttachmentPrepared:({png})=>captureHost.importPng(png,{mode:'contribution'}),
+        onIconRequest:(action,value)=>iconFinderHost.handle(action,value)});
+    iconFinderHost = new IconFinderHost({session:wikiHost.session,stateDir:path.join(userDataDir(),'wiki-icons'),nativeImage:electron.nativeImage});
+    observationHost = new DropObservationHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
+        stateDir:path.join(userDataDir(),'drop-observations'),client:wikiHost.client,version:APP_VERSION});
+    await observationHost.ready;
+    // Resolve the cookie-backed account before new events enter the outbox.
+    const wikiCookies=await wikiHost.session.cookies.get({url:'https://eqlwiki.com/'}).catch(()=>[]);
+    await observationHost.accountChanged(wikiCookies.length?await wikiHost.client.status().catch(()=>({authenticated:false})):{authenticated:false});
+    rendererDrain = new RendererDrain({ipcMain,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     shareHost = new ShareHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
         isTimerPanel:event=>overlayHost.overlaySender(event)==='timers',captureScreenshot:value=>captureHost.captureScreenshot(value)});
@@ -940,17 +976,15 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', event => {
     if (quitReady) return;
-    event.preventDefault();
-    if (quitFlush) return;
-    quitting = true;
-    stopDataPackRefresh();
-    overlayHost?.dispose();
-    discoveryHost?.dispose();
-    wikiHost?.dispose();
-    shareHost?.dispose();
-    inventoryFileHost?.dispose();
-    appUpdater?.shutdown();
-    try { server?.close(); } catch {}
-    quitFlush=Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain,characterStorage?.close()])
-        .finally(()=>{electron.session.defaultSession.flushStorageData();quitReady=true;app.quit();});
+    event.preventDefault();if (quitFlush) return;quitting = true;
+    quitFlush=(async()=>{
+        if(rendererDrain && !await rendererDrain.drain() && windowRef && !windowRef.isDestroyed()){
+            quitting=false;rendererDrain.resume();
+            dialog.showErrorBox('Eye of Zomm could not save pending observations','The app has been left open. Check available disk space and try closing it again.');return;
+        }
+        stopDataPackRefresh();overlayHost?.dispose();discoveryHost?.dispose();wikiHost?.dispose();iconFinderHost?.dispose();shareHost?.dispose();inventoryFileHost?.dispose();appUpdater?.shutdown();
+        try { server?.close(); } catch {}
+        await Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain,characterStorage?.close(),observationHost?.close()]);
+        rendererDrain?.dispose();electron.session.defaultSession.flushStorageData();quitReady=true;app.quit();
+    })().finally(()=>{quitFlush=null;});
 });

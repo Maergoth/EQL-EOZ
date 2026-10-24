@@ -1,5 +1,17 @@
 # Eye of Zomm — Product and UX Vision
 
+## 0.9.8 candidate
+
+Keep the recorded-only Character flow below. Add an equipped-hover tier slider,
+rich shared item cards, imported Exaltations with five fallback sockets and
+reviewed User-page sharing. Contribute leads with identity/task review, supports
+scoped existing-page work, one guarded unknown-kill `/loc` prompt, screenshot
+selection and local Icon Finder matching. A separate opt-out hourly observation
+outbox retains minimal kill/loot evidence without publishing article edits or
+calculating drop rates. See [the execution plan](RELEASE_098_PLAN.md) for focused
+acceptance and separate app/wiki activation receipts. Published 0.9.7 remains the
+baseline until those release gates complete.
+
 ## Current 0.9.7 inventory-export contract
 
 Keep all gear equipped. Enter metadata, generate a fresh `/outputfile inventory`
@@ -43,8 +55,8 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 [release history](RELEASE_HISTORY.md) and [validation](../VALIDATION.md).
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.9.7 candidate, extending released 0.9.6
-Last updated: 2026-10-23
+Baseline: 0.9.8 candidate, extending published 0.9.7
+Last updated: 2026-10-24
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)
 

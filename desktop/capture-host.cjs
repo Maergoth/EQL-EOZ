@@ -394,7 +394,12 @@ class CaptureHost {
             if(!stat.isFile()||stat.size>32*1024*1024)throw new Error('Choose an image smaller than 32 MB.');
             png=await fs.readFile(target);validateCapturePng(png);image=this.electron.nativeImage.createFromBuffer(png);
         }
-        const size=image.getSize();
+        return this.importPng(png,{mode,sessionId});
+    }
+    async importPng(png,{mode='contribution',sessionId}={}) {
+        if(!Buffer.isBuffer(png)||png.length>32*1024*1024||!MODES.has(mode))throw new Error('Invalid screenshot pixels.');
+        validateCapturePng(png);
+        const image=this.electron.nativeImage.createFromBuffer(png),size=image.getSize();
         if(image.isEmpty()||size.width*size.height>16*1024*1024)throw new Error('Choose an image smaller than 16 megapixels.');
         if(this.hold)throw new Error('Another screenshot is already being read.');
         this.hold=true;this.advanceGeneration();this.clearPending();

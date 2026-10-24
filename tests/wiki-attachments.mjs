@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url),{WikiClient,validatePNG}=require('../desktop/wiki-client.cjs'),{WikiHost}=require('../desktop/wiki-host.cjs'),{WikiAttachments,readBoundedFile}=require('../desktop/wiki-attachments.cjs');
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
+const stateDir=await fs.mkdtemp(path.join(os.tmpdir(),'eoz-attachments-'));
+try{
+ const store=new WikiAttachments({stateDir,validate:validatePNG}),a=await store.add(png,{candidateId:'candidate_01',kind:'item'});
+ assert(!JSON.stringify(a).includes('png'));assert.equal(a.bytes,png.length);
+ const reopened=new WikiAttachments({stateDir,validate:validatePNG});const both=await Promise.all([reopened.get(a.id),reopened.get(a.id)]);assert(both.every(v=>v.bytes.equals(png)));
+ await assert.rejects(reopened.get(a.id,'different_candidate'),/unavailable/);
+ const file=path.join(stateDir,'wiki-attachments',a.id+'.png');const changed=Buffer.from(png);changed[40]^=1;await fs.writeFile(file,changed);await assert.rejects(reopened.get(a.id),/changed/);await fs.writeFile(file,png);
+ const oversized=path.join(stateDir,'large.png');await fs.writeFile(oversized,Buffer.alloc(1025));await assert.rejects(readBoundedFile(oversized,1024),/smaller/);
+ const small=new WikiAttachments({validate:validatePNG});for(let i=0;i<20;i++)await small.add(png,{candidateId:'candidate_01',kind:'item'});await assert.rejects(small.add(png,{candidateId:'candidate_01',kind:'item'}),/full/);
+ let imports=0,dialogs=0,cancel=false,icons=0;const forwarded=[];const image={isEmpty:()=>false,getSize:()=>({width:1,height:1}),toPNG:()=>png,resize(){return this;},toDataURL:()=>`data:image/png;base64,${png.toString('base64')}`};
+ const session={fetch:async()=>new Response('{}'),setPermissionRequestHandler(){},setPermissionCheckHandler(){},setDevicePermissionHandler(){},clearStorageData:async()=>{},clearCache:async()=>{},on(){},removeListener(){}},webContents={mainFrame:{url:'http://127.0.0.1:9999/'}},window={isDestroyed:()=>false,webContents};
+ const client=new WikiClient({fetchImpl:session.fetch,stateDir});const host=new WikiHost({electron:{session:{fromPartition:()=>session},ipcMain:{handle(){},removeHandler(){}},clipboard:{readImage:()=>image},nativeImage:{createFromBuffer:()=>image},dialog:{showOpenDialog:async()=>{dialogs++;return cancel?{canceled:true}:{canceled:false,filePaths:[file]};}}},origin:'http://127.0.0.1:9999',getMainWindow:()=>window,client,onStatus:async status=>{forwarded.push(status);},onAttachmentPrepared:async({png:bytes,kind,candidateId})=>{assert(bytes.equals(png));assert.equal(kind,'item');assert.equal(candidateId,'candidate_01');imports++;},onIconRequest:async(action,value)=>{icons++;return {action,value};}});
+ const event={sender:webContents,senderFrame:webContents.mainFrame};
+ const status=await host.handle(event,'status');assert.equal(forwarded.at(-1),status,'An explicit fresh status is forwarded before the IPC call resolves');await host.publishStatus();assert.equal(forwarded.length,2);const logout=await host.handle(event,'logout');assert.equal(logout.authenticated,false);assert(forwarded.some(value=>value===logout),'Cleared account is forwarded even before a remote refresh completes');
+ await assert.rejects(host.handle({...event,senderFrame:{url:webContents.mainFrame.url}},'prepare-attachment',{candidateId:'candidate_01',kind:'item',source:'file'}),/main app/);assert.equal(dialogs,0);
+ const pasted=await host.handle(event,'prepare-attachment',{candidateId:'candidate_01',kind:'item',source:'clipboard'});assert.equal(imports,1);assert.equal(pasted.id,pasted.attachmentId);assert.match(pasted.thumbnail,/^data:image\/png/);assert(!JSON.stringify(pasted).includes(stateDir));
+ await host.handle(event,'prepare-attachment',{candidateId:'candidate_02',kind:'npc',source:'file'});assert.equal(imports,1,'NPC pictures never enter item OCR');assert.equal(dialogs,1);
+ cancel=true;assert.equal((await host.handle(event,'prepare-attachment',{candidateId:'candidate_01',kind:'item',source:'file'})).cancelled,true);assert.equal(imports,1);
+ assert.equal((await host.handle(event,'icon-catalog',{page:0})).action,'icon-catalog');assert.equal(icons,1);
+ await host.handle(event,'discard-attachment',{attachmentId:pasted.attachmentId});await assert.rejects(client.attachments.get(pasted.id),/unavailable/);
+ let resolveOld;client.status=()=>new Promise(resolve=>{resolveOld=resolve;});const oldStatus=host.publishStatus();client.status=async()=>({authenticated:false,user:null});await host.logout();resolveOld({authenticated:true,user:{id:99,name:'Stale Account'}});await oldStatus;assert.equal(forwarded.at(-1).authenticated,false);assert(!forwarded.some(value=>value.user?.id===99),'A delayed pre-logout status cannot restore an old observation owner');host.dispose();
+ console.log('Wiki attachments: explicit file/clipboard admission, predecode bytes/dimensions, private restart/hash/candidate bounds, capacity, main-frame guard, item-only OCR and discard passed.');
+}finally{assert.equal(path.dirname(stateDir),path.resolve(os.tmpdir()));await fs.rm(stateDir,{recursive:true,force:true});}

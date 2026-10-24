@@ -3,6 +3,7 @@
 import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
 import { applyAppearance } from './appearance.js';
 import { isItemStatModified } from './item-stat-presentation.js';
+import { catalogItemDetailsMarkup } from './character-item-card.js';
 const PANELS = Object.freeze({ parse:'Parse', intel:'Zone & loot', timers:'Triggers', map:'Map' });
 // PNUT M&M 28bbf8d _TabStrip/_HeaderBar and compact MeterTable, translated
 // to native Electron panels with EQL colors and this app's supported metrics.
@@ -104,9 +105,8 @@ export function renderItem(item = {}, index = 0, context = '') {
     return `<div class="item-card"><div class="item-heading"><button type="button" class="item-icon-button" ${hoverAttrs} aria-label="${attr(`Stats for ${item.name || 'Unknown item'}`)}">${icon ? `<img class="item-icon" src="${attr(icon)}" alt="">` : '<span class="item-icon item-icon-placeholder" aria-hidden="true">◇</span>'}</button><div><button type="button" class="item-name" ${hoverAttrs}>${escapeHtml(item.name || 'Unknown item')}</button><div class="item-meta">${escapeHtml((item.slots || []).join(' · ') || 'Item')}${number(item.tier) ? ` · Tier ${number(item.tier)}` : ' · Base'}</div></div></div>${stats.length ? `<div class="item-stats">${stats.map(([key,value]) => `<span${isItemStatModified(item.baseStats?.[key],value,item.tier)?' class="is-scaled"':''}>${escapeHtml(key)} ${escapeHtml(value)}</span>`).join(' · ')}</div>` : ''}</div>`;
 }
 export function renderItemTooltip(item = {}) {
-    const stats = Object.entries(item.stats || {}).filter(([,value]) => ['string','number'].includes(typeof value)).slice(0,24);
-    const lines = (Array.isArray(item.displayLines) ? item.displayLines : []).slice(0,12);
-    return `<div class="intel-tooltip-title">${escapeHtml(item.name || 'Unknown item')}<span>${number(item.tier) ? `Tier ${number(item.tier)}` : 'Base'}</span></div><div class="intel-tooltip-body">${lines.length ? lines.map(line => `<div>${escapeHtml(line)}</div>`).join('') : `<div>Slot: ${escapeHtml((item.slots || []).join(' ') || 'Unknown')}</div><div>Class: ${escapeHtml((item.classes || []).join(' ') || 'Unknown')}</div>`}<div class="intel-tooltip-scale">${number(item.tier) ? 'Adjusted stats (base)' : 'Base stats'}</div><dl>${stats.map(([key,value]) => {
+    const stats = Object.entries(item.stats || {}).filter(([,value]) => ['string','number'].includes(typeof value)).slice(0,64);
+    return `<div class="intel-tooltip-title">${escapeHtml(item.name || 'Unknown item')}<span>${number(item.tier) ? `Tier ${number(item.tier)}` : 'Base'}</span></div><div class="intel-tooltip-body">${catalogItemDetailsMarkup(item)}<div class="intel-tooltip-scale">${number(item.tier) ? 'Adjusted stats (base)' : 'Base stats'}</div><dl>${stats.map(([key,value]) => {
         const base = item.baseStats?.[key], changed = isItemStatModified(base,value,item.tier);
         return `<div><dt>${escapeHtml(key.replace(/_/g,' '))}</dt><dd${changed?' class="is-scaled"':''}>${escapeHtml(value)}${changed ? ` <small>(${escapeHtml(base)})</small>` : ''}</dd></div>`;
     }).join('')}</dl>${!stats.length ? '<div class="intel-tooltip-note">No numeric stats are recorded for this item.</div>' : ''}${item.notes ? `<div class="intel-tooltip-note">${escapeHtml(String(item.notes).slice(0,1200))}</div>` : ''}</div>`;

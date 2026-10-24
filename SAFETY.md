@@ -9,10 +9,16 @@ EQLWiki - Eye of Zomm is intentionally designed around a narrow, auditable bound
 - local EverQuest zone/archive/map files under that selected folder;
 - Eye of Zomm's own preferences/cache files;
 - the public GitHub `dataset` branch manifest and compressed EQLWiki dataset.
+- a fresh character inventory export while Character import is explicitly active,
+  or a bounded inventory file chosen with the native file picker; parsing never
+  writes back to the game folder.
 - release metadata and the exact matching Windows/Linux package from the public Eye of Zomm GitHub repository, when checking/downloading an app update.
 - a window or display image only after the player clicks Screenshot on a wiki-discovery notice; the image goes to the local clipboard.
 - a selected window/display while optional Screen reading is enabled for contributions or a Character session, or a PNG explicitly imported for review. OCR runs locally with bundled language data; capture is off by default.
 - the current public wiki blueprints and potential page matches when using the Contribute to Wiki workflow. Authenticated edits/uploads require an explicit review and publish/upload action.
+- the wiki's versioned public icon catalog/fingerprint index and bounded
+  first-party thumbnails when Icon Finder is explicitly used. Cropped icon
+  pixels are processed locally and are not uploaded for matching.
 - installed font family names after Refresh installed fonts is clicked. Font bytes are not read, uploaded or downloaded.
 
 ## It does not
@@ -58,9 +64,23 @@ PNG imports do not enable live capture.
 Wiki login uses a separate hardened native session with the wiki's own normal
 login page. Cookies/CSRF tokens remain in the desktop service. Page writes check
 the current account, reviewed blueprint and revisions/create-only guards; partial
-results are saved for safe retry. Character PNG uploads target only the logged-in
-user's own talk page after preview/confirmation. Ordinary gameplay, queueing,
-screenshots and PNG copy/save never publish a wiki contribution automatically.
+results are saved for safe retry. Interactive Character sheets target only the
+logged-in user's own User page after preview/confirmation. They replace one
+managed Character (Server) block, preserving unrelated content and other sheets.
+Old talk-page sheets are not moved or deleted, and destination changes need a
+fresh review. Local PNG copy/save does not upload an image. Ordinary gameplay,
+queueing and screenshots never publish an article edit automatically.
+
+The 0.9.8 candidate adds a separate minimal kill/loot observation outbox. Its
+clearly labeled Settings option defaults on and controls collection and upload.
+While enabled, fresh structured events are retained in bounded atomic private
+storage; while the app runs and the user is logged in, due batches can be sent
+at most hourly to the wiki with account-bound receipt checks and retry/backoff.
+Opting out stops collection/upload and retains pending records. Raw logs, chat,
+player/actor fields, filesystem paths, coordinates and screenshots are not
+accepted by this endpoint. This archive is separate from reviewed attributed
+article edits and cannot establish drop probabilities or unseen zero drops.
+Wiki API/schema activation remains a separate release gate.
 
 The embedded Zone Viewer receives bounded, read-only access to supported zone/map files under the selected folder. Its parsed/cached data is maintained by the viewer runtime and is never written back into the EverQuest installation.
 

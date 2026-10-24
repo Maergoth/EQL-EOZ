@@ -7,8 +7,38 @@ It tracks every approved Character/card, Contribute, wiki API/drop-storage and
 local contribution-list cleanup requirement with task IDs, code locations,
 dependencies, acceptance conditions, owners and separate deployment checkboxes.
 Update its completion ledger and the private checkpoint before context compaction.
-Planning is complete; implementation and publication of these follow-up features
-are still pending. No updated database/dataset pull is requested.
+Pure Character/card, contribution identity/queue, observation outbox, wiki API
+and Icon Finder implementations now exist with focused synthetic checks. Root
+owns remaining integrated native/platform/package gates and activation receipts;
+this is still a candidate, not a published 0.9.8. No updated database/dataset pull
+is requested.
+
+### Candidate integration contracts
+
+- Character uses only confirmed current displayed stats. Equipped-hover tiers,
+  catalog cards and Exaltations never change totals. Attached `(Exaltation)`
+  aliases are socket-only; unknown capacity falls back to five, retaining
+  observed capacity/occupied sockets through eight. New sheets target User pages;
+  old talk-page attempts require a fresh destination review.
+- Contribute shares typed identity/presence and durable Ignore/submitted state.
+  Existing pages can need missing-source/population or tier-zero work. A fresh
+  unknown kill arms one guarded next `/loc`; generated names are filtered with
+  the pinned EQEmu algorithm unless a wiki NPC is positively known. Safe untouched
+  false positives are archived; protected edits and partial plans are preserved.
+  The actual installed-profile cleanup requires its private backup/count receipt.
+- `app/drop-observations.js` collects minimal fresh events independently of
+  Contribute/OCR. The main-process atomic outbox and hourly host own persistence,
+  account binding, receipt validation, retry/backoff and opt-out. No raw logs,
+  chat, player fields, paths, screenshots or coordinates enter this API. See
+  [evidence/storage contracts](CONTRIBUTION_EVIDENCE_PLAN.md).
+- `app/icon-fingerprint.js`, `app/icon-finder.js` and
+  `desktop/icon-finder-host.cjs` reuse wiki algorithm 6 with exact aliases and
+  lazy bounded public catalog/index/thumbnail caching. Cropped icon pixels stay
+  local. The source provenance is in `THIRD_PARTY/EQL-Icon-Finder/README.md`.
+- Public [API_Documentation](https://eqlwiki.com/API_Documentation) must describe
+  attributed standard MediaWiki create/edit/upload and the enabled observation
+  contract for other clients too. File deployment does not install that wiki
+  page, templates or observation schema. Source tests do not prove activation.
 
 0.9.7 is published from main `e30028b330554760a5240131105365fe43aeef63`.
 Its source/package and wiki activation receipts establish the baseline only.

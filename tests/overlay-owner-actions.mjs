@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import {wikiLocationToWorld} from '../app/coordinate-system.js';
 import {EQLogParser} from '../app/parser.js';
 import {scaledItemStats} from '../app/item-scaling.js';
+import {characterCatalogDetails} from '../app/character-item-card.js';
 
 // Execute the actual main owner's action handler. These fixtures prove camera
 // preview cannot become a logged player position or choose a different source.
@@ -59,6 +60,9 @@ const discoveryOwner={consume:(...args)=>discoveryCalls.push(args)};
 const splitContext=vm.createContext({parser,partialLine:'[Wed Oct 21 12:00:02 2026] You slash Synthetic Keeper for ',logOffset:12345,
     selectedEncounterId:'old-fight',fightExpiryTimer:77,clearTimeout:id=>calls.push(['clear-timer',id]),
     renderAll:()=>calls.push(['render-split']),showNotice:message=>notices.push(message),overlaySession:overlayOwner,wikiDiscovery:discoveryOwner,
+    // Collection/outbox behavior has its own fixtures; splitting a session must
+    // retain these owner-action assertions regardless of telemetry preference.
+    observationPreference:false,
     bridgeInfo:{logPath:'synthetic-log'},state:()=>parser.snapshot()});
 splitContext.observedLogCursor=0;
 splitContext.captureWorkspace={consumeLog:(...args)=>contributionCalls.push(args)};
@@ -86,7 +90,7 @@ assert.equal(contributionCalls.at(-1)[1].cursor,2,'each consumed line has a dist
 // comparisons at the shared tier, without granting another file/network API.
 const itemFrom=source.indexOf('function overlayItemSummary('),itemTo=source.indexOf('const mapDataLoader',itemFrom);
 assert(itemFrom>=0&&itemTo>itemFrom);
-const itemContext=vm.createContext({settings:{itemTier:7},scaledItemStats,itemIconSource:()=>'',});
+const itemContext=vm.createContext({settings:{itemTier:7},scaledItemStats,characterCatalogDetails,itemIconSource:()=>'',});
 vm.runInContext(`${source.slice(itemFrom,itemTo)};this.summarize=overlayItemSummary;`,itemContext);
 const summary=itemContext.summarize({name:'Synthetic Sword',slots:['PRIMARY'],classes:['WAR'],displayLines:['MAGIC ITEM','Class: WAR'],
     stats:{HP:20,DMG:10,WT:1,INVALID:Infinity},notes:'Synthetic note',privatePath:'C:\\Private\\fixture'}, {remaining:1000});
@@ -101,6 +105,6 @@ assert.doesNotMatch(JSON.stringify(summary),/privatePath|Private/);
 const bounded=itemContext.summarize({name:'X'.repeat(500),classes:Array(100).fill('Y'.repeat(100)),displayLines:Array(100).fill('Z'.repeat(1000)),notes:'N'.repeat(5000)}, {remaining:1000});
 assert.equal(bounded.name.length,240);
 assert.equal(bounded.classes.length,20);assert.equal(bounded.classes[0].length,40);
-assert.equal(bounded.displayLines.length,12);assert.equal(bounded.displayLines[0].length,240);
+assert.equal(bounded.displayLines.length,32);assert.equal(bounded.displayLines[0].length,400);
 assert.equal(bounded.notes.length,1200);
 console.log('Owner actions: exact raid identity, camera-only native map preview, unknown Z, stale-source rejection and shared item-level persistence passed.');

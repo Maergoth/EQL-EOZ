@@ -1,5 +1,17 @@
 # Browsable release history
 
+The 0.9.8 candidate adds five reviewed actual component captures: equipped-hover
+tier/proc/sockets with recorded-only totals, match/page review, Common/Unique
+loot and the screenshot plus area, selected screenshot/rights/effect fields,
+and local Icon Finder matching with exact artwork alias selection. The four
+workspace captures use Chromium at 13px Arial with synthetic records and isolated
+storage/wiki/capture APIs. The selected screenshot is a one-pixel placeholder;
+the fifth capture uses synthetic local canvas pixels/catalog. Each image is
+archived under 0.9.8 with its own SHA-256; every earlier
+entry, caption and image remains unchanged. The current app release and wiki
+activation still require the separate release-plan receipts. No player pixels
+or production uploads are used for these illustrations.
+
 Version 0.9.7 archives five visually reviewed native captures: inventory export,
 prominent equipped/unbuffed stat preparation, recorded-only character inspect,
 log discoveries with a reviewed spawn-location proposal, and item screenshot/icon

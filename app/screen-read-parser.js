@@ -164,7 +164,7 @@ function stats(text, confidence, { character = false, modern = false } = {}) {
         const match = text.match(regex);
         if (!match || (label==='HP' && /HP\s+Regen/i.test(match[0])) || /^[-+]?0\d/.test(match[1]) || !percent&&text.slice(match.index+match[0].length).startsWith('%')) continue;
         if(key==='damage'&&/^DMG$/i.test(label)&&/\bBackstab[ \t]*$/i.test(text.slice(0,match.index)))continue;
-        if(key==='haste'&&/^(?:Click|Worn|Focus|Proc) Effect\s*:/i.test(text.slice(0,match.index).split('\n').at(-1).trim()))continue;
+        if(key==='haste'&&/^(?:(?:Click|Worn|Focus|Proc|Combat)\s+)?Effect\s*:/i.test(text.slice(0,match.index).split('\n').at(-1).trim()))continue;
         // Modern attributes/resources are displayed as explicit pairs. A lone
         // "1510" may be a lost slash/current value, not a four-digit attribute.
         if(character&&modern&&(modernPairedStats.has(key)&&match[2]===undefined||['attack','ac'].includes(key)))continue;
@@ -405,7 +405,7 @@ export function parseScreenRead(input = {}) {
         if(sockets.augmentSlotCount!==null)fields.push(field('augmentSlotCount',itemText,sockets.augmentSlotCount,confidence));
         if(sockets.emptyAugmentSlots!==null)fields.push(field('emptyAugmentSlots',itemText,sockets.emptyAugmentSlots,confidence));
         if(sockets.augments.length)fields.push(field('augments',itemText,sockets.augments,confidence));
-        const effects = lines.filter(line=>/^(?:Click|Worn|Focus|Proc) Effect\s*:/i.test(line)||/^(?:\w+ )?Exaltation\s*:/i.test(line)&&distance(line.replace(/^[^:]+:\s*/,'').toLowerCase(),'empty')>1).slice(0,12);
+        const effects = lines.filter(line=>/^(?:(?:Click|Worn|Focus|Proc|Combat)\s+)?Effect\s*:/i.test(line)||/^(?:\w+ )?Exaltation\s*:/i.test(line)&&distance(line.replace(/^[^:]+:\s*/,'').toLowerCase(),'empty')>1).slice(0,12);
         if (effects.length) fields.push(field('effects',effects.join('; '),effects,confidence));
         // Modern always renders an unchecked "Modified" checkbox label. Only
         // an explicit title/state is evidence; the label by itself is unknown.

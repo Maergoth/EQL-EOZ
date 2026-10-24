@@ -1,6 +1,10 @@
 # Persistent contribution evidence
 
-## Current 0.9.7 scope and owners
+## Current 0.9.8 candidate scope and owners
+
+0.9.7 is the released baseline. The source contracts below include the candidate
+0.9.8 changes; wiki schema, database pages, installed-list cleanup and packages
+need separate receipts in [the active release plan](RELEASE_098_PLAN.md).
 
 This extends [the inventory-export Character plan](INVENTORY_EXPORT_CHARACTER_PLAN.md).
 Logs supply observed monster names, considers, kills, acquired items, zone names
@@ -26,6 +30,13 @@ seconds in the future, out-of-order live lines and remembered duplicate IDs are
 rejected. Historical journal replay uses the existing `queue.consume(record)`;
 it cannot arm a spawn request or turn a historical kill into a live prompt.
 
+Queue intake, transient notices and reconciliation share the typed resolver in
+`app/wiki-identity.js`. It normalizes NFKC, supported apostrophes/backticks,
+whitespace/underscores, case, canonical titles and declared aliases without
+discarding NPC articles or applying fuzzy equality. Potential fuzzy matches
+remain review choices. Generated pet names follow the pinned EQEmu algorithm;
+positive known wiki NPC identity wins over that heuristic.
+
 Missing articles are established only by a non-sample pack marked
 `meta.wikiEntitiesComplete: true` with `wikiEntities.items`, `.npcs` and `.titles`
 arrays. Older/incomplete packs establish positive presence but only **unknown**
@@ -46,6 +57,15 @@ remain in relationships. NPC drafts retain their zone identity. Old item
 zone-specific keys remain aliases, including Ignore suppression. Historical
 duplicate reviewed drafts are preserved for manual reconciliation rather than
 silently deleting one or choosing conflicting verified fields.
+
+Draft reasons distinguish `missing-page`, `missing-source`,
+`missing-population`, `tier0-verification`, `catalog-unknown` and
+`identity-review`. A known page with a real source/population gap is a patch
+task, not a proposed duplicate. Existing exact source/zone/instance relationships
+are compared before creating work; a bare acquisition in a zone does not prove
+a drop source. Known quest/crafted/vendor items do not become new missing pages
+merely because they have no mob source. Reviewed/ignored/submitted state remains
+durable and new evidence can enrich a task without repeatedly alerting.
 
 Existing untouched tier-named drafts receive one narrow load migration: only an
 item with a supported trailing tier, a title exactly equal to its original name,
@@ -107,11 +127,15 @@ entity, zone and source provenance.
 
 An unknown/missing NPC killed in a fresh live line creates one durable
 `spawnRequest: {status:'requested', requestedAt, evidenceId}` and returns
-`prompt: {candidateId,name,zone}`. Root supplies a nonblocking prompt and review
-action. Killing the same NPC again does not repeatedly open the request.
+`prompt: {candidateId,name,zone,armed:true,expiresAt}` after automatically arming
+the next eligible `/loc`. Root supplies a nonblocking bottom-right prompt
+without stealing focus. Killing the same NPC again does not repeatedly open it.
+A newer eligible unknown kill replaces the one active target; the older request
+remains saved and can be explicitly rearmed. One location cannot fill several
+drafts, and a captured request does not silently advance to another monster.
 
-The player must choose to record a spawn location, go to the actual spawn and
-type `/loc`. `queue.armSpawnLocation(candidateId)` returns `{ok,error?}` and
+The player must go to the actual spawn and type `/loc`. **Record next /loc** can
+explicitly rearm a saved request. `queue.armSpawnLocation(candidateId)` returns `{ok,error?}` and
 binds only that NPC, current source and current zone for five minutes. The next
 fresh later line/cursor in that context supplies a proposal; an already cached
 player location, kill location, historical line or `/loc` before arming cannot.
@@ -126,6 +150,32 @@ structured relation uses normalized world **X, Y, Z**. Coordinates must all be
 finite; unknown Z is not zero. Both field and relation remain unconfirmed until
 review, with `spawnRequest.status: 'captured'`. The app never sends `/loc` or
 other gameplay commands itself.
+
+## Reviewed editor and media
+
+Match/task review appears before fields. The editor defaults to Classic Era
+and Normal instance with a Raid Instance choice; dynamic existing raid sections
+remain distinct. Human labels and optional unknown blueprint placeholders replace
+per-field Verified checkboxes. Common Loot and Unique Loot are section choices,
+not inferred drop-frequency claims. Fresh evidence does not overwrite deliberate
+in-progress edits. A final reviewed multi-page diff is required for publication.
+
+PNG screenshot selection/paste is separate from local OCR and actual upload.
+Caption/license and the intended article link are included in the reviewed plan.
+The local Icon Finder accepts only a bounded crop containing just the icon,
+reuses the wiki's algorithm-6 fingerprint code and versioned static catalog,
+and preserves every exact item artwork alias/ID. It fetches metadata/catalog/
+fingerprint index only as needed and proxies bounded first-party thumbnails;
+no crop pixels leave the renderer or upload to the wiki.
+
+Tiered base recovery preserves original evidence, unsupported/ambiguous values
+and explicit user choices. Recovered values include the visible warning:
+"These stats are reverse calculated from a tier X item. Please confirm with a
+tier 0 item and remove this message". A genuine reviewed tier-zero observation
+can replace the proposal through a scoped existing-page patch. Missing item
+effects may include a spell-blueprint page in the same guarded plan; existing
+spell pages are resolved first. Sequential writes retain normal attribution,
+fresh revision/create-only guards and partial-result retry.
 
 ## Durable storage and limits
 
@@ -146,6 +196,60 @@ full rather than silently deleting an older draft. A storage/byte-limit failure
 warns that changes remain in memory; recovery/removal is needed before closing.
 Malformed/unsupported saved queue data is preserved and write-blocked. This is
 not an unlimited raw log archive or recording.
+
+`queue.reconcile({apply:false})` provides a bounded dry run. Versioned apply
+archives safe untouched known-complete/generated-pet/duplicate entries while
+retaining edited, reviewed, submitted and partial plans and real patch tasks.
+Archive entries remain bounded and recoverable; a failed save rolls back the
+active queue. Root must back up the installed profile, inspect the dry-run
+counts, apply and read back before claiming the user's list is cleaned. No
+player list or private backup belongs in Git.
+
+## Separate hourly observation outbox
+
+The observation archive is independent of the editable contribution queue.
+`collectDropObservation(event, context)` taps fresh parsed kill/loot events
+before Ignore, submitted and wiki-presence filters. Known NPCs/items therefore
+still supply observations. Explicit player/pet evidence and generated-name
+rules exclude ineligible kills; uncertain loot sources stay unknown. No zero
+drop or probability calculation is performed.
+
+`desktop/drop-observation-storage.cjs` stores minimal allowlisted events with
+stable IDs and SHA-256 payload hashes in a private atomic file. Bounds are
+16 MiB, 10,000 pending/issue records and 5,000 acknowledged dedup receipts.
+Corrupt saved files are preserved and write-blocked. A full/unwritable store
+warns; it never silently deletes pending data. New parse sessions, Contribute
+Ignore/clear and journal retention cannot erase this outbox.
+
+`desktop/drop-observation-host.cjs` restricts collection/status/configure IPC to
+the exact main frame. **Collect and sync drop observations** defaults on and
+controls both collection and upload; disabling retains existing pending data.
+Uploads require the normal logged-in wiki account and a due hourly schedule.
+Overdue startup checks resume when running; failures back off 1, 2, 4 and then
+up to 24 hours. Closing the app cannot promise background transmission.
+
+Events contain only ID, kill/loot kind, observed time, optional server/catalog
+version, zone/NPC/item and canonical titles, quantity, tier, instance, source
+kind and opaque source/session/sequence tokens. No player/actor fields, chat,
+raw logs, paths, screenshots or coordinates are accepted. Batches have schema
+version 1 and at most 100 events/262,144 bytes; each event is at most 4,096 bytes.
+Normal authenticated cycles send at most ten batches, below the server's twelve
+per-hour account cap.
+
+Records collected with a known account are bound to it. An immutable persisted
+batch precedes network work. A receipt must match schema, batch, account, payload
+hashes and an exhaustive disjoint partition of accepted/duplicate/conflict/
+rejected event IDs. Only accepted/duplicate records are acknowledged; conflicts
+and rejected records remain for review. Uncertain writes retry the same IDs;
+logout/account changes invalidate in-flight acknowledgements. Different accounts
+cannot drain already-bound records.
+
+Reviewed article edits use the normal attributed MediaWiki Action API, distinct
+from `action=eozobservations` ingestion. The public
+[API_Documentation](https://eqlwiki.com/API_Documentation) page must document
+supported create/edit/upload, blueprint retrieval, metadata and observation
+contracts for other tools. Server schema/API and the database documentation page
+require actual activation; an app/source push is insufficient.
 
 ## Validation ledger
 

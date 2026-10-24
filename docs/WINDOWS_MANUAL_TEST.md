@@ -1,8 +1,33 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.7-x64.exe`.
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.8-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.7` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.8` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
+
+## 0.9.8 targeted acceptance
+
+- Adjust equipped-hover tiers with pointer and keyboard. Keep the hover, focus
+  and scroll position stable, show real proc details and retain recorded totals.
+  Import attached known Exaltations, preserve explicit socket evidence and use
+  five only when capacity is unknown. Reject unknown wiki gear without fake stats.
+- Preview two Character (Server) sheets on the authenticated User page. Reshare
+  one without changing its sibling/unrelated prose or old talk-page content.
+  Account/destination/revision changes must force a fresh guarded review.
+- Review missing-page versus existing-source/population/tier-zero tasks. Keep
+  generated pets suppressed unless known in the wiki. A fresh unknown kill arms
+  one next `/loc`; stand at its spawn, then type the command. Newer kills replace
+  the active target, and source/zone/timeout changes cancel it without losing drafts.
+- Check readable fields, Common/Unique Loot, screenshot select/paste and local
+  cropped-icon matching. Preserve edits during background evidence, reject
+  unsupported base recovery, review every page and safely retry partial results.
+- With synthetic observations only, exercise offline restart, overdue hourly
+  retry, logout/account switch, Settings opt-out and pending-write close/reload.
+  No pending observation may silently disappear; no article publishes from logs.
+  Keep the app open with a recovery message when a normal drain cannot save.
+
+These targeted checks supplement the unchanged inventory/stat and overlay/map
+matrices below. Synthetic native fixtures are separate from real-client and
+production wiki acceptance; record what was actually exercised.
 
 ## 0.9.7 inventory export and observed stat acceptance
 

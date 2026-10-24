@@ -79,7 +79,7 @@ const itemHover = renderItem({name:'Sword',tier:7,slots:['Primary'],stats:{HP:70
 assert.equal((itemHover.match(/data-item-hover/g)||[]).length,2,'Both item picture and name are stat-tooltip targets');
 assert.match(itemHover,/class="item-icon-button"[\s\S]*aria-label="Stats for Sword"/);
 const tooltip = renderItemTooltip({name:'Sword',tier:7,slots:['PRIMARY'],classes:['WAR'],stats:{HP:70,AC:15},baseStats:{HP:10,AC:15},notes:injection});
-assert.match(tooltip,/Tier 7/);assert.match(tooltip,/Class: WAR/);assert.match(tooltip,/<dt>HP<\/dt><dd class="is-scaled">70 <small>\(10\)<\/small>/);
+assert.match(tooltip,/Tier 7/);assert.match(tooltip,/<div data-item-detail="Class"><dt>Class<\/dt><dd>WAR<\/dd>/);assert.match(tooltip,/<dt>HP<\/dt><dd class="is-scaled">70 <small>\(10\)<\/small>/);
 assert.match(tooltip,/<dt>AC<\/dt><dd>15<\/dd>/,'An unchanged stat does not acquire the green changed-value class.');
 assert.doesNotMatch(tooltip,/<img|<script/,'Stat blocks escape notes, names and stat values');
 assert.match(renderIntel({npcs:[{name:'Named',named:true,waypoint:'1,2,3',drops:[]}],canRoute:false}),/disabled title="Enable maps/);

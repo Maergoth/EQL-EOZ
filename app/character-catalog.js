@@ -1,3 +1,4 @@
+import {characterCatalogDetails,characterItemDetailsMarkup} from './character-item-card.js';
 import { characterBaseItemName, characterSlotKinds, normalizeCharacterStats, safeCharacterIcon } from './character-model.js';
 import { scaleItemStat } from './item-scaling.js';
 import { isItemStatModified } from './item-stat-presentation.js';
@@ -76,14 +77,20 @@ export function resolveCharacterCatalog(pack,observedName,{limit=CHARACTER_CATAL
 
 /** Inventory import establishes exact article presence even without rich stats.
  * Fuzzy proposals stay manual. Presence never supplies invented equipment stats. */
-export function resolveInventoryCatalog(pack,name){
-    const match=resolveCharacterCatalog(pack,name);
-    if(match.status==='exact')return {item:match.item,icon:pack?.icons?.[match.item.iconId]};
-    const key=value=>text(value).normalize('NFKC').replace(/_/g,' ').replace(/\s+/gu,' ').toLowerCase(),query=key(characterBaseItemName(name));
-    for(const record of [...(pack?.wikiEntities?.items||[]),...(pack?.wikiEntities?.titles||[])]){
-        const title=typeof record==='string'?record:record?.wikiTitle||record?.title||record?.name;
-        if(title&&[title,record?.name].some(value=>value&&key(value)===query))return {item:{name:characterBaseItemName(name),wikiTitle:title,slots:[],stats:{}}};
-    }
+export function resolveInventoryCatalog(pack,name,{socket=false}={}){
+    const lookup=value=>{
+        const match=resolveCharacterCatalog(pack,value);
+        if(match.status==='exact')return {item:match.item,icon:pack?.icons?.[match.item.iconId]};
+        const key=value=>text(value).normalize('NFKC').replace(/_/g,' ').replace(/\s+/gu,' ').toLowerCase(),query=key(characterBaseItemName(value));
+        for(const record of [...(pack?.wikiEntities?.items||[]),...(pack?.wikiEntities?.titles||[])]){
+            const title=typeof record==='string'?record:record?.wikiTitle||record?.title||record?.name;
+            if(title&&[title,record?.name].some(name=>name&&key(name)===query))return {item:{name:characterBaseItemName(value),wikiTitle:title,slots:[],stats:{}}};
+        }
+        return {};
+    };
+    const direct=lookup(name);if(direct.item)return direct;
+    const base=socket&&characterBaseItemName(name).replace(/\s*\(Exaltation\)$/i,'').trim();
+    if(base&&base!==characterBaseItemName(name)){const resolved=lookup(base);if(resolved.item)return {...resolved,exaltationAlias:true};}
     return {};
 }
 
@@ -95,10 +102,10 @@ export function characterCatalogCard(item,options={}){
     if(!item||typeof item!=='object'||!text(item.name||item.wikiTitle))throw Error('Choose a cached item first.');
     const {tier,fraction}=tierOptions(options),baseStats=normalizeCharacterStats(item.stats),name=characterBaseItemName(item.name||item.wikiTitle),wikiTitle=text(item.wikiTitle||item.name);
     return{name,observedName:'',wikiTitle,wikiMatch:'confirmed',catalogIdentity:{name,wikiTitle,match:'manual'},iconId:text(item.iconId),icon:safeCharacterIcon(options.icon),
-        slots:characterSlotKinds(item.slots),tier,fraction,baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,
+        slots:characterSlotKinds(item.slots),details:characterCatalogDetails(item),augmentSlots:Number.isInteger(item.augmentSlots)&&item.augmentSlots>=0&&item.augmentSlots<=8?item.augmentSlots:5,tier,fraction,baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,
         unscaledStatKeys:Object.hasOwn(baseStats,'SV_CORRUPTION')?['SV_CORRUPTION']:[],
         observedStats:{},observedStatsComplete:false,augments:[],augmentStatus:item.augmentStatus==='none'?'none':'unknown',
-        level:item.requiredLevel??null,notes:'Added from the local wiki catalog. Verify tier, compatible slots and augments against the item you own.'};
+        level:item.requiredLevel??null,notes:'Added from the local wiki catalog. Verify tier, compatible slots and Exaltations against the item you own.'};
 }
 
 /** Preview rows use the same forward scaling and modified-stat predicate as the
@@ -119,7 +126,7 @@ export function characterCatalogPreview(item,options={}){
 export function mountCharacterCatalog({host,getPack=()=>({}),purpose='inventory',onAdd=()=>({ok:false,error:'Character inventory is unavailable.'})}={}){
     if(!host)return{refresh(){},dispose(){}};
     const document=host.ownerDocument,removers=[];let selected=null,result={items:[]},pack=null,packItems=null,packVersion=null,disposed=false;
-    host.innerHTML=`<h3>Search cached items</h3><p class="settings-helper">${purpose==='augment'?'Choose an item and tier for this augment slot. Weapons and armor can both be used as augments.':purpose==='equipment'?'Choose a matching item and its tier to equip it into this slot.':'Find a wiki item, choose its tier and add it to Inventory.'}</p><label>Item name<input type="search" data-character-catalog-query maxlength="160" placeholder="Search item names or wiki titles" autocomplete="off"></label><div class="character-catalog-controls"><label>Item Level Slider <output data-character-catalog-tier-label>Tier 0</output><input data-character-catalog-tier type="range" min="0" max="10" step="1" value="0" aria-label="Character catalog item tier"></label></div><p data-character-catalog-status role="status"></p><div class="character-catalog-layout"><div class="character-catalog-results" data-character-catalog-results aria-label="Cached item results"></div><article class="character-catalog-preview" data-character-catalog-preview aria-label="Selected catalog item preview"></article></div>`;
+    host.innerHTML=`<h3>Search cached items</h3><p class="settings-helper">${purpose==='augment'?'Choose an item and tier for this Exaltation slot. Weapons and armor can both be used as Exaltations.':purpose==='equipment'?'Choose a matching item and its tier to equip it into this slot.':'Find a wiki item, choose its tier and add it to Inventory.'}</p><label>Item name<input type="search" data-character-catalog-query maxlength="160" placeholder="Search item names or wiki titles" autocomplete="off"></label><div class="character-catalog-controls"><label>Item Level Slider <output data-character-catalog-tier-label>Tier 0</output><input data-character-catalog-tier type="range" min="0" max="10" step="1" value="0" aria-label="Character catalog item tier"></label></div><p data-character-catalog-status role="status"></p><div class="character-catalog-layout"><div class="character-catalog-results" data-character-catalog-results aria-label="Cached item results"></div><article class="character-catalog-preview" data-character-catalog-preview aria-label="Selected catalog item preview"></article></div>`;
     const $=selector=>host.querySelector(selector),query=$('[data-character-catalog-query]'),tier=$('[data-character-catalog-tier]'),results=$('[data-character-catalog-results]'),preview=$('[data-character-catalog-preview]'),status=$('[data-character-catalog-status]');
     const listen=(element,event,callback)=>{element.addEventListener(event,callback);removers.push(()=>element.removeEventListener(event,callback));};
     const options=()=>tierOptions({tier:Number(tier.value)});
@@ -128,7 +135,7 @@ export function mountCharacterCatalog({host,getPack=()=>({}),purpose='inventory'
         results.querySelectorAll('[data-character-catalog-select]').forEach(button=>{const active=result.items[Number(button.dataset.characterCatalogSelect)]===selected;button.classList.toggle('is-active',active);button.setAttribute('aria-pressed',String(active));});
         if(!selected){preview.innerHTML='<p class="empty-state">Hover, focus or select a result to preview its item stats.</p>';return;}
         try{const {card,rows}=characterCatalogPreview(selected,{...options(),icon:icon(selected)});
-            preview.innerHTML=`<div class="character-catalog-title">${card.icon?`<img src="${escape(card.icon)}" alt="">`:'<span class="character-catalog-icon" aria-hidden="true">◇</span>'}<div><h4>${escape(card.name)}</h4><small>${escape(card.wikiTitle)}</small></div></div><p>Tier ${card.tier}${card.tier===10?' (maximum)':''} · ${escape(card.slots.join(' / ')||'Slots unknown')}</p><dl class="character-catalog-stats">${rows.map(row=>`<div class="${row.modified?'is-scaled':''}"><dt>${escape(row.label)}</dt><dd>${row.value===null?'?':escape(number(row.value))}${row.modified?` <small>(${escape(number(row.base))} base)</small>`:''}${row.unsupported?` <small>(${escape(number(row.base))} base; tier adjustment unverified)</small>`:''}</dd></div>`).join('')}</dl>${rows.length?'':'<p class="settings-helper">No numeric base stats are available for this cached record.</p>'}<p class="settings-helper">Green values reflect the selected tier; base comparisons stay muted.</p><button type="button" class="primary-button" data-character-catalog-add>${purpose==='augment'?'Put in augment slot':purpose==='equipment'?'Equip item':'Add to inventory'}</button><p data-character-catalog-added role="status"></p>`;
+            preview.innerHTML=`<div class="character-catalog-title">${card.icon?`<img src="${escape(card.icon)}" alt="">`:'<span class="character-catalog-icon" aria-hidden="true">◇</span>'}<div><h4>${escape(card.name)}</h4><small>${escape(card.wikiTitle)}</small></div></div><p>Tier ${card.tier}${card.tier===10?' (maximum)':''} · ${escape(card.slots.join(' / ')||'Slots unknown')}</p><dl class="character-catalog-stats">${rows.map(row=>`<div class="${row.modified?'is-scaled':''}"><dt>${escape(row.label)}</dt><dd>${row.value===null?'?':escape(number(row.value))}${row.modified?` <small>(${escape(number(row.base))} base)</small>`:''}${row.unsupported?` <small>(${escape(number(row.base))} base; tier adjustment unverified)</small>`:''}</dd></div>`).join('')}</dl>${characterItemDetailsMarkup(card.details)}${rows.length?'':'<p class="settings-helper">No numeric base stats are available for this cached record.</p>'}<p class="settings-helper">Green values reflect the selected tier; base comparisons stay muted.</p><button type="button" class="primary-button" data-character-catalog-add>${purpose==='augment'?'Put in Exaltation slot':purpose==='equipment'?'Equip item':'Add to inventory'}</button><p data-character-catalog-added role="status"></p>`;
         }catch(error){preview.innerHTML=`<p class="capture-warning" role="status">${escape(error.message)}</p>`;}
     }
     function paintResults(){

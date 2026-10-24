@@ -14,8 +14,8 @@ The tracked `docs/RELEASE_098_PLAN.md` is authoritative and is linked from
 Keep private evidence and machine-specific recovery instructions in the local
 checkpoint; never commit player data, account data or secrets.
 
-**Current state: planning/audit only. None of the 0.9.8 features is implemented
-or published.** The implementation version remains 0.9.7 until packaging work.
+**Current state: implementation in progress on the follow-up branch. No 0.9.8
+features are published yet.** The candidate package version is now 0.9.8; production remains 0.9.7 until publication.
 
 ### Resume procedure
 
@@ -50,6 +50,10 @@ or published.** The implementation version remains 0.9.7 until packaging work.
   commands. `/loc` is typed by the player; the app listens to the log.
 - Reuse active custom wiki components and existing authenticated MediaWiki edit
   APIs. Preserve contributor attribution, normal permissions and account isolation.
+- The API must support page creation and editing for other tools as well as EoZ.
+  Publish a real `API_Documentation` wiki page with supported contracts/examples;
+  repository notes alone do not satisfy this requirement. Prefer the standard
+  attributed Action API for writes over inventing an EoZ-only edit proxy.
 - Wiki feature PRs target `staging`. Promote only scoped reviewed commits to
   `main`; never merge all staging into production. Every main push deploys files.
 - Database templates/interface scripts, schema and private host scripts need
@@ -438,6 +442,27 @@ definitions. Keep the existing `eqlmetadata` contract backward compatible.
   revert compatible files, restore DB template only via fresh backup/revision
   guard. No automatic destructive table drop or database restore.
 
+### W6. Reusable create/edit API and public API_Documentation — IN PROGRESS
+
+- [ ] Make page creation/editing an explicit supported integration contract for
+  external tools. No EoZ-only secret, user-agent gate or shared bot authorship.
+- [ ] Reuse MediaWiki `action=query` for source/revision/account context,
+  `action=parse` for unsaved previews, `action=edit` with createonly/nocreate,
+  baserevid/starttimestamp, assert/assertuser and user CSRF; reuse `action=upload`
+  with normal image warnings/license review. Every edit remains the caller's.
+- [ ] Document blueprint retrieval from reviewed Help source and safe minimal
+  item/NPC/zone/spell patches, existing-page races and partially applied retries.
+- [ ] Provide public schema, auth/login options actually enabled here, examples,
+  limits, error/retry handling, API versioning and endpoint discovery for metadata
+  and observations. Other clients can implement the same workflow without EoZ.
+- [ ] Save reviewed page source in `ops/api-documentation.wiki`; publish to
+  [API_Documentation](https://eqlwiki.com/API_Documentation) with current revision
+  checks and a fresh private backup (or createonly if missing). Verify rendered
+  content and examples. File deployment alone does not publish this page.
+- [ ] Link documentation from app Contribute/settings and the wiki/API component
+  guide. Publish only endpoints that are actually enabled; mark future proposals
+  clearly rather than documenting unshipped behavior as live.
+
 ## S — Hourly persisted app sender
 
 - [ ] **S1:** Collect minimal structured kill/loot observations alongside existing
@@ -604,28 +629,29 @@ Do not collapse this ledger into a vague "mostly done" summary.
 
 | Task | Implementation | Evidence/PR | Live/local activation |
 | --- | --- | --- | --- |
-| P1/P2 plan and audits | Audited | Three read-only agent audits, 2026-10-24 | Not a feature deployment |
-| C1 tier hover | TODO | — | — |
-| C2 Exaltations/default sockets | TODO | — | — |
-| C3 rich item cards/procs | TODO | — | — |
-| C4 User-page share/retries | TODO | — | — |
-| D1 shared identity | TODO | — | — |
-| D2 typed existing-page gaps | TODO | — | — |
-| D3 immediate prompt/automatic loc | TODO | — | — |
-| D4 generated pets | Source verified; implementation TODO | Pinned EQEmu source | — |
-| U1 matching-first review | TODO | — | — |
-| U2 simplified fields/loot/defaults | TODO | — | — |
-| U3 screenshot upload/Icon Finder | TODO | — | — |
-| U4 simplified recovery/tier0 verification | TODO | — | — |
-| U5 item-effect spell pages | TODO | — | — |
-| W1 API/schema contract | Audited; implementation TODO | — | — |
-| W2 drop storage | TODO | — | — |
-| W3 partial-page plans | TODO | — | — |
-| W4 rich Character templates | TODO | — | — |
-| W5 wiki deployment | TODO | — | — |
-| S1-S5 hourly outbox | TODO | — | — |
-| L1-L5 this user's local cleanup | TODO; backup required first | Private report only | — |
-| R1-R6 release/docs/lean gates | TODO | — | — |
+| P1/P2 plan and audits | Complete | This plan; draft app PR21 | Planning does not install features |
+| C1 tier hover | Implemented | Native workspace slider keeps focus; totals unchanged | App release pending |
+| C2 Exaltations/default sockets | Implemented | Import/model/inspect/socket suites | App release pending |
+| C3 rich item cards/procs | Implemented across app/overlay/wiki source | Shared safe metadata; native Character hover; unsaved wiki parser | Wiki template activation and app release pending |
+| C4 User-page share/retries | Implemented | Destination/account-bound client retry suite | App release pending |
+| D1 shared identity | Implemented | Resolver/queue/discovery suites | App release pending |
+| D2 typed existing-page gaps | Implemented | Queue reconciliation and protected-work tests | App release pending |
+| D3 immediate prompt/automatic loc | Implemented | Native main/preload hover-held prompt, source cancellation | App release pending |
+| D4 generated pets | Implemented | Pinned EQEmu source and exact-generator tests | App release pending |
+| U1 matching-first review | Implemented | Native editor identity gate and fresh final review | App release pending |
+| U2 simplified fields/loot/defaults | Implemented | Native Common/Unique controls, hidden raw field | App release pending |
+| U3 screenshot upload/Icon Finder | Implemented | Exact wiki algorithm6 native matching; explicit upload/retry tests | App release pending |
+| U4 simplified recovery/tier0 verification | Implemented | Bounded provisional recovery and proof-preserving patch tests | App release pending |
+| U5 item-effect spell pages | Implemented | Missing spell child plan, known spell reuse and retry tests | App release pending |
+| W1 API/schema contract | Implemented, v1 frozen | Wiki PR62; actual MW registration/CSRF tests | Source/schema/config activation pending |
+| W2 drop storage | Implemented | Separate transactional actor/event/receipt storage tests | Narrow schema/config activation pending |
+| W3 partial-page plans | Implemented | Canonical per-page grouping and normal/raid guarded updates | App release pending |
+| W4 rich Character templates | Implemented | 808 serializer-to-unsaved-wiki parser checks; hover DOM | Template/CSS activation pending |
+| W5 wiki deployment | In progress | Staging PR62 exact-head checks | Scoped production promotion pending |
+| W6 reusable create/edit API and API_Documentation | Implemented | Standard attributed Action API; guarded fixed page publisher | Actual public page publication pending |
+| S1-S5 hourly outbox | Implemented | Durable exact-account/ACK retry suites; normal close/reload drain | App release pending |
+| L1-L5 this user's local cleanup | Applied | Private backup/hash-CAS/readback receipt; no fresh catalog pull | 49 active ->37 active +12 archived; unrelated values retained |
+| R1-R6 release/docs/lean gates | In progress | Illustrated history and focused native gates pass; source gate running | App PR21/published release pending |
 
 ## Progress log
 
@@ -639,3 +665,23 @@ Do not collapse this ledger into a vague "mostly done" summary.
   committed on the isolated follow-up branch. Private recovery checkpoint saved.
 - Next action: implement D1 shared typed identity and C2/C3 socket/item-card
   contracts; finalize W1 ingestion payload/schema before client/server edits.
+- 2026-10-24 implementation: Character pure model/cards/socket suites pass;
+  root is integrating hover/editor/shared cards. Queue identity/pet modules and
+  telemetry contract are in implementation. Wiki API/schema and destination-bound
+  User-page sharing are assigned. Nothing from this follow-up is published yet.
+- Owner added reusable page creation/editing and an actual API_Documentation wiki
+  page. W6 records the attributed standard API workflow, reviewed public examples
+  and explicit database-page publication. This is part of the release scope.
+
+- Integration checkpoint: Character/editor/overlay and main/preload are assembled.
+  Matching-first review, Common/Unique loot, optional fields, screenshot paste,
+  wiki Icon Finder, provisional recovery, tier-zero confirmation and spell child
+  plans are implemented. Existing normal/raid reciprocal pages group into one CAS
+  review per canonical title. Account status forwarding and local close/reload
+  drain protect the observation outbox. Focused native workspace and spawn gates
+  pass. Actual installed queue cleanup completed with a fresh private backup:
+  12 stale entries archived,37 retained; character/profile values preserved.
+- Wiki feature PR62 targets staging. Source/schema/config/templates/public API
+  page installation remain distinct release gates. App package+lock are0.9.8;
+  baseline production is0.9.7 until actual publication. Required full source and
+  exact-head Windows/Linux gates remain in progress. No dataset refresh occurred.

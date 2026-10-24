@@ -2,6 +2,71 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
   {
+    "version": "0.9.8",
+    "title": "Richer Character cards and reviewed wiki contributions",
+    "changes": [
+      "Adjust an equipped item's tier directly below its hover name. Rich cards keep real effects, cast times and restrictions; Character totals remain the recorded game values.",
+      "Prefill attached known Exaltations from inventory export. Unknown socket capacity defaults to five while observed capacity and occupied positions are retained through eight.",
+      "Share interactive Character (Server) sheets to your own User page with account, revision and destination guards. Existing talk-page sheets remain intact.",
+      "Review contribution matches and task reasons first, including missing-source, population and tier-zero work on existing pages. Generated pets and safe obsolete false positives no longer become new-page work.",
+      "A fresh unknown kill prompts for one next spawn /loc without stealing focus. Review loot sections, screenshots and optional missing spell effects before publishing the multi-page diff.",
+      "Find exact wiki artwork by pasting a crop containing just the icon. Matching runs locally against the lazy public index and preserves artwork aliases and IDs.",
+      "Keep minimal kill/loot observations in a separate durable outbox. While enabled and logged in, due batches sync at most hourly with account-bound acknowledgements and offline retry; no raw logs, chat, paths or screenshots are sent."
+    ],
+    "steps": [
+      {
+        "title": "Adjust an equipped item's tier in place",
+        "image": "0.9.8/character-hover-tier-and-proc",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Hover or focus equipped gear. Its tier slider sits directly below its name, with green adjusted preview values, real proc details and Exaltation sockets. Use pointer or keyboard controls without leaving the hover. The recorded character stat panel stays unchanged.",
+        "alt": "Synthetic equipped item with a tier-three slider, combat proc, five Exaltation sockets and an unchanged recorded character total.",
+        "caption": "Actual Chromium Character component at 13px Arial with synthetic records and isolated storage/APIs. The native fixture changes item tier while recorded HP remains 4321. No player pixels or wiki writes.",
+        "imageSha256": "5b8c2089ccfedfd8fd867930c1ec1fed65d74481f3ba394927d1720b1f41acd3"
+      },
+      {
+        "title": "Review page identity before contribution details",
+        "image": "0.9.8/contribution-matching-and-loot",
+        "view": "contribute",
+        "action": "Open Contribute",
+        "copy": "Start with potential existing pages and the contribution type. Confirm the identity, choose the zone and Raid Instance when appropriate, and correct readable page details. A saved spawn location remains a proposal for the final wiki diff. Individual fields no longer need Verified checkboxes.",
+        "alt": "Actual Contribute component showing potential matches, identity review, era, instance and readable NPC page details using synthetic data.",
+        "caption": "Actual Chromium Contribute component at 13px Arial with synthetic queue records and isolated fake wiki replies. This shows match/page details, not a production edit or a live spawn capture.",
+        "imageSha256": "0f262668873b01ff566f863dce294b9b696108bd5b59037e9ff7f2319db1292b"
+      },
+      {
+        "title": "Classify loot and choose a screenshot",
+        "image": "0.9.8/contribution-loot-controls",
+        "view": "contribute",
+        "action": "Open Contribute",
+        "copy": "Use Common Loot and Unique Loot to select the wiki sections for observed drops. Add another item by title, then select or paste a screenshot into the plus area. Caption and rights remain editable. Submit first opens the reviewed wiki changes; these controls never publish on capture.",
+        "alt": "Synthetic loot rows with Common Loot and Unique Loot buttons above the screenshot plus area, caption and image rights.",
+        "caption": "Actual Chromium Contribute component at 13px Arial with synthetic loot and isolated storage/APIs. Common/Unique are page sections, not measured drop probabilities. No production writes or uploads.",
+        "imageSha256": "b0d7b5929187ed743046c68346fa25f1443ff7e02a8aa38b15b95a53290d606d"
+      },
+      {
+        "title": "Review screenshot and item effect evidence",
+        "image": "0.9.8/contribution-screenshot-and-icon",
+        "view": "contribute",
+        "action": "Open Contribute",
+        "copy": "Review the item's effect, required level and Exaltation capacity, then inspect the selected screenshot, caption and rights. Replace or remove the image before preparing the plan. Expand Icon Finder for artwork selection; a separate tour step shows its local matching results.",
+        "alt": "Synthetic item effect fields, five Exaltation slots, selected screenshot placeholder, caption, rights and collapsed Icon Finder controls.",
+        "caption": "Actual Chromium Contribute component at 13px Arial. The selected image is a one-pixel synthetic placeholder; this illustrates attachment controls rather than icon matching or a real item screenshot. No uploads.",
+        "imageSha256": "34c5112391fa3a87ba62c5ae05f8f70d735c685a42db6e1e3e693f1b25f13e8c"
+      },
+      {
+        "title": "Match exact wiki artwork locally",
+        "image": "0.9.8/wiki-icon-finder-match",
+        "view": "contribute",
+        "action": "Open Contribute",
+        "copy": "Open Icon Finder on an item draft. Paste or select a crop containing just the icon, compare local matches, and select the exact artwork alias. You can also browse or search icon IDs. Crop pixels stay on your computer; publishing an article screenshot is a separate reviewed action.",
+        "alt": "Actual Eye of Zomm Icon Finder component matching synthetic icon pixels and selecting an exact artwork alias.",
+        "caption": "Actual sandboxed Chromium component using shared app styling, synthetic PNGs and an isolated local catalog/cache fixture. No player pixels, live wiki images or uploads.",
+        "imageSha256": "67a6dcd08e8882aae44cca9d08e215e27302eeb6c15d7c124767c7877c1b8c1b"
+      }
+    ]
+  },
+  {
     "version": "0.9.7",
     "title": "Import equipped inventory and record observed stats",
     "changes": [

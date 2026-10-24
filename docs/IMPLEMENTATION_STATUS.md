@@ -1,5 +1,17 @@
 # Eye of Zomm implementation status
 
+## 0.9.8 candidate implementation
+
+Character pure modules, rich card serialization, socket-only Exaltation aliases,
+typed contribution reconciliation, guarded spawn prompting, reviewed existing-
+page/spell/screenshot plans, local Icon Finder and the atomic hourly observation
+outbox are implemented. Focused pure and actual Chromium component checks pass
+with synthetic data. Recorded current Character totals remain independent of
+gear/tier previews. Root owns the final main/preload/native/platform/package
+gates, installed-profile cleanup and wiki schema/templates/API_Documentation
+activation. See [the active plan](RELEASE_098_PLAN.md); passing source fixtures
+does not establish those live receipts. Published baseline: 0.9.7.
+
 ## Current 0.9.7 inventory-export contract
 
 Keep all gear equipped. Enter metadata, generate a fresh `/outputfile inventory`
@@ -46,14 +58,15 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 
 Last updated: 2026-10-24
 
-Code baseline: 0.9.7 candidate; active work tracked in [INVENTORY_EXPORT_CHARACTER_PLAN.md](INVENTORY_EXPORT_CHARACTER_PLAN.md)
+Code baseline: 0.9.8 candidate, extending published 0.9.7; active work tracked in [RELEASE_098_PLAN.md](RELEASE_098_PLAN.md)
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
 | Vision area | Status | Evidence | Next condition |
 |---|---|---|---|
 | Optional capture and wiki contributions | Implemented; Windows/Linux X11 source/native baseline passed | Local OCR/journal, log-first candidates, current Help blueprints, hardened wiki login, reviewed multi-page changes and persisted partial retry; [execution plan](CAPTURE_CONTRIBUTIONS.md) | Final changed-head CI/package checks; real game skins, production CAPTCHA/2FA and native Wayland remain manual |
-| Character snapshots | 0.9.7 inventory-export/current-stat implementation in progress; final acceptance pending | Fresh selected-character export, atomic known-only worn gear, equipped/unbuffed current-stat review, ten modifiers, clear and existing guarded sharing; [plan](INVENTORY_EXPORT_CHARACTER_PLAN.md) | Complete current source/native/profile/platform/package gates; do not infer live-game accuracy or reuse old baseline/gear acceptance |
+| Character snapshots | 0.9.7 inventory/current-stat baseline published; 0.9.8 rich cards and User-page follow-up implemented | Known-only fresh export, recorded totals, Exaltation alias/prefill/five fallback sockets, equipped-hover tier, rich proc cards and guarded User-page sharing; [plan](RELEASE_098_PLAN.md) | Complete changed-head source/native/platform/package and wiki-template activation; do not infer live-game accuracy from fixtures |
+| Minimal drop observations | 0.9.8 candidate implemented; focused storage/host checks passed | Independent atomic outbox, fresh known/unknown kill/loot intake, account-bound hourly batches, strict receipts/backoff and Settings opt-out; [contract](CONTRIBUTION_EVIDENCE_PLAN.md) | Verify integrated shutdown/account gates, actual wiki schema/API activation and package closure; no drop-rate or zero-drop claims |
 | Font preferences | Implemented; native Windows/Linux CI passed | Shared main/overlay family and bounded base size, retained panel multipliers, process persistence/reset, canvas labels and compact Trigger sizing; [evidence](../VALIDATION.md) | Retain physical DPI/compositor acceptance |
 | Linux desktop | Implemented; Ubuntu 22.04/X11 package/runtime CI passed | Same source/version, AppImage/deb, actual packaged binary/log/panels smoke, selected-folder paths and verified package handoff | Native Wayland, other desktops and complete installed upgrades remain manual acceptance |
 | 0.6 usable loop | Implemented | Folder/log/zone/`/loc` readiness, persistent mode/destination, relevant item defaults, live tier details, non-modal recovery; `npm test` | Retain all [Windows/manual gates](WINDOWS_MANUAL_TEST.md) |
@@ -74,9 +87,11 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 
 ## Current highest-priority task
 
-Complete the authorized 0.9.7 inventory-export/current-stat release using
-[INVENTORY_EXPORT_CHARACTER_PLAN.md](INVENTORY_EXPORT_CHARACTER_PLAN.md). Revalidate the final changed head, then verify
-the unified Windows/Linux publication. Screen reading defaults off; existing
+Complete the authorized 0.9.8 follow-up using
+[RELEASE_098_PLAN.md](RELEASE_098_PLAN.md). Revalidate the final changed head,
+activate the reviewed wiki schema/templates/API documentation, verify backed-up
+local queue cleanup, then verify the unified Windows/Linux publication.
+Screen reading defaults off; existing
 combat/map/trigger functionality continues to use logs. Preserve all existing
 map acceptance requirements and explicit wiki review boundaries.
 

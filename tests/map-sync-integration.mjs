@@ -59,7 +59,8 @@ function harness() {
         partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,latestLocationSync:null,
         overlaySession:{ inputs:[], consume(event, context) { this.inputs.push({ event, context }); }, flush() {} },
         wikiDiscovery:{consume() {}},
-        observedLogCursor:0,captureWorkspace:{consumeLog() {}},
+        observationPreference:false,sessionDraining:false,
+        observedLogCursor:0,captureWorkspace:{cancelled:0,consumeLog() {},cancelSource(){this.cancelled++;}},
         $:node, state:() => parser.snapshot(), viewerApi:() => viewer,
         waitForViewerApi:async () => viewer, ensureViewerFolderConnected:async () => true,
         queueViewerSync:operation => { const pending = operation(); operations.push(pending); return pending; },
@@ -119,6 +120,7 @@ for(const change of ['log','root','both','mode-only']){
     assert.equal(h.parser.location===null,changed,`${change}: only an actual source change clears coordinates`);
     assert.equal(h.context.pendingViewerLocation===null,changed);
     assert.equal(h.viewer.clears,changed?1:0);
+    assert.equal(h.context.captureWorkspace.cancelled,changed?1:0,'a real log/root replacement cancels the old armed spawn location');
     assert.equal(h.context.mapDataRevision,changed?1:0,'one source change invalidates the map generation once');
     assert.equal(h.context.mapDataLoader.invalidations,change==='root'||change==='both'?1:0);
 }

@@ -1,20 +1,27 @@
-import { contributionNameKey, findPotentialMatches } from './contribution-model.js';
+import { findPotentialMatches } from './contribution-model.js';
 import { CONTRIBUTION_QUEUE_KEY, CONTRIBUTION_QUEUE_BYTES, contributionSourceToken, logContributionObservation } from './contribution-evidence.js';
+import { createWikiResolver, normalizeWikiIdentity as contributionNameKey, itemBaseIdentity as itemIdentity, wikiIdentityKey, wikiEntityKind } from './wiki-identity.js';
+import { contributionReasons } from './contribution-reasons.js';
+import { classifyNpcEvidence } from './generated-pets.js';
+import { collectTierZeroEvidence, tierZeroVerificationPreview, confirmTierZeroVerification } from './contribution-tier-zero.js';
 
 const KEY=CONTRIBUTION_QUEUE_KEY;
 const clean=(value,max=240)=>String(value??'').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim().slice(0,max);
-const itemIdentity=name=>{const value=clean(name),match=value.match(/^(.+?)\s*\+(10|[0-9])$/);return match&&match[1].trim()?{name:match[1].trim(),tier:Number(match[2])}:{name:value,tier:null};};
 const candidateKey=(kind,name,zone='')=>`${kind}|${contributionNameKey(kind==='item'?itemIdentity(name).name:name)}|${kind==='item'?'':contributionNameKey(zone)}`;
-export function createContributionQueue({storage=globalThis.localStorage,getPack=()=>({}),onWarning=()=>{},now=Date.now}={}){
-    let candidates=[],sequence=0,cursor=0,catalogCache=null,lastLog=null,armed=null,readBlocked=false,migrated=false;const ignored=new Set(),seenLogIds=new Set();
+export function createContributionQueue({storage=globalThis.localStorage,getPack=()=>({}),onWarning=()=>{},now=Date.now,autoReconcile=true}={}){
+    let candidates=[],archive=[],sequence=0,cursor=0,catalogCache=null,lastReconciled=null,lastLog=null,armed=null,readBlocked=false,migrated=false;const ignored=new Set(),seenLogIds=new Set(),registry=new Map();
     const pack=()=>{try{return getPack()||{};}catch{return {};}};
+    function resolver(){const current=pack(),version=current.meta?.manifestVersion||current.meta?.version||'',entities=current.wikiEntities,complete=`${current.meta?.wikiEntitiesComplete===true}:${current.meta?.sample===true}`;if(catalogCache?.pack!==current||catalogCache.entities!==entities||catalogCache.version!==version||catalogCache.complete!==complete||catalogCache.items!==current.items||catalogCache.npcs!==current.npcs||catalogCache.zones!==current.zones)catalogCache={pack:current,entities,version,complete,items:current.items,npcs:current.npcs,zones:current.zones,resolver:createWikiResolver(current)};return catalogCache.resolver;}
+    const canonicalKey=(kind,name,zone='')=>{const resolved=resolver().resolve(kind,name);return candidateKey(kind,resolved.canonicalTitle||name,zone);};
+    const protectedDraft=candidate=>Boolean(candidate.planId||candidate.baseRecovery||candidate.baseVerification||candidate.attachment||candidate.manual===true||candidate.spawnRequest?.status==='captured'||candidate.matchesReviewed===true||candidate.reviewed===true||candidate.submittedAt||!['needs-review',''].includes(candidate.status||'')||candidate.playerText||candidate.title&&contributionNameKey(candidate.title)!==contributionNameKey(candidate.name)||Object.values(candidate.fields||{}).some(field=>field?.confirmed===true||field?.edited===true)||[...(candidate.sources||[]),...(candidate.relations||[])].some(relation=>relation?.confirmed===true||relation?.type==='spawn-location'));
     const fieldValue=value=>Array.isArray(value)?value.slice(0,200).map(item=>typeof item==='string'?clean(item,512):typeof item==='number'&&Number.isFinite(item)?item:typeof item==='boolean'?item:null).filter(item=>item!==null):typeof value==='string'?clean(value,16000):typeof value==='number'&&Number.isFinite(value)||typeof value==='boolean'||value===null?value:null;
     const validField=key=>/^[A-Za-z][A-Za-z0-9_]{0,50}$/.test(key)&&!['constructor','prototype','__proto__'].includes(key);
+    function attachmentValue(value){if(value===null)return null;const thumbnail=typeof value?.thumbnail==='string'&&/^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/]*={0,2}$/.test(value.thumbnail)&&value.thumbnail.length<=200000?value.thumbnail:null;if(!value||typeof value.attachmentId!=='string'||!value.attachmentId.trim()||value.attachmentId.length>240||!Number.isSafeInteger(value.width)||!Number.isSafeInteger(value.height)||value.width<1||value.height<1||value.width*value.height>16777216||!Number.isSafeInteger(value.bytes)||value.bytes<1||value.bytes>16*1024*1024)throw Error('Review a bounded screenshot attachment.');return {attachmentId:clean(value.attachmentId),thumbnail,width:value.width,height:value.height,bytes:value.bytes,caption:clean(value.caption,1000),license:clean(value.license,200)};}
     try{const raw=storage?.getItem(KEY);if(raw){
         if(typeof raw!=='string'||new TextEncoder().encode(raw).length>CONTRIBUTION_QUEUE_BYTES)throw Error('Queue too large');
         const saved=JSON.parse(raw);if(saved.schemaVersion!==1||!Array.isArray(saved.candidates)||saved.candidates.length>200||saved.candidates.some(c=>!c||!['item','npc','zone'].includes(c.kind)||typeof c.id!=='string'||typeof c.name!=='string'))throw Error('Unsupported queue');
         candidates=saved.candidates.map(candidate=>{
-            const key=candidateKey(candidate.kind,candidate.name,candidate.zone),aliases=[...(candidate.aliasKeys||[]),...(candidate.key&&candidate.key!==key?[candidate.key]:[])];
+            const key=canonicalKey(candidate.kind,candidate.name,candidate.zone),aliases=[...(candidate.aliasKeys||[]),...(candidate.key&&candidate.key!==key?[candidate.key]:[])];
             const loaded={...candidate,key,aliasKeys:[...new Set(aliases)].slice(-8),fields:candidate.fields&&typeof candidate.fields==='object'?candidate.fields:{},sources:Array.isArray(candidate.sources)?candidate.sources:[],relations:Array.isArray(candidate.relations)?candidate.relations.slice(-100):[],evidence:Array.isArray(candidate.evidence)?candidate.evidence:[]};
             const identity=itemIdentity(candidate.name),reviewed=Boolean(candidate.planId||candidate.baseRecovery||candidate.matchesReviewed===true||candidate.reviewed===true||candidate.submittedAt||Object.values(loaded.fields).some(field=>field?.confirmed===true||field?.edited===true)||[...loaded.sources,...loaded.relations].some(relation=>relation?.confirmed===true));
             if(candidate.kind==='item'&&identity.tier!==null&&candidate.title===candidate.name&&(!candidate.status||candidate.status==='needs-review')&&!reviewed){
@@ -26,84 +33,91 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
             }
             return loaded;
         });sequence=Number(saved.sequence)||0;cursor=Number(saved.cursor)||0;
+        if(saved.archive!==undefined&&(!Array.isArray(saved.archive)||saved.archive.length>200))throw Error('Unsupported archive');
+        if((saved.archive||[]).some(candidate=>!candidate||!['item','npc','zone'].includes(candidate.kind)||typeof candidate.id!=='string'||typeof candidate.name!=='string'))throw Error('Unsupported archived candidate');
+        archive=saved.archive||[];
         for(const key of (Array.isArray(saved.ignored)?saved.ignored:[]).slice(-2000))if(typeof key==='string'&&key.length<800)ignored.add(key);
         for(const id of (Array.isArray(saved.seenLogIds)?saved.seenLogIds:[]).slice(-2000))if(typeof id==='string'&&id.length<=240)seenLogIds.add(id);
+        for(const entry of (Array.isArray(saved.registry)?saved.registry:[]).slice(-2000))if(entry&&typeof entry.key==='string'&&entry.key.length<800&&['queued','submitted','partial','ignored','notified'].includes(entry.state))registry.set(entry.key,entry);
     }}catch{readBlocked=true;onWarning('The saved contribution queue could not be read and was preserved. Recover it before saving new drafts.');}
-    function save(){if(readBlocked)return false;try{const value=JSON.stringify({schemaVersion:1,sequence,cursor,candidates,ignored:[...ignored].slice(-2000),seenLogIds:[...seenLogIds].slice(-2000)});if(new TextEncoder().encode(value).length>CONTRIBUTION_QUEUE_BYTES)throw Error('Queue too large');storage?.setItem(KEY,value);return true;}catch{onWarning('Contributions remain in memory because their saved queue is full or unavailable. Review or remove drafts before closing Eye of Zomm.');return false;}}
+    function save(){if(readBlocked)return false;try{const value=JSON.stringify({schemaVersion:1,sequence,cursor,candidates,archive,registry:[...registry.values()].slice(-2000),ignored:[...ignored].slice(-2000),seenLogIds:[...seenLogIds].slice(-2000)});if(new TextEncoder().encode(value).length>CONTRIBUTION_QUEUE_BYTES)throw Error('Queue too large');storage?.setItem(KEY,value);return true;}catch{onWarning('Contributions remain in memory because their saved queue is full or unavailable. Review or remove drafts before closing Eye of Zomm.');return false;}}
+    function rememberState(kind,name,state,purpose='missing-page',zone=''){const resolved=resolver().resolve(kind,name),key=`${wikiIdentityKey(kind,resolved.canonicalTitle||name)}|${purpose}|${purpose==='spawn-location'?contributionNameKey(zone):''}`,prior=registry.get(key);if(prior?.state==='submitted'&&['queued','partial'].includes(state))return;registry.delete(key);registry.set(key,{key,state,at:new Date(now()).toISOString()});while(registry.size>2000)registry.delete(registry.keys().next().value);}
+    function suppression(rawKind,name,{zone='',purpose='missing-page'}={}){const kind=wikiEntityKind(rawKind),key=canonicalKey(kind,name,zone),resolved=resolver().resolve(kind,name),entityKey=wikiIdentityKey(kind,resolved.canonicalTitle||name),entry=registry.get(`${entityKey}|${purpose}|${purpose==='spawn-location'?contributionNameKey(zone):''}`),candidate=candidates.find(value=>value.kind===kind&&(value.key===key||value.aliasKeys?.includes(key)||wikiIdentityKey(kind,resolver().resolve(kind,value.name).canonicalTitle||value.name)===entityKey&&(kind==='item'||!zone||contributionNameKey(value.zone)===contributionNameKey(zone))));
+        const ignoredMatch=[...ignored].some(value=>value===key||value.startsWith(`${kind}|`)&&canonicalKey(kind,value.split('|')[1],kind==='item'?'':value.split('|')[2])===key);
+        const sameEntity=value=>value.kind===kind&&wikiIdentityKey(kind,resolver().resolve(kind,value.name).canonicalTitle||value.name)===entityKey;
+        const general=registry.get(`${entityKey}|missing-page|`),submitted=candidate?.status==='submitted'||general?.state==='submitted'||entry?.state==='submitted'||candidates.some(value=>value.status==='submitted'&&sameEntity(value)),ignoredState=general?.state==='ignored'||entry?.state==='ignored',queued=purpose==='spawn-location'?Boolean(candidate?.spawnRequest)||candidates.some(value=>value.spawnRequest&&sameEntity(value)):Boolean(candidate)||general?.state==='queued'||general?.state==='partial';
+        return {suppressed:ignoredMatch||ignoredState||submitted||queued||Boolean(entry),reason:ignoredMatch||ignoredState?'ignored':submitted?'submitted':queued?'queued':entry?.state||null,candidateId:candidate?.id||null};}
+    for(const candidate of candidates){const key=`${wikiIdentityKey(candidate.kind,resolver().resolve(candidate.kind,candidate.name).canonicalTitle||candidate.name)}|missing-page|`;if(!registry.has(key)){rememberState(candidate.kind,candidate.name,candidate.status==='submitted'?'submitted':candidate.status==='partial'?'partial':'queued');migrated=true;}}
     if(migrated&&!readBlocked)save();
     function rememberRelation(candidate,relation,observation){
         if(!relation||!['mob-zone','zone-population','zone-loot','drop-source','spawn-location'].includes(relation.type))return;
         const name=clean(relation.name),zone=clean(relation.zone);if(!name||!zone)return;
         const evidence=clean(relation.evidence,40),location=relation.type==='spawn-location'?relation.location:undefined;
         const item=relation.type==='drop-source'?itemIdentity(relation.item||observation?.subject?.kind==='item'&&observation.subject.name||'').name:'';
-        const normalized={type:relation.type,name,zone,evidence,confirmed:false,...(item?{item}:{}),...(location?{location}: {})};
-        const key=JSON.stringify([normalized.type,contributionNameKey(name),contributionNameKey(zone),evidence,item,location]);
-        candidate.relations??=[];let existing=candidate.relations.find(value=>JSON.stringify([value.type,contributionNameKey(value.name),contributionNameKey(value.zone),value.evidence,value.item||'',value.location])===key);
+        const instance=['normal','raid'].includes(relation.instance)?relation.instance:'unknown';
+        const normalized={type:relation.type,name,zone,instance,evidence,confirmed:false,...(item?{item}:{}),...(location?{location}: {})};
+        const key=JSON.stringify([normalized.type,contributionNameKey(name),contributionNameKey(zone),instance,evidence,item,location]);
+        candidate.relations??=[];let existing=candidate.relations.find(value=>JSON.stringify([value.type,contributionNameKey(value.name),contributionNameKey(value.zone),value.instance||'unknown',value.evidence,value.item||'',value.location])===key);
         const id=clean(relation.eventId||observation?.id),at=clean(relation.at||observation?.capturedAt,50);
         if(!existing){if(candidate.relations.length>=100){const index=candidate.relations.findIndex(value=>value.confirmed!==true);if(index<0)return;candidate.relations.splice(index,1);}existing={...normalized,firstAt:at,lastAt:at,evidenceIds:[]};candidate.relations.push(existing);}
         if(at){if(!existing.firstAt||at<existing.firstAt)existing.firstAt=at;if(!existing.lastAt||at>existing.lastAt)existing.lastAt=at;}
         existing.evidenceIds=Array.isArray(existing.evidenceIds)?existing.evidenceIds:[];
         if(id&&!existing.evidenceIds.includes(id))existing.evidenceIds=[...existing.evidenceIds,id].slice(-8);
     }
-    function membership(kind,name){const current=pack(),entities=current.wikiEntities||{};
-        const version=current.meta?.manifestVersion||current.meta?.version||'';
-        if(catalogCache?.pack!==current||catalogCache.entities!==entities||catalogCache.version!==version)catalogCache={pack:current,entities,version,types:new Map()};
-        if(!catalogCache.types.has(kind)){
-            const list=kind==='item'?current.items:kind==='npc'?current.npcs:current.zones,typed=kind==='item'?entities.items:kind==='npc'?entities.npcs:[];
-            const records=[...(Array.isArray(entities.titles)?entities.titles:[]),...(Array.isArray(typed)?typed:[]),...(Array.isArray(list)?list:[])];
-            catalogCache.types.set(kind,new Set(records.flatMap(record=>typeof record==='string'?[record]:[record?.name,record?.title,record?.wikiTitle,...(Array.isArray(record?.aliases)?record.aliases:[])]).filter(Boolean).map(contributionNameKey)));
-        }
-        const keys=catalogCache.types.get(kind);
-        const baseName=kind==='item'?String(name).replace(/\s*\+\d+(?:\s*\([^)]*\))?\s*$/,'').trim():name;
-        const present=keys.has(contributionNameKey(name))||baseName!==name&&keys.has(contributionNameKey(baseName));
-        const complete=current.meta?.wikiEntitiesComplete===true&&current.meta?.sample!==true&&['items','npcs','titles'].every(key=>Array.isArray(entities[key]));
-        return present?'present':complete?'missing':'unknown';}
-    function add({kind,name,zone='',fields={},evidence=null,relations=[]},force=false){
+    function add({kind,name,zone='',instance='unknown',fields={},evidence=null,relations=[]},force=false){
         name=clean(name);if(!['item','npc','zone'].includes(kind)||!name)return null;
         const observedName=name,identity=kind==='item'?itemIdentity(name):{name,tier:null};name=identity.name;
         if(identity.tier!==null){fields={...fields,...(!Object.hasOwn(fields,'tier')?{tier:identity.tier}:{})};if(!evidence)evidence={id:`item-name-${contributionSourceToken(observedName)}`,kind:'observed-name',capturedAt:new Date(now()).toISOString(),evidence:{text:`Observed item name: ${observedName}\nExact base identity: ${name}\nObserved tier decoration: +${identity.tier}`}};}
-        const key=candidateKey(kind,name,zone),legacyKey=`${kind}|${contributionNameKey(observedName)}|${contributionNameKey(zone)}`;
-        const present=membership(kind,name);
-        const matchingIgnores=[...ignored].filter(value=>value===key||kind==='item'&&value.startsWith('item|')&&candidateKey('item',value.split('|')[1])===key);
+        const resolved=resolver().resolve(kind,name),key=canonicalKey(kind,name,zone),legacyKey=`${kind}|${contributionNameKey(observedName)}|${contributionNameKey(zone)}`;
+        const present=resolved.membership;
+        const matchingIgnores=[...ignored].filter(value=>value===key||value.startsWith(`${kind}|`)&&canonicalKey(kind,value.split('|')[1],kind==='item'?'':value.split('|')[2])===key);
         if(matchingIgnores.length&&!force)return null;if(force)for(const value of matchingIgnores)ignored.delete(value);
         let candidate=candidates.find(c=>c.key===key||c.aliasKeys?.includes(key));
-        if(present==='present'&&!force&&!candidate)return null;
-        if(!candidate){if(candidates.length>=200){onWarning('The contribution queue is full. Review or remove a draft to save another discovery.');return null;}candidate={id:`contribution-${++sequence}`,key,aliasKeys:[],kind,name,title:name,zone:clean(zone),instance:'unknown',era:'',playerText:'',fields:{},sources:[],relations:[],evidence:[],status:'needs-review',membership:present};candidates.push(candidate);}
+        if(!force&&!candidate&&['submitted','ignored'].includes(suppression(kind,name,{zone}).reason))return null;
+        const classified=contributionReasons({...candidate,kind,name,zone,instance,fields:{...candidate?.fields,...Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{value}]))},relations:[...(candidate?.relations||[]),...relations]},resolver());
+        if(classified.excluded&&!force)return null;
+        if(present==='present'&&!classified.reasons.length&&!force&&!candidate)return null;
+        if(!candidate){if(candidates.length>=200){onWarning('The contribution queue is full. Review or remove a draft to save another discovery.');return null;}candidate={id:`contribution-${++sequence}`,key,aliasKeys:[],kind,name:resolved.canonicalTitle||name,title:resolved.canonicalTitle||name,zone:clean(zone),instance:['normal','raid'].includes(instance)?instance:'unknown',era:'',playerText:'',fields:{},sources:[],relations:[],evidence:[],status:'needs-review',membership:present};candidates.push(candidate);}
+        if(force)candidate.manual=true;
         if(kind==='item'){if(!candidate.zone&&zone)candidate.zone=clean(zone);if(legacyKey!==key)candidate.aliasKeys=[...new Set([...(candidate.aliasKeys||[]),legacyKey])].slice(-8);}
-        candidate.membership=present;
+        candidate.membership=present;candidate.canonicalTitle=resolved.canonicalTitle;candidate.revisionId=resolved.record?.revisionId||null;candidate.reasons=classified.reasons.length?classified.reasons:force?['manual-review']:[];if(candidate.intent===undefined||!protectedDraft(candidate))candidate.intent=present==='present'?'update':present==='missing'?'create':'review';
         for(const [key,raw] of Object.entries(fields||{}).slice(0,80)){if(!validField(key))continue;let value=fieldValue(raw);
             if(candidate.fields[key]?.edited===true)continue;
             if(['knownLoot','knownNPCs'].includes(key)&&Array.isArray(value)){const previous=Array.isArray(candidate.fields[key]?.value)?candidate.fields[key].value:[],combined=[...new Map([...previous,...value].map(item=>[contributionNameKey(item),item])).values()].slice(0,100);if(JSON.stringify(combined)!==JSON.stringify(previous))candidate.fields[key]={...candidate.fields[key],value:combined,confirmed:false};}
             else if(!candidate.fields[key]?.confirmed)candidate.fields[key]={...candidate.fields[key],value,confirmed:false};}
         if(evidence&&!candidate.evidence.some(e=>e.id===evidence.id)){const text=evidence.evidence?.text||(evidence.kind==='game-log'?`Observed ${clean(evidence.subject?.kind)}: ${clean(evidence.subject?.name)}${(Array.isArray(evidence.relations)?evidence.relations:[]).filter(relation=>relation.type==='drop-source').map(relation=>`\nReported source: ${clean(relation.name)} in ${clean(relation.zone)} (${clean(relation.evidence)})`).join('')}`:'');candidate.evidence.push({id:clean(evidence.id),at:clean(evidence.capturedAt),kind:clean(evidence.kind),text:clean(text,6000),confidence:Math.min(100,Number(evidence.confidence??evidence.fields?.[0]?.confidence)||0)});candidate.evidence=candidate.evidence.slice(-6);}
-        for(const relation of (Array.isArray(relations)?relations:[]).filter(r=>r?.type==='drop-source'))if(!candidate.sources.some(s=>s.npc===relation.name&&s.zone===relation.zone&&s.sourceEvidence===relation.evidence))candidate.sources.push({npc:clean(relation.name),zone:clean(relation.zone),confirmed:false,sourceEvidence:clean(relation.evidence)});
+        for(const relation of (Array.isArray(relations)?relations:[]).filter(r=>r?.type==='drop-source'))if(!candidate.sources.some(s=>contributionNameKey(s.npc)===contributionNameKey(relation.name)&&contributionNameKey(s.zone)===contributionNameKey(relation.zone)&&s.sourceEvidence===relation.evidence&&(s.instance||'unknown')===(relation.instance||'unknown')))candidate.sources.push({npc:clean(relation.name),zone:clean(relation.zone),instance:relation.instance||'unknown',confirmed:false,sourceEvidence:clean(relation.evidence)});
         for(const relation of (Array.isArray(relations)?relations:[]).slice(0,100))rememberRelation(candidate,relation,evidence);
+        if(kind==='item'&&evidence)collectTierZeroEvidence(candidate,evidence,{now:now()});
+        if(candidate.tierZeroEvidence?.length&&!candidate.baseVerification)candidate.reasons=[...new Set([...candidate.reasons,'tier0-verification'])];
+        rememberState(kind,candidate.name,candidate.status==='submitted'?'submitted':candidate.status==='partial'?'partial':'queued');
         save();return structuredClone(candidate);
     }
     function consume(observation){
         cursor=Math.max(cursor,Number(observation?.sequence)||0);
         const kind=observation?.subject?.kind==='monster'?'npc':observation?.subject?.kind;
         if(observation?.owner==='character'||!['item','npc','zone'].includes(kind)){save();return null;}
+        if(kind==='npc'&&!classifyNpcEvidence(observation.subject.name,resolver().resolve(kind,observation.subject.name)).eligible){save();return null;}
         const fields=Object.fromEntries((observation.fields||[]).filter(f=>f.key!=='name').map(f=>[f.key,f.value]));
         const itemName=kind==='item'?itemIdentity(observation.subject.name).name:null;
-        const zone=observation.input?.zone||'',relations=[...(observation.relations||[])].map(relation=>relation.type==='zone-loot'?{...relation,name:itemIdentity(relation.name).name}:relation);
+        const zone=observation.input?.zone||'',instance=observation.input?.instance||'unknown',relations=[...(observation.relations||[])].filter(relation=>!['drop-source','mob-zone','zone-population'].includes(relation.type)||classifyNpcEvidence(relation.name,resolver().resolve('npc',relation.name)).eligible).map(relation=>relation.type==='zone-loot'?{...relation,name:itemIdentity(relation.name).name}:relation);
         // Older game-log journal records predate explicit relationship entries.
         // Replay the same observed associations, without promoting them to facts.
         if(observation.kind==='game-log'&&zone){
             if(kind==='npc'){for(const type of ['mob-zone','zone-population'])if(!relations.some(value=>value.type===type))relations.push({type,name:observation.subject.name,zone,evidence:observation.input?.event||'observed'});}
             if(kind==='item'&&!relations.some(value=>value.type==='zone-loot'))relations.push({type:'zone-loot',name:itemName,zone,evidence:'loot'});
         }
-        const result=add({kind,name:observation.subject.name,zone,fields,evidence:observation,relations});
+        const result=add({kind,name:observation.subject.name,zone,instance,fields,evidence:observation,relations});
         let relatedCandidate=null;
         if(kind==='item')for(const relation of relations.filter(relation=>relation.type==='drop-source'&&relation.evidence==='explicit-corpse'&&relation.name&&relation.zone)){
-            const npcRelations=[{type:'mob-zone',name:relation.name,zone:relation.zone,evidence:'explicit-corpse'},{type:'zone-population',name:relation.name,zone:relation.zone,evidence:'explicit-corpse'}];
-            const proposal=add({kind:'npc',name:relation.name,zone:relation.zone,fields:{knownLoot:[itemName]},evidence:observation,relations:npcRelations});
+            const npcRelations=[{type:'mob-zone',name:relation.name,zone:relation.zone,instance,evidence:'explicit-corpse'},{type:'zone-population',name:relation.name,zone:relation.zone,instance,evidence:'explicit-corpse'}];
+            const proposal=add({kind:'npc',name:relation.name,zone:relation.zone,instance,fields:{knownLoot:[itemName]},evidence:observation,relations:npcRelations});
             if(proposal)relatedCandidate=proposal;
         }
         if(zone){
             const population=relations.filter(value=>value.type==='zone-population').map(value=>value.name),loot=relations.filter(value=>value.type==='zone-loot').map(value=>value.name);
             const zoneFields={...(population.length?{knownNPCs:population}:{}),...(loot.length?{knownLoot:loot}:{})};
-            if(kind!=='zone'&&(population.length||loot.length)){const proposal=add({kind:'zone',name:zone,zone,fields:zoneFields,evidence:observation,relations});if(proposal)relatedCandidate??=proposal;}
+            if(kind!=='zone'&&(population.length||loot.length)){const proposal=add({kind:'zone',name:zone,zone,instance,fields:zoneFields,evidence:observation,relations});if(proposal)relatedCandidate??=proposal;}
         }
         save();return result||relatedCandidate;
     }
@@ -129,20 +143,55 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         }
         const candidate=consume(observation);let prompt=null;
         if(event.type==='kill'){
-            const target=candidates.find(value=>value.kind==='npc'&&contributionNameKey(value.name)===contributionNameKey(observation.subject.name)&&contributionNameKey(value.zone)===contributionNameKey(zone));
-            if(target&&!target.spawnRequest&&target.fields.location?.confirmed!==true&&target.membership!=='present'){
-                target.spawnRequest={status:'requested',requestedAt:observation.capturedAt,evidenceId:observation.id};prompt={candidateId:target.id,name:target.name,zone};save();
+            const target=candidates.find(value=>value.kind==='npc'&&value.key===canonicalKey('npc',observation.subject.name,zone));
+            if(target&&zone&&!target.spawnRequest&&target.fields.location?.confirmed!==true&&target.membership==='missing'&&!suppression('npc',target.name,{zone,purpose:'spawn-location'}).suppressed){
+                target.spawnRequest={status:'requested',requestedAt:observation.capturedAt,evidenceId:observation.id};const result=armSpawnLocation(target.id);if(result.ok){prompt={candidateId:target.id,name:target.name,zone,armed:true,expiresAt:result.expiresAt};rememberState('npc',target.name,'notified','spawn-location',zone);}save();
             }
         }
-        return {candidate,prompt,locationCaptured:null};
+        return {candidate:prompt?structuredClone(candidates.find(value=>value.id===prompt.candidateId)):candidate,prompt,locationCaptured:null};
     }
+    function armSpawnLocation(candidateId){const candidate=candidates.find(value=>value.id===candidateId&&value.kind==='npc');if(!candidate||!lastLog?.zone||contributionNameKey(candidate.zone)!==contributionNameKey(lastLog.zone))return {ok:false,error:'Return to the monster’s zone before recording its spawn location.'};const armedAt=now();armed={candidateId,source:lastLog.source,zone:lastLog.zone,cursor:lastLog.cursor,armedAt,expiresAt:armedAt+300000};return {ok:true,candidateId,name:candidate.name,zone:candidate.zone,expiresAt:armed.expiresAt};}
+    function reconcile({apply=false}={}){
+        if(apply&&readBlocked)return {version:1,applied:false,changed:false,rows:[],active:candidates.length,archived:archive.length,blocked:true,persisted:false,error:'The preserved queue must be recovered before reconciliation.'};
+        const rows=[],seen=new Map(),before=apply?{candidates:structuredClone(candidates),archive:structuredClone(archive),armed:structuredClone(armed)}:null;let changed=false;
+        for(const candidate of [...candidates]){
+            const classification=contributionReasons(candidate,resolver()),resolved=classification.resolved,key=canonicalKey(candidate.kind,candidate.name,candidate.zone),protectedWork=protectedDraft(candidate),prior=seen.get(key),realGap=classification.reasons.some(reason=>['missing-source','missing-population','tier0-verification','identity-review'].includes(reason)),conflict=prior&&Object.entries(candidate.fields||{}).some(([field,value])=>prior.fields?.[field]&&!['knownLoot','knownNPCs'].includes(field)&&JSON.stringify(prior.fields[field].value)!==JSON.stringify(value.value)),duplicate=prior&&!protectedWork&&!protectedDraft(prior)&&!realGap&&!conflict;
+            if(!prior)seen.set(key,candidate);
+            const obsolete=classification.excluded||resolved.membership==='present'&&!classification.reasons.length?'generated-pet'===classification.excluded?'generated-pet':'known-complete':duplicate?'duplicate':null;
+            const reason=protectedWork?'protected-work':prior&&conflict?'duplicate-conflict':obsolete||classification.reasons[0]||'unresolved',action=obsolete&&!protectedWork&&archive.length<200?'archive':'keep';
+            rows.push({id:candidate.id,name:candidate.name,kind:candidate.kind,classification:reason,reasons:classification.reasons,action,canonicalTitle:resolved.canonicalTitle,membership:resolved.membership,...(prior?{duplicateOf:prior.id}:{})});
+            if(!apply)continue;
+            if(action==='archive'){
+                if(obsolete==='duplicate'){
+                    for(const [field,value]of Object.entries(candidate.fields||{})){if(!prior.fields[field])prior.fields[field]=structuredClone(value);else if(['knownLoot','knownNPCs'].includes(field))prior.fields[field].value=[...new Set([...(prior.fields[field].value||[]),...(value.value||[])])].slice(0,100);}
+                    prior.aliasKeys=[...new Set([...(prior.aliasKeys||[]),candidate.key,...(candidate.aliasKeys||[])])].slice(-8);
+                    for(const field of ['sources','relations','evidence'])prior[field]=[...new Map([...(prior[field]||[]),...(candidate[field]||[])].map(value=>[field==='evidence'?value.id:JSON.stringify(value),value])).values()].slice(field==='evidence'?-6:-100);
+                }
+                archive.push({...structuredClone(candidate),archive:{version:1,reason:obsolete,at:new Date(now()).toISOString()}});candidates=candidates.filter(value=>value.id!==candidate.id);if(armed?.candidateId===candidate.id)armed=null;changed=true;
+            }else{
+                const knownTarget=resolved.membership==='present'&&[resolved.canonicalTitle,candidate.name].some(title=>contributionNameKey(title)===contributionNameKey(candidate.title||candidate.name));
+                const patch={membership:resolved.membership,canonicalTitle:resolved.canonicalTitle,revisionId:resolved.record?.revisionId||null,reasons:classification.reasons,...(knownTarget?{intent:'update'}:protectedWork||candidate.matchesReviewed===true?{}:{intent:resolved.membership==='present'?'update':resolved.membership==='missing'?'create':'review'})};
+                if(Object.entries(patch).some(([key,value])=>JSON.stringify(candidate[key])!==JSON.stringify(value))){Object.assign(candidate,patch);changed=true;}
+            }
+        }
+        const persisted=!changed||save();if(apply&&!persisted){candidates=before.candidates;archive=before.archive;armed=before.armed;}
+        return {version:1,applied:apply&&persisted,changed:changed&&persisted,rows,active:candidates.length,archived:archive.length,blocked:readBlocked,persisted,...(!persisted?{error:'Reconciliation could not be saved; the active queue was retained.'}:{})};
+    }
+    function ensureReconciled(){const current=resolver();if(autoReconcile&&lastReconciled!==current){lastReconciled=current;return reconcile({apply:true});}return null;}
+    ensureReconciled();
     return{
-        snapshot:()=>structuredClone(candidates),cursor:()=>cursor,
+        snapshot:()=>{ensureReconciled();return structuredClone(candidates);},cursor:()=>cursor,archived:()=>structuredClone(archive),reconcile,suppression,refreshCatalog:ensureReconciled,
+        spawnStatus(){if(armed&&now()>armed.expiresAt)armed=null;return armed?{...armed}:null;},
+        tierZeroReview(id,options={}){return tierZeroVerificationPreview(candidates.find(value=>value.id===id),{...options,now:now()});},
+        confirmTierZero(id,options={}){const candidate=candidates.find(value=>value.id===id);if(!candidate)throw Error('This contribution no longer exists.');const patch=confirmTierZeroVerification(candidate,{...options,now:now()});Object.assign(candidate,patch);candidate.planId=null;candidate.status='needs-review';candidate.reasons=contributionReasons(candidate,resolver()).reasons;save();return structuredClone(candidate);},
         add,consume,consumeLog,
-        armSpawnLocation(candidateId){const candidate=candidates.find(value=>value.id===candidateId&&value.kind==='npc');if(!candidate||!lastLog?.zone||contributionNameKey(candidate.zone)!==contributionNameKey(lastLog.zone))return {ok:false,error:'Return to the monster’s zone before recording its spawn location.'};const armedAt=now();armed={candidateId,source:lastLog.source,zone:lastLog.zone,cursor:lastLog.cursor,armedAt,expiresAt:armedAt+300000};return {ok:true,candidateId,name:candidate.name,zone:candidate.zone,expiresAt:armed.expiresAt};},
+        armSpawnLocation,
         cancelSpawnLocation(){armed=null;},
-        update(id,patch){const candidate=candidates.find(c=>c.id===id);if(!candidate)return null;const priorKey=candidate.key,priorTitle=contributionNameKey(candidate.title);for(const key of ['name','title','zone','instance','era','playerText','fields','sources','relations','status','matchesReviewed','planId','baseRecovery'])if(Object.hasOwn(patch,key))candidate[key]=structuredClone(patch[key]);candidate.key=candidateKey(candidate.kind,candidate.name,candidate.zone);if(priorKey!==candidate.key)candidate.aliasKeys=[...new Set([...(candidate.aliasKeys||[]),priorKey])].slice(-8);if(armed?.candidateId===id&&(priorKey!==candidate.key||priorTitle!==contributionNameKey(candidate.title)))armed=null;save();return structuredClone(candidate);},
-        remove(id){const candidate=candidates.find(c=>c.id===id);if(candidate)for(const key of [candidate.key,...(candidate.aliasKeys||[])])ignored.add(key);while(ignored.size>2000)ignored.delete(ignored.values().next().value);candidates=candidates.filter(c=>c.id!==id);if(armed?.candidateId===id)armed=null;save();},
+        update(id,patch){const candidate=candidates.find(c=>c.id===id);if(!candidate)return null;const attachment=Object.hasOwn(patch,'attachment')?attachmentValue(patch.attachment):undefined;const priorKey=candidate.key,priorTitle=contributionNameKey(candidate.title);for(const key of ['name','title','zone','instance','era','playerText','fields','sources','relations','status','matchesReviewed','planId','baseRecovery'])if(Object.hasOwn(patch,key))candidate[key]=structuredClone(patch[key]);if(Object.hasOwn(patch,'intent')&&['create','update','review'].includes(patch.intent))candidate.intent=patch.intent;
+            if(Object.hasOwn(patch,'attachment'))candidate.attachment=attachment;
+            candidate.key=canonicalKey(candidate.kind,candidate.name,candidate.zone);if(priorKey!==candidate.key)candidate.aliasKeys=[...new Set([...(candidate.aliasKeys||[]),priorKey])].slice(-8);if(armed?.candidateId===id&&(priorKey!==candidate.key||priorTitle!==contributionNameKey(candidate.title)))armed=null;rememberState(candidate.kind,candidate.name,candidate.status==='submitted'?'submitted':candidate.status==='partial'?'partial':'queued');save();return structuredClone(candidate);},
+        remove(id){const candidate=candidates.find(c=>c.id===id);if(candidate){for(const key of [candidate.key,...(candidate.aliasKeys||[])])ignored.add(key);rememberState(candidate.kind,candidate.name,'ignored');rememberState(candidate.kind,candidate.name,'ignored','spawn-location',candidate.zone);}while(ignored.size>2000)ignored.delete(ignored.values().next().value);candidates=candidates.filter(c=>c.id!==id);if(armed?.candidateId===id)armed=null;save();},
+        suppress(kind,name,{zone='',purpose='missing-page',state='ignored'}={}){rememberState(wikiEntityKind(kind),name,state,purpose,zone);save();},
         matches(candidate){const current=pack(),entries=candidate.kind==='item'?current.items:candidate.kind==='npc'?current.npcs:current.zones;return findPotentialMatches(candidate.title||candidate.name,entries||[]);}
     };
 }

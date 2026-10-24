@@ -21,12 +21,34 @@ import { mountCaptureWorkspace } from './capture-workspace.js';
 import { createCharacterStorage } from './character-storage.js';
 import { mountSystemFontSettings } from './system-font-settings.js';
 import { isItemStatModified } from './item-stat-presentation.js';
+import { catalogItemDetailsMarkup,characterCatalogDetails } from './character-item-card.js';
+import { collectDropObservation } from './drop-observations.js';
+import { createWikiResolver } from './wiki-identity.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
 
 const parser = new EQLogParser();
 let pack = { meta:{}, zones:[], npcs:[], items:[] };
+let observationPack=null,observationResolver=null;
+const observationSession=globalThis.crypto.randomUUID();
+let observationPreference=true;
+const observationPending=[];let observationSending=null,observationRetry=null,observationWarning=false,sessionDraining=false;
+function queueObservation(observation){
+    if(observationPending.length>=10000){if(!observationWarning){observationWarning=true;showNotice('Drop observation storage is unavailable. The pending buffer is full; check Settings.',{tone:'warning'});}return;}
+    observationPending.push(observation);void flushObservations();
+}
+async function flushObservations(){
+    if(observationSending)return observationSending;
+    if(!observationPending.length)return true;
+    if(!window.eyeOfZommObservations)return false;
+    clearTimeout(observationRetry);observationRetry=null;
+    const task=(async()=>{
+        try{while(observationPending.length){const batch=observationPending.slice(0,100);const result=await window.eyeOfZommObservations.collect(batch);if(result?.disabled){observationPreference=false;observationPending.splice(0);break;}observationPending.splice(0,batch.length);}observationWarning=false;return true;}
+        catch{if(!observationWarning){observationWarning=true;showNotice('Drop observations could not be saved yet. They will retry while the app stays open.',{tone:'warning'});}if(!observationRetry)observationRetry=setTimeout(()=>{observationRetry=null;void flushObservations();},30000);return false;}
+    })();observationSending=task;const saved=await task;if(observationSending===task)observationSending=null;return saved&&observationPending.length?flushObservations():saved;
+}
+window.eyeOfZommLifecycle?.onDrain(async()=>{sessionDraining=true;clearTimeout(pollTimer);while(observationPending.length){if(!await flushObservations())return false;}return true;},()=>{sessionDraining=false;schedulePoll(0);});
 let lootByNpcZone = new Map();
 let lootByNpcName = new Map();
 let itemByName = new Map();
@@ -497,6 +519,7 @@ function mapSourceContextMatches(context) {
 }
 
 function clearSourceLocation() {
+    captureWorkspace.cancelSource();
     parser.resetSourceContext();
     clearActiveRoute({clearViewer:false});
     pendingViewerLocation = null;
@@ -509,6 +532,7 @@ async function pollLog() {
     const requestSource = mapSourceContext();
     try {
         const data = await api(`/api/log?offset=${encodeURIComponent(logOffset)}`);
+        if(sessionDraining)return;
         if (!mapSourceContextMatches(requestSource)) { schedulePoll(0); return; }
         let changed = false;
         let requiresFullRender = false;
@@ -591,11 +615,18 @@ function consumeText(text, allowTransientUi = true) {
         const freshTimerEvent = Number.isFinite(originalAt) && Math.abs(Date.now() - originalAt) <= 10000;
         let listedTarget = false;
         if (allowTransientUi && freshTimerEvent && ['consider','kill'].includes(event?.type)) listedTarget = focusIntelForConsider(event.type === 'consider' ? event.target : {name:event.victim});
-        if (!listedTarget) wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt});
+        if (!listedTarget && event?.type!=='kill') wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt});
         overlaySession.consume(event, { zone:parser.zone, character:parser.character, live:allowTransientUi && freshTimerEvent,
             text:line, at:parser.currentLineAt, logId:bridgeInfo?.logPath || 'current-log' });
+        const observationCursor=++observedLogCursor;
+        if(observationPreference&&window.eyeOfZommObservations&&allowTransientUi&&freshTimerEvent&&['loot','kill'].includes(event?.type)){
+            if(observationPack!==pack){observationPack=pack;observationResolver=createWikiResolver(pack);}
+            const source=bridgeInfo?.logPath||'current-log',server=String(source).split(/[\\/]/).pop()?.match(/^eqlog_[^_]+_(.+)\.txt$/i)?.[1]||'';
+            const observation=collectDropObservation(event,{live:true,at:parser.currentLineAt,cursor:observationCursor,logId:source,sessionId:observationSession,server,zone:parser.zone,playerNames:[parser.character].filter(Boolean),pack,resolver:observationResolver});
+            if(observation)queueObservation(observation);
+        }
         captureWorkspace.consumeLog(event,{zone:parser.zone,live:allowTransientUi&&freshTimerEvent,
-            logId:bridgeInfo?.logPath||'current-log',at:parser.currentLineAt,cursor:++observedLogCursor});
+            logId:bridgeInfo?.logPath||'current-log',at:parser.currentLineAt,cursor:observationCursor});
     }
     overlaySession.flush();
     if (zoneChanged) {
@@ -658,7 +689,8 @@ function overlayItemSummary(item, budget) {
     return { name:String(item.name || '').slice(0,240), icon,
         slots:(item.slots || []).slice(0,8).map(slot => String(slot).slice(0,60)),
         classes:(Array.isArray(item.classes) ? item.classes : []).slice(0,20).map(value => String(value).slice(0,40)),
-        displayLines:(Array.isArray(item.displayLines) ? item.displayLines : []).slice(0,12).map(value => String(value).slice(0,240)),
+        displayLines:(Array.isArray(item.displayLines) ? item.displayLines : []).slice(0,32).map(value => String(value).slice(0,400)),
+        details:characterCatalogDetails(item),
         notes:String(item.notes || '').slice(0,1200), baseStats:boundedStats(item.stats),
         stats:boundedStats(scaledItemStats(item,settings.itemTier)), tier:Number(settings.itemTier) || 0 };
 }
@@ -1157,7 +1189,7 @@ function renderDropLog(s) {
 function tooltipHtml(item,target) {
     const tier = target?.closest('#map-loot-pane') ? mapLootTier : Number(settings.itemTier) || 0;
     const stats = scaledItemStats(item, tier);
-    const statHtml = Object.entries(stats).slice(0, 18).map(([key, value]) => {
+    const statHtml = Object.entries(stats).slice(0, 64).map(([key, value]) => {
         const base = Number(item?.stats?.[key]);
         const changed = isItemStatModified(item?.stats?.[key],value,tier);
         return `<div class="tooltip-stat ${changed ? 'is-scaled' : ''}"><span>${esc(key.replace(/_/g, ' '))}:</span><strong>${Number(value) > 0 ? '+' : ''}${formatNum(value)}${changed ? `<small> (${base > 0 ? '+' : ''}${formatNum(base)})</small>` : ''}</strong></div>`;
@@ -1167,11 +1199,11 @@ function tooltipHtml(item,target) {
         .map(source => esc(`${source.zone ? `${source.zone} · ` : ''}${source.name}`))
         .join('<br>');
     const icon = itemIconSource(item);
-    const displayLines = Array.isArray(item.displayLines) ? item.displayLines.slice(0, 12) : [];
+    const details = catalogItemDetailsMarkup(item);
     return `<div class="itembox-title"><span>${esc(item.name)}</span>${tier > 0 ? `<span class="itembox-tier">Tier ${tier}</span>` : ''}</div>
         <div class="itembox-body">
             <div class="itembox-summary">${icon ? `<img class="itembox-icon" src="${esc(icon)}" alt="">` : '<span class="itembox-icon item-icon-placeholder">◇</span>'}<div>
-                ${displayLines.length ? displayLines.map(line => `<div>${esc(line)}</div>`).join('') : `<div>${esc((item.slots || []).length ? `Slot: ${(item.slots || []).join(' ')}` : 'Slot: Unknown')}</div><div>Class: ${esc((item.classes || []).join(' ') || 'Unknown')}</div>`}
+                ${details}
             </div></div>
             ${statHtml ? `<div class="tooltip-scale-label">${tier > 0 ? `Tier ${tier} adjusted stats <small>(base)</small>` : 'Base stats'}</div><div class="tooltip-stats">${statHtml}</div>` : ''}
             ${sources ? `<div class="tooltip-source"><strong>Drops from</strong><br>${sources}</div>` : ''}
@@ -2336,9 +2368,11 @@ const overlaySession = createOverlaySession({ api:window.eyeOfZommOverlays, getS
     onCommand:handleOverlayCommand, onCues:cues => timerAlerts.play(cues), notify:message => showNotice(message, { tone:'warning' }) });
 const timerAlerts = createTimerAlerts();
 const wikiDiscovery = createWikiDiscovery({getPack:()=>pack,
+    getSuppression:(kind,name,options)=>captureWorkspace.suppression?.(kind,name,options),
+    onIgnore:(kind,name,options)=>captureWorkspace.suppress?.(kind,name,options),
     onMissing:entry=>window.eyeOfZommDiscovery?.show(entry) || Promise.reject(new Error('The desktop discovery prompt is unavailable.')),
     onWarning:message=>showNotice(message,{tone:'warning'})});
-window.eyeOfZommDiscovery?.onAction?.(({action,id})=>{if(action==='ignore')wikiDiscovery.ignore(id);else wikiDiscovery.dismiss(id);void overlaySession.publish();});
+window.eyeOfZommDiscovery?.onAction?.(({action,id,candidateId,purpose})=>{if(purpose==='spawn-location'&&candidateId){if(action==='contribute')captureWorkspace.openContribution(candidateId);else if(action==='ignore')captureWorkspace.ignoreContribution(candidateId);}else if(action==='ignore')wikiDiscovery.ignore(id);else wikiDiscovery.dismiss(id);void overlaySession.publish();});
 window.eyeOfZommOverlays?.onState?.(next => {
     if (next.appearance && !appearancePending && !appearanceDraft) acceptAppearance(next.appearance);
     nativeMapVisible = Boolean(next.panels?.map?.visible);
@@ -2364,7 +2398,11 @@ let captureWorkspace={consumeLog(){},refresh(){},dispose(){}};
 const characterStorage=await createCharacterStorage({onWarning:message=>showNotice(message,{tone:'warning'})});
 captureWorkspace = mountCaptureWorkspace({characterStorage,contributionStorage:characterStorage,getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
     getAppearance:()=>settings.appearance,notify:showNotice,navigate:view=>setView(view)});
-window.addEventListener('pagehide', () => { captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
+const observationSettings=document.createElement('section');observationSettings.className='observation-settings';observationSettings.innerHTML='<h2>Drop observations</h2><label class="check-control"><input type="checkbox" data-observation-enabled checked> Collect and sync drop observations</label><p class="settings-helper">Keeps minimal kill and loot observations locally and sends them hourly when logged in to the wiki. Chat, screenshots and file paths are excluded. Drop percentages are not calculated yet.</p><p data-observation-status role="status"></p><a href="https://eqlwiki.com/API_Documentation" target="_blank" rel="noopener">Wiki API documentation</a>';document.getElementById('capture-settings').append(observationSettings);
+const renderObservationStatus=async()=>{try{const status=await window.eyeOfZommObservations?.status();if(!status){observationSettings.hidden=true;return;}observationPreference=status.enabled;observationSettings.querySelector('[data-observation-enabled]').checked=status.enabled;observationSettings.querySelector('[data-observation-status]').textContent=`${status.pending} pending · ${status.acknowledged} delivered${status.error?' · '+status.error:''}`;}catch{observationSettings.querySelector('[data-observation-status]').textContent='Observation storage unavailable.';}};
+observationSettings.querySelector('[data-observation-enabled]').onchange=async event=>{try{await window.eyeOfZommObservations.configure({enabled:event.target.checked});await renderObservationStatus();}catch(error){showNotice(error.message,{tone:'warning'});await renderObservationStatus();}};
+void renderObservationStatus();const observationStatusTimer=setInterval(()=>void renderObservationStatus(),60000);
+window.addEventListener('pagehide', () => { clearTimeout(observationRetry);clearInterval(observationStatusTimer);captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

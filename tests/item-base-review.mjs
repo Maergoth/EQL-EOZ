@@ -22,11 +22,11 @@ assert.deepEqual(original,before,'preparing the review never overwrites observed
 assert.equal(patch.fields.statLines.confirmed,false,'applying base proposals still requires verification of outgoing stat text');assert.equal(patch.fields.statLines.edited,true);
 assert.deepEqual(patch.fields.statLines.value,['HP: 30','STR: 5','STA: -2','Delay: 24','A contributor note in their own words.','Effect: A synthetic sparkle.','Slot: BACK','Class: WAR']);
 const applied={...original,...patch};assert.equal(validateItemBaseReview(applied).ok,false,'new stat text must be verified before a recovery can bypass the base-capture guard');
-assert(buildContributionDraft(original,blueprints).blockers.some(value=>/upgraded/.test(value)),'the original upgraded/augmented guard remains');
-assert(buildContributionDraft(applied,blueprints).blockers.some(value=>/Confirm the base/.test(value)),'unverified generated stat text cannot be published');
+const unrecoveredDraft=buildContributionDraft(original,blueprints);assert.doesNotMatch(unrecoveredDraft.text||'',/HP: 42|STR: 9|Weight: 0\.7/,'An optional unrecovered tiered item cannot leak its observed numeric values as wiki bases');
+assert(buildContributionDraft(applied,blueprints).blockers.some(value=>/Verify the recovered base stat text/.test(value)),'unverified generated stat text cannot be published');
 const confirmed={...applied,fields:{...applied.fields,statLines:{...applied.fields.statLines,confirmed:true}}},draft=buildContributionDraft(confirmed,blueprints);
 assert.equal(validateItemBaseReview(normalizeContributionCandidate(confirmed)).ok,true,'normalization preserves the verified review contract');
-assert.deepEqual(draft.blockers,[]);assert.match(draft.text,/HP: 30<br>/);assert.match(draft.text,/STA: -2/);assert.match(draft.text,/Rounding choices were reviewed; this is an inference, not a base-item capture/);assert.match(draft.text,/A contributor note in their own words/);
+assert.deepEqual(draft.blockers,[]);assert.match(draft.text,/HP: 30<br>/);assert.match(draft.text,/STA: -2/);assert.match(draft.text,/These stats are reverse calculated from a tier 4 item\. Please confirm with a tier 0 item and remove this message/);assert.match(draft.text,/A contributor note in their own words/);
 assert.doesNotMatch(draft.text,/HP: 42|Weight: 0\.7|SV Void: 4|Damage Bonus: 41/,'omitted observed/unsupported numbers never enter the recovered wiki stat block');
 assert(draft.warnings.some(value=>/Unresolved base statistics/.test(value)));
 

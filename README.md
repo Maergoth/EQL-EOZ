@@ -4,33 +4,39 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.7 imports equipped gear from the game's inventory export and records the
-displayed character stats.** Keep all gear on. Enter character details, type
+**0.9.8 candidate: clearer Character cards and reviewed contributions.** This
+follow-up adds equipped-hover tier controls, imported Exaltations, richer item
+details, User-page character sheets and a screenshot-based Icon Finder. The
+published baseline remains 0.9.7 until the release gates and wiki activation
+finish; see [the active release plan](docs/RELEASE_098_PLAN.md).
+
+Keep all gear on. Enter character details, type
 `/outputfile inventory`, then let EoZ detect the fresh matching export in your
 chosen game folder. Next, **Open your Inventory → Scroll down → Click off your
 buffs**, select the game window and review its fully equipped, unbuffed stats.
 Character totals use only that reviewed reading; item/catalog values and older
 baselines are never added. Character does not collect gear by item OCR.
 
-Missing wiki items and augments leave public slots/sockets empty. Use Contribute
+Missing wiki items and Exaltations leave public slots/sockets empty. Use Contribute
 to supply missing details, sync the accepted wiki data and export inventory again.
 Optional local stat/examine reading uses a lower **1 FPS** cadence for stable
 panes. See [the inventory-export flow](docs/CHARACTER_WALKTHROUGH.md) and
-[implementation plan](docs/INVENTORY_EXPORT_CHARACTER_PLAN.md). Version 0.9.7 is
-unreleased until its final native, platform and package checks complete.
+[inventory-export design](docs/INVENTORY_EXPORT_CHARACTER_PLAN.md).
 
 The compact inspect and interactive wiki sharing introduced in 0.9.6 remain:
-24 equipment slots including two Any slots, clickable known gear/augments, PNG
-copy/save and an explicitly reviewed own-talk share. Character Select preserves
+24 equipment slots including two Any slots, clickable known gear/Exaltations,
+PNG copy/save and an explicitly reviewed interactive share. In 0.9.8 new shares
+target your **User:Name** page. Character Select preserves
 separate **Character (Server)** saves. The wiki contract and activation boundary
 are documented in [the cross-repository plan](docs/CHARACTER_SHEETS_PLAN.md).
 
-The following images show the **released 0.9.6 UI with synthetic records**; they
-are historical illustrations, not evidence of the new inventory-export flow.
+The following images show the **0.9.8 candidate components with synthetic
+records** in Chromium. They are interface evidence, not live-game capture or
+production wiki submissions. Older tours remain available in What's new.
 
-![0.9.6 character inspect with one total panel and compact equipment](app/assets/whats-new/0.9.6/character-total-inspect.png)
+![Equipped hover tier slider, proc details and Exaltations with recorded-only totals](app/assets/whats-new/0.9.8/character-hover-tier-and-proc.png)
 
-![0.9.6 empty-slot item picker with wiki search](app/assets/whats-new/0.9.6/character-empty-slot-picker.png)
+![Contribution matches and readable page details before publication](app/assets/whats-new/0.9.8/contribution-matching-and-loot.png)
 
 In **Settings → Screen reading**, explicitly select the source you want to read.
 The supported calibration is **Default Modern (`default_modern`)**; other game
@@ -162,10 +168,29 @@ contribution capture so the two modes cannot read the source concurrently.
 ### Contribute to Wiki through an explicit review
 
 Open **Contribute to Wiki** to review proposed items, monsters and zones from
-supported live log events, screenshot reads or manual entry. Correct the fields,
-verify what you observed and check potential existing pages. An incomplete or
-unavailable catalog does not prove a page is missing. Keep descriptions in your
-own words and confirm proposed loot/location relationships separately.
+supported live log events, screenshot reads or manual entry. Review potential
+existing pages and the task reason first: an existing page may need a source,
+population or tier-zero correction rather than a duplicate article. A shared
+resolver handles exact title aliases, apostrophes, case and supported item tiers;
+an incomplete catalog cannot prove absence. Generated pet names are excluded
+unless the wiki positively identifies a real NPC.
+
+A fresh unknown-monster kill arms one next **/loc** and shows a noninterrupting
+prompt. Stand at that monster's spawn before typing the command. A newer eligible
+kill replaces the active target; older drafts remain available for explicit
+rearming. Locations remain proposals for review, and EoZ never types commands.
+
+Correct the readable fields, choose **Raid Instance** when appropriate, and
+classify observed drops as **Common Loot** or **Unique Loot**. These are wiki
+sections, not measured drop probabilities. Optional unknown fields use the
+blueprint's supported placeholders. Match review and the final page diff remain
+required; individual fields no longer need separate Verified checkboxes.
+
+Use the screenshot **+** area to select/paste a PNG, review its caption/license
+and choose whether to publish it with the article. Local OCR is separate from
+uploading. In **Icon Finder**, paste/select a crop containing **just the icon**,
+or browse/search exact artwork IDs. Matching runs locally against the wiki's
+versioned index; original aliases and IDs are preserved. No icon crop uploads.
 
 Log in through the wiki's normal dedicated window when you are ready to submit.
 The app loads the current wiki blueprints, prepares a page plan and shows every
@@ -174,17 +199,16 @@ publish action. Existing permissions and edit-conflict checks apply; a partial
 result identifies unfinished pages so a retry does not repeat completed edits.
 Nothing publishes merely because a candidate was captured or previewed.
 
-For a tiered drop without a wiki base record, **Recover base stats from a tiered
-drop** keeps the observed numbers and evidence intact. Verify exact tier,
-progress and absence of augments/modifiers, then calculate possible bases.
-Choose among rounded ranges yourself; blank, unsupported and unresolved values
-are omitted. Applying a proposal still requires verifying the outgoing stat
-text. The wiki preview labels the result as an inference. Editing its source,
-assumptions or selected values invalidates that review.
+For a tiered drop without a wiki base record, base recovery keeps the original
+numbers/evidence and lets you correct ambiguous inverse-scaled values. Unknown
+or unsupported values stay omitted. Recovered pages carry a visible request for
+verification against a tier-zero item; a genuine reviewed tier-zero reading can
+replace that proposal through a scoped patch. Missing item effects can include
+a separate spell-blueprint page in the same reviewed multi-page plan.
 
-![Reviewed tier-four base proposals with ambiguous and unsupported values](app/assets/whats-new/0.9.0/base-recovery.png)
+![Common and Unique Loot controls, screenshot paste area and reviewed submission](app/assets/whats-new/0.9.8/contribution-loot-controls.png)
 
-![0.9.0 contribution review queue and editable synthetic NPC fields using an isolated loopback wiki account](app/assets/whats-new/0.9.0/contributions.png)
+![Local Icon Finder matching synthetic pixels without uploading the crop](app/assets/whats-new/0.9.8/wiki-icon-finder-match.png)
 
 ### Build and share a character snapshot
 
@@ -209,7 +233,18 @@ assumptions or selected values invalidates that review.
    is separate from ATK Accuracy. Missing values stay unknown; changing gear,
    catalog tiers or item previews does not recalculate character totals.
 
-Unknown items/augments are rejected from public equipment and leave empty
+Hover equipped gear to adjust its **tier directly below the name**; tier-adjusted
+preview values stay green. Item cards retain real effects/procs, cast time,
+required level, flags and restrictions, including Thornstinger's Rampage. None
+of these previews change the recorded character totals.
+
+Attached inventory-export **(Exaltation)** rows prefill known parent sockets. An
+exact socket-only base-item alias resolves these rows without weakening worn
+item matching. Unknown capacity defaults to **five**; observed capacity and
+occupied positions are retained through eight. The ambiguous export Slots
+column is not used as capacity.
+
+Unknown items/Exaltations are rejected from public equipment and leave empty
 slots/sockets. Use **Contribute to Wiki** to review missing item details, then
 sync accepted wiki data and generate a new inventory export. Item examine OCR
 belongs to Contribute, not Character gear intake. No missing item publishes
@@ -218,9 +253,10 @@ character's gear/import evidence and now-invalid stat reading, retaining identit
 and other saved characters.
 
 PNG copy/save stays local. Wiki sharing requires login and one explicit review;
-it updates only the authenticated account's own talk page, replacing that
+it updates only the authenticated account's own **User page**, replacing that
 Character (Server)'s managed sheet while preserving other characters and
-discussion. The app checks template/renderer support first. Raw OCR, export
+content. Old talk-page sheets remain intact; a destination change needs a fresh
+review. The app checks template/renderer support first. Raw OCR, export
 paths, source IDs, private inventory and current resource counters are not
 published. See [the current walkthrough](docs/CHARACTER_WALKTHROUGH.md).
 
@@ -232,7 +268,7 @@ captures with synthetic records and an isolated profile.
 ![Prepare the equipped character stat reading](app/assets/whats-new/0.9.7/character-recorded-stats.png)
 ![Review log discoveries and spawn locations](app/assets/whats-new/0.9.7/contribution-log-discoveries.png)
 
-## Your files stay local
+## Local files and optional wiki sync
 
 EoZ reads logs and supported map/archive files under the folder you choose.
 Optional screen reading reads only the source you select;
@@ -244,6 +280,23 @@ input. Wiki edits/uploads require the review actions described above. See
 When a complete wiki catalog confirms that an encountered NPC or looted item is missing, an inline Triggers notice offers **Screenshot** or **Ignore**. Screenshot opens an explicit window/display choice and copies the selected image to your local clipboard. You decide where to paste it; nothing uploads automatically. Notices pause their dismissal timer while hovered or keyboard-focused.
 
 Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards open their exact wiki pages. Ordinary search and filtering use cached data and do not crawl wiki pages.
+
+**Settings → Collect and sync drop observations** controls a separate durable
+outbox. While enabled, fresh kill/loot events are saved locally even for known
+or ignored wiki entities. While the app is running and you are logged in, due
+batches are sent at most hourly to the wiki, with overdue startup checks and
+retry backoff. Offline events survive restarts; parse resets and Contribute
+Ignore/clear actions do not erase them. Disable the setting to stop collection
+and upload while retaining pending data.
+
+Only structured item/NPC/zone/source/tier/quantity/time evidence is sent, with
+opaque deduplication tokens. Player names, chat, paths, coordinates, screenshots
+and raw logs are excluded. Accepted observations are separate from reviewed
+article edits and do not imply drop chances or zero-drop counts. Other tools
+can use the documented attributed MediaWiki create/edit/upload APIs and the
+versioned observation endpoint: [API documentation](https://eqlwiki.com/API_Documentation).
+The endpoint, storage schema and documentation page require separate wiki
+activation; candidate app source does not prove they are live.
 
 ## Two separate updates
 

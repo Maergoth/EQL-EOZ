@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {itemBaseReviewPreview,createItemBaseReview,applyItemBaseReview,validateItemBaseReview} from '../app/item-base-review.js';
+import {scaleItemStat} from '../app/item-scaling.js';
+const wrap=value=>({value,confirmed:false});
+const source={kind:'item',name:'Synthetic Provisional Mantle',fields:{tier:wrap(4),fraction:wrap(null),hp:wrap(42),mana:wrap(85),haste:wrap(16),weight:wrap(.7),resistCorruption:wrap(4),statLines:wrap(['HP: 42','Mana: 85','Haste: 16','An original contributor note.'])}};
+const options={tier:4,fraction:null,reviewMode:'provisional'},preview=itemBaseReviewPreview(source,options);
+assert.equal(preview.options.fraction,null);assert.equal(preview.provenance.modifiersExcluded,null);assert.equal(preview.provenance.fractionStates,16);
+assert.deepEqual(preview.fields.HP.ranges.map(range=>[range.min,range.max]),[[28,30]]);
+assert.equal(preview.fields.HP.status,'range');assert.equal(preview.fields.HP.value,null);assert.equal(preview.fields.HASTE.status,'exact');assert.equal(preview.fields.HASTE.value,12);
+assert.equal(preview.fields.WT.status,'unknown');assert.equal(preview.fields.SV_CORRUPTION.status,'unsupported');
+for(let fraction=0;fraction<16;fraction++)for(let base=11;base<100;base++)if(scaleItemStat('HP',base,4,{fraction})===42)assert(preview.fields.HP.candidates.includes(base),'All legal fractional witnesses are represented without choosing progress zero');
+assert.throws(()=>createItemBaseReview(source,{...options,choices:{HP:30}}));
+assert.throws(()=>createItemBaseReview(source,{...options,reviewed:true,choices:{WT:1}}));
+assert.throws(()=>createItemBaseReview(source,{...options,reviewed:true,choices:{HP:31}}));
+assert.throws(()=>createItemBaseReview(source,{...options,reviewed:true,choices:{HP:30,MP:57}}),/one possible item progress state/,'Individually valid inverses cannot use contradictory fractional states');
+const review=createItemBaseReview(source,{...options,reviewed:true,choices:{HP:30,HASTE:12}}),patch=applyItemBaseReview(source,review);
+assert.equal(review.schemaVersion,2);assert.equal(review.modifiersExcluded,null);assert.equal(review.fraction,null);assert.deepEqual(review.choices,{HP:30,HASTE:12});
+assert(patch.fields.statLines.value.includes('An original contributor note.'));assert.equal(patch.fields.hp.value,42);assert.equal(patch.fields.tier.value,4);assert.equal(patch.fields.statLines.confirmed,false);
+const candidate={...source,...patch,fields:{...patch.fields,statLines:{...patch.fields.statLines,confirmed:true}}},validation=validateItemBaseReview(candidate);assert(validation.ok);
+assert.equal(validation.note,'These stats are reverse calculated from a tier 4 item. Please confirm with a tier 0 item and remove this message');
+for(const [field,value]of [['modified',true],['augmented',true],['augmentNames',['Synthetic Exaltation']]]){const blocked={...source,fields:{...source.fields,[field]:wrap(value)}};assert.equal(itemBaseReviewPreview(blocked,options).fields.HP.status,'unknown');assert.throws(()=>createItemBaseReview(blocked,{...options,reviewed:true,choices:{HP:30}}));}
+assert.equal(validateItemBaseReview({...candidate,fields:{...candidate.fields,hp:wrap(43)}}).ok,false);
+assert.equal(validateItemBaseReview({...candidate,fields:{...candidate.fields,statLines:wrap([...candidate.fields.statLines.value,'Weight: 0.7'])}}).ok,false);
+const cap=itemBaseReviewPreview({...source,fields:{...source.fields,tier:wrap(10)}},{tier:10,fraction:null,reviewMode:'provisional'});assert.equal(cap.provenance.fractionStates,1,'Tier ten cannot invent additional progress');
+console.log('Provisional recovery v2: bounded fractional union, common-state choices, explicit unknown modifier assumptions, unsupported omissions and exact tier-zero warning passed.');
