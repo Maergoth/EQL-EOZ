@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {buildContributionDraft,extractContributionBlueprints,patchContributionPrimary,patchContributionRelationship,contributionItemEffects} from '../app/contribution-model.js';
-import {contributionFieldMarkup,contributionLootMarkup,contributionMatchMarkup,contributionScreenshotMarkup} from '../app/contribution-editor.js';
+import {contributionFieldMarkup,contributionLootMarkup,contributionMatchMarkup,contributionScreenshotMarkup,contributionMatchState,contributionMatchesMarkup,contributionDestinationHintsMarkup} from '../app/contribution-editor.js';
 const wrap=value=>({value,confirmed:true}),blueprints=extractContributionBlueprints('=== Item Page Blueprint ===\n<pre>{{Itempage|itemname=?|statsblock=?}}</pre>\n=== NPC Page Blueprint ===\n<pre>{{Namedmobpage|name=?}}</pre>\n=== Raid Encounter Blueprint ===\n<pre>{{Namedmobpage|name=?}}</pre>\n=== Zone Page Blueprint ===\n<pre>{| class="zoneTopTable"\n|}</pre>\n=== Spell Page Blueprint ===\n<pre>{{Spellpage\n|spellname=Spell\n|description=Description\n|classes=Classes\n|items_with_effect=Items\n|casting_time=Time\n|mana=Mana\n|slots=Effects\n}}</pre>',123);
 const item={kind:'item',name:'Synthetic Thorn',fields:{effectName:wrap('Synthetic Rampage'),effectType:wrap('Combat'),effectCastTime:wrap('Instant'),effectLevel:wrap(45)}};
 const draft=buildContributionDraft(item,blueprints);assert.deepEqual(draft.blockers,[]);assert.match(draft.text,/Classic Era/);assert.match(draft.text,/Effect: \[\[Synthetic Rampage\]\] \(Combat, Casting Time: Instant\) at Level 45/);assert.match(draft.text,/Exaltation capacity: 5/);
@@ -26,3 +26,21 @@ assert.equal((identityCards.match(/data-use-existing=/g)||[]).length,1,'Case and
 assert.match(identityCards,/This is the correct existing page/);assert.doesNotMatch(identityCards,/page identity and contribution type/);
 assert.match(contributionFieldMarkup('location',wrap(''),{kind:'npc',requireLocation:false}),/placeholder="ex\. /);
 assert.doesNotMatch(contributionFieldMarkup('location',wrap(''),{kind:'npc',requireLocation:false}),/required/,'A source update does not demand a new spawn location');
+
+const directCandidate={kind:'zone',name:'Plane of Hate',title:'Plane of Hate',membership:'present',canonicalTitle:'Plane of Hate',intent:'update',fields:{}};
+const directMarkup=contributionMatchMarkup(directCandidate,[{title:'Plane_of_Hate',pageId:50,exact:true}]);
+assert.match(directMarkup,/Matched existing page/);assert.doesNotMatch(directMarkup,/Potential existing pages/);assert.match(directMarkup,/data-direct-match="true"/);
+assert.match(directMarkup,/data-matches-reviewed\s*>/,'Exact name matching never checks the destination review checkbox for the user');
+assert.match(contributionMatchesMarkup({...directCandidate,canonicalTitle:null},[{title:'Plane of Growth'}]),/Potential existing pages/,'Fuzzy results stay suggestions');
+assert.match(contributionMatchesMarkup({...directCandidate,membership:'ambiguous'},[{title:'Plane of Hate',pageId:50},{title:'Plane of hate',pageId:51}]),/Multiple matching pages/);
+assert.equal(contributionMatchState(directCandidate,[{title:'Plane of Hate',pageId:50},{title:'Plane_of_Hate',pageId:50}]).matches.length,1,'One real page ID has one card');
+assert.equal(contributionMatchState(directCandidate,[{title:'Plane of Hate',pageId:50},{title:'Plane of hate',pageId:51}]).direct,null,'Distinct actual pages with a folded spelling cannot be called one direct match');
+assert.equal(contributionMatchState(directCandidate,[]).direct?.title,'Plane of Hate','Positive canonical membership labels a cached direct match even without fuzzy results');
+assert.match(contributionDestinationHintsMarkup(directCandidate,{compact:true}),/To <a href="https:\/\/eqlwiki.com\/Plane%20of%20Hate"/);
+assert.doesNotMatch(contributionDestinationHintsMarkup(directCandidate,{compact:true}),/<button/,'Destination links can live beside queue selection buttons');
+const sourceHints=contributionDestinationHintsMarkup({kind:'item',name:'Synthetic Thorn',title:'Synthetic Thorn',intent:'update',membership:'present',reasons:['missing-source'],instance:'normal',fields:{},sources:[{npc:'A synthetic lich',zone:'Synthetic Vale',confirmed:true,instance:'normal'}]});
+for(const target of ['Synthetic%20Thorn','A%20synthetic%20lich','Synthetic%20Vale'])assert.match(sourceHints,new RegExp('href="https://eqlwiki.com/'+target+'"'));
+assert.match(sourceHints,/Add drop source: A synthetic lich/);assert.match(sourceHints,/Add Synthetic Thorn to monster loot/);assert.match(sourceHints,/Add monster: A synthetic lich/);assert.match(sourceHints,/Related pages are updated only when they exist/);
+const escapedHints=contributionDestinationHintsMarkup({kind:'item',title:'Synthetic "Blade"',intent:'create'});
+assert.match(escapedHints,/Synthetic &quot;Blade&quot;/);assert.doesNotMatch(escapedHints,/href="javascript:/);
+console.log('Contribution destination clarity: direct/fuzzy/ambiguous page labels, explicit review gating, fixed-origin destination links and reciprocal source descriptions passed.');

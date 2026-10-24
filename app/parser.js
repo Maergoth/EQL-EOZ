@@ -47,6 +47,9 @@ function isCurrencyLoot(item) {
 export class EQLogParser {
     constructor() {
         this.character = '';
+        // Only /who identity rows establish other player names. A nearby spell
+        // cast alone cannot identify an actor as either a player or a monster.
+        this.knownPlayerNames = new Set();
         this.level = 0;
         this.classes = [];
         this.zone = '';
@@ -83,6 +86,7 @@ export class EQLogParser {
 
     resetSourceContext() {
         this.zone = '';this.zoneShortName = '';this.location = null;
+        this.knownPlayerNames.clear();
         this.lastKill = null;this.currentFight = null;this.currentLineAt = null;
         this.sourceEncounters = new WeakSet();this.currentSourceEvents = new WeakSet();
     }
@@ -128,7 +132,7 @@ export class EQLogParser {
     setCharacterFromFilename(path) {
         const name = String(path || '').split(/[\\/]/).pop() || '';
         const match = name.match(/^eqlog_([^_]+)_/i);
-        if (match) this.character = match[1];
+        if (match) { this.character = match[1]; this.knownPlayerNames.add(this.character.toLowerCase()); }
     }
 
     rememberEvent(event) {
@@ -201,10 +205,11 @@ export class EQLogParser {
         if (addToEncounter) this.totalOwnKills += 1;
         this.lastKill = { name: victim, zone: this.zone, at };
         this.rememberNpc(victim, { killed: true });
+        const playerEvidence=this.isPlayerTarget(victim)||this.knownPlayerNames.has(victim.toLowerCase())?{victimIsPlayer:true}:{};
         if (addToEncounter) {
-            return this.rememberCombatEvent({ type: 'kill', victim, encounterTarget: victim });
+            return this.rememberCombatEvent({ type: 'kill', victim, encounterTarget: victim, ...playerEvidence });
         }
-        return this.rememberEvent({ type: 'kill', victim });
+        return this.rememberEvent({ type: 'kill', victim, ...playerEvidence });
     }
 
     noteLoot(itemName, sourceName = '') {
@@ -336,6 +341,10 @@ export class EQLogParser {
         // contain an instance number. Only the current character's row is an
         // authoritative zone signal when /who returns multiple players.
         x = text.match(/^\[(\d+)\s+([A-Z]{3}(?:\/[A-Z]{3})*)\]\s+([^\s]+)\s+\([^)]+\).*?\bZONE:\s*(.*?)\s+\(([^()]+)\)\s*$/i);
+        if (x) {
+            this.knownPlayerNames.add(normalizeName(x[3]).toLowerCase());
+            if (this.knownPlayerNames.size>200) this.knownPlayerNames.delete(this.knownPlayerNames.values().next().value);
+        }
         if (x && (!this.character || x[3].toLowerCase() === this.character.toLowerCase())) {
             this.level = Number(x[1]);
             this.classes = x[2].toUpperCase().split('/');

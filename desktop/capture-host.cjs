@@ -46,6 +46,7 @@ class CaptureHost {
         this.region=null;this.referenceSize=null;this.sourceSize=null;this.calibrationWarning=null;
         this.readWarning=null;this.frameWarning=null;this.readErrors=0;this.nextReadAt=0;
         this.parseModule = import(pathToFileURL(path.join(__dirname,'..','app','screen-read-parser.js')).href);
+        this.logEvidenceModule = import(pathToFileURL(path.join(__dirname,'..','app','contribution-evidence.js')).href);
         electron.ipcMain.handle(CHANNEL,(event,action,value)=>this.handle(event,action,value));
         electron.ipcMain.handle(SOURCE_CHANNEL,(event,action,value)=>this.handleSource(event,action,value));
     }
@@ -359,22 +360,17 @@ class CaptureHost {
         return record;
     }
     async ingestLogObservation(event,context={}) {
-        if (!event || context.live!==true || !Number.isFinite(context.at) || Math.abs(this.now()-context.at)>10000 ||
-            !['kill','loot','consider','zone','profile'].includes(event.type)) return {accepted:false};
-        const kind=event.type==='loot'?'item':['kill','consider'].includes(event.type)?'monster':event.type==='zone'?'zone':'character';
-        const name=clean(event.type==='loot'?event.item:event.type==='kill'?event.victim:event.type==='consider'?event.target?.name:event.type==='zone'?event.zone:event.character);
-        if(!name)return {accepted:false};
-        const fields=[{key:'name',raw:name,value:name,confidence:100}];
-        if(event.type==='loot' && Number.isSafeInteger(event.quantity) && event.quantity>0)fields.push({key:'quantity',raw:String(event.quantity),value:event.quantity,confidence:100});
-        if(event.type==='consider' && Number.isFinite(event.target?.level))fields.push({key:'level',raw:String(event.target.level),value:event.target.level,confidence:100});
-        const zone=clean(context.zone||event.zone),source=clean(event.source),sourceKind=clean(event.sourceEvidence?.kind,40);
-        const relations=event.type==='loot'&&source&&source!=='Unknown'?[{type:'drop-source',name:source,zone,evidence:sourceKind||'unknown',reviewRequired:sourceKind!=='explicit-corpse'}]:[];
-        // A local caller supplies parser events, never raw log lines or paths.
-        const logId=digest(clean(context.logId,2048));
+        if(!['kill','loot','zone'].includes(event?.type))return {accepted:false};
+        const {logContributionObservation}=await this.logEvidenceModule;
         const cursor=Number.isSafeInteger(context.cursor)?context.cursor:++this.sequence;
-        const record=await this.saveObservation({kind:'game-log',owner:'contribution',sessionId:`log-${logId.slice(0,16)}`,
-            capturedAt:new Date(context.at).toISOString(),input:{logId,cursor,event:event.type,zone,live:true},parser:{name:'eq-log',version:1},
-            subject:{kind,name},fields,relations,evidence:{text:'',imageId:null}},this.generation);
+        const observation=logContributionObservation(event,{...context,cursor},{now:this.now()});
+        if(!observation)return {accepted:false};
+        // Match the direct queue gate and evidence contract. Only this bounded
+        // triggering line is retained in the private journal, never a log path
+        // or surrounding chat, and never the hourly observation payload.
+        const relations=observation.relations.map(relation=>relation.type==='drop-source'?{...relation,reviewRequired:relation.evidence!=='explicit-corpse'}:relation);
+        const record=await this.saveObservation({...observation,sessionId:`log-${observation.input.logId}`,
+            parser:{name:'eq-log',version:2},relations},this.generation);
         return {accepted:Boolean(record)};
     }
     async importImage({mode,sessionId,source='file'}={}) {

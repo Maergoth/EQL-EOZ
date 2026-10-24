@@ -9,7 +9,7 @@ let clock=Date.UTC(2026,9,24,12),cursor=0,source='C:/Synthetic/eqlog_Test_server
 const pack={meta:{wikiEntitiesComplete:true},wikiEntities:{items:['Known Ring'],npcs:['Known Sentinel'],titles:['Known Ring','Known Sentinel','Known Vale']},items:[],npcs:[],zones:[{name:'Known Vale'}]};
 const makeQueue=()=>createContributionQueue({storage,getPack:()=>pack,now:()=>clock});
 let q=makeQueue();const parser=new EQLogParser();
-const feed=text=>{clock+=1000;const event=parser.parse(`[${new Date(clock).toISOString()}] ${text}`);return {event,context:{live:true,at:clock,logId:source,cursor:++cursor,zone:parser.zone}};};
+const feed=text=>{clock+=1000;const logLine=`[${new Date(clock).toISOString()}] ${text}`,event=parser.parse(logLine);return {event,context:{live:true,at:clock,logId:source,cursor:++cursor,zone:parser.zone,logLine}};};
 const consume=text=>{const {event,context}=feed(text);return q.consumeLog(event,context);};
 const find=name=>q.snapshot().find(candidate=>candidate.name===name);
 
@@ -19,17 +19,21 @@ assert.equal(contributionMembership(pack,'item','Known Ring +4'),'present');
 assert.equal(contributionMembership({items:[],npcs:[],zones:[]},'zone','Hidden Vale'),'unknown');
 consume('You have entered Hidden Vale.');assert.equal(find('Hidden Vale').membership,'missing');
 consume('a copper watcher regards you indifferently (Lvl: 37)');
-let npc=find('a copper watcher'),zone=find('Hidden Vale');assert.equal(npc.fields.level.value,37);assert.equal(npc.fields.level.confirmed,false);
-assert.deepEqual(zone.fields.knownNPCs.value,['a copper watcher']);assert.equal(zone.fields.knownNPCs.confirmed,false);
-assert(npc.relations.some(relation=>relation.type==='mob-zone'&&relation.evidence==='consider'&&!relation.confirmed));
+assert.equal(find('a copper watcher'),undefined,'Considering still informs Intel but creates no contribution');
+assert(parser.snapshot().observed.some(npc=>npc.name==='a copper watcher'&&npc.level===37));
+let npc,zone=find('Hidden Vale');assert.equal(zone.fields.knownNPCs,undefined);
 
 parser.location={x:999,y:888,z:777};
-const killed=consume('You have slain a copper watcher!');assert.deepEqual(killed.prompt,{candidateId:npc.id,name:'a copper watcher',zone:'Hidden Vale',armed:true,expiresAt:clock+300000});
+const killed=consume('You have slain a copper watcher!');npc=find('a copper watcher');assert.deepEqual(killed.prompt,{candidateId:npc.id,name:'a copper watcher',zone:'Hidden Vale',armed:true,expiresAt:clock+300000});
+assert.equal(npc.evidence[0].event,'kill');assert.equal(npc.evidence[0].logLine,`[${new Date(clock).toISOString()}] You have slain a copper watcher!`);
+zone=find('Hidden Vale');assert.deepEqual(zone.fields.knownNPCs,{value:['a copper watcher'],confirmed:false});
+assert(npc.relations.some(relation=>relation.type==='mob-zone'&&relation.evidence==='kill'&&!relation.confirmed));
 assert.equal(find('a copper watcher').fields.location,undefined,'A cached player/kill position is never a spawn');
 assert(consume('Your Location is 1, 2, 3').locationCaptured,'The next fresh /loc attaches to the automatically armed unknown kill');
 assert.equal(q.armSpawnLocation(npc.id).ok,true);
 const located=consume('Your Location is -10.5, 20.25, 3');assert.equal(located.locationCaptured.display,'-10.5, 20.25, 3');
 npc=find('a copper watcher');assert.deepEqual(npc.fields.location,{value:'-10.5, 20.25, 3',confirmed:false});assert.equal(npc.spawnRequest.status,'captured');
+assert.equal(npc.evidence.at(-1).event,'location');assert.match(npc.evidence.at(-1).logLine,/Your Location is -10\.5, 20\.25, 3$/);
 const location=npc.relations.findLast(relation=>relation.type==='spawn-location');assert.deepEqual(location.location,{x:20.25,y:-10.5,z:3});assert.equal(location.evidence,'player-requested-next-loc');assert.equal(location.confirmed,false);
 assert.equal(consume('Your Location is 100, 200, 300').locationCaptured,null,'One request consumes exactly one fresh location');
 assert.equal(consume('You have slain a copper watcher!').prompt,null,'An existing request is not prompted on every kill');

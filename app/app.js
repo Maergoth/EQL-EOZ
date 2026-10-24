@@ -626,7 +626,8 @@ function consumeText(text, allowTransientUi = true) {
             if(observation)queueObservation(observation);
         }
         captureWorkspace.consumeLog(event,{zone:parser.zone,live:allowTransientUi&&freshTimerEvent,
-            logId:bridgeInfo?.logPath||'current-log',at:parser.currentLineAt,cursor:observationCursor});
+            logId:bridgeInfo?.logPath||'current-log',at:parser.currentLineAt,cursor:observationCursor,
+            logLine:line.slice(0,2048),playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)});
     }
     overlaySession.flush();
     if (zoneChanged) {

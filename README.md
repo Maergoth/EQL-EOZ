@@ -55,6 +55,11 @@ checks still apply. Ordinary log parsing does not require screen reading.
 
 ![Historical OCR area calibration with a synthetic preview](app/assets/whats-new/0.9.0/ocr-calibration.png)
 
+The [next-release discovery plan](docs/CONTRIBUTION_DISCOVERY_PLAN.md) adds
+kill/death-only automatic monster tasks, the actual triggering log line in local
+review, clear direct page matches and linked destinations for each proposed
+addition. Existing cached loot relationships are labeled already recorded.
+
 ## Get started
 
 1. Download the latest Windows `Setup-<version>-x64.exe`, Linux `<version>-x64.AppImage`, or Debian/Ubuntu `<version>-x64.deb` package from [Releases](https://github.com/Maergoth/EQL-EOZ/releases). Both platforms use the same version and data source.
