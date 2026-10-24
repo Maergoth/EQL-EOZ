@@ -6,9 +6,9 @@
 
 **0.9.8: clearer Character cards and reviewed contributions.** This
 follow-up adds equipped-hover tier controls, imported Exaltations, richer item
-details, User-page character sheets and a screenshot-based Icon Finder. The
-published baseline remains 0.9.7 until the release gates and wiki activation
-finish; see [the active release plan](docs/RELEASE_098_PLAN.md).
+details, User-page character sheets and a screenshot-based Icon Finder. Version
+0.9.8 and its wiki integration are published; see
+[the completed release record](docs/RELEASE_098_PLAN.md).
 
 Keep all gear on. Enter character details, type
 `/outputfile inventory`, then let EoZ detect the fresh matching export in your
@@ -295,8 +295,9 @@ and raw logs are excluded. Accepted observations are separate from reviewed
 article edits and do not imply drop chances or zero-drop counts. Other tools
 can use the documented attributed MediaWiki create/edit/upload APIs and the
 versioned observation endpoint: [API documentation](https://eqlwiki.com/API_Documentation).
-The endpoint, storage schema and documentation page require separate wiki
-activation; candidate app source does not prove they are live.
+The observation endpoint/storage version 1.2.0 and public documentation are
+installed for 0.9.8. Future schema, database-page and application deployments
+still have separate activation and verification steps.
 
 ## Two separate updates
 
@@ -359,6 +360,45 @@ node scripts/test-capture-workspace.mjs --screenshots <output-directory>
 ```
 
 Tests with synthetic content do not establish live route quality, physical overlay focus/passthrough, monitor/DPI transitions or installer acceptance. Keep client archives, player logs, database snapshots, settings, generated packs and private diagnostic exports out of Git.
+
+### Developing the wiki integration
+
+Start with [EQLWiki's developer repository](https://github.com/Maergoth/EQLWiki)
+and the public [API documentation](https://eqlwiki.com/API_Documentation).
+EoZ uses the same attributed MediaWiki APIs available to other clients; it has
+no private edit proxy or shared bot identity. The desktop app opens the normal
+wiki login in a dedicated persistent session. Cookies and CSRF tokens stay in
+the trusted native service, and wiki IPC admits only the exact main frame.
+
+| Boundary | Entry points | Contract |
+| --- | --- | --- |
+| Desktop / renderer | [main](desktop/main.cjs), [preload](desktop/preload.cjs), [app](app/app.js) | Main owns private files, wiki transport and native windows; preload exposes bounded actions; the renderer owns the shared log/UI session. |
+| Auth and API transport | [WikiHost](desktop/wiki-host.cjs), [WikiClient](desktop/wiki-client.cjs) | Fixed wiki origin/session, current-account assertions, bounded requests and tokens kept outside renderer/draft state. |
+| Reviewed contributions | [workspace](app/capture-workspace.js), [draft builder](app/contribution-model.js), [queue](app/contribution-queue.js) | Resolve identity/task reasons, load current Help blueprints, preview every page, then publish scoped changes with revision/create-only guards and persisted partial retry. |
+| Character sharing | [model](app/character-model.js), [totals](app/character-totals.js), [sheet serializer](app/character-wiki-sheet.js) | Import known gear separately from confirmed recorded totals; share only a bounded managed Character (Server) block on the authenticated User page. |
+| Observation sync | [collector](app/drop-observations.js), [storage](desktop/drop-observation-storage.cjs), [sender](desktop/drop-observation-host.cjs) | Separate minimal schema-1 kill/loot outbox, stable IDs, account-bound receipts and due hourly batches; no article edits or raw-log upload. |
+| Published wiki data | [producer/host contract](server/README.md), [bootstrap fetch](scripts/fetch-bootstrap-pack.mjs), [client cache](desktop/main.cjs) | Wiki-local export → filtered GitHub `dataset` manifest/gzip → SHA-256-verified bootstrap/cache. Dataset refresh, observation ingestion and application releases are separate operations. |
+
+For a new integration, read account/source/revision context with `action=query`,
+load the documented current blueprints, and render an unsaved `action=parse`
+preview. Submit `action=edit` with the user's CSRF/account assertions plus
+`createonly` for new pages or `nocreate`/`baserevid` for patches. Screenshots use
+explicit reviewed `action=upload`; reconcile uncertain results before retrying.
+The separate `action=eozobservations` endpoint uses a versioned bounded batch
+and exhaustive per-event acknowledgements, not the article-edit workflow.
+
+Use [the contribution design](docs/design/WIKI_CONTRIBUTIONS.md),
+[evidence/outbox contract](docs/CONTRIBUTION_EVIDENCE_PLAN.md),
+[Character walkthrough](docs/CHARACTER_WALKTHROUGH.md) and
+[current release plan](docs/RELEASE_098_PLAN.md) for the detailed boundaries.
+Focused checks include `node tests/wiki-client.mjs`,
+`node tests/wiki-observations.mjs`, `node tests/drop-observations.mjs` and
+`npm run test:capture-workspace`; use disposable profiles and loopback wiki
+fixtures for writes. Run the full/platform/package gates for a release.
+Wiki PRs target `staging`; promote only scoped reviewed changes. File deployment
+does not publish database templates/scripts, install schema/private host jobs or
+refresh the dataset. See the wiki repository's contributor/operations guides
+before changing either side of that contract.
 
 | Documentation | Purpose |
 | --- | --- |
