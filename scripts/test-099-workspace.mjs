@@ -81,14 +81,23 @@ async function run({root,temporary,screenshots}){
         assert.equal(await execute(()=>document.querySelector('[data-card-tier-unknown]')===null),true);
         // A fleeting real pointer hover is ignored; a held hover opens after350ms.
         await execute(()=>{document.activeElement?.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));document.querySelector('[data-edit-card]').scrollIntoView({block:'center'});});
+        // CDP drives Chromium's real hit testing/:hover independently of an OS
+        // window being visible. CI's hidden Windows process and Linux Xvfb use
+        // the same pointer path as screenshot mode; no synthetic DOM mouse event.
+        window.webContents.debugger.attach('1.3');
+        await window.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled',{enabled:true});
+        const move=async point=>window.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:point.x,y:point.y});
+        await execute(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+        await move({x:1,y:1});
         const pointer=await execute(()=>{const r=document.querySelectorAll('[data-edit-card]')[1].getBoundingClientRect();return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};});
-        window.showInactive();window.webContents.sendInputEvent({type:'mouseMove',x:pointer.x,y:pointer.y});
+        assert.equal(await execute(p=>document.elementFromPoint(p.x,p.y)?.closest('[data-edit-card]')?.dataset.editCard===document.querySelectorAll('[data-edit-card]')[1].dataset.editCard,pointer),true,'Settled pointer coordinates hit the intended item');
+        await move(pointer);
         await new Promise(done=>setTimeout(done,100));
         assert.equal(await execute(()=>document.querySelector('.character-item-tooltip').hidden),true,'No tooltip during accidental hover');
-        await wait(()=>execute(()=>!document.querySelector('.character-item-tooltip').hidden),'delayed held hover');
+        await wait(()=>execute(()=>!document.querySelector('.character-item-tooltip').hidden),'delayed held hover').catch(async error=>{console.error('Hover diagnostics',await execute(p=>({point:p,hit:document.elementFromPoint(p.x,p.y)?.outerHTML.slice(0,300),hover:[...document.querySelectorAll(':hover')].map(el=>el.tagName+'.'+el.className),scroll:scrollY,focused:document.hasFocus(),tooltipHidden:document.querySelector('.character-item-tooltip').hidden}),pointer));throw error;});
         // Switching icons cancels the first item's hide timer before its delayed show.
         const secondPointer=await execute(()=>{const r=document.querySelectorAll('[data-edit-card]')[0].getBoundingClientRect();return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2),id:document.querySelectorAll('[data-edit-card]')[0].dataset.editCard};});
-        window.webContents.sendInputEvent({type:'mouseMove',x:secondPointer.x,y:secondPointer.y});
+        await move(secondPointer);
         await wait(()=>execute(id=>!document.querySelector('.character-item-tooltip').hidden&&document.querySelector('[data-tooltip-card]').dataset.tooltipCard===id,secondPointer.id),'adjacent held item hover');
         await execute(()=>{document.dispatchEvent(new Event('scroll'));});
         assert.equal(await execute(()=>document.querySelector('.character-item-tooltip').hidden),true,'Page scrolling dismisses hover');
@@ -102,7 +111,7 @@ async function run({root,temporary,screenshots}){
         assert.equal(await execute(()=>document.querySelector('[data-candidate-form] h2').textContent),'Synthetic Missing Blade','Ignoring an entry selects only from visible filtered work');
         assert.deepEqual(errors,[]);console.log('0.9.9 native workspace: targeted update fields, source summaries, match card layout/dedup, gap filters, real-pointer hover delay, immediate tier badge; matching-first gating, no field checkboxes, Common/Unique, short recovery, screenshot attachment, full Icon Finder, equipped hover tier focus and recorded-only totals passed.');
         await execute(()=>fixture.workspace.dispose());
-    }finally{window.destroy();await new Promise(done=>server.close(done));app.quit();}
+    }finally{if(window.webContents.debugger.isAttached())window.webContents.debugger.detach();window.destroy();await new Promise(done=>server.close(done));app.quit();}
 }
 try{const entry=join(temporary,'main.cjs');await writeFile(entry,`(${run.toString()})(${JSON.stringify({root,temporary,screenshots})}).catch(error=>{console.error(error.stack);require('electron').app.exit(1);});`);const electron=createRequire(import.meta.url)('electron'),env={...process.env};delete env.ELECTRON_RUN_AS_NODE;const code=await new Promise((done,reject)=>{const child=spawn(electron,[entry],{env,stdio:'inherit',windowsHide:true});child.once('error',reject);child.once('exit',done);});assert.equal(code,0);}
 finally{assert.equal(dirname(resolve(temporary)),resolve(tmpdir()));await rm(temporary,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
