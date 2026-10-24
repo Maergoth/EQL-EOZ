@@ -262,13 +262,30 @@ function moveNpcLootFromOpposite(source,itemTitle,instance,lootKind){
     const value=field.value.slice(0,start)+field.value.slice(end);
     return source.slice(0,field.valueStart)+value+source.slice(field.end);
 }
-export function patchContributionRelationship(source, { role, itemTitle, npcTitle, zoneTitle, instance, lootKind='unique' }) {
+export function patchContributionRelationship(source, { role, itemTitle, npcTitle, zoneTitle, instance, lootKind }) {
     if(['zone-population','zone-loot'].includes(role))return patchContributionZone(source,{role,itemTitle,npcTitle,instance,lootKind});
     if (typeof source !== 'string' || source.length > 512*1024) throw new Error('The existing page is too large or unavailable.');
     const originalSource=source;
     const name = role === 'npc-loot' ? 'Namedmobpage' : role === 'item-source' ? 'Itempage' : null;
     if (!name) throw new Error('Unsupported related-page change.');
-    if(role==='npc-loot'){if(!['common','unique'].includes(lootKind))throw Error('Choose Common or Unique loot.');source=moveNpcLootFromOpposite(source,itemTitle,instance,lootKind);}
+    let preservedNpcLoot=false;
+    if(role==='npc-loot'){
+        if(lootKind===undefined){
+            // Adding the reciprocal source is not a request to reclassify an
+            // established drop. Preserve either existing section byte-for-byte;
+            // a newly observed association with no classification uses Unique.
+            const template=contributionScopedTemplate(source,'Namedmobpage',instance),title=contributionTitle(itemTitle),escaped=title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/ /g,'[ _]'),reference=new RegExp(`(?:\\{\\{\\s*:\\s*${escaped}\\s*(?=[}|])|\\[\\[\\s*${escaped}\\s*(?=[\\]|]))`,'i');
+            const occupied=[];
+            for(const [parameter,kind]of [['known_loot','unique'],['common_loot','common']]){
+                const fields=template.fields.filter(field=>field.name.toLowerCase()===parameter);if(fields.length>1)throw Error('The existing page has duplicate loot fields; use the wiki source editor.');
+                if(fields.some(field=>reference.test(activeContributionText(field.value))))occupied.push(kind);
+            }
+            preservedNpcLoot=occupied.length>0;lootKind=occupied.includes('common')&&!occupied.includes('unique')?'common':'unique';
+        }else{
+            if(!['common','unique'].includes(lootKind))throw Error('Choose Common or Unique loot.');
+            source=moveNpcLootFromOpposite(source,itemTitle,instance,lootKind);
+        }
+    }
     const template=contributionScopedTemplate(source,name,instance), parameter=role==='npc-loot'?lootKind==='common'?'common_loot':'known_loot':'dropsfrom';
     const fields=template.fields.filter(field=>field.name.toLowerCase()===parameter);
     if (fields.length>1) throw new Error('The existing page has duplicate template fields; use the wiki source editor.');
@@ -300,7 +317,7 @@ export function patchContributionRelationship(source, { role, itemTitle, npcTitl
         if(zone>=0){zoneBlock={start:headings[zone].index,end:headings[zone+1]?.index??current.length};scope=outline.slice(headings[zone].index+headings[zone][0].length,zoneBlock.end);}
         else scope='';
     }
-    const already=role==='npc-loot'?new RegExp(`\\{\\{\\s*:\\s*${escaped}\\s*(?:[}|])`,'i').test(scope):new RegExp(`\\[\\[\\s*${escaped}\\s*(?:[\\]|])`,'i').test(scope);
+    const already=preservedNpcLoot|| (role==='npc-loot'?new RegExp(`\\{\\{\\s*:\\s*${escaped}\\s*(?:[}|])`,'i').test(scope):new RegExp(`\\[\\[\\s*${escaped}\\s*(?:[\\]|])`,'i').test(scope));
     let text=source;
     if(!already){
         const addition=role==='npc-loot'?`<ul><li>{{:${targetTitle}}}</li></ul>`:`${link(zoneTitle)}\n* ${link(targetTitle)}`;
