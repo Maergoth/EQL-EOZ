@@ -2,9 +2,11 @@
 
 ## 0.9.5 - Keep your inventory and recover missed item reads
 
+- Select saved characters as Character (Server), with separate inventory, equipment, baseline and walkthrough progress. Entries appear after the first validated step; switching stops Character capture without automatically restarting it.
 - Keep selected-item tier and progress controls visible outside the advanced editor. Label wiki-based previews, color adjusted values green and retain original captured statistics.
 - Persist Character inventory, equipment and walkthrough state in private app storage across restarts, upgrades and fallback local ports.
 - Reuse one automatic item card across capture sessions and changing tiers; add extra physical copies manually and choose which saved copy to update when ambiguous.
+- Unequip with the equipped item’s X or by dragging it back to Inventory. Add item opens and focuses wiki search immediately without creating a blank card.
 - Add two universal Any slots. Highlight valid drag targets and reject incompatible normal placements, including legacy restores.
 - Fix later item reads being suppressed by earlier removals. Block stale/held tooltip results while allowing a fresh capture pass or explicit Rescan removed items to recover the item.
 

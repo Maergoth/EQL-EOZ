@@ -4,9 +4,13 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.5 keeps your Character inventory across restarts.** Adjust a selected
+**0.9.5 keeps your Character inventory across restarts.** Use Character Select
+to switch between **Character (Server)** saves after the first walkthrough step;
+each character retains its own gear, stats and progress. Adjust a selected
 item’s tier and progress beside its stats, arrange known gear in 25 compact
-slots including two Any slots, and see valid targets while dragging. Adjusted
+slots including two Any slots, and see valid targets while dragging. Use an
+equipped item’s X or drag it back into Inventory to unequip. Add item takes
+you directly to wiki search. Adjusted
 wiki previews appear in green while original captured values remain intact.
 
 Automatic screen reads update the saved item instead of adding copies. Use
@@ -15,6 +19,8 @@ Default Modern tooltip visible until its card appears. **Rescan removed items**
 allows a fresh read after removing a bad capture; stale queued reads stay blocked.
 See the [persistence and capture audit](docs/CHARACTER_INVENTORY_PERSISTENCE.md)
 and [guided walkthrough](docs/CHARACTER_WALKTHROUGH.md).
+
+![Character Select with separate saved Character (Server) profiles](app/assets/whats-new/0.9.5/character-select-profiles.png)
 
 ![Character inventory with visible tier controls and two Any slots](app/assets/whats-new/0.9.5/character-tier-inventory.png)
 

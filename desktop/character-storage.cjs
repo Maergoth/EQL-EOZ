@@ -5,14 +5,19 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const {randomUUID} = require('node:crypto');
 
-const CHARACTER_STORAGE_KEYS=Object.freeze(['eql-eye-of-zomm-character-v1','eql-eye-of-zomm-character-walkthrough-v1']);
-const MAX_VALUE_BYTES=1500000,MAX_FILE_BYTES=MAX_VALUE_BYTES*12+4096;
+const PROFILE_STORAGE_KEY='eql-eye-of-zomm-character-profiles-v1';
+const CHARACTER_STORAGE_KEYS=Object.freeze(['eql-eye-of-zomm-character-v1','eql-eye-of-zomm-character-walkthrough-v1',PROFILE_STORAGE_KEY]);
+const MAX_VALUE_BYTES=1500000,MAX_ROSTER_BYTES=8000000;
+// Inner values are JSON strings. Any one-byte character can require six bytes
+// when escaped in the fixed outer envelope; allow every bounded key at once.
+const MAX_FILE_BYTES=(MAX_VALUE_BYTES*2+MAX_ROSTER_BYTES)*6+4096;
 const CHANNEL='eye-of-zomm:character-storage';
 const own=(object,key)=>Object.prototype.hasOwnProperty.call(object,key);
 function checkedValues(value){
     if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid Character storage values.');
     for(const [key,text]of Object.entries(value)){
-        if(!CHARACTER_STORAGE_KEYS.includes(key)||text!==null&&(typeof text!=='string'||Buffer.byteLength(text,'utf8')>MAX_VALUE_BYTES))throw Error('Invalid Character storage entry.');
+        const limit=key===PROFILE_STORAGE_KEY?MAX_ROSTER_BYTES:MAX_VALUE_BYTES;
+        if(!CHARACTER_STORAGE_KEYS.includes(key)||text!==null&&(typeof text!=='string'||Buffer.byteLength(text,'utf8')>limit))throw Error('Invalid Character storage entry.');
     }
     return Object.fromEntries(Object.entries(value));
 }
@@ -101,4 +106,4 @@ class CharacterStorage {
     }
     async close(){this.accepting=false;try{return await this.flush();}finally{if(this.registered){this.electron.ipcMain.removeHandler(CHANNEL);this.registered=false;}}}
 }
-module.exports={CharacterStorage,CHARACTER_STORAGE_KEYS,MAX_VALUE_BYTES,MAX_FILE_BYTES,CHANNEL};
+module.exports={CharacterStorage,CHARACTER_STORAGE_KEYS,MAX_VALUE_BYTES,MAX_ROSTER_BYTES,MAX_FILE_BYTES,CHANNEL};

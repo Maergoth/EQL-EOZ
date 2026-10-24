@@ -24,13 +24,22 @@ tier/progress changes preserve focus and scroll, persist immediately and update
 HP estimates; cross-session item reuse, explicit-copy choice, pass-scoped Rescan,
 manual unequip stability, both Any slots and strict drag placement are covered.
 The full npm test suite, dependency audit (zero vulnerabilities) and production
-catalog relevance checks pass. Two actual synthetic UI captures were visually
+catalog relevance checks pass. Five actual synthetic UI captures were visually
 reviewed and archived under 0.9.5.
 
 Final review also reproduced malformed inner JSON in a valid storage envelope.
 The adapter now preserves and write-blocks malformed/unsupported per-key data
 before model mount; focused tests cover both keys, host/browser-only records,
 startup seed attempts and unchanged originals.
+
+The final native gates also pass equipped X and drag-to-inventory unassignment,
+direct focused wiki search, and same-name/different-server Character Select.
+Separate gear, metadata, baseline and flow survive selection/reload; switching
+stops capture, explicit resume remains necessary and foreign-profile journal
+rows cannot join an identically named item. Inactive profiles also reject
+foreign or unsolicited stat proposals; an explicit current-profile screenshot
+can supply a baseline without changing another character. The three-process actual-main gate
+also restores both roster entries and active equipment across cache/port changes.
 
 Final exact-head Windows/Linux and published-download results belong to the
 release PR/private ledger after completion. Synthetic fixtures do not

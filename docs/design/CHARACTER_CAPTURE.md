@@ -1,5 +1,20 @@
 # Character capture data and share image
 
+Character Select shows **Character (Server)** only after the validated first
+walkthrough step. New character uses a separate unregistered draft; switching
+preserves each character’s own inventory, equipment, baseline and walkthrough.
+An active Character capture stops before switching and never restarts by
+selection alone. The roster is one atomic, bounded private record; legacy
+current-character mirrors remain for migration/rollback. Journal replay requires
+the selected flow or an exact previously accepted observation reference, so
+shared item names cannot mix characters.
+
+The 0.9.5 inventory shortcuts include an equipped-item top-right X and
+dragging equipped gear back into Inventory. Both unassign the same saved card
+without deleting it, preserve explicit physical copies and keep it loose across
+held rereads. Add item opens and focuses the wiki catalog query immediately;
+searching does not create a blank inventory card.
+
 The Character tab uses `app/character-model.js` for local editable data and
 `app/character-share.js` for a deterministic canvas PNG. Capture arbitration,
 OCR, authentication, clipboard/save and own-talk submission belong to their
@@ -16,6 +31,7 @@ wiki edit, load remote artwork or interpret an item's text as markup.
 | `app/character-catalog.js` | Local token search and tier preview, exact/bounded fuzzy identity resolution and explicit catalog-card creation. |
 | `app/character-model.js` | Bounded physical cards/evidence, known-only assignment, legacy identity reconciliation, separate observations and equipped estimates. |
 | `app/character-share.js` | Bounded deterministic canvas layout and local PNG encoding from assigned gear. |
+| `app/character-profiles.js` | Atomic per-character model/flow roster, first-step registration, legacy migration, preserved draft and safe identity selection. |
 | `app/character-storage.js` | File-authoritative model adapter, current-origin migration/browser mirror, immediate IPC writes and visible failures. |
 | `desktop/character-storage.cjs` | Fixed private file, bounded exact-main IPC, coalesced atomic saves, corruption preservation and quit draining. |
 
@@ -365,8 +381,10 @@ and other browser preferences retain their stores. The main host writes fixed
 `userData/eye-of-zomm-character-storage.json`, independent of loopback port.
 `eyeOfZommCharacterStorage.read()` returns `{values,error}`;
 `write({key,value})` and `flush()` acknowledge `{ok:true}` after persistence or
-reject. Exactly the two keys above are accepted, each at most 1,500,000 UTF-8
-bytes, only from the exact trusted main window/root frame. Null is a present
+reject. The two legacy keys above remain bounded to 1,500,000 UTF-8 bytes each.
+The third fixed key, `eql-eye-of-zomm-character-profiles-v1`, stores up to 32
+characters in an 8,000,000-byte UTF-8 roster. Only the exact trusted main
+window/root frame can access these keys. Null is a present
 deletion tombstone, so stale browser data cannot resurrect a removed key.
 
 File-key presence is authoritative; only an absent key imports the current

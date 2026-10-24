@@ -5,11 +5,13 @@ export const RELEASE_HISTORY = freeze([
     "version": "0.9.5",
     "title": "Keep your inventory and recover missed item reads",
     "changes": [
+      "Use Character Select to switch between Character (Server) saves after their first validated walkthrough step. Each keeps separate inventory, equipment, baseline and progress; switching stops Character reading without automatically restarting it.",
       "Adjust selected-item tier and progress beside its stats, outside Edit captured values. Wiki-based previews show adjusted values in green and retain original captured statistics.",
       "Keep Character inventory, placements and walkthrough state across restarts, upgrades and changed local ports. A new walkthrough retains inventory while rebuilding its placements and baseline.",
       "Reuse one automatic item card across capture sessions and changing tiers. Add extra physical copies with Second copy; choose which saved copy to update when a read is ambiguous.",
       "Use two manual Any slots. Valid slots light up while dragging, and incompatible normal placements are rejected.",
-      "Recover removed items during fresh later capture passes or with Rescan removed items. Stale queued reads and the held tooltip remain blocked."
+      "Recover removed items during fresh later capture passes or with Rescan removed items. Stale queued reads and the held tooltip remain blocked.",
+      "Unequip with the item’s top-right X or by dragging equipped gear back into Inventory. Add item opens and focuses cached wiki search immediately without creating a blank card."
     ],
     "steps": [
       {
@@ -31,6 +33,36 @@ export const RELEASE_HISTORY = freeze([
         "alt": "Synthetic Character walkthrough showing Rescan removed items, saved/equipped/loose counts and the 25-slot equipment board including Any 1 and Any 2.",
         "caption": "Actual synthetic Character component. Native regressions distinguish held or stale reads from a fresh rescan and verify valid drag targets, occupied replacement and strict slot rejection.",
         "imageSha256": "a7dc1fe74fe4a8e38326afd44f566ef014c49c2b9ca4fe636034ba0cfb4e84e6"
+      },
+      {
+        "title": "Choose a saved Character (Server)",
+        "image": "0.9.5/character-select-profiles",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Character Select lists characters after completing the first walkthrough step. Choose New character to begin another, or select a saved Character (Server) to restore its inventory, equipment, baseline and progress. Switching stops the current Character capture; resume explicitly when ready. Same-named characters on different servers remain separate.",
+        "alt": "Character Select shows a synthetic Second Realm character, saved re-equip progress and paused screen reading.",
+        "caption": "Actual synthetic native Character component. Regressions cover selected-profile isolation, inventory identity, explicit capture ownership and direct search; no player or game pixels.",
+        "imageSha256": "c7fa5d4044063c9a863450feb62ae8e5ae0cfd232083e9f0052b4026edfbd6ae"
+      },
+      {
+        "title": "Unequip straight from the equipment board",
+        "image": "0.9.5/character-equipped-x",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Hover or focus an equipped item to reveal its top-right X. Click it, or drag the item back into Inventory, to unequip the same saved physical card. Its values stay intact, and held tooltip rereads do not silently equip it again. Normal slots still reject incompatible items.",
+        "alt": "Synthetic equipment board showing an equipped head item with its top-right X and separate loose inventory.",
+        "caption": "Actual synthetic native Character component. Regressions cover selected-profile isolation, inventory identity, explicit capture ownership and direct search; no player or game pixels.",
+        "imageSha256": "1223e4fdcfbe8ee5130c6ffc7f32db33feb3c92c940d8a50a463a59bee08e8cf"
+      },
+      {
+        "title": "Add item opens wiki search immediately",
+        "image": "0.9.5/character-add-item-search",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Click Add item to open and focus cached wiki search. Type a name, choose the matching item and adjust its tier/progress before adding it. Opening search creates no blank inventory card. Extra physical copies remain deliberate; automatic reads update existing saved items.",
+        "alt": "Focused synthetic cached item search opened from Add item, with tier/progress controls and Add to inventory.",
+        "caption": "Actual synthetic native Character component. Regressions cover selected-profile isolation, inventory identity, explicit capture ownership and direct search; no player or game pixels.",
+        "imageSha256": "3b15faece5e73c2fcad1e6eb1aecfd31545c8d83dde99849017a215fcc50968a"
       }
     ]
   },

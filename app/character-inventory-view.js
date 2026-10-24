@@ -23,7 +23,8 @@ export function characterEquipmentMarkup(snapshot){
     const byId=new Map(snapshot.candidates.map(card=>[card.id,card])),slots=new Map(CHARACTER_SLOTS.map(slot=>[slot.id,slot]));
     return CHARACTER_EQUIPMENT_ROWS.flatMap((row,r)=>row.map((id,c)=>{
         const slot=slots.get(id),card=byId.get(snapshot.equipment[id]);
-        return `<div class="character-slot ${slot.universal?'is-universal':''}" data-slot-id="${id}" style="--slot-row:${r+1};--slot-column:${c+1+(r===4?2:0)}"><span class="character-slot-label">${escape(SHORT_SLOT[id]||slot.label)}</span><button type="button" class="character-slot-icon ${card?'is-equipped':''}" ${card?`data-equipped-card="${id}" data-edit-card="${escape(card.id)}" draggable="true"`:`data-equip-slot="${id}"`} aria-label="${escape(`${slot.label}: ${card?characterItemLabel(card):'empty'}`)}">${card?itemIcon(card)+tierBadge(card):`<span aria-hidden="true">${slot.universal?'ANY':SLOT_MARK[id]}</span>`}</button></div>`;
+        const unequipLabel=card?escape(`Unequip ${characterItemLabel(card)} from ${slot.label}`):'';
+        return `<div class="character-slot ${slot.universal?'is-universal':''}" data-slot-id="${id}" style="--slot-row:${r+1};--slot-column:${c+1+(r===4?2:0)}"><span class="character-slot-label">${escape(SHORT_SLOT[id]||slot.label)}</span>${card?`<button type="button" class="character-item-remove character-equipped-remove" data-unequip-slot="${id}" aria-label="${unequipLabel}" title="${unequipLabel}" draggable="false">×</button>`:''}<button type="button" class="character-slot-icon ${card?'is-equipped':''}" ${card?`data-equipped-card="${id}" data-edit-card="${escape(card.id)}" draggable="true"`:`data-equip-slot="${id}"`} aria-label="${escape(`${slot.label}: ${card?characterItemLabel(card):'empty'}`)}">${card?itemIcon(card)+tierBadge(card):`<span aria-hidden="true">${slot.universal?'ANY':SLOT_MARK[id]}</span>`}</button></div>`;
     })).join('');
 }
 

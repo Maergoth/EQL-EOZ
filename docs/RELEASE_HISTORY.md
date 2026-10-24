@@ -1,7 +1,7 @@
 # Browsable release history
 
-Version 0.9.5 adds two actual synthetic captures of the visible selected-item
-tier controls and Rescan/25-slot board. Both were captured by the isolated
+Version 0.9.5 adds five actual synthetic captures of selected-item tier
+controls, Rescan/25-slot board, Character Select, equipped X and direct item search. Both were captured by the isolated
 native Character walkthrough and visually inspected before archiving; no
 player or game pixels. Every older entry and image stays unchanged.
 

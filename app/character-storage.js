@@ -3,8 +3,9 @@
 import { CHARACTER_STORAGE_KEY } from './character-model.js';
 import { CHARACTER_WALKTHROUGH_KEY } from './character-walkthrough.js';
 
-const KEYS=new Set([CHARACTER_STORAGE_KEY,CHARACTER_WALKTHROUGH_KEY]);
-const MAX_VALUE=1500000;
+const PROFILE_STORAGE_KEY='eql-eye-of-zomm-character-profiles-v1';
+const KEYS=new Set([CHARACTER_STORAGE_KEY,CHARACTER_WALKTHROUGH_KEY,PROFILE_STORAGE_KEY]);
+const valueLimit=key=>key===PROFILE_STORAGE_KEY?8000000:1500000;
 export async function createCharacterStorage({api=globalThis.eyeOfZommCharacterStorage,legacyStorage=globalThis.localStorage,onWarning=()=>{}}={}) {
     const values=new Map(),pending=new Set(),failedKeys=new Set(),blockedKeys=new Set();let hostReady=false,writeWarning=false,localWarning=false;
     const warn=message=>{try{onWarning(message);}catch{/* A warning must not break editing. */}};
@@ -30,7 +31,8 @@ export async function createCharacterStorage({api=globalThis.eyeOfZommCharacterS
     }
     for(const key of KEYS){
         const present=hostReady&&Object.hasOwn(saved,key),value=present?saved[key]:localGet(key);
-        if(value!==null&&(typeof value!=='string'||value.length>MAX_VALUE||new TextEncoder().encode(value).length>MAX_VALUE)){blockedKeys.add(key);warn('A saved Character entry exceeds its supported limit and was left unchanged.');continue;}
+        const limit=valueLimit(key);
+        if(value!==null&&(typeof value!=='string'||value.length>limit||new TextEncoder().encode(value).length>limit)){blockedKeys.add(key);warn('A saved Character entry exceeds its supported limit and was left unchanged.');continue;}
         if(value!==null){
             let valid=false;try{const parsed=JSON.parse(value);valid=Boolean(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&parsed.schemaVersion===1);}catch{/* Preserve unreadable values before the model can replace them. */}
             if(!valid){blockedKeys.add(key);warn('A saved Character entry is malformed or uses an unsupported version and was left unchanged. Recover that entry before saving changes to it.');continue;}
@@ -43,7 +45,8 @@ export async function createCharacterStorage({api=globalThis.eyeOfZommCharacterS
         setItem(key,value){
             if(!KEYS.has(key))throw Error('Unsupported Character storage key.');
             if(blockedKeys.has(key))throw Error('This saved Character entry is preserved until its malformed or unsupported data is recovered.');
-            if(typeof value!=='string'||value.length>MAX_VALUE||new TextEncoder().encode(value).length>MAX_VALUE)throw Error('Character storage value exceeds its limit.');
+            const limit=valueLimit(key);
+            if(typeof value!=='string'||value.length>limit||new TextEncoder().encode(value).length>limit)throw Error('Character storage value exceeds its limit.');
             values.set(key,value);mirror(key,value);persist(key,value);
         },
         removeItem(key){if(!KEYS.has(key))throw Error('Unsupported Character storage key.');if(blockedKeys.has(key))throw Error('This saved Character entry is preserved until its malformed or unsupported data is recovered.');values.set(key,null);mirror(key,null);persist(key,null);},

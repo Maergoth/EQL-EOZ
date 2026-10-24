@@ -1,5 +1,20 @@
 # Character tier controls and durable inventory
 
+Character Select shows **Character (Server)** only after the validated first
+walkthrough step. New character uses a separate unregistered draft; switching
+preserves each character’s own inventory, equipment, baseline and walkthrough.
+An active Character capture stops before switching and never restarts by
+selection alone. The roster is one atomic, bounded private record; legacy
+current-character mirrors remain for migration/rollback. Journal replay requires
+the selected flow or an exact previously accepted observation reference, so
+shared item names cannot mix characters.
+
+The 0.9.5 inventory shortcuts include an equipped-item top-right X and
+dragging equipped gear back into Inventory. Both unassign the same saved card
+without deleting it, preserve explicit physical copies and keep it loose across
+held rereads. Add item opens and focuses the wiki catalog query immediately;
+searching does not create a blank inventory card.
+
 ## Current request and context
 
 Follow-up to published 0.9.4, source main
@@ -132,7 +147,9 @@ recognition and does not claim that every unobserved tooltip was readable.
 `eyeOfZommCharacterStorage` exposes only `read()`, `write({key,value})` and
 `flush()`, restricted to the exact trusted main window/root frame. It accepts
 only `eql-eye-of-zomm-character-v1` and
-`eql-eye-of-zomm-character-walkthrough-v1`, each bounded to 1,500,000 UTF-8 bytes.
+`eql-eye-of-zomm-character-walkthrough-v1`, each bounded to 1,500,000 UTF-8 bytes,
+and `eql-eye-of-zomm-character-profiles-v1`, bounded to 8,000,000 UTF-8 bytes.
+The roster supports 32 named characters without evicting prior records.
 One active atomic, synced write and one coalesced current state bound pending
 work; normal Quit drains accepted writes and flushes DOM storage.
 

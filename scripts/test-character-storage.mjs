@@ -33,14 +33,19 @@ async function native({root,temporary,profile,port,phase,seed}){
             return {values,origin:location.origin,legacy:localStorage.getItem('synthetic-origin-only-marker')};
         },phase,seed);
         if(phase==='seed')await execute(owner,()=>localStorage.setItem('synthetic-origin-only-marker','first-origin'));
-        for(const [key,value]of Object.entries(seed))assert.equal(result.values[key],value,`${phase}: exact Character/walkthrough values survive relaunch`);
-        if(phase!=='seed')await until(()=>execute(owner,()=>document.querySelector('[data-character-identity]')?.textContent.includes('Storage Fixture')&&Boolean(document.querySelector('[data-slot-id="finger1"] [data-equipped-card]'))),'The actual Character UI restores private-file metadata and equipped gear');
+        for(const [key,value]of Object.entries(seed))assert.equal(result.values[key],value,`${phase}: exact Character/walkthrough/roster values survive relaunch`);
+        const roster=JSON.parse(result.values['eql-eye-of-zomm-character-profiles-v1']);assert.equal(roster.schemaVersion,1);assert.equal(roster.activeId,'storage-primary');assert.equal(roster.profiles.length,2);assert.deepEqual(roster.profiles.map(({id,name,server})=>({id,name,server})),[{id:'storage-primary',name:'Storage Fixture',server:'Synthetic'},{id:'storage-secondary',name:'Storage Alternate',server:'Synthetic'}]);assert.equal(roster.profiles[0].model,result.values['eql-eye-of-zomm-character-v1']);assert.equal(roster.profiles[0].walkthrough,result.values['eql-eye-of-zomm-character-walkthrough-v1']);
+        if(phase!=='seed'){
+            try{await until(()=>execute(owner,()=>document.querySelector('[data-character-identity]')?.textContent.includes('Storage Fixture')&&Boolean(document.querySelector('[data-slot-id="finger1"] [data-equipped-card]'))),'The actual Character UI restores private-file metadata and equipped gear');}
+            catch(error){const state=await execute(owner,()=>({identity:document.querySelector('[data-character-identity]')?.textContent?.slice(0,300),equipped:Array.from(document.querySelectorAll('[data-equipped-card]'),node=>node.getAttribute('data-equipped-card')),select:Array.from(document.querySelector('[data-character-select]')?.options||[],option=>({value:option.value,label:option.textContent})).slice(0,5),status:document.querySelector('[data-character-status]')?.textContent?.slice(0,300)}));throw Error(`${error.message}: ${JSON.stringify(state)}`,{cause:error});}
+            const selection=await execute(owner,()=>{const select=document.querySelector('[data-character-select]');return {active:select?.value,profiles:Array.from(select?.options||[]).filter(option=>option.value!=='__new__').map(option=>({id:option.value,label:option.textContent}))};});assert.equal(selection.active,'storage-primary');assert.deepEqual(selection.profiles,[{id:'storage-secondary',label:'Storage Alternate (Synthetic)'},{id:'storage-primary',label:'Storage Fixture (Synthetic)'}],'The actual Character Select restores both saved profiles after process/origin changes');
+        }
         if(phase==='same')assert.equal(result.legacy,'first-origin','Real process restart on the same origin retains ordinary localStorage');
         if(phase==='fallback')assert.equal(result.legacy,null,'An occupied preferred port creates a separate empty browser origin');
         const foreign=new BrowserWindow({show:false,webPreferences:{preload:path.join(root,'desktop/preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false}});
-        try{await foreign.loadURL(origin+'/overlay.html?panel=parse');const denied=await execute(foreign,async()=>{const api=window.eyeOfZommCharacterStorage;return Promise.all([()=>api.read(),()=>api.write({key:'eql-eye-of-zomm-character-v1',value:'bad'}),()=>api.flush()].map(async fn=>{try{await fn();return false;}catch{return true;}}));});assert.deepEqual(denied,[true,true,true],'A foreign renderer cannot access Character files');}finally{foreign.destroy();}
+        try{await foreign.loadURL(origin+'/overlay.html?panel=parse');const denied=await execute(foreign,async()=>{const api=window.eyeOfZommCharacterStorage;return Promise.all([()=>api.read(),...['eql-eye-of-zomm-character-v1','eql-eye-of-zomm-character-walkthrough-v1','eql-eye-of-zomm-character-profiles-v1'].map(key=>()=>api.write({key,value:'bad'})),()=>api.flush()].map(async fn=>{try{await fn();return false;}catch{return true;}}));});assert.deepEqual(denied,[true,true,true,true,true],'A foreign renderer cannot read, write any of the three keys, or flush Character files');}finally{foreign.destroy();}
         await execute(owner,()=>window.eyeOfZommCharacterStorage.flush());
-        await fs.writeFile(path.join(temporary,`result-${phase}.json`),JSON.stringify({ok:true,phase,origin,fileAuthoritative:true,foreignDenied:true,legacySameOrigin:phase==='same',fallbackOrigin:phase==='fallback',actualCharacterUi:phase!=='seed'}));
+        await fs.writeFile(path.join(temporary,`result-${phase}.json`),JSON.stringify({ok:true,phase,origin,fileAuthoritative:true,foreignDenied:true,rosterProfiles:roster.profiles.length,activeProfileRestored:roster.activeId==='storage-primary',legacySameOrigin:phase==='same',fallbackOrigin:phase==='fallback',actualCharacterUi:phase!=='seed'}));
         clearTimeout(watchdog);app.quit();
     })();
     require(path.join(root,'desktop/main.cjs'));
@@ -56,6 +61,8 @@ try{
         'eql-eye-of-zomm-character-v1':JSON.stringify({schemaVersion:1,metadata:{name:'Storage Fixture',server:'Synthetic',classes:['WAR'],level:60,aaCount:25},candidates:[{id:'storage-ring',name:'Synthetic Storage Ring',wikiTitle:'Synthetic Storage Ring',catalogIdentity:{name:'Synthetic Storage Ring',wikiTitle:'Synthetic Storage Ring',match:'manual'},slots:['FINGER'],tier:4,fraction:0,observedStats:{HP:40},augmentStatus:'none'}],equipment:{finger1:'storage-ring'},statSnapshots:{base:{stats:{HP:100},confirmed:true}},sequence:1}),
         'eql-eye-of-zomm-character-walkthrough-v1':JSON.stringify({schemaVersion:1,active:false,step:'details',items:[],ignored:[{name:'synthetic removed ring',tier:3,fraction:0,augments:[]}]})
     };
+    const alternateModel=JSON.parse(seed['eql-eye-of-zomm-character-v1']);alternateModel.metadata.name='Storage Alternate';alternateModel.candidates=[];alternateModel.equipment={};
+    seed['eql-eye-of-zomm-character-profiles-v1']=JSON.stringify({schemaVersion:1,activeId:'storage-primary',draft:{model:null,walkthrough:null},profiles:[{id:'storage-primary',name:'Storage Fixture',server:'Synthetic',model:seed['eql-eye-of-zomm-character-v1'],walkthrough:seed['eql-eye-of-zomm-character-walkthrough-v1']},{id:'storage-secondary',name:'Storage Alternate',server:'Synthetic',model:JSON.stringify(alternateModel),walkthrough:null}]});
     const probe=http.createServer();await new Promise(done=>probe.listen(0,'127.0.0.1',done));const port=probe.address().port;await new Promise(done=>probe.close(done));
     for(const phase of ['seed','same','fallback']){
         if(phase==='same'){const config=JSON.parse(await readFile(join(profile,'eye-of-zomm-config.json'),'utf8'));config.frontendCacheVersion='synthetic-previous-version';await writeFile(join(profile,'eye-of-zomm-config.json'),JSON.stringify(config));}
@@ -67,7 +74,7 @@ try{
         assert.equal(JSON.parse(await readFile(join(profile,'eye-of-zomm-config.json'),'utf8')).frontendCacheVersion,pkg.version,'Real cache-upgrade handling completes without clearing Character data');
     }
     assert.equal(proofs[0].origin,proofs[1].origin);assert.notEqual(proofs[1].origin,proofs[2].origin);
-    console.log('EOZ_CHARACTER_STORAGE='+JSON.stringify({ok:true,actualMainPreload:true,processes:3,cacheUpgrade:true,occupiedPreferredPort:true,privateFileSurvives:true,foreignFramesDenied:true,proofs,installedProfile:false}));
+    console.log('EOZ_CHARACTER_STORAGE='+JSON.stringify({ok:true,actualMainPreload:true,processes:3,rosterProfiles:2,cacheUpgrade:true,occupiedPreferredPort:true,privateFileSurvives:true,foreignFramesDenied:true,proofs,installedProfile:false}));
 }finally{
     if(occupied)await new Promise(done=>occupied.close(done));
     assert.equal(dirname(resolve(temporary)),resolve(tmpdir()));assert.ok(basename(temporary).startsWith('eoz-character-storage-'));
