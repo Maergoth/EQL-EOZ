@@ -185,6 +185,19 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         tierZeroReview(id,options={}){return tierZeroVerificationPreview(candidates.find(value=>value.id===id),{...options,now:now()});},
         confirmTierZero(id,options={}){const candidate=candidates.find(value=>value.id===id);if(!candidate)throw Error('This contribution no longer exists.');const patch=confirmTierZeroVerification(candidate,{...options,now:now()});Object.assign(candidate,patch);candidate.planId=null;candidate.status='needs-review';candidate.reasons=contributionReasons(candidate,resolver()).reasons;save();return structuredClone(candidate);},
         add,consume,consumeLog,
+        sourceItemHints(candidate){
+            if(candidate?.kind!=='npc'||!candidate.zone||!['normal','raid'].includes(candidate.instance))return [];
+            const names=new Set([candidate.name,candidate.title].filter(Boolean).map(name=>contributionNameKey(resolver().resolve('npc',name).canonicalTitle||name))),zone=contributionNameKey(candidate.zone),titles=new Map();
+            for(const item of [...candidates,...archive]){
+                if(item.kind!=='item')continue;
+                const matches=(Array.isArray(item.sources)?item.sources:[]).slice(0,30).some(source=>source?.npc&&source.zone&&names.has(contributionNameKey(resolver().resolve('npc',source.npc).canonicalTitle||source.npc))&&contributionNameKey(source.zone)===zone&&source.instance===candidate.instance&&(source.confirmed===true||source.edited!==true&&source.sourceEvidence==='explicit-corpse'));
+                if(matches){const title=clean(item.title||item.name,230);if(title)titles.set(contributionNameKey(title),title);}
+                if(titles.size>=100)break;
+            }
+            // Hints bridge indexing delays; the host must verify the published
+            // item source before adding any loot to a reviewed monster plan.
+            return [...titles.values()];
+        },
         armSpawnLocation,
         cancelSpawnLocation(){armed=null;},
         update(id,patch){const candidate=candidates.find(c=>c.id===id);if(!candidate)return null;const attachment=Object.hasOwn(patch,'attachment')?attachmentValue(patch.attachment):undefined;const priorKey=candidate.key,priorTitle=contributionNameKey(candidate.title);for(const key of ['name','title','zone','instance','era','playerText','fields','sources','relations','status','matchesReviewed','planId','baseRecovery'])if(Object.hasOwn(patch,key))candidate[key]=structuredClone(patch[key]);if(Object.hasOwn(patch,'intent')&&['create','update','review'].includes(patch.intent))candidate.intent=patch.intent;

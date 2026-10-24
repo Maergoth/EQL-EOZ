@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {contributionUpdateSummary} from '../app/contribution-update.js';
-import {buildContributionDraft,contributionNameKey,contributionTitle,extractContributionBlueprints,findPotentialMatches,patchContributionRelationship,contributionTemplates,patchContributionPrimary,normalizeContributionCandidate,contributionItemEffects} from '../app/contribution-model.js';
+import {buildContributionDraft,contributionNameKey,contributionTitle,extractContributionBlueprints,findPotentialMatches,patchContributionRelationship,contributionTemplates,patchContributionPrimary,normalizeContributionCandidate,contributionItemEffects,contributionItemSourceMatches} from '../app/contribution-model.js';
 import {createItemBaseReview,applyItemBaseReview} from '../app/item-base-review.js';
 import {collectTierZeroEvidence,confirmTierZeroVerification,validateTierZeroVerification} from '../app/contribution-tier-zero.js';
 
@@ -175,3 +175,44 @@ const preservePrimaryNpc=patchContributionPrimary(preserveLoot,{kind:'npc',name:
 console.log('Wiki contribution model: optional values/location gate, safe fields, active instance scoping, reviewed Common/Unique moves, verified tier-zero patches and idempotence passed.');
 
 assert.doesNotMatch(contributionUpdateSummary({kind:'item',intent:'update',reasons:['missing-source'],sources:[{npc:'Excluded Guardian',zone:'Excluded Vale',confirmed:false,edited:true,sourceEvidence:'explicit-corpse'}]}).additions.join(' '),/Excluded Guardian/,'Excluded sources are absent from promised additions');
+
+// Recovery follows real item drop-source rows, never a backlink by itself.
+const sourceProof={npcTitle:'A synthetic guardian',zoneTitle:'Synthetic Vale',instance:'normal'};
+const proofPage=dropsfrom=>`{{Itempage\n|itemname=Synthetic Source Gem\n|dropsfrom=\n${dropsfrom}\n|notes=Unrelated [[A synthetic guardian]] prose.\n}}`;
+for(const eol of ['\n','\r\n']){
+    const source=proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]\n[[Other Vale]]\n* [[Other Guardian]]\n=== Raid Instance ===\n[[Synthetic Vale]]\n* [[Raid Guardian]]').replaceAll('\n',eol);
+    assert(contributionItemSourceMatches(source,sourceProof));
+    assert(contributionItemSourceMatches(source,{...sourceProof,npcTitle:'a_SYNTHETIC_guardian',zoneTitle:'synthetic_vale'}),'First-letter case and underscore differences retain page identity.');
+    assert(!contributionItemSourceMatches(source,{...sourceProof,zoneTitle:'Other Vale'}));
+    assert(!contributionItemSourceMatches(source,{...sourceProof,instance:'raid'}));
+    assert(contributionItemSourceMatches(source,{...sourceProof,npcTitle:'Raid Guardian',instance:'raid'}));
+    assert(!contributionItemSourceMatches(source,{...sourceProof,npcTitle:'Raid Guardian'}));
+}
+assert(contributionItemSourceMatches(proofPage('[[Synthetic Vale|The Vale]]\n<ul><li>[[A synthetic guardian|Guardian]] (Rare)</li></ul>'),sourceProof));
+assert(contributionItemSourceMatches('== Raid Instance ==\n'+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),{...sourceProof,instance:'raid'}),'An externally raid-scoped item does not require a second internal Raid Instance heading.');
+assert(!contributionItemSourceMatches('== Raid Instance ==\n'+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),sourceProof));
+assert(contributionItemSourceMatches(proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]')+'\n== Raid Instance ==\n'+proofPage('[[Synthetic Vale]]\n* [[Raid Guardian]]'),sourceProof));
+for(const dropsfrom of [
+    '[[Synthetic Vale]]\nA passing mention of [[A synthetic guardian]].',
+    '[[Synthetic Vale]]\n<ul><li>A passing mention of [[A synthetic guardian]].</li></ul>',
+    '[[Synthetic Vale]]\n<ul><li>[[A synthetic guardian]]',
+    '[[Synthetic Vale]]\n<!-- * [[A synthetic guardian]] -->',
+    '[[Synthetic Vale]]\n<nowiki>* [[A synthetic guardian]]</nowiki>',
+    '[[Synthetic Vale]]\n<pre>\n* [[A synthetic guardian]]\n</pre>',
+    '[[Synthetic Vale]]\n{{Example|\n* [[A synthetic guardian]]\n}}',
+    '[[Synthetic Vale]]\n<ref>\n* [[A synthetic guardian]]\n</ref>',
+    '[[Synthetic Vale]]\n* [[Other Guardian]]\n[[Synthetic_Vale]]\n* [[A synthetic guardian]]',
+    '[[Other Vale]]\n* [[A synthetic guardian]]',
+    '[[Synthetic Vale]]\n* [[Other Guardian]]\n== Raid Instance ==\n[[Synthetic Vale]]\n* [[A synthetic guardian]]\n== Raid Instance ==\n[[Synthetic Vale]]\n* [[A synthetic guardian]]'
+])assert(!contributionItemSourceMatches(proofPage(dropsfrom),sourceProof),'Prose, protected examples and ambiguous zone/instance scopes are not source proof.');
+for(const malformed of [
+    '[[Synthetic Vale]]\n* [[A synthetic guardian]]',
+    '<!-- '+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),
+    '<nowiki>'+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]')+'</nowiki>',
+    '{{Itempage|dropsfrom=[[Synthetic Vale]]\n* [[A synthetic guardian]]',
+    proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]')+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),
+    '{{Itempage|dropsfrom=[[Synthetic Vale]]\n* [[A synthetic guardian]]\n|dropsfrom=[[Synthetic Vale]]\n* [[A synthetic guardian]]\n}}',
+    'x'.repeat(512*1024+1),'é'.repeat(256*1024)+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),null
+])assert.equal(contributionItemSourceMatches(malformed,sourceProof),false);
+assert(!contributionItemSourceMatches(proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),{...sourceProof,instance:'unknown'}));
+assert(!contributionItemSourceMatches(proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),{...sourceProof,npcTitle:'<script>'}));

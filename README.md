@@ -217,6 +217,15 @@ related updates, including pages completed before a partial result. Empty item
 fields stay blank; missing factual monster values retain `?` placeholders.
 Nothing publishes merely because a candidate was captured or previewed.
 
+Item and monster submissions keep both sides of a drop relationship in the
+same review when both pages exist. When a monster is created later through EoZ,
+its preview recovers loot from published item source entries for the same zone and instance.
+The review shows those source pages; local drafts are only lookup hints. Source
+revisions are checked before publication. An incomplete lookup requires a fresh
+Preview, and existing Common/Unique loot placement is preserved.
+Direct wiki-editor creation still needs the separate wiki-side reverse-lookup
+work tracked in the form plan; the app feature does not change wiki templates.
+
 For a tiered drop without a wiki base record, base recovery keeps the original
 numbers/evidence and lets you correct ambiguous inverse-scaled values. Unknown
 or unsupported values stay omitted. Recovered pages carry a visible request for

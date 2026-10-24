@@ -32,6 +32,12 @@ Only pages confirmed `applied` expose **View page** links, using digest-bound
 canonical titles on the wiki origin; these links survive partial-plan restart.
 Item blanks stay blank and explicit effects supersede stale placeholder lines;
 monster factual unknowns retain `?`. See the form plan for the validation ledger.
+NPC preparation also recovers published item drop-source rows through bounded
+live backlinks and saved-item lookup hints. A hint/backlink is never proof:
+`contributionItemSourceMatches` requires the correct active Itempage source row,
+zone and normal/raid scope. Recovered loot and source revisions enter the review;
+source revision changes or incomplete lookup require a fresh Preview. This
+completes item-first / NPC-later submissions without background wiki edits.
 
 - Character uses only confirmed current displayed stats. Equipped-hover tiers,
   catalog cards and Exaltations never change totals. Attached `(Exaltation)`

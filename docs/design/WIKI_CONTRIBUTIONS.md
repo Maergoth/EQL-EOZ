@@ -16,6 +16,28 @@ Confirmed `applied` pages offer canonical **View page** links, including partial
 results and resumed plans. Empty item fields stay blank; explicit selected
 effects replace stale placeholders. Monster factual unknowns retain `?`.
 
+## Later monster creation and published item sources
+
+An item can be published before its source monster exists. Its `dropsfrom`
+entry is the durable relationship; the missing monster is not fabricated.
+On a later NPC preview, the client reads bounded live
+[MediaWiki backlinks](https://www.mediawiki.org/wiki/API:Backlinks), then checks
+each candidate's active Itempage source rows for that NPC, zone and instance.
+Saved/archived item titles can bridge indexing delays, but still require live
+source proof. Plain prose/backlinks, comments, wrong zones and other instances
+cannot add loot. Existing Common/Unique placement remains intact.
+
+Recovered items and source revisions appear in the complete plan. They are
+bound to the review digest and rechecked before uploads/edits. A changed source
+or incomplete/offline lookup blocks publication until a fresh Preview. This
+uses ordinary authenticated attributed edits and the existing per-page
+revision/create guards; there is no background repair job or new server schema.
+This applies to EoZ's contribution workflow. The live
+[monster template](https://eqlwiki.com/index.php?title=Template:Namedmobpage&oldid=149842)
+currently displays only its explicit loot fields, so a person creating the page
+directly on the wiki does not yet get this recovery. The separate wiki-side
+read-only rendering requirement is recorded in the active form plan.
+
 ## 0.9.7 reviewed log relationships
 
 Live log evidence is retained by the durable queue described in

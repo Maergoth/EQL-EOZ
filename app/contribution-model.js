@@ -363,6 +363,9 @@ export function patchContributionRelationship(source, { role, itemTitle, npcTitl
 }
 
 function contributionScopedTemplate(source,name,instance){
+    return contributionScopedTemplateInfo(source,name,instance).template;
+}
+function contributionScopedTemplateInfo(source,name,instance){
     const all=contributionTemplates(source,name);let outline=source;
     // Headings inside protected source or a previous template argument do not
     // select an enclosing article section for another template.
@@ -374,10 +377,48 @@ function contributionScopedTemplate(source,name,instance){
         if(labels.size>1)throw Error('Choose the correct existing normal/raid template in the wiki source editor.');
         return {template,scope:[...labels][0]||null};
     });
-    if(all.length===1&&!scopes[0].scope)return all[0];
+    if(all.length===1&&!scopes[0].scope)return scopes[0];
     if(!['normal','raid'].includes(instance))throw Error('Choose the correct existing normal/raid template in the wiki source editor.');
-    const scoped=scopes.filter(({scope})=>instance==='raid'?scope==='raid':scope!=='raid').map(value=>value.template);
+    const scoped=scopes.filter(({scope})=>instance==='raid'?scope==='raid':scope!=='raid');
     if(scoped.length!==1)throw Error('Choose the correct existing normal/raid template in the wiki source editor.');return scoped[0];
+}
+
+// Read-only proof for reciprocal recovery. A backlink, prose mention or a
+// reference in another zone/instance is insufficient to establish a drop.
+// Unsupported or ambiguous layouts fail closed without blocking other pages.
+export function contributionItemSourceMatches(source,{npcTitle,zoneTitle,instance}={}){
+    if(typeof source!=='string'||source.length>512*1024||!['normal','raid'].includes(instance))return false;
+    try{
+        if(new TextEncoder().encode(source).byteLength>512*1024)return false;
+        const npcKey=contributionNameKey(contributionTitle(npcTitle)),zoneKey=contributionNameKey(contributionTitle(zoneTitle));
+        const {template,scope}=contributionScopedTemplateInfo(source,'Itempage',instance),fields=template.fields.filter(field=>field.name.toLowerCase()==='dropsfrom');
+        if(fields.length!==1)return false;
+        let current=activeContributionText(fields[0].value);
+        // Nested examples and citations do not become direct source rows.
+        const nested=[];let depth=0,start=0;
+        for(let i=0;i<current.length-1;i++){
+            const pair=current.slice(i,i+2);
+            if(pair==='{{'){if(depth===0)start=i;depth++;i++;}
+            else if(pair==='}}'&&depth){depth--;i++;if(depth===0)nested.push([start,i+1]);}
+        }
+        if(depth)return false;
+        for(const [a,b]of nested.reverse())current=current.slice(0,a)+current.slice(a,b).replace(/[^\r\n]/g,' ')+current.slice(b);
+        current=current.replace(/<(ref|code)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi,value=>value.replace(/[^\r\n]/g,' '));
+        const hasRaid=/^(={1,6})[ \t]*[^\r\n]*\bRaid\s+Instance\b[^\r\n]*\1[ \t]*\r?$/im.test(current);
+        if(hasRaid){const range=zoneContributionRange(current,instance);current=current.slice(range.start,range.end);}
+        else if(instance==='raid'){if(scope!=='raid')return false;}
+        else {const range=zoneContributionRange(current,'normal');current=current.slice(range.start,range.end);}
+        if(/^={1,6}[ \t]*[^=\r\n]*\b(?:raid|normal)[ \t]+(?:instance|zone)\b[^=\r\n]*={1,6}[ \t]*$/im.test(current))return false;
+        const headings=[...current.matchAll(/^[ \t]*\[\[([^\]|]+)(?:\|[^\]]*)?\]\][ \t]*\r?$/gm)],matching=headings.filter(heading=>contributionNameKey(heading[1])===zoneKey);
+        if(matching.length!==1)return false;
+        const heading=matching[0],index=headings.indexOf(heading),body=current.slice(heading.index+heading[0].length,headings[index+1]?.index??current.length);
+        const references=[...body.matchAll(/^[ \t]*[*#]+[ \t]*\[\[([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/gm)];
+        for(const row of body.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li\s*>/gi)){
+            if(/<li\b/i.test(row[1]))continue;
+            const reference=row[1].match(/^\s*\[\[([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/);if(reference)references.push(reference);
+        }
+        return references.some(reference=>contributionNameKey(reference[1])===npcKey);
+    }catch{return false;}
 }
 function patchTemplateFields(source,name,updates,instance='normal'){
     const template=contributionScopedTemplate(source,name,instance),edits=[],additions=[];
