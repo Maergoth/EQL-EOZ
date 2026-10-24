@@ -1,5 +1,17 @@
 # Validation report — v0.9.5
 
+The 0.9.6 character inspect work passes the full source suite, catalog relevance,
+native walkthrough, deterministic real-canvas PNG export, and actual main/preload
+capture/workspace checks against an isolated loopback wiki. The latter covers
+24 slots, whole-tier controls, weapon augments in armor without double counting,
+explicit clipboard OCR, filtered empty-slot add, and three interactive A/B/A
+shares preserving two characters and unrelated discussion without PNG uploads.
+Wiki-side unsaved MediaWiki parsing and DOM checks are tracked in its staging PR;
+the actual app serializer also passed a 182-check two-character parser roundtrip.
+No production wiki write, live-game recapture, Linux desktop session or new
+public package verification is implied by these local synthetic checks.
+
+
 ## 0.9.5 durable Character inventory
 
 The private installed-app audit found 26 journal item observations covering 16

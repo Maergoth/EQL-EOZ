@@ -11,10 +11,10 @@ const folded=value=>text(value).normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
 const itemName=value=>folded(characterBaseItemName(value));
 const statsLabel=key=>({MP:'Mana',END:'Endurance',WT:'Weight',DMG:'Damage',DMG_BONUS:'Damage bonus',SV_CORRUPTION:'Void resist',ATTACK_SPEED:'Attack speed %'}[key]||key.replace(/_/g,' '));
 const number=value=>value===null?'?':Number.isInteger(value)?String(value):String(Math.round(value*1000)/1000);
-function progress(options={}){
-    const tier=Object.hasOwn(options,'tier')?options.tier:0,fraction=Object.hasOwn(options,'fraction')?options.fraction:0;
-    if(!Number.isInteger(tier)||tier<0||tier>10||!Number.isInteger(fraction)||fraction<0||fraction>=(tier===10?1:2**tier))throw Error('Choose tier 0–10 and progress from 0 to 2^tier − 1. Tier 10 is the maximum and uses progress 0.');
-    return{tier,fraction};
+function tierOptions(options={}){
+    const tier=Object.hasOwn(options,'tier')?options.tier:0;
+    if(!Number.isInteger(tier)||tier<0||tier>10)throw Error('Choose tier 0–10.');
+    return{tier,fraction:0};
 }
 
 /** Bounded AND-token name/wiki-title search. Results retain catalog identity and
@@ -75,17 +75,17 @@ export function resolveCharacterCatalog(pack,observedName,{limit=CHARACTER_CATAL
 }
 
 /** A manual physical card from an explicitly selected catalog identity. The
- * selected tier/progress is known; observedStats and capture evidence are empty.
+ * selected tier is known; observedStats and capture evidence are empty.
  * Catalog stats remain base values. Augment state needs review unless explicit.
  */
 export function characterCatalogCard(item,options={}){
     if(!item||typeof item!=='object'||!text(item.name||item.wikiTitle))throw Error('Choose a cached item first.');
-    const {tier,fraction}=progress(options),baseStats=normalizeCharacterStats(item.stats),name=characterBaseItemName(item.name||item.wikiTitle),wikiTitle=text(item.wikiTitle||item.name);
+    const {tier,fraction}=tierOptions(options),baseStats=normalizeCharacterStats(item.stats),name=characterBaseItemName(item.name||item.wikiTitle),wikiTitle=text(item.wikiTitle||item.name);
     return{name,observedName:'',wikiTitle,wikiMatch:'confirmed',catalogIdentity:{name,wikiTitle,match:'manual'},iconId:text(item.iconId),icon:safeCharacterIcon(options.icon),
         slots:characterSlotKinds(item.slots),tier,fraction,baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,
         unscaledStatKeys:Object.hasOwn(baseStats,'SV_CORRUPTION')?['SV_CORRUPTION']:[],
         observedStats:{},observedStatsComplete:false,augments:[],augmentStatus:item.augmentStatus==='none'?'none':'unknown',
-        level:item.requiredLevel??null,notes:'Added from the local wiki catalog. Verify tier, progress, compatible slots and augments against the item you own.'};
+        level:item.requiredLevel??null,notes:'Added from the local wiki catalog. Verify tier, compatible slots and augments against the item you own.'};
 }
 
 /** Preview rows use the same forward scaling and modified-stat predicate as the
@@ -103,19 +103,19 @@ export function characterCatalogPreview(item,options={}){
  * ordinary model intake operation, which creates a new physical copy each time.
  * refresh notices pack replacement; dispose removes all owned event listeners.
  */
-export function mountCharacterCatalog({host,getPack=()=>({}),onAdd=()=>({ok:false,error:'Character inventory is unavailable.'})}={}){
+export function mountCharacterCatalog({host,getPack=()=>({}),purpose='inventory',onAdd=()=>({ok:false,error:'Character inventory is unavailable.'})}={}){
     if(!host)return{refresh(){},dispose(){}};
     const document=host.ownerDocument,removers=[];let selected=null,result={items:[]},pack=null,packItems=null,packVersion=null,disposed=false;
-    host.innerHTML=`<h3>Search cached items</h3><p class="settings-helper">Find an item in your local wiki pack, choose its item level and add a separate copy to your inventory. Catalog values are base stats; review augments after adding.</p><label>Item name<input type="search" data-character-catalog-query maxlength="160" placeholder="Search item names or wiki titles" autocomplete="off"></label><div class="character-catalog-controls"><label>Item Level Slider <output data-character-catalog-tier-label>Tier 0</output><input data-character-catalog-tier type="range" min="0" max="10" step="1" value="0" aria-label="Character catalog item tier"></label><label>Fractional progress <span data-character-catalog-denominator>/ 1</span><input data-character-catalog-fraction type="number" min="0" max="0" step="1" value="0" aria-label="Character catalog fractional progress"></label></div><p data-character-catalog-status role="status"></p><div class="character-catalog-layout"><div class="character-catalog-results" data-character-catalog-results aria-label="Cached item results"></div><article class="character-catalog-preview" data-character-catalog-preview aria-label="Selected catalog item preview"></article></div>`;
-    const $=selector=>host.querySelector(selector),query=$('[data-character-catalog-query]'),tier=$('[data-character-catalog-tier]'),fraction=$('[data-character-catalog-fraction]'),results=$('[data-character-catalog-results]'),preview=$('[data-character-catalog-preview]'),status=$('[data-character-catalog-status]');
+    host.innerHTML=`<h3>Search cached items</h3><p class="settings-helper">${purpose==='augment'?'Choose an item and tier for this augment slot. Weapons and armor can both be used as augments.':purpose==='equipment'?'Choose a matching item and its tier to equip it into this slot.':'Find a wiki item, choose its tier and add it to Inventory.'}</p><label>Item name<input type="search" data-character-catalog-query maxlength="160" placeholder="Search item names or wiki titles" autocomplete="off"></label><div class="character-catalog-controls"><label>Item Level Slider <output data-character-catalog-tier-label>Tier 0</output><input data-character-catalog-tier type="range" min="0" max="10" step="1" value="0" aria-label="Character catalog item tier"></label></div><p data-character-catalog-status role="status"></p><div class="character-catalog-layout"><div class="character-catalog-results" data-character-catalog-results aria-label="Cached item results"></div><article class="character-catalog-preview" data-character-catalog-preview aria-label="Selected catalog item preview"></article></div>`;
+    const $=selector=>host.querySelector(selector),query=$('[data-character-catalog-query]'),tier=$('[data-character-catalog-tier]'),results=$('[data-character-catalog-results]'),preview=$('[data-character-catalog-preview]'),status=$('[data-character-catalog-status]');
     const listen=(element,event,callback)=>{element.addEventListener(event,callback);removers.push(()=>element.removeEventListener(event,callback));};
-    const options=()=>{if(!fraction.value.trim())throw Error('Enter fractional progress; use 0 for no fractional progress.');return progress({tier:Number(tier.value),fraction:Number(fraction.value)});};
+    const options=()=>tierOptions({tier:Number(tier.value)});
     const icon=item=>safeCharacterIcon(pack?.icons?.[item?.iconId]);
     function paintPreview(){
         results.querySelectorAll('[data-character-catalog-select]').forEach(button=>{const active=result.items[Number(button.dataset.characterCatalogSelect)]===selected;button.classList.toggle('is-active',active);button.setAttribute('aria-pressed',String(active));});
         if(!selected){preview.innerHTML='<p class="empty-state">Hover, focus or select a result to preview its item stats.</p>';return;}
         try{const {card,rows}=characterCatalogPreview(selected,{...options(),icon:icon(selected)});
-            preview.innerHTML=`<div class="character-catalog-title">${card.icon?`<img src="${escape(card.icon)}" alt="">`:'<span class="character-catalog-icon" aria-hidden="true">◇</span>'}<div><h4>${escape(card.name)}</h4><small>${escape(card.wikiTitle)}</small></div></div><p>Tier ${card.tier} · ${card.tier===10?'maximum tier':`${card.fraction}/${2**card.tier} progress`} · ${escape(card.slots.join(' / ')||'Slots unknown')}</p><dl class="character-catalog-stats">${rows.map(row=>`<div class="${row.modified?'is-scaled':''}"><dt>${escape(row.label)}</dt><dd>${row.value===null?'?':escape(number(row.value))}${row.modified?` <small>(${escape(number(row.base))} base)</small>`:''}${row.unsupported?` <small>(${escape(number(row.base))} base; tier adjustment unverified)</small>`:''}</dd></div>`).join('')}</dl>${rows.length?'':'<p class="settings-helper">No numeric base stats are available for this cached record.</p>'}<p class="settings-helper">Green values changed at this item level; base comparisons stay muted. Catalog selection confirms the wiki identity, not that you own an unaugmented item.</p><button type="button" class="primary-button" data-character-catalog-add>Add to inventory</button><p data-character-catalog-added role="status"></p>`;
+            preview.innerHTML=`<div class="character-catalog-title">${card.icon?`<img src="${escape(card.icon)}" alt="">`:'<span class="character-catalog-icon" aria-hidden="true">◇</span>'}<div><h4>${escape(card.name)}</h4><small>${escape(card.wikiTitle)}</small></div></div><p>Tier ${card.tier}${card.tier===10?' (maximum)':''} · ${escape(card.slots.join(' / ')||'Slots unknown')}</p><dl class="character-catalog-stats">${rows.map(row=>`<div class="${row.modified?'is-scaled':''}"><dt>${escape(row.label)}</dt><dd>${row.value===null?'?':escape(number(row.value))}${row.modified?` <small>(${escape(number(row.base))} base)</small>`:''}${row.unsupported?` <small>(${escape(number(row.base))} base; tier adjustment unverified)</small>`:''}</dd></div>`).join('')}</dl>${rows.length?'':'<p class="settings-helper">No numeric base stats are available for this cached record.</p>'}<p class="settings-helper">Green values reflect the selected tier; base comparisons stay muted.</p><button type="button" class="primary-button" data-character-catalog-add>${purpose==='augment'?'Put in augment slot':purpose==='equipment'?'Equip item':'Add to inventory'}</button><p data-character-catalog-added role="status"></p>`;
         }catch(error){preview.innerHTML=`<p class="capture-warning" role="status">${escape(error.message)}</p>`;}
     }
     function paintResults(){
@@ -130,7 +130,7 @@ export function mountCharacterCatalog({host,getPack=()=>({}),onAdd=()=>({ok:fals
     listen(query,'input',paintResults);listen(query,'keydown',event=>{if(event.key==='ArrowDown'){const button=results.querySelector('button');if(button){event.preventDefault();button.focus();}}});
     for(const event of ['mouseover','focusin','click'])listen(results,event,select);
     listen(results,'keydown',event=>{if(!['ArrowDown','ArrowUp'].includes(event.key))return;const buttons=[...results.querySelectorAll('button')],index=buttons.indexOf(document.activeElement),next=buttons[index+(event.key==='ArrowDown'?1:-1)];if(next){event.preventDefault();next.focus();}});
-    listen(tier,'input',()=>{const capped=Number(tier.value)===10,maximum=capped?0:2**Number(tier.value)-1;fraction.max=String(maximum);if(Number(fraction.value)>maximum)fraction.value=String(maximum);$('[data-character-catalog-tier-label]').textContent=`Tier ${tier.value}${capped?' (maximum)':''}`;$('[data-character-catalog-denominator]').textContent=capped?'(maximum tier; 0 only)':`/ ${maximum+1}`;paintPreview();});listen(fraction,'input',paintPreview);
+    listen(tier,'input',()=>{$('[data-character-catalog-tier-label]').textContent=`Tier ${tier.value}${Number(tier.value)===10?' (maximum)':''}`;paintPreview();});
     listen(preview,'click',event=>{if(!event.target.closest('[data-character-catalog-add]')||!selected)return;const added=$('[data-character-catalog-added]');try{const card=characterCatalogCard(selected,{...options(),icon:icon(selected)}),outcome=onAdd({item:card});if(outcome?.ok===false)throw Error(outcome.error||'This item could not be added.');if(added)added.textContent=`Added ${card.name}. Review its card and place this copy in a slot.`;}catch(error){if(added)added.textContent=error.message||'This item could not be added.';}});
     paintResults();
     return{refresh(){if(disposed)return;try{const next=getPack()||{};if(next!==pack||next.items!==packItems||next.meta?.version!==packVersion)paintResults();}catch{paintResults();}},dispose(){disposed=true;removers.forEach(remove=>remove());host.replaceChildren();}};

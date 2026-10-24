@@ -1,5 +1,17 @@
 # Character capture data and share image
 
+For current 0.9.6 inspect/wiki sharing, see [the cross-repository plan](../CHARACTER_SHEETS_PLAN.md).
+Character uses 24 slots without Power Source. `setTierPreview(id,{tier})` uses
+whole tiers; fractional progress is no longer imported, displayed or required.
+Stored legacy fields and raw observations remain recoverable. Indexed augment
+APIs are `setAugmentSlots(id,count)`, `setAugment(id,index,knownCard)` and
+`removeAugment(id,index)`; any known item kind can be an augment. Original
+observed contribution anchors prevent double counting and remain private.
+`character-totals.js` supplies one maximum-resource inspect view to Character,
+PNG and the normalized interactive wiki sheet. The older sections below describe
+historical data decisions where superseded by this paragraph.
+
+
 Character Select shows **Character (Server)** only after the validated first
 walkthrough step. New character uses a separate unregistered draft; switching
 preserves each character’s own inventory, equipment, baseline and walkthrough.

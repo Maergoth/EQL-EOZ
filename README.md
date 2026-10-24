@@ -4,14 +4,20 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.5 keeps your Character inventory across restarts.** Use Character Select
-to switch between **Character (Server)** saves after the first walkthrough step;
-each character retains its own gear, stats and progress. Adjust a selected
-item’s tier and progress beside its stats, arrange known gear in 25 compact
-slots including two Any slots, and see valid targets while dragging. Use an
-equipped item’s X or drag it back into Inventory to unequip. Add item takes
-you directly to wiki search. Adjusted
-wiki previews appear in green while original captured values remain intact.
+**0.9.6 adds a compact character inspect and interactive wiki sharing.**
+Use one equipment total panel with maximum HP, mana and endurance. Click an empty
+slot to search cached wiki items, choose a tier, or paste an item screenshot for
+local screen reading. Click augment sockets to choose any known item, including
+weapons in armor; captured socket counts and existing item values are retained.
+Character uses 24 equipment slots including two Any slots. Existing Power Source
+gear returns to Inventory. Item tiers stay editable without fractional progress.
+
+Character Select keeps separate **Character (Server)** saves. Use an equipped
+item’s X or drag it back into Inventory to unequip. Tier-adjusted wiki previews
+appear in green. Wiki sharing uses a collapsed `Character_sheet` with clickable
+gear and augments, replacing that character’s prior managed sheet while keeping
+other characters and talk-page discussion. The wiki templates and renderer must
+be installed before sharing; see the [implementation and activation plan](docs/CHARACTER_SHEETS_PLAN.md).
 
 Automatic screen reads update the saved item instead of adding copies. Use
 **Second copy** for another physical item. Unequip slowly and keep each complete
@@ -20,9 +26,9 @@ allows a fresh read after removing a bad capture; stale queued reads stay blocke
 See the [persistence and capture audit](docs/CHARACTER_INVENTORY_PERSISTENCE.md)
 and [guided walkthrough](docs/CHARACTER_WALKTHROUGH.md).
 
-![Character Select with separate saved Character (Server) profiles](app/assets/whats-new/0.9.5/character-select-profiles.png)
+![Character inspect with one total panel and compact equipment](app/assets/whats-new/0.9.6/character-total-inspect.png)
 
-![Character inventory with visible tier controls and two Any slots](app/assets/whats-new/0.9.5/character-tier-inventory.png)
+![Empty-slot Add item with wiki search, tier slider and screenshot paste](app/assets/whats-new/0.9.6/character-empty-slot-picker.png)
 
 In **Settings → Screen reading**, start an explicitly selected source. Optionally use
 **Calibrate OCR area** to draw around a complete examine or Inventory/stat pane.
@@ -203,16 +209,18 @@ ANY items last, examine anything missed, then confirm ambiguous slots together.
 Source loss offers Resume or Choose game window without losing the current step.
 
 **Search for item** uses the cached wiki catalog. Select an item and preview its
-tier/progress with changed values in green, then **Add to inventory**. Repeated
+tier with changed values in green, then **Add to inventory**. Repeated
 adds create distinct copies. Catalog bases stay separate from observed examine
-stats; unknown augment state and unsupported adjustments remain explicit.
+stats. Unsupported calculations remain unavailable rather than being guessed.
 
 ![Character catalog search with tier-adjusted stats and separate item copies](app/assets/whats-new/0.9.0/character-catalog.png)
 
 ![Guided snapshot review and synthetic equipment layout](app/assets/whats-new/0.9.1/character-walkthrough-review.png)
 
-Augments retain their own names and observed statistics. State whether the
-examine block already includes them so their values are not added twice.
+Hover equipped or loose gear and click an augment socket to choose a wiki item
+and its tier. Weapons can be augments in armor. The item reader captures explicit
+socket counts; Set augment slots also supports older saved items. Existing
+examine values are preserved and augment changes are applied once.
 Equipped estimates update from the reviewed baseline and assigned gear; a second
 equipped-stat capture is unnecessary. Additive estimates exclude caps and buffs.
 AC/ATK component conversions and exact Haste stacking remain unknown where the
@@ -221,15 +229,14 @@ correct an explicit Haste percentage and Save item to reparse it.
 
 ![Written item text with editable Haste and retained unparsed content](app/assets/whats-new/0.9.1/character-item-stat-review.png)
 
-Use **Preview and save snapshot**, review the entire PNG, then copy or save it locally.
-Successful copy/save completes the walkthrough and ends Character reading;
-canceling Save keeps reading. Explicit Cancel walkthrough is always available.
-The image contains assigned gear, base values, calculated estimates and
-uncertainty; raw OCR evidence and unassigned inventory are excluded. Optional
-authenticated upload requires an additional confirmation and targets only your
-own user talk page. Upload and talk-page results are reported separately.
-
-![Calculated equipped estimates with separate AC and attack components](app/assets/whats-new/0.9.1/character-equipped-estimates.png)
+Use **Preview current snapshot** to review the interactive inspect. Click items
+and augments to open their wiki articles. PNG copy/save remains available locally.
+Successful copy/save or wiki share completes the walkthrough; canceling Save
+keeps reading. Wiki sharing requires login and one explicit confirmation. It
+updates only the authenticated account’s own talk page with one collapsed section
+per Character (Server), preserving other characters and unrelated discussion.
+Only assigned known gear, augments and totals are shared; raw OCR and loose
+inventory stay private. The app checks template/renderer support before editing.
 
 These captures and local checks use synthetic records. The combined UI fixture
 exercises real local OCR import, disposable PNG save/clipboard handling and

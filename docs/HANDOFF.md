@@ -1,5 +1,15 @@
 # Eye of Zomm contributor handoff
 
+0.9.6 adds a compact total-only character inspect, clickable indexed augment
+sockets, filtered empty-slot Add item with a tier slider and explicit screenshot
+paste, and reviewed interactive wiki sheets. Power Source and Character
+fractional progress controls are removed without discarding saved cards or
+observations. See [CHARACTER_SHEETS_PLAN.md](CHARACTER_SHEETS_PLAN.md) for the
+cross-repository schema, ownership, actual checks and wiki activation boundary.
+The wiki component and two database templates must be installed before app
+sharing is enabled; source/PR preparation alone is not live deployment.
+
+
 0.9.5 adds visible selected-item tier/progress controls with labeled catalog previews,
 private Character storage independent of the loopback port, automatic cross-session
 item reuse, explicit extra copies, two manual Any slots, strict compatible-slot

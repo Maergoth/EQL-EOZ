@@ -1,5 +1,14 @@
 # Eye of Zomm Windows/game-client acceptance test
 
+0.9.6 uses a single equipment total panel, maximum resources, indexed augment
+pickers and empty-slot Add item with wiki search, a tier slider and explicit
+screenshot paste. Interactive own-talk sharing replaces the matching Character
+(Server) sheet and preserves other characters/discussion. See
+[CHARACTER_SHEETS_PLAN.md](CHARACTER_SHEETS_PLAN.md) for current acceptance and
+wiki template/renderer activation. Existing persistence, known-item placement,
+manual capture ownership and private evidence boundaries continue unchanged.
+
+
 0.9.5 adds visible selected-item tier/progress controls with labeled catalog previews,
 private Character storage independent of the loopback port, automatic cross-session
 item reuse, explicit extra copies, two manual Any slots, strict compatible-slot
@@ -38,9 +47,9 @@ archive audit, acceptance and limits.
    game throughput separately from synthetic native walkthrough checks.
 
 
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.5-x64.exe`.
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.6-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.5` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.6` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
 
 ## 0.9.3 live item recovery
 

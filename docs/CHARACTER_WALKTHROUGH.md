@@ -1,5 +1,15 @@
 # Guided Character capture
 
+Version 0.9.6 uses one total-stat inspect with maximum resources and 24 equipment
+slots (two Any, no Power Source). The tier slider remains immediately editable;
+individual item fractional progress is no longer imported or requested. Click
+an empty slot for filtered wiki search and a tier slider, or explicitly paste an
+item screenshot. Click item sockets to select known augments, including weapons
+in armor. Original observed values stay intact and augment deltas apply once.
+The [interactive sheet plan](CHARACTER_SHEETS_PLAN.md) records the current
+cross-repository contract, checks and wiki activation boundary. Older sections
+below preserve the previous walkthrough's decisions and validation history.
+
 Character Select shows **Character (Server)** only after the validated first
 walkthrough step. New character uses a separate unregistered draft; switching
 preserves each character’s own inventory, equipment, baseline and walkthrough.

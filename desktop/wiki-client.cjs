@@ -14,6 +14,7 @@ function normalizeWikiSubmissionText(text) {
     return text.replace(/\0/g,'').replace(/[ \t\n\r\v]+$/,'').replace(/\r\n?/g,'\n');
 }
 const models = () => import('../app/contribution-model.js');
+const characterSheets = () => import('../app/character-wiki-sheet.js');
 const copy = value => JSON.parse(JSON.stringify(value));
 const safeMessage = value => String(value || 'The wiki request could not complete.').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,500);
 class WikiError extends Error {
@@ -44,7 +45,7 @@ class WikiClient {
         this.fetch=fetchImpl || (session && session.fetch.bind(session));
         if(typeof this.fetch!=='function') throw new WikiError('transport','The dedicated wiki session is unavailable.');
         this.session=session;this.version=version;this.stateDir=stateDir;this.now=now;this.id=id;
-        this.plans=new Map();this.uploads=new Map();this.blueprintCache=null;this.busy=false;
+        this.plans=new Map();this.uploads=new Map();this.sheets=new Map();this.blueprintCache=null;this.busy=false;
         this.loaded=false;this.persistChain=Promise.resolve();
     }
     async load() {
@@ -57,12 +58,13 @@ class WikiClient {
             if(value.schemaVersion!==1)return;
             for(const plan of (value.plans||[]).slice(-30)) if(typeof plan?.id==='string' && Array.isArray(plan.pages) && plan.pages.length<=12 && plan.wikiOrigin===this.origin) this.plans.set(plan.id,plan);
             for(const item of (value.uploads||[]).slice(-30)) if(typeof item?.snapshotId==='string'&&item.origin===this.origin)this.uploads.set(item.snapshotId,item);
+            for(const item of (value.sheets||[]).slice(-20)) if(typeof item?.shareId==='string'&&/^[A-Za-z0-9_-]{8,100}$/.test(item.shareId)&&item.origin===this.origin&&namedUser(item.user))this.sheets.set(item.shareId,item);
         }catch(error){if(error.code!=='ENOENT')this.loadWarning='Saved wiki plans could not be read. Existing drafts remain on disk.';}finally{this.loaded=true;}})();
         return this.loading;
     }
     async persist() {
         if(!this.stateDir)return;
-        const value=JSON.stringify({schemaVersion:1,plans:[...this.plans.values()].slice(-30),uploads:[...this.uploads.values()].slice(-30)});
+        const value=JSON.stringify({schemaVersion:1,plans:[...this.plans.values()].slice(-30),uploads:[...this.uploads.values()].slice(-30),sheets:[...this.sheets.values()].slice(-20)});
         if(Buffer.byteLength(value)>4*1024*1024)throw new WikiError('storage','The local contribution plan store is full.');
         const task=async()=>{await fs.mkdir(this.stateDir,{recursive:true});const file=path.join(this.stateDir,'wiki-contribution-plans.json'),temp=`${file}.tmp`;await fs.writeFile(temp,value,{mode:0o600});await fs.rename(temp,file);};
         this.persistChain=this.persistChain.then(task,task);await this.persistChain;
@@ -248,6 +250,49 @@ class WikiClient {
                 catch(error){record.error={code:error.code,message:safeMessage(error.message)};await this.persist();}
             }
             return result();
+        }finally{this.busy=false;}
+    }
+    async characterSheetCapability(){
+        const {CHARACTER_WIKI_SHEET_CAPABILITY:contract}=await characterSheets();
+        const [template,item]=await Promise.all([this.page(contract.template),this.page(contract.itemTemplate)]);
+        if(template.missing||template.redirect||item.missing||item.redirect||!new RegExp(`\\b${contract.templateMarker}\\b`).test(template.content)||!new RegExp(`\\b${contract.itemMarker}\\b`).test(item.content))throw new WikiError('sheet-unavailable','The wiki interactive character sheet templates are not installed at the supported version.');
+        const result=await this.request({action:'parse',text:'{{Character_sheet|name=EoZ capability probe|server=Fixture|head_item=EoZ Capability Item|head_tier=0|head_stats=HP: 1}}',contentmodel:'wikitext',prop:'text|modules',disablelimitreport:'1'}),parsed=result.parse,html=typeof parsed?.text==='string'?parsed.text:parsed?.text?.['*'];
+        if(typeof html!=='string'||!/<[^>]+class=["'][^"']*\beql-character-sheet-v1\b/.test(html)||!/<[^>]+class=["'][^"']*\beql-character-inspect-v1\b/.test(html)||!Array.isArray(parsed?.modules)||!parsed.modules.includes(contract.module))throw new WikiError('sheet-unavailable','The wiki interactive character sheet renderer is unavailable. No talk-page changes were made.');
+        return {schemaVersion:1,templateRevision:template.revision,itemTemplateRevision:item.revision,module:contract.module};
+    }
+    async shareCharacter({sheet:input,caption='',confirmed=false,shareId=null}={}){
+        if(confirmed!==true)throw new WikiError('review','Review the interactive character sheet and confirm sharing first.');
+        const {normalizeCharacterWikiSheet,normalizeCharacterWikiCaption,characterWikiIdentity,serializeCharacterWikiSheet,patchCharacterWikiSheet}=await characterSheets();
+        let sheet,note;try{sheet=normalizeCharacterWikiSheet(input);note=normalizeCharacterWikiCaption(caption);}catch(error){throw new WikiError('sheet',error.message);}
+        await this.load();if(this.busy)throw new WikiError('busy','A wiki submission is already in progress.');this.busy=true;
+        try{
+            const status=await this.expectedUser();await this.characterSheetCapability();
+            const key=hash(characterWikiIdentity(sheet.metadata)),payloadHash=hash(JSON.stringify({sheet,caption:note}));
+            const prior=shareId===null?[...this.sheets.values()].reverse().find(item=>item.user?.id===status.user.id&&item.key===key&&item.payloadHash===payloadHash&&['pending','unknown'].includes(item.status)):null;
+            const id=prior?.shareId||(shareId===null?this.id():String(shareId));if(!/^[A-Za-z0-9_-]{8,100}$/.test(id))throw new WikiError('sheet-id','Invalid character sheet review identifier.');
+            let record=this.sheets.get(id);
+            if(shareId!==null&&!record)throw new WikiError('sheet-review','That saved character sheet review is unavailable. Preview and share it again.');
+            if(record&&(record.origin!==this.origin||record.user?.id!==status.user.id||record.user?.name!==status.user.name||record.key!==key||record.payloadHash!==payloadHash))throw new WikiError('sheet-review','That character sheet review belongs to different content or a different account.');
+            const page=await this.page(`User_talk:${status.user.name}`);
+            if(page.redirect||page.title.replace(/^User[ _]talk:/i,'User_talk:')!==`User_talk:${status.user.name}`)throw new WikiError('sheet-talk','Resolve your talk-page redirect on the wiki before sharing.');
+            if(page.missing&&!status.canCreate)throw new WikiError('permission','This account cannot create its missing talk page.');
+            let replacement;try{replacement=patchCharacterWikiSheet(page.content,key,serializeCharacterWikiSheet(sheet,{caption:note}),{metadata:sheet.metadata});}catch(error){throw new WikiError('sheet-conflict',error.message);}
+            if(replacement.text.length>MAX_PAGE||Buffer.byteLength(replacement.text,'utf8')>MAX_PAGE)throw new WikiError('size','Your talk page would exceed the safe automatic-edit limit. No changes were made.');
+            const reused=Boolean(record);if(!record){record={shareId:id,origin:this.origin,user:status.user,key,payloadHash,status:'pending',beforeRevision:null,beforeHash:null};this.sheets.set(id,record);if(this.sheets.size>20)this.sheets.delete(this.sheets.keys().next().value);}
+            const result=()=>({...copy(record),reused,talkPageUrl:`${this.origin}/User_talk:${encodeURIComponent(record.user.name)}`});
+            if(!replacement.changed){const reconciled=record.status==='unknown';record.status='applied';record.revision=page.revision;record.reconciled=reconciled;delete record.error;await this.persist();return result();}
+            // A retry may only resend the identical reviewed before-state. A
+            // matching applied block above reconciles even unrelated later edits.
+            if(record.beforeHash!==null&&(record.beforeRevision!==page.revision||record.beforeHash!==hash(page.content))){record.status='failed';record.error={code:'editconflict',message:'The talk page changed after this share attempt. Preview the sheet again before replacing it.'};await this.persist();return result();}
+            record.beforeRevision=page.revision;record.beforeHash=hash(page.content);record.afterHash=hash(normalizeWikiSubmissionText(replacement.text));
+            await this.expectedUser(record.user);const token=await this.csrf(record.user);
+            record.status='unknown';record.reconciled=false;delete record.error;await this.persist();
+            try{
+                const response=await this.request({action:'edit',title:page.title,text:normalizeWikiSubmissionText(replacement.text),summary:'Share reviewed character sheet from Eye of Zomm',assert:'user',assertuser:record.user.name,token,starttimestamp:page.startTimestamp,watchlist:'preferences',...(page.missing?{createonly:'1'}:{nocreate:'1',baserevid:String(page.revision)})},{post:true});
+                if(response.edit?.result!=='Success')throw new WikiError(response.edit?.code||'edit-result',response.edit?.info||'The wiki did not confirm the character sheet update.');
+                record.status='applied';record.revision=response.edit.newrevid||response.edit.oldrevid;delete record.error;
+            }catch(error){record.status=error.code==='unknown-write'?'unknown':'failed';record.error={code:error.code||'write',message:safeMessage(error.message)};}
+            await this.persist();return result();
         }finally{this.busy=false;}
     }
     clearAccountState(){this.blueprintCache=null;for(const plan of this.plans.values())if(plan.status!=='submitted'){plan.blockers=[...new Set([...plan.blockers,'The account session changed. Prepare and review again.'])];plan.reviewDigest=this.digest(plan);}return this.persist();}

@@ -1,5 +1,14 @@
 # Browsable release history
 
+Version 0.9.6 adds six reviewed synthetic screenshots: the compact one-total
+inspect, empty-slot item picker, augment picker, share review, wiki item inspect
+and independent collapsed characters. The four app captures use the actual main
+window/preload at 13px with an isolated profile and loopback wiki. The two wiki
+captures use actual unsaved MediaWiki parse output and the registered component;
+they establish component behavior, not a live deployment. All prior release
+entries and image bytes remain unchanged.
+
+
 Version 0.9.5 adds five actual synthetic captures of selected-item tier
 controls, Rescan/25-slot board, Character Select, equipped X and direct item search. Both were captured by the isolated
 native Character walkthrough and visually inspected before archiving; no

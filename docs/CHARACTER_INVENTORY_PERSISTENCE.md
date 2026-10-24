@@ -1,5 +1,12 @@
 # Character tier controls and durable inventory
 
+Current Character behavior is described in [the inspect-sheet plan](CHARACTER_SHEETS_PLAN.md).
+Version 0.9.6 keeps these persistence and profile guarantees, removes per-item
+fractional progress controls and Power Source placement, and preserves the old
+Power Source card as loose inventory. Indexed augment selections and their
+original observed contribution anchor persist privately with each saved item.
+
+
 Character Select shows **Character (Server)** only after the validated first
 walkthrough step. New character uses a separate unregistered draft; switching
 preserves each character’s own inventory, equipment, baseline and walkthrough.

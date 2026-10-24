@@ -376,15 +376,24 @@ class CaptureHost {
             subject:{kind,name},fields,relations,evidence:{text:'',imageId:null}},this.generation);
         return {accepted:Boolean(record)};
     }
-    async importImage({mode,sessionId}={}) {
+    async importImage({mode,sessionId,source='file'}={}) {
         if((mode!==undefined&&!MODES.has(mode))||(sessionId!==undefined&&!/^[\w-]{1,120}$/.test(sessionId)))throw new Error('Invalid screenshot review session.');
+        if(!['file','clipboard'].includes(source))throw new Error('Choose a screenshot file or paste an image.');
         if(this.hold)throw new Error('Another screenshot is already being read.');
-        const answer=await this.electron.dialog.showOpenDialog(this.getMainWindow(),{title:'Read an item or character screenshot',properties:['openFile'],filters:[{name:'PNG screenshots',extensions:['png']}]});
-        if(answer.canceled||!answer.filePaths?.length)return {cancelled:true};
-        const target=answer.filePaths[0],stat=await fs.stat(target);
-        if(!stat.isFile()||stat.size>32*1024*1024)throw new Error('Choose an image smaller than 32 MB.');
-        const png=await fs.readFile(target);validateCapturePng(png);
-        const image=this.electron.nativeImage.createFromBuffer(png),size=image.getSize();
+        let png,image;
+        if(source==='clipboard'){
+            image=this.electron.clipboard.readImage();
+            if(!image||image.isEmpty())throw new Error('Copy an item screenshot to the clipboard, then paste it here.');
+            const size=image.getSize();if(size.width*size.height>16*1024*1024)throw new Error('Choose an image smaller than 16 megapixels.');
+            png=image.toPNG();if(png.length>32*1024*1024)throw new Error('Choose an image smaller than 32 MB.');validateCapturePng(png);
+        }else{
+            const answer=await this.electron.dialog.showOpenDialog(this.getMainWindow(),{title:'Read an item or character screenshot',properties:['openFile'],filters:[{name:'PNG screenshots',extensions:['png']}]});
+            if(answer.canceled||!answer.filePaths?.length)return {cancelled:true};
+            const target=answer.filePaths[0],stat=await fs.stat(target);
+            if(!stat.isFile()||stat.size>32*1024*1024)throw new Error('Choose an image smaller than 32 MB.');
+            png=await fs.readFile(target);validateCapturePng(png);image=this.electron.nativeImage.createFromBuffer(png);
+        }
+        const size=image.getSize();
         if(image.isEmpty()||size.width*size.height>16*1024*1024)throw new Error('Choose an image smaller than 16 megapixels.');
         if(this.hold)throw new Error('Another screenshot is already being read.');
         this.hold=true;this.advanceGeneration();this.clearPending();

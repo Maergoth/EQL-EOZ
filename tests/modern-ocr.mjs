@@ -34,16 +34,16 @@ async function verify({root,profile,diagnostics}){
             // assertion above. Golden names/slots/base values are independent
             // of the OCR output; differing bases must not replace read values.
             const model=createCharacterModel({storage:null}),knownItems=[
-                {observation:boots,slot:'feet',catalog:{name:'Synthetic Ember Boots',wikiTitle:'Synthetic Ember Boots',slots:['FEET'],stats:{AC:20,HP:100,HASTE:8}},expectedHp:147,expectedFraction:5},
-                {observation:blade,slot:'primary',catalog:{name:'Synthetic Quartz Blade',wikiTitle:'Synthetic Quartz Blade',slots:['PRIMARY'],stats:{AC:18,HP:50,DMG:8}},expectedHp:83,expectedFraction:18}
+                {observation:boots,slot:'feet',catalog:{name:'Synthetic Ember Boots',wikiTitle:'Synthetic Ember Boots',slots:['FEET'],stats:{AC:20,HP:100,HASTE:8}},expectedHp:147},
+                {observation:blade,slot:'primary',catalog:{name:'Synthetic Quartz Blade',wikiTitle:'Synthetic Quartz Blade',slots:['PRIMARY'],stats:{AC:18,HP:50,DMG:8}},expectedHp:83}
             ];
-            for(const {observation,slot,catalog,expectedHp,expectedFraction}of knownItems){
+            for(const {observation,slot,catalog,expectedHp}of knownItems){
                 const original=structuredClone(observation),result=model.intake(observation);assert.equal(result.ok,true);
                 const blocked=model.assign(result.candidate.id,slot);assert.equal(blocked.ok,false);assert.equal(blocked.reason,'unknown-catalog','OCR alone cannot establish trusted equipment identity');
                 const selected=model.resolveCatalog(result.candidate.id,catalog,{match:'manual'});assert.equal(selected.ok,true);assert.equal(selected.candidate.name,catalog.name);
                 assert.deepEqual(selected.candidate.observedStats,result.candidate.observedStats);assert.equal(selected.candidate.observedStats.HP,expectedHp);
                 assert.deepEqual(selected.candidate.baseStats,catalog.stats);assert.equal(selected.candidate.rawStatBlock,result.candidate.rawStatBlock);assert.deepEqual(selected.candidate.evidence,result.candidate.evidence);
-                assert.equal(selected.candidate.fraction,expectedFraction);assert.equal(selected.candidate.observedName,original.subject.name);assert.deepEqual(observation,original,'Catalog selection cannot mutate the original parsed OCR record');
+                assert.equal(selected.candidate.fraction,null,'Character no longer imports per-item progress; original parser evidence remains intact');assert.equal(selected.candidate.observedName,original.subject.name);assert.deepEqual(observation,original,'Catalog selection cannot mutate the original parsed OCR record');
                 assert.equal(model.assign(selected.candidate.id,slot).ok,true);
             }
             console.log(`Modern synthetic pixel OCR ${packaged?'assembled runtime':'source dependencies'}: two names, split item stats, slots/progress, right-hand Inventory current/max/attributes/resists, no field bleed and usable Character cards passed.`);

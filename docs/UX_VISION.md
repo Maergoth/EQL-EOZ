@@ -1,5 +1,14 @@
 # Eye of Zomm — Product and UX Vision
 
+0.9.6 uses a single equipment total panel, maximum resources, indexed augment
+pickers and empty-slot Add item with wiki search, a tier slider and explicit
+screenshot paste. Interactive own-talk sharing replaces the matching Character
+(Server) sheet and preserves other characters/discussion. See
+[CHARACTER_SHEETS_PLAN.md](CHARACTER_SHEETS_PLAN.md) for current acceptance and
+wiki template/renderer activation. Existing persistence, known-item placement,
+manual capture ownership and private evidence boundaries continue unchanged.
+
+
 0.9.5 adds visible selected-item tier/progress controls with labeled catalog previews,
 private Character storage independent of the loopback port, automatic cross-session
 item reuse, explicit extra copies, two manual Any slots, strict compatible-slot
@@ -20,7 +29,7 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 [release history](RELEASE_HISTORY.md) and [validation](../VALIDATION.md).
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.9.5, extending released 0.9.4
+Baseline: 0.9.6, extending released 0.9.5
 Last updated: 2026-10-23
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)

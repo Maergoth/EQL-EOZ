@@ -1,5 +1,5 @@
 // OCR proposals only: never scale an item, infer drop sources or publish a fact.
-export const SCREEN_READ_PARSER_VERSION = 6;
+export const SCREEN_READ_PARSER_VERSION = 7;
 const clean = value => String(value ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim();
 const number = value => Number(String(value).replace(/,/g,''));
 const statNames = {
@@ -176,7 +176,7 @@ export function parseItemStatBlock(text){
     if(typeof text!=='string'||rawText.length>8192||lines.length>60)return {fields:[],conflicts:[],warnings:['Item stat text must contain at most 8,192 characters and 60 lines.']};
     const values=new Map(),boundary=new RegExp(`\\b(?:${Object.keys(statNames).sort((a,b)=>b.length-a.length).map(escaped).join('|')})[ \\t]*[:=;]?[ \\t]*(?:%[ \\t]*)?(?=[+-]?[\\d,]+)`,'gi');
     for(const line of lines){
-        if(/^(?:Click|Worn|Focus|Proc|Combat) Effects?\s*:?|^(?:\w+ )?Exaltation\s*:|^Item(?: Name)?\s*:/i.test(clean(line)))continue;
+        if(/^(?:Click|Worn|Focus|Proc|Combat) Effects?\s*:?|^(?:\w+ )?Exaltation\s*:|^Item(?: Name)?\s*:|^(?:Augment(?:ation)?(?: Slot)?|Socket)\s*#?\s*\d+\s*:/i.test(clean(line)))continue;
         const starts=[...line.matchAll(boundary)].map(match=>match.index),parts=starts.length?starts.map((start,index)=>line.slice(start,starts[index+1])):[line];
         for(const part of parts)for(const entry of stats(part,0)){
             const previous=values.get(entry.key)||[];previous.push(entry);values.set(entry.key,previous);
@@ -186,6 +186,24 @@ export function parseItemStatBlock(text){
     for(const [key,entries]of values){if(new Set(entries.map(entry=>entry.value)).size>1)conflicts.push(key);else fields.push(entries[0]);}
     if(conflicts.length)warnings.push(`Conflicting written values remain unknown: ${conflicts.join(', ')}.`);
     return {fields,conflicts,warnings};
+}
+/** Explicit socket text only. Exaltations are intrinsic effects, never items.
+ * Numbered game labels are converted once to zero-based model indices. */
+export function parseItemAugmentSlots(text){
+    const lines=String(text??'').slice(0,8192).split(/\r?\n/).slice(0,60).map(clean),emptyCounts=[],totalCounts=[],occupied=new Map(),conflicts=new Set();
+    for(const line of lines){
+        const empty=line.match(/^(\d+)\s+empty\s+(?:augment(?:ation)?\s+)?slots?\s*[.!]?$/i),total=line.match(/^(?:Augment(?:ation)?|Socket)\s+slots?\s*:\s*(\d+)\s*$/i);
+        if(empty)emptyCounts.push(Number(empty[1]));if(total)totalCounts.push(Number(total[1]));
+        const slot=line.match(/^(?:Augment(?:ation)?(?: Slot)?|Socket)\s*#?\s*([1-8])\s*:\s*(.+)$/i);
+        if(!slot||/^empty$/i.test(slot[2]))continue;
+        const index=Number(slot[1])-1,name=slot[2].trim().slice(0,240);
+        if(occupied.has(index)&&occupied.get(index)!==name){conflicts.add(index);continue;}occupied.set(index,name);
+    }
+    const count=values=>values.length&&new Set(values).size===1&&Number.isInteger(values[0])&&values[0]>=0&&values[0]<=8?values[0]:null;
+    const emptyAugmentSlots=count(emptyCounts),explicitTotal=count(totalCounts),augments=[...occupied].filter(([index])=>!conflicts.has(index)).sort(([a],[b])=>a-b).map(([index,name])=>({index,name}));
+    let augmentSlotCount=explicitTotal??(emptyAugmentSlots===null?null:emptyAugmentSlots+augments.length);
+    if(augmentSlotCount!==null&&(augmentSlotCount>8||augments.some(entry=>entry.index>=augmentSlotCount)||explicitTotal!==null&&emptyAugmentSlots!==null&&explicitTotal!==emptyAugmentSlots+augments.length)||conflicts.size||emptyCounts.length&&emptyAugmentSlots===null||totalCounts.length&&explicitTotal===null)augmentSlotCount=null;
+    return {augmentSlotCount,emptyAugmentSlots,augments};
 }
 function itemName(lines) {
     const labeled = lines.find(line => /^(?:Item(?: Name)?|Name)\s*:/i.test(line));
@@ -357,9 +375,11 @@ export function parseScreenRead(input = {}) {
             if (found) fields.push(field(key,found[0],key==='size' ? found[1].trim().split(/\s+/)[0] : key==='slots'?slotNames(found[1]):found[1].split(/\s*[,/]\s*|\s+/).filter(Boolean),confidence));
         }
         if(!fields.some(entry=>entry.key==='slots')){const slot=lines.find(line=>bareSlot.test(line));if(slot)fields.push(field('slots',slot,slotNames(slot),confidence));}
-        const augmentNames = lines.map(line=>line.replace(/^[^a-z]+/i,'')).filter(line=>/^(?:\w+ )?Exaltation\s*:/i.test(line)).map(line=>line.replace(/^[^:]+:\s*/,'')).filter(value=>distance(value.toLowerCase(),'empty')>1).slice(0,12);
-        if (augmentNames.length) fields.push(field('augmentNames',augmentNames.join('; '),augmentNames,confidence));
-        const effects = lines.filter(line=>/^(?:Click|Worn|Focus|Proc) Effect\s*:/i.test(line)).slice(0,12);
+        const sockets=parseItemAugmentSlots(itemText);
+        if(sockets.augmentSlotCount!==null)fields.push(field('augmentSlotCount',itemText,sockets.augmentSlotCount,confidence));
+        if(sockets.emptyAugmentSlots!==null)fields.push(field('emptyAugmentSlots',itemText,sockets.emptyAugmentSlots,confidence));
+        if(sockets.augments.length)fields.push(field('augments',itemText,sockets.augments,confidence));
+        const effects = lines.filter(line=>/^(?:Click|Worn|Focus|Proc) Effect\s*:/i.test(line)||/^(?:\w+ )?Exaltation\s*:/i.test(line)&&distance(line.replace(/^[^:]+:\s*/,'').toLowerCase(),'empty')>1).slice(0,12);
         if (effects.length) fields.push(field('effects',effects.join('; '),effects,confidence));
         // Modern always renders an unchecked "Modified" checkbox label. Only
         // an explicit title/state is evidence; the label by itself is unknown.

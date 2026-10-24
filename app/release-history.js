@@ -2,6 +2,79 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
   {
+    "version": "0.9.6",
+    "title": "Inspect your character and share it on the wiki",
+    "changes": [
+      "Use one compact equipment total panel with maximum resources and distinct AC/attack components. Original baseline and observed item values remain private calculation inputs.",
+      "Click empty equipment slots for focused compatible wiki search, a tier slider and explicit screenshot paste or file OCR. Unknown screen reads stay in Inventory until matched.",
+      "Choose known items and tiers for indexed augment sockets, including weapons in armor. Preserve captured item values and apply socket changes once.",
+      "Remove per-item fractional progress and Power Source placement. Retain saved Power Source cards in Inventory and both Any slots.",
+      "Share an interactive collapsed Character (Server) sheet with clickable gear and augments. Resharing updates only that character, with account/revision/retry guards and no extra PNG upload."
+    ],
+    "steps": [
+      {
+        "title": "One character total panel",
+        "image": "0.9.6/character-total-inspect",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "See maximum HP, mana and endurance in a compact inspect below your equipment. AC and attack components remain distinct. Power Source is removed; existing cards return to Inventory. Item tiers remain editable without fractional progress.",
+        "alt": "One character total panel using synthetic character records and equipment.",
+        "caption": "Actual Eye of Zomm main/preload interface at 13px using an isolated synthetic profile and loopback wiki. No player or game pixels.",
+        "imageSha256": "1c816ab11c7938472dc06a7981835e3e34b218b88871cda78d66fa63abc42ab5"
+      },
+      {
+        "title": "Add items from an empty slot",
+        "image": "0.9.6/character-empty-slot-picker",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Click an empty equipment slot to open focused wiki search. Choose the item and adjust its tier before equipping. The picker respects normal slot restrictions; Any slots accept any known item. Paste a screenshot or read a PNG file for local OCR.",
+        "alt": "Add items from an empty slot using synthetic character records and equipment.",
+        "caption": "Actual Eye of Zomm main/preload interface at 13px using an isolated synthetic profile and loopback wiki. No player or game pixels.",
+        "imageSha256": "4f1eee61ed9f382afcc09bd3d6140043b815e6811840944fb3ee4b6fa6285249"
+      },
+      {
+        "title": "Choose items for augment sockets",
+        "image": "0.9.6/character-augment-picker",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Hover equipped or loose gear and click an augment socket to choose a known item and tier. Weapons and armor can both be augments. Captured socket counts and original examine values are retained; changes apply once.",
+        "alt": "Choose items for augment sockets using synthetic character records and equipment.",
+        "caption": "Actual Eye of Zomm main/preload interface at 13px using an isolated synthetic profile and loopback wiki. No player or game pixels.",
+        "imageSha256": "356558d8372403c53310dcd0fae718d23f3bf18267aca8fa444c4aab65ccb3e7"
+      },
+      {
+        "title": "Review an interactive character sheet",
+        "image": "0.9.6/character-wiki-share",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Preview your assigned equipment, augments and totals before sharing to your own wiki talk page. Click gear to open its wiki article. Local PNG copy/save remains available. Raw OCR and loose inventory stay private.",
+        "alt": "Review an interactive character sheet using synthetic character records and equipment.",
+        "caption": "Actual Eye of Zomm main/preload interface at 13px using an isolated synthetic profile and loopback wiki. No player or game pixels.",
+        "imageSha256": "a398a5152f1c03ec6a423aeb6be8f70976ad4af25bc7794646ab9da8e902521a"
+      },
+      {
+        "title": "Inspect linked gear on the wiki",
+        "image": "0.9.6/wiki-sheet-inspect",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Your Character sheet has clickable item icons and tier-specific stat cards with linked augments. Maximum resources and one total panel match the app review. The wiki component and both templates must be installed before sharing is available.",
+        "alt": "Inspect linked gear on the wiki using synthetic character records and equipment.",
+        "caption": "Actual synthetic component rendered from unsaved MediaWiki parsing, including keyboard/hover checks. This is not a live-site deployment.",
+        "imageSha256": "17ab91903a777db1dc070445bd3f71b77843f040f2862e2d8336e4f028b61f19"
+      },
+      {
+        "title": "Keep multiple characters together",
+        "image": "0.9.6/wiki-sheets-collapsed",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Each Character (Server) starts collapsed and expands independently. Sharing the same character again replaces its managed sheet while preserving other characters and unrelated discussion. Revision and retry checks protect concurrent edits.",
+        "alt": "Keep multiple characters together using synthetic character records and equipment.",
+        "caption": "Actual synthetic component rendered from unsaved MediaWiki parsing, including keyboard/hover checks. This is not a live-site deployment.",
+        "imageSha256": "b8047002c86cfe3d3d4564a9a52a4e8c7b25758451c1d71d30f1f1053f4c0251"
+      }
+    ]
+  },
+  {
     "version": "0.9.5",
     "title": "Keep your inventory and recover missed item reads",
     "changes": [

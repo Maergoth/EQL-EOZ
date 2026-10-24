@@ -1,5 +1,14 @@
 # Capture, wiki contributions and character snapshots
 
+Character sharing in 0.9.6 uses a reviewed interactive `Character_sheet` upsert on
+the authenticated user's own talk page, rather than uploading another PNG. Local
+PNG export remains available. Template/module capability, account assertions,
+page revisions, scoped Character (Server) replacement and uncertain-write retry
+checks are documented in [CHARACTER_SHEETS_PLAN.md](CHARACTER_SHEETS_PLAN.md).
+Explicit screenshot paste uses the same bounded local OCR import; the app never
+polls the clipboard. Older release validation remains recorded below.
+
+
 ## Scope, authorization and release boundary
 
 The owner requested two new app tabs, optional screen reading, a local working
