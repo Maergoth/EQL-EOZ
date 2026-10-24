@@ -47,6 +47,7 @@ async function run({root,temporary,screenshots}){
     const diagnostic=()=>execute(()=>({flow:window.fixture?.flow(),state:window.fixture?.state,metadata:window.fixture?.model().metadata,candidates:window.fixture?.model().candidates.map(c=>({id:c.id,name:c.name,slots:c.slots,stats:c.observedStats})),notices:window.fixture?.notices.slice(-4),status:document.querySelector('[data-walkthrough-status]')?.textContent,dialog:document.querySelector('.character-share-dialog')?.open,pointer:window.fixture?.pointerEvents})).catch(()=>null);
     const until=async(fn,label)=>{const end=Date.now()+8000;while(Date.now()<end){if(await fn())return;await new Promise(done=>setTimeout(done,25));}throw Error(`Timed out: ${label}; synthetic state=${JSON.stringify(await diagnostic())}; renderer=${JSON.stringify(errors)}`);};
     const click=selector=>execute(selector=>{const node=document.querySelector(selector);if(!node)throw Error(`Missing ${selector}`);node.click();},selector);
+    const editCapturedValues=()=>execute(()=>{const details=[...document.querySelectorAll('[data-character-editor] details')].find(node=>node.querySelector(':scope > summary')?.textContent.includes('Edit captured values'));if(details&&!details.open)details.querySelector(':scope > summary').click();});
     const step=name=>until(()=>execute(name=>fixture.flow().step===name,name),`walkthrough ${name}`);
     const model=()=>execute(()=>fixture.model());
     const observe=(kind,fields,patch={})=>execute((kind,fields,patch)=>fixture.observe(kind,fields,patch),kind,fields,patch);
@@ -83,7 +84,8 @@ async function run({root,temporary,screenshots}){
                 stop:async value=>{stops.push(value);emit({enabled:false,phase:'disabled',owner:null,sessionId:'',source:null,hasPreview:false,resumable:false});return state;},
                 resume:async()=>{resumes.push(true);emit({phase:'running',resumable:false,error:null,readWarning:null,generation:state.generation+1,generationStartedAt:Date.now()});return state;}};
             const share={savePng:async value=>{saveCalls.push({png:value.startsWith('data:image/png;base64,'),length:value.length});return{ok:fixture.saveSucceeds};},copyPng:async value=>{copyCalls.push({png:value.startsWith('data:image/png;base64,'),length:value.length});return{ok:true};}};
-            const mount=()=>mountCaptureWorkspace({capture:api,wiki:null,share,notify:value=>notices.push(value),getPack:()=>({items:[],icons:{}})});
+            const catalog=[['Synthetic Trail Boots',['FEET']],['Synthetic Trial Boots',['FEET']],['Synthetic Universal Sigil',['ANY']],['Synthetic Spare Cap',['HEAD']],['Synthetic Brief Hover Bracer',['WRIST']],['Synthetic Brief Gloves',['HANDS']],['Synthetic Brief Hover Gloves',['HANDS']],['Synthetic Slots-phase Tooltip',['PRIMARY']],['Synthetic Pending ANY',['ANY']],['Synthetic Recovered Ring',['FINGER']],['Synthetic Review-phase Tooltip',['WAIST']],['Synthetic Review Screenshot',['EAR']]].map(([name,slots])=>({name,wikiTitle:name,slots,stats:{}}));
+            const mount=()=>mountCaptureWorkspace({capture:api,wiki:null,share,notify:value=>notices.push(value),getPack:()=>({items:catalog,icons:{}})});
             window.fixture={source,starts,stops,resumes,notices,saveCalls,copyCalls,reads,sourcesCalls,imports,emit,observe,model,flow,mount,saveSucceeds:false,get state(){return state;},get firstFrameAt(){return firstFrameAt;}};
             fixture.workspace=mount();
         });
@@ -107,22 +109,25 @@ async function run({root,temporary,screenshots}){
         assert.equal(current.equipment.feet,bootsId,'Unambiguous Feet are assigned automatically');
         assert(!Object.values(current.equipment).includes(anyId),'ANY awaits the user choice');
         assert.equal(current.equipment.head,removedId);
+        assert.equal(await execute(id=>Boolean(document.querySelector(`[data-loose-inventory] [data-character-card="${id}"]`)),bootsId),false,'Equipped physical cards do not remain in loose inventory');
+        assert.equal(await execute(id=>document.querySelector('[data-equipped-card="feet"]')?.dataset.editCard===id,bootsId),true,'The equipment board opens the exact equipped physical card');
         await execute(()=>fixture.emit({reading:true,queuedFrames:2}));assert.match(await execute(()=>document.querySelector('[data-walkthrough-reading]').textContent),/Reading.*2 waiting.*Wait for each item card/);
         if(screenshots){const bounds=window.getBounds();window.setContentSize(1280,1000);await snapshot('character-tooltip-capture.png',{selector:'[data-walkthrough-stage]'});window.setBounds(bounds);}
         await execute(()=>fixture.emit({reading:false,queuedFrames:0,lastReadAt:Date.now(),lastReadItemCount:0}));assert.match(await execute(()=>document.querySelector('[data-walkthrough-reading]').textContent),/last frame had no readable item tooltip/);
         assert.equal(await execute(()=>document.querySelector('[data-calculated-stat="HP"]').cells[2].textContent),'56 *','Only assigned gear contributes to the gear total');
-        const x=await execute(id=>{const b=document.querySelector(`[data-inventory-remove="${id}"]`),r=b.getBoundingClientRect(),p=b.closest('.character-item-wrap').getBoundingClientRect();return{label:b.getAttribute('aria-label'),right:p.right-r.right,top:r.top-p.top,width:r.width,height:r.height};},removedId);
-        assert.match(x.label,/Remove Synthetic Spare Cap/);assert(x.width>=20&&x.height>=20&&x.top>=0&&x.top<16&&x.right>=0&&x.right<16,`Inventory X is a visible top-right action: ${JSON.stringify(x)}`);
+        await click(`[data-equipped-card="head"][data-edit-card="${removedId}"]`);await editCapturedValues();
+        const x=await execute(()=>{const b=document.querySelector('[data-remove-card]'),r=b.getBoundingClientRect();return{label:b.getAttribute('aria-label')||b.textContent,width:r.width,height:r.height};});
+        assert.match(x.label,/Remove/i);assert(x.width>=20&&x.height>=20,`The selected-card remove action remains visible: ${JSON.stringify(x)}`);
         // A hidden Chromium compositor can retain the pre-scroll hit-test
         // surface even when getBoundingClientRect/elementFromPoint are current.
         // Show without activation, commit the scrolled frame, then prove that
         // trusted pointer input reaches this exact action before pressing it.
         window.showInactive();
         try{
-            await execute(id=>{document.querySelector(`[data-inventory-remove="${id}"]`).scrollIntoView({block:'center',behavior:'instant'});fixture.pointerEvents=[];for(const type of ['mousemove','mousedown','mouseup','click'])document.addEventListener(type,event=>{if(fixture.pointerEvents.length<20)fixture.pointerEvents.push({type,trusted:event.isTrusted,id:event.target.closest('button')?.dataset.inventoryRemove||'',x:event.clientX,y:event.clientY});},true);},removedId);
+            await execute(id=>{document.querySelector('[data-remove-card]').scrollIntoView({block:'center',behavior:'instant'});fixture.removalTarget=id;fixture.pointerEvents=[];for(const type of ['mousemove','mousedown','mouseup','click'])document.addEventListener(type,event=>{if(fixture.pointerEvents.length<20)fixture.pointerEvents.push({type,trusted:event.isTrusted,id:event.target.closest('button')?.dataset.inventoryRemove||(event.target.closest('[data-remove-card]')?fixture.removalTarget:''),x:event.clientX,y:event.clientY});},true);},removedId);
             await execute(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
             window.webContents.invalidate();await window.capturePage();
-            const hit=await execute(id=>{const button=document.querySelector(`[data-inventory-remove="${id}"]`),rect=button.getBoundingClientRect(),x=Math.round(rect.x+rect.width/2),y=Math.round(rect.y+rect.height/2);return{x,y,exposed:document.elementFromPoint(x,y)?.closest('button')===button};},removedId);
+            const hit=await execute(()=>{const button=document.querySelector('[data-remove-card]'),rect=button.getBoundingClientRect(),x=Math.round(rect.x+rect.width/2),y=Math.round(rect.y+rect.height/2);return{x,y,exposed:document.elementFromPoint(x,y)?.closest('button')===button};});
             assert.equal(hit.exposed,true,'The remove action is not covered by the item card');
             window.webContents.sendInputEvent({type:'mouseMove',x:hit.x,y:hit.y});
             await until(()=>execute(id=>fixture.pointerEvents.some(event=>event.type==='mousemove'&&event.trusted&&event.id===id),removedId),'trusted native move reaches the committed remove hit target');
@@ -186,7 +191,7 @@ async function run({root,temporary,screenshots}){
         current=await model();assert.equal(current.candidates.length,originalCount,'Re-equipped same physical item merges into its card');
         assert(current.candidates.find(c=>c.id===bootsId).seenCount>1,'The existing physical card receives the new evidence');
         assert.equal(current.equipment.feet,bootsId);
-        await click(`[data-character-inventory] [data-edit-card="${bootsId}"]`);
+        await click(`[data-equipped-card="feet"][data-edit-card="${bootsId}"]`);await editCapturedValues();
         await execute(()=>{const raw=document.querySelector('.character-card-editor').elements.rawStatBlock;raw.focus();raw.value=raw.value.replace('Haste: 12%','Haste: 16%')+'\nUnsaved review note: keep this text';raw.dispatchEvent(new Event('input',{bubbles:true}));fixture.focusedRaw=raw;fixture.unsavedRaw=raw.value;});
         await observe('item',{...boots,hp:41,sta:4,rawStatBlock:'Feet\nTier: 2\nHP: 41\nSTR: 9\nSTA: 4\nHaste: 12%\nWorn Effect: Trail Sense'});
         const concurrent=(await model()).candidates.find(c=>c.id===bootsId);
@@ -197,7 +202,7 @@ async function run({root,temporary,screenshots}){
         current=await model();
         const focusedCaptureId=current.candidates.find(c=>c.name==='Synthetic Brief Gloves').id;
         assert.equal(current.equipment.hands,focusedCaptureId);
-        assert.equal(await execute(id=>Boolean(document.querySelector(`[data-character-inventory] [data-edit-card="${id}"]`)),focusedCaptureId),true,'A fresh card appears while another item editor retains focus');
+        assert.equal(await execute(id=>document.querySelector('[data-equipped-card="hands"]')?.dataset.editCard===id,focusedCaptureId),true,'A fresh known card appears in its equipment slot while another editor retains focus');
         assert.equal(await execute(()=>document.querySelector('[data-calculated-stat="HP"]').cells[2].textContent),'46 *','Assigned gear totals update while the raw editor is protected');
         assert.equal(await execute(()=>document.querySelector('.character-card-editor').elements.rawStatBlock===fixture.focusedRaw&&document.activeElement===fixture.focusedRaw&&fixture.focusedRaw.value===fixture.unsavedRaw),true,'Live intake preserves the focused raw textarea and every unsaved character');
         await execute(()=>document.querySelector('.character-card-editor').requestSubmit());
@@ -206,8 +211,9 @@ async function run({root,temporary,screenshots}){
         assert.equal(corrected.observedStats.HASTE,16,'Saving the deliberate Haste text change applies that correction');
         assert.equal(corrected.observedStats.STA,4,'Saving an older form must retain a newly recovered same-card field');
         assert.equal(corrected.observedStats.HP,41,'An unchanged old raw/numeric value cannot overwrite a newer same-card observation');
-        await click(`[data-inventory-remove="${focusedCaptureId}"]`);
+        await click(`[data-equipped-card="hands"][data-edit-card="${focusedCaptureId}"]`);await editCapturedValues();await click('[data-remove-card]');
         assert.equal((await model()).candidates.length,originalCount);
+        await click(`[data-equipped-card="feet"][data-edit-card="${bootsId}"]`);await editCapturedValues();
         await execute(()=>{const form=document.querySelector('.character-card-editor'),raw=form.elements.rawStatBlock;raw.value=raw.value.replace('Haste: 12%','Haste: 16%')+'\nUnrecognized inscription: ?';form.requestSubmit();});
         current=await model();assert.equal(current.candidates.find(c=>c.id===bootsId).observedStats.HASTE,16,'Raw written Haste is reparsed on Save item');
         assert.match(current.candidates.find(c=>c.id===bootsId).rawStatBlock,/Unrecognized inscription: \?/,'Unparsed written text remains available for manual recovery');
@@ -278,6 +284,8 @@ async function run({root,temporary,screenshots}){
         current=await model();assert.equal(current.equipment.charm,anyId);assert.equal(current.statSnapshots.equipped,null,'No equipped capture is needed');
         assert.equal(await execute(()=>document.querySelector('[data-calculated-stat="HP"]').cells[3].textContent),'657 *','Equipped HP uses reviewed base plus gear');
         for(const [key,value]of Object.entries({AC_MITIGATION:61,AC_MITIGATION_SOFTCAP:43,AC_EVASION:127,ATK_OFFENSE:46,ATK_ACCURACY:107}))assert.deepEqual(await execute(key=>[...document.querySelector(`[data-calculated-stat="${key}"]`).cells].slice(1).map(c=>c.textContent),key),[String(value),'—','Unknown'],`${key} stays a distinct observation without an invented equipped formula`);
+        const resourceLabels=await execute(()=>[...[...document.querySelectorAll('[data-character-stat-summary] section')].find(section=>section.querySelector('h4')?.textContent==='Resources').querySelectorAll('dt')].map(label=>label.textContent));assert.equal(resourceLabels.length,3,'The compact summary has exactly one row per resource');assert.equal(new Set(resourceLabels).size,3);
+        await snapshot('character-inventory.png',{selector:'[data-character-identity]'});
         await snapshot('character-walkthrough-review.png');
         await snapshot('character-walkthrough-review-20px.png',{font:20});
         await snapshot('character-equipped-estimates.png',{font:13,selector:'.character-stats'});
@@ -299,6 +307,30 @@ async function run({root,temporary,screenshots}){
         await click('[data-walkthrough-new]');await step('details');
         await execute(()=>document.querySelector('[data-character-metadata]').requestSubmit());await step('source');
         await click('[data-walkthrough-start-source]');await step('unequip');
+        // Identity matching may correct OCR spelling, but never supplies stats
+        // or permits an unresolved item to contribute to equipped totals.
+        await click(`[data-loose-inventory] [data-edit-card="${bootsId}"]`);await click('[data-slot-id="feet"] [data-equip-slot]');assert.equal((await model()).equipment.feet,bootsId,'The second walkthrough explicitly equips an existing known card before the occupied-slot check');
+        const gearHp=()=>execute(()=>Number(document.querySelector('[data-calculated-stat="HP"]').cells[2].textContent.match(/-?\d+/)?.[0]));
+        const beforeUnknownHp=await gearHp();
+        const mystery={name:'Synthetic Uncatalogued Mystery',slots:['Head'],tier:2,hp:9000,rawStatBlock:'Head\nHP: 9000\nUncatalogued inscription: keep this'};
+        const fuzzy={name:'Synthetic Tral Boots +2',slots:['Feet'],tier:2,fraction:0,hp:91,str:7,rawStatBlock:'Feet\nHP: 91\nSTR: 7\nUnparsed inscription: preserve me'};
+        await observe('item',mystery);await observe('item',fuzzy);
+        const unknownCards=(await model()).candidates,mysteryId=unknownCards.find(card=>card.name===mystery.name).id,fuzzyId=unknownCards.find(card=>card.observedName===fuzzy.name).id;
+        for(const id of [mysteryId,fuzzyId]){assert(!Object.values((await model()).equipment).includes(id));assert.equal(await execute(id=>{const card=document.querySelector(`[data-loose-inventory] [data-character-card="${id}"]`);return card?.classList.contains('is-unmatched')&&Boolean(card.querySelector('[data-item-unmatched]'));},id),true);}
+        assert.equal(await gearHp(),beforeUnknownHp,'Unknown and fuzzy-unreviewed items cannot increase equipment stats');
+        assert.equal(await execute(id=>document.querySelector(`[data-character-card="${id}"]`).querySelectorAll('[data-item-tier]').length,fuzzyId),1,'A captured tier suffix does not produce a second tier badge');
+        await click(`[data-loose-inventory] [data-edit-card="${fuzzyId}"]`);assert.equal(await execute(id=>document.querySelector('[data-item-match-picker]')?.dataset.itemMatchPicker===id,fuzzyId),true);
+        await execute(()=>{const query=document.querySelector('[data-item-match-query]');query.value='trail boots';query.dispatchEvent(new Event('input',{bubbles:true}));});await until(()=>execute(()=>[...document.querySelectorAll('[data-item-match-select]')].some(button=>button.textContent.includes('Synthetic Trail Boots'))),'flexible existing-item picker');
+        await snapshot('character-unmatched-match.png',{selector:'[data-loose-inventory]'});
+        const observedBeforeMatch=(await model()).candidates.find(card=>card.id===fuzzyId);await execute(()=>[...document.querySelectorAll('[data-item-match-select]')].find(button=>button.textContent.includes('Synthetic Trail Boots')).click());
+        const matched=(await model()).candidates.find(card=>card.id===fuzzyId);assert.equal(matched.name,'Synthetic Trail Boots');assert.equal(matched.observedName,fuzzy.name);assert.deepEqual(matched.observedStats,observedBeforeMatch.observedStats);assert.equal(matched.rawStatBlock,fuzzy.rawStatBlock);assert.deepEqual(matched.evidence,observedBeforeMatch.evidence,'Canonicalizing identity preserves the original capture evidence');
+        assert.equal((await model()).equipment.feet,bootsId,'Matching does not silently replace an occupied slot');
+        await click(`[data-equipped-card="feet"][data-edit-card="${bootsId}"]`);await click('[data-card-unequip]');assert.equal(await execute(id=>document.querySelectorAll(`[data-loose-inventory] [data-character-card="${id}"]`).length,bootsId),1);
+        const withoutBootsHp=await gearHp();await click(`[data-loose-inventory] [data-edit-card="${fuzzyId}"]`);await click('[data-slot-id="feet"] [data-equip-slot]');assert.equal((await model()).equipment.feet,fuzzyId);assert.equal(await gearHp(),withoutBootsHp+91,'Clicking the empty slot equips the selected known item and immediately updates totals');
+        assert.equal(await execute(id=>Boolean(document.querySelector(`[data-loose-inventory] [data-character-card="${id}"]`)),fuzzyId),false);await click(`[data-equipped-card="feet"][data-edit-card="${fuzzyId}"]`);await click('[data-card-unequip]');assert.equal(await gearHp(),withoutBootsHp);assert.equal(await execute(id=>document.querySelectorAll(`[data-loose-inventory] [data-character-card="${id}"]`).length,fuzzyId),1,'Unequip restores the same physical item without duplication');
+        const beforeLegacyHp=await gearHp();await execute(id=>{fixture.workspace.dispose();const legacy=fixture.model();legacy.equipment.head=id;const card=legacy.candidates.find(card=>card.id===id);card.wikiTitle=card.name;card.wikiMatch='confirmed';delete card.catalogIdentity;localStorage.setItem('eql-eye-of-zomm-character-v1',JSON.stringify(legacy));fixture.workspace=fixture.mount();},mysteryId);await step('unequip');assert.equal((await model()).equipment.head,undefined,'A legacy typed wiki match cannot restore an unknown item into equipment');assert.equal(await gearHp(),beforeLegacyHp,'Legacy unknown gear is excluded from computed totals after real remount');assert.equal(await execute(id=>Boolean(document.querySelector(`[data-loose-inventory] [data-character-card="${id}"] [data-item-unmatched]`)),mysteryId),true);
+        const persistedMatched=(await model()).candidates.find(card=>card.id===fuzzyId);assert.equal(persistedMatched.name,'Synthetic Trail Boots');assert.equal(persistedMatched.observedName,fuzzy.name);assert.equal((await model()).metadata.aaCount,123);assert.match(await execute(()=>document.querySelector('[data-character-identity]').textContent),/Synthetic Pathfinder/);
+        await snapshot('character-compact-inventory-1024.png',{selector:'[data-character-slots]'});await snapshot('character-compact-inventory-1024-20px.png',{font:20,selector:'[data-character-slots]'});
         await click('[data-walkthrough-next]');await step('base');
         const copyGate=await execute(()=>fixture.flow());
         await observe('character',{hp:620,str:76},{capturedAt:new Date(copyGate.baseAfterAt+1).toISOString(),sequence:copyGate.baseAfterSequence+1});

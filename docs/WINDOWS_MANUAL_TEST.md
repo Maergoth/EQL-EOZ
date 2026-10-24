@@ -1,8 +1,24 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.3-x64.exe`.
+## 0.9.4 Character inventory
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.3` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
+1. Use Default Modern. Unequip slowly, one item at a time, keeping the complete
+   tooltip visible until its card appears. Verify one tier label, known-item
+   automatic placement and retained original observed text in item review.
+2. Review an uncertain name. Unmatched items must remain loose, with red glow
+   and yellow !; they cannot equip by dragging, slot selection or ANY review.
+   Choose a potential match and check the original stats/tier remain intact.
+3. Equip, replace and unequip separate physical copies. Equipped IDs must leave
+   loose inventory and return once on unequip. Check identity, level, classes,
+   AA count and dynamic estimates, then reload the saved snapshot.
+4. Hover/focus icons and select them for details at compact width and 10–20px.
+   No class artwork is invented; text initials are the fallback. Validate actual
+   game throughput separately from synthetic native walkthrough checks.
+
+
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.4-x64.exe`.
+
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.4` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
 
 ## 0.9.3 live item recovery
 

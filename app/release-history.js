@@ -2,6 +2,39 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
   {
+    "version": "0.9.4",
+    "title": "A compact Character inventory with wiki matching",
+    "changes": [
+      "Use a compact icon inventory with identity, level, classes, AA count and live equipped estimates beside all 23 equipment slots. Hover or select an item for its stat block.",
+      "Show each tier once. Resolve unique bounded OCR spelling errors against the cached wiki catalog; exact names take priority and ambiguous matches need your choice. Keep original observed text and stats.",
+      "Keep unmatched reads in loose inventory with a red glow and yellow warning until you choose a wiki match. Only known items can equip, including restored snapshots.",
+      "Equipped physical items leave loose inventory and return on unequip. Separate copies, manual corrections and original evidence remain intact.",
+      "Unequip slowly, one item at a time, keeping the complete Default Modern tooltip visible until its card appears. Reading continues through review; No Equipment still requires a fresh baseline."
+    ],
+    "steps": [
+      {
+        "title": "Arrange gear in a compact Character inventory",
+        "image": "0.9.4/character-inventory",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Your identity, level, classes and AA count sit beside equipped stat estimates and 23 compact slots. Drag an inventory item to a slot, or select it and choose an empty slot. Equipped items leave loose inventory; Unequip returns that same physical card. Hover or select an icon for its stats. Unequip slowly and wait for each complete tooltip to produce a card before moving on.",
+        "alt": "Compact Character sheet with synthetic identity, equipped estimates, 23 icon slots and a separate loose inventory.",
+        "caption": "Actual Character component at 20 px with a disposable synthetic profile. Equipment placement, loose-card identity, estimates and reload persistence are exercised by the native walkthrough; no game or player pixels.",
+        "imageSha256": "a337db29601a4738f9348fe9e8e62a6eb9d0561223b91187721e567296344f67"
+      },
+      {
+        "title": "Match uncertain reads before equipping",
+        "image": "0.9.4/character-unmatched-match",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "A yellow ! and red glow mark a read that needs a cached wiki identity. Select it to review potential matches or search by name, then choose Use match. Your captured statistics, tier and original text stay intact. Unique bounded OCR errors can resolve automatically; ties need a choice. An unmatched cache entry does not prove an item is absent from the live wiki.",
+        "alt": "Loose inventory with highlighted unmatched items and an open wiki-match search for a synthetic item.",
+        "caption": "Actual Character component with synthetic ambiguous names. The native fixture confirms matching preserves observed values and evidence and does not silently equip the item; no production wiki writes.",
+        "imageSha256": "60b2ea67fcb2a82b68d3627432670a8ed3dcd61626faa5cecb1b5443d01cf2b2"
+      }
+    ]
+  },
+  {
     "version": "0.9.3",
     "title": "Keep reading items through Character review",
     "changes": [

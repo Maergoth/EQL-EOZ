@@ -1,5 +1,12 @@
 # Eye of Zomm contributor handoff
 
+The **0.9.4 inventory follow-up** adds a compact Character sheet, strict known-item
+equipment, bounded catalog spelling recovery, a fuzzy-match picker and disjoint
+loose/equipped physical cards. See [the durable plan](CHARACTER_INVENTORY_REVIEW.md)
+for scope, ownership and release acceptance. Original OCR evidence and manual
+corrections remain distinct from canonical item identity.
+
+
 The **0.9.3 follow-up** addresses real 4K capture and items rejected during
 Slots/Review while reading remained active. [The recovery plan](LIVE_CAPTURE_RECOVERY.md)
 records actual source evidence, private diagnostics, ownership and acceptance.
@@ -43,7 +50,7 @@ local log parser and versioned release; application validation runs in GitHub CI
 3. Run the automated gates in [VALIDATION.md](../VALIDATION.md), then use the [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md) for proprietary archives the repository cannot contain.
 4. Check [CHANGELOG.md](../CHANGELOG.md) for the current code version and [SAFETY.md](../SAFETY.md) before changing any game-facing data flow.
 
-Current code baseline: **0.9.1**, based on released 0.9.0. Four independent native windows provide Parse, Map, Zone & loot and Triggers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
+Current code baseline: **0.9.4**, extending released 0.9.3. Four independent native windows provide Parse, Map, Zone & loot and Triggers. Intel lists Raid Zone before Normal Zone, preserves class filters and expands every matching drop through Show More. Its item-level/class controls stay anchored above scrolling mobs; per-mob actions appear on hover/focus. Named considers/kills select and expand Intel with a mild flash/blip, without activating the window. Class-filtered loot excludes statless and weight-only items. Minimal mode and the separate Consider window are retired. Items use cumulative Through era choices present in the dataset.
 
 [Overlay workspace follow-up](OVERLAY_MAP_WORKSPACE.md) is the 0.8.5 continuation
 index. Native Map has a collapsing control header and Map/Top/First cycle;
@@ -157,6 +164,14 @@ Elitist/Carebear remain excluded.
 
 ## Runtime architecture
 
+Character's compact rendering lives in [`app/character-inventory-view.js`](../app/character-inventory-view.js).
+[`app/capture-workspace.js`](../app/capture-workspace.js) owns its UI events and
+walkthrough integration; [`app/character-model.js`](../app/character-model.js)
+owns physical cards, catalog identity, equipment and calculated totals.
+[`app/character-catalog.js`](../app/character-catalog.js) resolves exact and
+bounded fuzzy identities from the cached pack. See the
+[Character design](design/CHARACTER_CAPTURE.md) for persistence and evidence boundaries.
+
 The desktop process in [`desktop/main.cjs`](../desktop/main.cjs) owns the selected EverQuest root, safe loopback file bridge, log selection, cached dataset, and Electron window. [`app/app.js`](../app/app.js) consumes that bridge, parses appended log text with [`app/parser.js`](../app/parser.js), derives the session UI, and coordinates the embedded viewer.
 
 [`app/coordinate-system.js`](../app/coordinate-system.js) is the authoritative boundary: log/wiki `(Y,X,Z)` → world `(X,Y,Z)`; client map `(-X,-Y,Z)` and world/WLD both meet in viewer `(-Y,Z,X)`. Visible coordinate text converts canonical world positions back to `/loc (Y,X,Z)` and must never expose internal axis labels. The embedded wrapper in [`app/zoneviewer/viewer.html`](../app/zoneviewer/viewer.html) applies those named adapters. The upstream-derived viewer implementation stays under [`app/zoneviewer/`](../app/zoneviewer/). Movement constraints live in [`app/navigation-policy.js`](../app/navigation-policy.js); pure turn/distance behavior lives in [`app/route-guidance.js`](../app/route-guidance.js).
@@ -194,6 +209,13 @@ The app is read-only with respect to EverQuest. It may consume `/loc` lines prod
 - EQEmu's deprecated but directly relevant [azone2 WLD exporter](https://github.com/EQEmu/EQEmu/blob/master/utils/deprecated/azone2/wld.cpp) assigns each material group's `polycount` to the next sequential polygons. That is corroborating evidence for the skipped-material cursor repair, not a replacement for proprietary client rendering tests.
 
 ## Exact next work
+
+Complete the final 0.9.4 source and full-app fixture checks, then require the
+reviewed head's Windows/Linux native/package gates before merge. Verify the
+published installer, AppImage and deb against that source, archived images,
+offline OCR inventory and one fresh shared bootstrap. Record actual run IDs
+and public-download results in the release PR and private publication ledger;
+do not infer an installed upgrade from successful publication.
 
 For native overlays, use the source map in [PNUT_UX_PLAN.md](PNUT_UX_PLAN.md) and
 repeat `npm run test:native-overlays` against the current runtime. Complete

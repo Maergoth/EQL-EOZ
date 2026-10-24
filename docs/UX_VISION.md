@@ -1,5 +1,10 @@
 # Eye of Zomm — Product and UX Vision
 
+The 0.9.4 Character inventory follows [the current execution plan](CHARACTER_INVENTORY_REVIEW.md):
+compact equipment icons, identity and live stat estimates, loose physical items,
+bounded catalog name recovery and explicit review before unknown gear can equip.
+
+
 The 0.8.9 desktop follow-up adds installed system fonts, a one-time upgrade
 cache repair, green item-level values, a complete Live Map loot pane, browsable
 release screenshots, a five-second Windows restart countdown and an opt-in swing
@@ -7,7 +12,7 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 [release history](RELEASE_HISTORY.md) and [validation](../VALIDATION.md).
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.9.3, extending released 0.9.2
+Baseline: 0.9.4, extending released 0.9.3
 Last updated: 2026-10-23
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.4 - A compact Character inventory with wiki matching
+
+- Use a compact icon inventory with identity, level, classes, AA count and live equipped estimates beside all 23 equipment slots. Hover or select an item for its stat block.
+- Show each tier once. Resolve unique bounded OCR spelling errors against the cached wiki catalog; exact names take priority and ambiguous matches need your choice. Keep original observed text and stats.
+- Keep unmatched reads in loose inventory with a red glow and yellow warning until you choose a wiki match. Only known items can equip, including restored snapshots.
+- Equipped physical items leave loose inventory and return on unequip. Separate copies, manual corrections and original evidence remain intact.
+- Unequip slowly, one item at a time, keeping the complete Default Modern tooltip visible until its card appears. Reading continues through review; No Equipment still requires a fresh baseline.
+
 ## 0.9.3 - Keep reading items through Character review
 
 - Continue item capture during Confirm slots and Save snapshot until walkthrough completion or cancellation. Keep fresh No Equipment baseline and source/session/generation checks.

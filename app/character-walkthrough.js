@@ -1,3 +1,5 @@
+import {characterBaseItemName} from './character-model.js';
+
 export const CHARACTER_WALKTHROUGH_KEY='eql-eye-of-zomm-character-walkthrough-v1';
 export const CHARACTER_WALKTHROUGH_STEPS=Object.freeze(['details','source','unequip','base','reequip','slots','review','complete']);
 export const CHARACTER_ITEM_READ_STEPS=Object.freeze(['unequip','reequip','slots','review']);
@@ -7,7 +9,7 @@ const finiteTime=value=>typeof value==='number'&&Number.isFinite(value)&&value>=
 const ITEM_STEPS=new Set(CHARACTER_ITEM_READ_STEPS),MAX_ITEM_WINDOWS=32;
 const generation=value=>Number.isSafeInteger(value)&&value>=0?value:null;
 function itemIdentity(item={}){
-    return {name:bounded(item.name).normalize('NFKC').toLocaleLowerCase(),tier:Number.isInteger(item.tier)?item.tier:null,
+    return {name:characterBaseItemName(item.name).normalize('NFKC').toLocaleLowerCase(),tier:Number.isInteger(item.tier)?item.tier:null,
         fraction:Number.isInteger(item.fraction)?item.fraction:null,augments:(Array.isArray(item.augments)?item.augments:[]).slice(0,8).map(a=>bounded(a?.name||a,120).toLocaleLowerCase()).sort()};
 }
 const matches=(a,b)=>a.name&&a.name===b.name&&['tier','fraction'].every(k=>a[k]===null||b[k]===null||a[k]===b[k])&&(!a.augments.length||!b.augments.length||JSON.stringify(a.augments)===JSON.stringify(b.augments));

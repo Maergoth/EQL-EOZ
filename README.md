@@ -4,18 +4,22 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.3 keeps reading missing items through Character slot confirmation and
-snapshot review.** Capture ends when you finish or cancel the walkthrough.
-Default Modern tooltip panes are automatically cropped and enlarged for offline
-reading; their changes take priority over animated scenery.
-Keep each complete tooltip visible until its card appears; review uncertain
-names and statistics before saving. See the
-[live capture recovery plan](docs/LIVE_CAPTURE_RECOVERY.md),
-[tooltip capture plan](docs/TOOLTIP_CAPTURE.md) and
-[guided walkthrough](docs/CHARACTER_WALKTHROUGH.md) for implementation and check
-scope. The existing reviewed wiki contribution workflow is retained.
+**0.9.4 gives Character a compact MMO inventory.** Identity and equipped
+estimates sit beside 23 icon slots; equipped physical items leave loose
+inventory. Bounded OCR spelling corrections use the cached wiki catalog, and
+unmatched reads stay highlighted until you choose a match. Item tiers display
+once while original observations remain available for review.
 
-![Character slot confirmation continues reading missing items, shown with synthetic equipment](app/assets/whats-new/0.9.3/character-slots-live-reading.png)
+Unequip slowly, one item at a time. Keep each complete Default Modern tooltip
+visible until its card appears. Reading continues through slot and snapshot
+review; capture ends when you finish or cancel. See the
+[inventory review plan](docs/CHARACTER_INVENTORY_REVIEW.md),
+[live capture recovery plan](docs/LIVE_CAPTURE_RECOVERY.md) and
+[guided walkthrough](docs/CHARACTER_WALKTHROUGH.md).
+
+![Compact Character inventory with synthetic identity, equipped estimates and icon slots](app/assets/whats-new/0.9.4/character-inventory.png)
+
+![Unmatched synthetic items with a warning and selectable wiki matches](app/assets/whats-new/0.9.4/character-unmatched-match.png)
 
 In **Settings → Screen reading**, start an explicitly selected source. Optionally use
 **Calibrate OCR area** to draw around a complete examine or Inventory/stat pane.
@@ -45,7 +49,7 @@ On Linux, make the AppImage executable and launch it, or install the deb using y
 
 ## A look around
 
-The tooltip-reading image shows the actual **0.9.2 Character component with synthetic records and capture status**; other guided Character images show 0.9.1. Capture and contribution images show 0.9.0 with a loopback-only wiki; font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
+The inventory images show the actual **0.9.4 Character component with synthetic records**. The tooltip-reading image shows the actual **0.9.2 Character component with synthetic records and capture status**; other guided Character images show 0.9.1. Capture and contribution images show 0.9.0 with a loopback-only wiki; font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
 
 ### A normal desktop workspace
 

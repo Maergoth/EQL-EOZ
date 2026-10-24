@@ -38,6 +38,8 @@ flow.editBase(' '.repeat(12001));assert.equal(flow.snapshot().baseDraft.length,1
 let aliasSaved='';const aliasStorage={getItem:()=>aliasSaved,setItem:(_key,value)=>aliasSaved=value};
 const aliases=createCharacterWalkthrough({storage:aliasStorage,id:()=> 'synthetic-aliases'});aliases.begin();
 aliases.rememberItem({id:'copy-a',name:'Synthetic OCR Rlng',tier:2,fraction:0});
+assert.equal(aliases.findItem({name:'Synthetic OCR Rlng +2 +2',tier:2,fraction:0}),'copy-a','Repeated tier display decorations do not create another physical identity');
+assert.equal(aliases.findItem({name:'Synthetic OCR Rlng +2',tier:3,fraction:0}),null,'Stripping name decoration never conflates explicit tiers');
 aliases.rememberItem({id:'copy-a',name:'Synthetic corrected Ring',tier:3,fraction:2});
 assert.equal(aliases.findItem({name:'Synthetic OCR Rlng',tier:2,fraction:0}),'copy-a','A corrected name/tier retains the original capture identity');
 assert.equal(aliases.findItem({name:'Synthetic corrected Ring',tier:3,fraction:2}),'copy-a');

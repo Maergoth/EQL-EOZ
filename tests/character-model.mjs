@@ -1,17 +1,61 @@
 import assert from 'node:assert/strict';
-import { CHARACTER_SLOTS, CHARACTER_LIMITS, CHARACTER_STORAGE_KEY, createCharacterModel, characterAutoAssignment, characterItemStats, characterObservationInput, characterShareSummary, characterSlotCompatibility, characterStatLabel, normalizeCharacterStats, safeCharacterIcon } from '../app/character-model.js';
+import { CHARACTER_SLOTS, CHARACTER_LIMITS, CHARACTER_STORAGE_KEY, createCharacterModel, characterAutoAssignment, characterBaseItemName, characterEquipmentEligibility, characterLooseCandidates, characterItemStats, characterObservationInput, characterShareSummary, characterSlotCompatibility, characterStatLabel, normalizeCharacterStats, safeCharacterIcon } from '../app/character-model.js';
+import {characterCatalogCard,resolveCharacterCatalog} from '../app/character-catalog.js';
 import { CHARACTER_SHARE_LIMITS, characterShareLayout } from '../app/character-share.js';
 import {parseScreenRead} from '../app/screen-read-parser.js';
 
 const memory=()=>{const data=new Map();return {getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value)};};
 const storage=memory(),model=createCharacterModel({storage,now:()=>12345});
-const item=(name='Synthetic Ring',extra={})=>({id:`observation-${name}`,sessionId:'synthetic-session',source:'synthetic-examine',at:12300,text:'PRIVATE_SYNTHETIC_EVIDENCE',item:{name,slots:['FINGER'],tier:0,stats:{HP:10,STR:2},statsComplete:true,augmentStatus:'none',...extra}});
+// Existing equipment/math fixtures deliberately select a synthetic catalog
+// identity. Unknown manual/OCR cards are tested separately below.
+const item=(name='Synthetic Ring',extra={})=>({id:`observation-${name}`,sessionId:'synthetic-session',source:'synthetic-examine',at:12300,text:'PRIVATE_SYNTHETIC_EVIDENCE',item:{name,wikiTitle:name,catalogIdentity:characterCatalogCard({name}).catalogIdentity,slots:['FINGER'],tier:0,stats:{HP:10,STR:2},statsComplete:true,augmentStatus:'none',...extra}});
 assert.equal(CHARACTER_SLOTS.length,23);
 assert.equal(new Set(CHARACTER_SLOTS.map(slot=>slot.id)).size,23);
 for(const kind of ['EAR','WRIST','FINGER']) assert.equal(CHARACTER_SLOTS.filter(slot=>slot.kind===kind).length,2);
 assert.deepEqual(normalizeCharacterStats({HP:'100',MP:'unknown',STR:Infinity,AC:null,constructor:5}),{HP:100,MP:null,STR:null,AC:null,CONSTRUCTOR:5});
 assert.equal(safeCharacterIcon('https://invalid.test/tracker.png'),'');
 assert.equal(safeCharacterIcon('data:image/svg+xml;base64,PHN2Zz4='),'');
+for(const name of ['Synthetic Needle +5','Synthetic Needle +5 +5','Synthetic Needle+5+5'])assert.equal(characterBaseItemName(name),'Synthetic Needle');
+assert.equal(characterBaseItemName('Synthetic +15'),'Synthetic +15','Only supported trailing tier decorations are removed');
+assert.equal(characterBaseItemName('Synthetic +5 Needle'),'Synthetic +5 Needle','Interior text is not a tier decoration');
+const identityStorage=memory(),identityModel=createCharacterModel({storage:identityStorage,now:()=>12345});
+const unknownReading={id:'unknown-reading',sessionId:'synthetic-identity',source:'ocr',text:'Synthetic raw pane +5',item:{name:'Synthetic Unknown +5 +5',wikiTitle:'Typed title',wikiMatch:'confirmed',slots:['ANY'],tier:5,stats:{HP:37,DMG:null},rawStatBlock:'Synthetic raw pane +5',augmentStatus:'none'}};
+const unknownIdentity=identityModel.intake(unknownReading,{autoAssign:true});
+assert.equal(unknownIdentity.candidate.name,'Synthetic Unknown');assert.equal(unknownIdentity.candidate.observedName,'Synthetic Unknown +5 +5');
+assert.equal(unknownIdentity.assignment.reason,'unknown-catalog');assert.equal(characterEquipmentEligibility(unknownIdentity.candidate).known,false);
+assert.equal(identityModel.assign(unknownIdentity.candidate.id,'head',{replace:true,allowIncompatible:true}).ok,false,'No manual slot override bypasses unknown catalog identity');
+assert.deepEqual(identityModel.snapshot().equipment,{});assert.equal(identityModel.totals().assignedCount,0);
+identityModel.updateCandidate(unknownIdentity.candidate.id,{wikiMatch:'confirmed',wikiTitle:'Synthetic Selected Needle',catalogIdentity:{name:'Synthetic Unknown',wikiTitle:'Synthetic Selected Needle'}});
+assert.equal(identityModel.assign(unknownIdentity.candidate.id,'head').ok,false,'Typed wiki titles/checkboxes cannot forge a catalog selection');
+const identityCatalog={name:'Synthetic Selected Needle',wikiTitle:'Item:Synthetic Selected Needle',slots:['PRIMARY'],stats:{HP:999,STR:222}};
+const beforeIdentity=identityModel.snapshot().candidates[0],resolvedIdentity=identityModel.resolveCatalog(unknownIdentity.candidate.id,identityCatalog,{match:'manual'}).candidate;
+assert.equal(resolvedIdentity.name,identityCatalog.name);assert.equal(resolvedIdentity.observedName,unknownReading.item.name);assert.equal(resolvedIdentity.tier,5);
+for(const key of ['observedStats','rawStatBlock','evidence'])assert.deepEqual(resolvedIdentity[key],beforeIdentity[key],`Catalog identity preserves ${key}`);
+assert.equal(resolvedIdentity.observedStats.HP,37);assert.equal(resolvedIdentity.observedStats.STR,undefined);assert.equal(resolvedIdentity.baseStats.STR,222);
+assert.equal(identityModel.assign(resolvedIdentity.id,'head').ok,true,'Known ANY items still require an explicit placement');
+const physicalCopy=identityModel.duplicateCandidate(resolvedIdentity.id).candidate;
+assert.deepEqual(characterLooseCandidates(identityModel.snapshot()).map(card=>card.id),[physicalCopy.id],'Only the equipped physical ID leaves loose inventory');
+identityModel.unassign('head');assert.equal(characterLooseCandidates(identityModel.snapshot()).length,2,'Unequipping restores the same copy');
+identityModel.assign(resolvedIdentity.id,'head');identityModel.updateCandidate(resolvedIdentity.id,{name:'Synthetic deliberate correction'});
+assert.equal(characterEquipmentEligibility(identityModel.snapshot().candidates[0]).known,false);assert.deepEqual(identityModel.snapshot().equipment,{},'Changing known identity moves the copy back to loose inventory');
+const manualCorrection=identityModel.mergeObservation(resolvedIdentity.id,{...unknownReading,id:'later-original-reading'},{wikiItem:identityCatalog}).candidate;
+assert.equal(manualCorrection.name,'Synthetic deliberate correction','Later OCR cannot replace a deliberate identity correction');assert.equal(manualCorrection.catalogIdentity,null);
+identityModel.resolveCatalog(resolvedIdentity.id,identityCatalog,{match:'manual'});identityModel.assign(resolvedIdentity.id,'head');identityModel.invalidateCatalog(resolvedIdentity.id);
+assert.deepEqual(identityModel.snapshot().equipment,{});assert.equal(characterLooseCandidates(identityModel.snapshot()).length,2);
+const restoredIdentity=createCharacterModel({storage:identityStorage});assert.equal(restoredIdentity.snapshot().candidates.length,2);assert.equal(restoredIdentity.snapshot().candidates[0].observedName,unknownReading.item.name);
+const legacyIdentityStorage=memory(),legacyKnown={id:'legacy-known',name:'Synthetic Selected Needle +5',slots:['PRIMARY'],tier:5,observedStats:{HP:37},evidence:[{observationId:'legacy-evidence',text:'Synthetic private evidence'}]},legacyFuzzy={id:'legacy-fuzzy',name:'Synthetic Selected Needlf +5',slots:['PRIMARY'],wikiTitle:'Typed title',wikiMatch:'confirmed'};
+legacyIdentityStorage.setItem(CHARACTER_STORAGE_KEY,JSON.stringify({schemaVersion:1,candidates:[legacyKnown,legacyFuzzy,{...legacyKnown,id:'legacy-copy'}],equipment:{primary:'legacy-known',head:'legacy-fuzzy',secondary:'legacy-copy'}}));
+const legacyIdentityModel=createCharacterModel({storage:legacyIdentityStorage});assert.deepEqual(legacyIdentityModel.snapshot().equipment,{});
+const identityPack={items:[identityCatalog],meta:{wikiEntitiesComplete:true}};
+legacyIdentityModel.reconcileCatalog(card=>resolveCharacterCatalog(identityPack,card.name));
+assert.deepEqual(legacyIdentityModel.snapshot().equipment,{primary:'legacy-known',secondary:'legacy-copy'},'Only exact legacy matches recover prior placements, without merging physical copies');
+assert.equal(legacyIdentityModel.snapshot().candidates.length,3);assert.equal(characterEquipmentEligibility(legacyIdentityModel.snapshot().candidates.find(card=>card.id==='legacy-fuzzy')).known,false);
+assert.equal(legacyIdentityModel.snapshot().candidates.find(card=>card.id==='legacy-known').observedName,legacyKnown.name);assert.deepEqual(legacyIdentityModel.snapshot().pendingEquipment,{});
+assert.equal(createCharacterModel({storage:legacyIdentityStorage}).totals().assignedCount,2);
+legacyIdentityModel.reconcileCatalog(()=>({status:'unmatched',item:null}));assert.equal(legacyIdentityModel.totals().assignedCount,0,'Removing a current catalog identity cannot leave stale equipped gear');assert.equal(legacyIdentityModel.snapshot().candidates.length,3);
+const conflictingTier=identityModel.intake({id:'synthetic-conflict',item:{name:'Synthetic conflict +4 +5',tier:5}}).candidate;
+assert(characterItemStats(conflictingTier).warnings.some(warning=>warning.includes('written name tier conflicts')),'Conflicting name tiers remain reviewable instead of silently concealed');
+assert.equal(identityModel.intake({item:{name:'New manually typed item'}}).candidate.observedName,'','Typing a manual card never claims screen-read name evidence');
 const adapted=characterObservationInput({subject:{name:'Observed Charm'},fields:[{key:'slots',value:['CHARM']},{key:'tier',value:10},{key:'hp',value:999},{key:'manaMaximum',value:650},{key:'augmentNames',value:['Synthetic Ruby']},{key:'effects',value:'unmeasured'}]});
 assert.deepEqual(adapted.stats,{HP:999,MP_MAXIMUM:650});
 assert.equal(adapted.augments[0].name,'Synthetic Ruby');
@@ -50,7 +94,7 @@ const hoverDamage=parseScreenRead({owner:'character',sessionId:'synthetic-hover-
     hoverWord('Needlefern +3',100,10,300),hoverWord('Lore Equipped, No Trade',100,35,300),hoverWord('Class:',100,60,55),hoverWord('ROG',165,60),hoverWord('Race:',100,85,55),hoverWord('ALL',165,85),hoverWord('Primary',100,110),hoverWord('Secondary',190,110,100),hoverWord('Size:',20,160,50),hoverWord('SMALL',130,160,75),hoverWord('HP:',250,160,40),hoverWord('73',350,160,30),hoverWord('Weight',20,185,70),hoverWord('1.4',150,185,30),hoverWord('Base Dmg:',250,185,100),hoverWord('18',380,185,30),hoverWord('Backstab Dmg:',250,210,130),hoverWord('15',400,210,30),hoverWord('Hold RMB or ALT+LMB to inspect or upgrade item',20,420,520)
 ]})[0];
 assert(hoverDamage);assert.equal(hoverDamage.fields.find(field=>field.key==='damage').value,18);assert.equal(hoverDamage.fields.find(field=>field.key==='backstabDamage').value,15);
-const hoverStorage=memory(),hoverModel=createCharacterModel({storage:hoverStorage}),hoverCard=hoverModel.intake({...hoverDamage,id:'hover-damage-a'}).candidate;
+const hoverStorage=memory(),hoverModel=createCharacterModel({storage:hoverStorage}),hoverCard=hoverModel.intake({...hoverDamage,id:'hover-damage-a'},{wikiItem:{name:'Needlefern',slots:['PRIMARY','SECONDARY']}}).candidate;
 assert.equal(hoverCard.observedStats.DMG,18);assert.equal(hoverCard.observedStats.BACKSTAB_DMG,15);assert.equal(characterStatLabel('BACKSTAB_DMG'),'Backstab dmg');
 hoverModel.assign(hoverCard.id,'primary');hoverModel.setStatSnapshot('base',{stats:{DMG:2,BACKSTAB_DMG:1},confirmed:true});
 const hoverSummary=characterShareSummary(hoverModel.snapshot()),hoverShared=hoverSummary.equipment.find(entry=>entry.slot==='primary').item;
@@ -81,14 +125,15 @@ guided.setStatSnapshot('base',{stats:componentInput.stats,confirmed:true});
 assert.equal(guided.totals().computed.AC_MITIGATION.value,82,'No assigned gear retains the observed baseline');
 const syntheticRaw='Description\nSynthetic Guide Ring\nClass: ALL\nFingers\nHP 17\nUnknown effect: synthetic only';
 const guidedObservation=proposal('guided-ring-a','item',{slots:['Fingers'],hp:17,mana:6,endurance:8,str:3,agi:2,resistFire:4,ac:9,attack:5,haste:12,rawStatBlock:syntheticRaw});
-const guidedA=guided.intake(guidedObservation,{autoAssign:true});
+const guidedCatalog={name:'Synthetic Modern piece',slots:['FINGER']};
+const guidedA=guided.intake(guidedObservation,{autoAssign:true,wikiItem:guidedCatalog});
 assert.equal(guidedA.assignment.slot,'finger1');assert.equal(guidedA.candidate.rawStatBlock,syntheticRaw);
 assert.equal(guidedA.candidate.observedStatsComplete,false,'Auto placement does not certify OCR stats');
 guided.updateCandidate(guidedA.candidate.id,{observedStatsComplete:true,augmentStatus:'included'});
-const guidedB=guided.intake({...guidedObservation,id:'guided-ring-b'},{autoAssign:true});
+const guidedB=guided.intake({...guidedObservation,id:'guided-ring-b'},{autoAssign:true,wikiItem:guidedCatalog});
 assert.notEqual(guidedA.candidate.id,guidedB.candidate.id);assert.equal(guidedB.assignment.slot,'finger2','A second physical copy takes the free paired slot');
 guided.updateCandidate(guidedB.candidate.id,{observedStatsComplete:true,augmentStatus:'none'});
-const guidedC=guided.intake({...guidedObservation,id:'guided-ring-c'},{autoAssign:true});
+const guidedC=guided.intake({...guidedObservation,id:'guided-ring-c'},{autoAssign:true,wikiItem:guidedCatalog});
 assert.equal(guidedC.assignment.assigned,false);assert.equal(guidedC.assignment.reason,'occupied','Auto placement never replaces either paired copy');
 assert.equal(guided.autoAssign(guidedA.candidate.id).reason,'already-assigned');
 for(const [slots,reason]of [[['PRIMARY','SECONDARY'],'multiple-slot-kinds'],[['ANY'],'any-slot'],[['ANY','HEAD'],'any-slot'],[[],'unknown-slots']]){
@@ -133,10 +178,10 @@ assert.equal(afterBegin.metadata.name,'Synthetic next guide');assert.equal(after
 const mergeStorage=memory(),mergeModel=createCharacterModel({storage:mergeStorage,now:()=>12345});
 const captured=(id,values)=>({...proposal(id,'item',values),kind:'ocr',parser:{name:'item-examine',version:1},capturedAt:'2026-10-23T12:00:00.000Z'});
 const originalMerge=captured('merge-original',{name:'Synthetic editable item',slots:['HEAD'],tier:2,fraction:1,hp:31,mana:14,wis:3,rawStatBlock:'Original synthetic pane'});
-const mergedCard=mergeModel.intake(originalMerge,{autoAssign:true}).candidate;
+const mergedCard=mergeModel.intake(originalMerge,{autoAssign:true,wikiItem:{name:'Synthetic editable item'}}).candidate;
 assert.equal(mergeModel.snapshot().equipment.head,mergedCard.id);
 const improved=captured('merge-improved',{name:'Untrusted changed title',slots:['FEET'],tier:3,hp:35,mana:null,haste:9,rawStatBlock:'Improved complete synthetic pane\nUnknown label still retained'}),immutableImproved=structuredClone(improved);
-const improvedResult=mergeModel.mergeObservation(mergedCard.id,improved,{wikiItem:{name:'Synthetic catalog title',stats:{HP:999,STR:222},iconId:'Exact_Synthetic'}});
+const improvedResult=mergeModel.mergeObservation(mergedCard.id,improved,{wikiItem:{name:'Synthetic editable item',stats:{HP:999,STR:222},iconId:'Exact_Synthetic'}});
 assert.equal(improvedResult.ok,true);assert.equal(improvedResult.candidate.id,mergedCard.id);assert.equal(improvedResult.candidate.name,'Synthetic editable item');
 assert.equal(improvedResult.candidate.observedStats.HP,35);assert.equal(improvedResult.candidate.observedStats.MP,null,'An explicitly conflicted observed value clears the stale number');
 assert.equal(improvedResult.candidate.observedStats.HASTE,9);assert.equal(improvedResult.candidate.observedStats.WIS,3,'An absent new field does not erase a prior read');
@@ -219,8 +264,9 @@ const afterReferencePressure=pressureModel.snapshot();assert.equal(afterReferenc
 assert(afterReferencePressure.observationRefs.length<beforeReferencePressure);assert(afterReferencePressure.observationFloor>0);assert(pressureStorage.getItem(CHARACTER_STORAGE_KEY).length<=CHARACTER_LIMITS.storageBytes);
 const pressureRestart=createCharacterModel({storage:pressureStorage});assert.equal(pressureRestart.intake(journalItem('r'.repeat(140)+'1',1,'s'.repeat(100))).ignored,true,'Storage pressure expiration remains replay-safe after reload');
 const progressStorage=memory(),progressModel=createCharacterModel({storage:progressStorage});
-const unknownProgress=progressModel.intake({id:'unread-progress',sessionId:'synthetic',item:{name:'Synthetic Progress',instanceKey:'same-copy',tier:6,baseStats:{HP:100},baseStatsComplete:true,augmentStatus:'none'}}).candidate;
-const zeroProgress=progressModel.intake({id:'explicit-zero-progress',sessionId:'synthetic',item:{name:'Synthetic Progress',instanceKey:'same-copy',tier:6,fraction:0,baseStats:{HP:100},baseStatsComplete:true,augmentStatus:'none'}}).candidate;
+const progressCatalog={name:'Synthetic Progress',stats:{HP:100}};
+const unknownProgress=progressModel.intake({id:'unread-progress',sessionId:'synthetic',item:{name:'Synthetic Progress',instanceKey:'same-copy',tier:6,augmentStatus:'none'}},{wikiItem:progressCatalog}).candidate;
+const zeroProgress=progressModel.intake({id:'explicit-zero-progress',sessionId:'synthetic',item:{name:'Synthetic Progress',instanceKey:'same-copy',tier:6,fraction:0,augmentStatus:'none'}},{wikiItem:progressCatalog}).candidate;
 assert.equal(unknownProgress.fraction,null);assert.equal(zeroProgress.fraction,0);assert.notEqual(unknownProgress.id,zeroProgress.id,'Unread progress and explicit zero are distinct variants');
 assert.equal(characterItemStats(unknownProgress).stats.HP,null,'Unknown progress cannot certify a catalog-scaled equipped value');assert.equal(characterItemStats(unknownProgress).complete,false);assert.equal(characterItemStats(zeroProgress).stats.HP,160);
 progressModel.updateCandidate(unknownProgress.id,{observedStats:{HP:23},observedStatsComplete:true});assert.equal(characterItemStats(progressModel.snapshot().candidates[0]).stats.HP,23,'Observed stats remain usable with unread progress');
@@ -319,6 +365,8 @@ assert(!serialized.includes('PRIVATE_SYNTHETIC_EVIDENCE'));assert(!serialized.in
 assert(!serialized.includes('synthetic-session'));assert(!serialized.includes('Catalog Blade'),'unassigned inventory stays private');
 assert.equal(summary.equipment.length,23);
 assert.equal(characterShareLayout(model.snapshot()).width,1800);
+const tierSummary=characterShareSummary({...model.snapshot(),candidates:model.snapshot().candidates.map(card=>({...card,name:card.name+' +0 +0'}))});
+assert(tierSummary.equipment.filter(entry=>entry.item).every(entry=>!entry.item.name.includes('+0')),'Share summary carries the base name and independent tier exactly once');
 assert.deepEqual(characterShareLayout(model.snapshot()),characterShareLayout(model.snapshot()),'same inputs have deterministic geometry');
 assert(characterShareLayout(model.snapshot()).height<=8192);
 
@@ -332,15 +380,16 @@ assert(!bounded.snapshot().candidates.some(candidate=>candidate.name==='Card 0')
 assert(boundedStorage.getItem(CHARACTER_STORAGE_KEY).length<=CHARACTER_LIMITS.storageBytes);
 const protectedStorage=memory(),protectedOnly=createCharacterModel({storage:protectedStorage,now:()=>1});
 const largeStats=Object.fromEntries(Array.from({length:48},(_,index)=>[`STAT_${String(index).padStart(27,'0')}`,1000000000]));
-for(const slot of CHARACTER_SLOTS){const card=protectedOnly.intake(item(`Protected ${slot.id}`,{slots:[slot.kind]})).candidate;protectedOnly.assign(card.id,slot.id);
-    protectedOnly.updateCandidate(card.id,{icon:'data:image/png;base64,'+'A'.repeat(23970),name:'N'.repeat(240),wikiTitle:'W'.repeat(240),notes:'X'.repeat(600),baseStats:largeStats,observedStats:largeStats,augments:Array.from({length:8},()=>({name:'A'.repeat(240),stats:largeStats,statsComplete:true}))});}
+for(const slot of CHARACTER_SLOTS){const longName=`${slot.id} `+'N'.repeat(220),card=protectedOnly.intake(item(longName,{slots:[slot.kind]})).candidate;protectedOnly.assign(card.id,slot.id);
+    protectedOnly.updateCandidate(card.id,{icon:'data:image/png;base64,'+'A'.repeat(23970),notes:'X'.repeat(600),baseStats:largeStats,observedStats:largeStats,augments:Array.from({length:8},()=>({name:'A'.repeat(240),stats:largeStats,statsComplete:true}))});}
 assert.equal(Object.keys(protectedOnly.snapshot().equipment).length,23);
 assert(protectedStorage.getItem(CHARACTER_STORAGE_KEY).length<=CHARACTER_LIMITS.storageBytes,'Protected equipment cannot defeat the serialized state bound');
 const warnings=[],failed=createCharacterModel({storage:{getItem(){throw Error('synthetic read failure');},setItem(){throw Error('synthetic full disk');}},onWarning:value=>warnings.push(value)});
 assert.equal(failed.intake(item()).saved,false);failed.setMetadata({name:'Still usable'});assert.equal(warnings.length,2);
 assert.equal(failed.snapshot().metadata.name,'Still usable');
 const hostile=memory();hostile.setItem(CHARACTER_STORAGE_KEY,JSON.stringify({schemaVersion:1,candidates:[{id:'dupe',name:'First'},{id:'dupe',name:'Second'}],equipment:{head:'dupe',face:'dupe',injected:'dupe'}}));
-assert.deepEqual(createCharacterModel({storage:hostile}).snapshot().equipment,{head:'dupe'});
+assert.deepEqual(createCharacterModel({storage:hostile}).snapshot().equipment,{},'Unknown legacy equipment is not treated as known gear');
+assert.deepEqual(createCharacterModel({storage:hostile}).snapshot().pendingEquipment,{head:'dupe'},'Legacy placement references remain bounded and recoverable until exact catalog reconciliation');
 
 export function createCharacterDemo() {
     const demo=createCharacterModel({storage:null,now:()=>Date.UTC(2026,9,22,12)});

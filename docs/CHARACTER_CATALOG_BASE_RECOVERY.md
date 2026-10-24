@@ -1,14 +1,31 @@
 # Character catalog search and reviewed base-stat recovery
 
-## Scope and release boundary
+## Current scope
+
+The 0.9.4 Character inventory follow-up uses the existing local catalog search
+and tier preview to establish canonical item identity before equipment placement.
+Unknown reads remain loose with a visible match warning and picker. A known
+physical copy leaves loose inventory only while equipped and returns on unequip.
+Numeric observations, tier/progress, raw spelling and evidence remain distinct
+from catalog identity. See [the inventory plan](CHARACTER_INVENTORY_REVIEW.md)
+and [capture model contract](design/CHARACTER_CAPTURE.md).
+
+For capture, unequip slowly one item at a time and keep its complete tooltip or
+examine pane visible until its card appears. Re-equip missed items the same way;
+Slots and Review continue reading until finish/cancel. Search and name tolerance
+do not weaken the active source/session/generation checks, eligible capture-time
+windows or fresh No Equipment baseline requirements.
+
+## Original 0.9.0 scope and release history
 
 The owner requested Character item search with an item-level slider, and a way
 to work backwards from a newly observed tiered drop to wiki base values. The
-owner explicitly requires these additions in 0.9.0. This work starts from merged source `21903b48d3bd9abf8edd00a1affe60af1d5793ca`
-on `codex/character-catalog-base-recovery`. The first 0.9.0 publication is withdrawn to draft. Public download verification
-found missing packaged OCR dependencies as well. Reissue 0.9.0 only after the
-feature additions and physical dependency checks pass; preserve the withdrawn
-source/assets/metadata privately before replacing that draft/tag. No private game
+owner required these additions in 0.9.0. That work started from merged source `21903b48d3bd9abf8edd00a1affe60af1d5793ca`
+on `codex/character-catalog-base-recovery`. The first 0.9.0 publication was withdrawn to draft after public download verification
+found missing packaged OCR dependencies. Its reissue required the
+feature additions and physical dependency checks to pass, with the withdrawn
+source/assets/metadata preserved privately. This is historical context, not an
+instruction to replace a published release. No private game
 pixels/player values are fixtures. Keep Default Modern (`default_modern`) as the
 current OCR support scope.
 
@@ -28,7 +45,7 @@ Critical context (read these after compaction):
 - `docs/RELEASE_090.md` plus component design guides: calibrated OCR, journal and
   ownership, existing native checks, private evidence paths and platform limits.
 
-## Ownership and integration order
+## Original 0.9.0 ownership and integration order
 
 | Work | Owner | Contract |
 | --- | --- | --- |
@@ -48,7 +65,7 @@ Critical context (read these after compaction):
    and record actual checks and limits. Withdrawn release metadata and source
    evidence stay private; reissue this same version from the exact passing source.
 
-## Integrated acceptance and publication
+## Recorded 0.9.0 integration acceptance
 
 Root integrated the Character catalog, reviewed inverse flow, overlay layout,
 Map player state and Intel stability changes on this branch. The actual native
@@ -67,7 +84,7 @@ Parse/Triggers and Map native checks are described in their sections below.
 Manual main-viewer Z inspection must retain the full-zone slider range after
 Auto Z is disabled; its regression covers a floor outside the automatic slice.
 
-What's New now keeps 29 versions and 33 reviewed PNGs. Four new synthetic native
+At that integration, What's New kept 29 versions and 33 reviewed PNGs. Four synthetic native
 captures cover catalog search, base recovery, overlay layout and Map Auto Z;
 all earlier captures remain byte-identical. README and changelog describe the
 final behavior. Fresh catalog acceptance uses generation
@@ -94,7 +111,8 @@ tokens can appear in a different order. Rendering is bounded to 24 results by
 default (60 maximum), with a total count and a prompt to refine large searches.
 An empty, sample or incomplete cache shows its limits; a missing result never
 proves that a wiki item does not exist. Catalog read failures leave manual card
-entry available. No search request goes to the wiki or another service.
+entry/review available, but unresolved cards cannot equip. No search request goes
+to the wiki or another service.
 
 Character has an independent **Item Level Slider** for tiers 0–10 and an explicit
 integer fractional-progress field. Tier 10 is capped at the wiki maximum and
@@ -113,6 +131,48 @@ fabricated. Augment state remains unknown unless the catalog explicitly says
 `augmentStatus:'none'`; review the card before using complete gear sums. The
 ordinary editor, assignment warnings, inventory bounds and persistence apply.
 
+### Canonical identity and bounded OCR tolerance in 0.9.4
+
+`resolveCharacterCatalog(pack,name,{limit?})` is full-name resolution, separate
+from the flexible token search above. It ignores complete repeated trailing
+`+0` through `+10` name decorations, case, accents and punctuation, but does not
+infer an item's numeric tier or progress. Exact display-name/wiki-title matches
+take precedence. A unique one-character insertion, deletion or substitution, or
+one `rn`/`m` OCR-glyph confusion, may canonicalize a new item read. Names under
+six non-space characters require an exact match. Fragments and more distant
+spellings never automatically choose a record; equal candidates require a pick.
+For example, `Thomstinger +5` can resolve to `Thornstinger`, while an ambiguous
+name cannot silently pick the first catalog page.
+
+The result is `{status,item,candidates,total,autoResolved,incomplete,query}`.
+Status is `exact`, `fuzzy`, `ambiguous` or `unmatched`; `item` is nullable and each
+candidate is `{item,distance,reason}`. At most eight suggestions are returned,
+while the total still accounts for ambiguity outside the displayed set. Resolution
+indexes at most 100,000 records, cached by the item-array identity and catalog
+manifest/version; replacing those rebuilds the index. Nothing queries the wiki.
+
+`character.resolveCatalog(id,item,{match:'manual'|'exact'|'fuzzy',icon?})` records
+the canonical local identity and refreshes its catalog base cache. It preserves
+the physical ID, original `observedName`, raw pane text/evidence, observed stats,
+nullable tier and progress. A selected catalog value is never relabeled as an
+observed number. Same-copy recapture and automatic catalog reconciliation keep
+existing reviewed base values. Fuzzy identity retains suggested-match metadata;
+it is not verification of the stats or approval for a wiki edit.
+
+All equipment operations require that identity, including explicit incompatible
+slot overrides and ANY placement. A manually typed wiki title or match checkbox
+cannot establish it. New eligible reads are canonicalized before the walkthrough's
+unique-copy and ambiguity checks; the original aliases and removal guards remain.
+On restore, legacy unknown gear leaves equipment/totals immediately. Exact current
+pack matches can recover old placements without displacement; fuzzy or missing
+legacy matches stay loose for selection. Existing saved physical copies are not
+merged because their canonical names happen to match. Equipped/loose views use
+card IDs, so replacement and unequip return the same copy to inventory.
+
+The name and one independent tier badge are shown in inventory/equipment and
+exports. Conflicting written tier suffixes remain a review warning, with the
+original text retained. Unread stats and unsupported formulas stay unknown.
+
 Conditional SV Void scaling is not inferred without its required item context.
 Cards retain the exact `SV_CORRUPTION` base value and bounded
 `unscaledStatKeys:['SV_CORRUPTION']` metadata. At tier zero the known base is
@@ -121,6 +181,7 @@ and sharing, with a warning; actual observed examine values still take precedenc
 unchanged. Other supported stats continue to use existing forward rules.
 
 The component exports `searchCharacterCatalog(pack,query,{limit?})`,
+`resolveCharacterCatalog(pack,name,{limit?})`,
 `characterCatalogCard(item,{tier?,fraction?,icon?})` and
 `characterCatalogPreview(item,options)` as pure helpers.
 `mountCharacterCatalog({host,getPack,onAdd})` owns only its local DOM/listeners;
@@ -133,7 +194,11 @@ catalog states, independent fractional scaling, changed/unchanged values,
 distinct physical copies, base/observed separation and unsupported Void values
 through persistence, sums and share JSON. Existing model and workspace source
 tests also passed. These are synthetic source checks; native UI integration and
-same-version 0.9.0 package checks remain recorded by the release owner below.
+the historical 0.9.0 package evidence belongs to that release's ledger. The
+0.9.4 source suites additionally cover exact/fuzzy/ambiguous names, raw/stat
+preservation, unknown placement blocking, exact-only legacy recovery and loose
+physical-card filtering. New native/package acceptance is recorded separately by
+the current release owner.
 
 ## Base recovery engine
 
