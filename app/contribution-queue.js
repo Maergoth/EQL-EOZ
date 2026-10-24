@@ -6,18 +6,31 @@ const clean=(value,max=240)=>String(value??'').replace(/[\u0000-\u0008\u000b-\u0
 const itemIdentity=name=>{const value=clean(name),match=value.match(/^(.+?)\s*\+(10|[0-9])$/);return match&&match[1].trim()?{name:match[1].trim(),tier:Number(match[2])}:{name:value,tier:null};};
 const candidateKey=(kind,name,zone='')=>`${kind}|${contributionNameKey(kind==='item'?itemIdentity(name).name:name)}|${kind==='item'?'':contributionNameKey(zone)}`;
 export function createContributionQueue({storage=globalThis.localStorage,getPack=()=>({}),onWarning=()=>{},now=Date.now}={}){
-    let candidates=[],sequence=0,cursor=0,catalogCache=null,lastLog=null,armed=null,readBlocked=false;const ignored=new Set(),seenLogIds=new Set();
+    let candidates=[],sequence=0,cursor=0,catalogCache=null,lastLog=null,armed=null,readBlocked=false,migrated=false;const ignored=new Set(),seenLogIds=new Set();
     const pack=()=>{try{return getPack()||{};}catch{return {};}};
     const fieldValue=value=>Array.isArray(value)?value.slice(0,200).map(item=>typeof item==='string'?clean(item,512):typeof item==='number'&&Number.isFinite(item)?item:typeof item==='boolean'?item:null).filter(item=>item!==null):typeof value==='string'?clean(value,16000):typeof value==='number'&&Number.isFinite(value)||typeof value==='boolean'||value===null?value:null;
     const validField=key=>/^[A-Za-z][A-Za-z0-9_]{0,50}$/.test(key)&&!['constructor','prototype','__proto__'].includes(key);
     try{const raw=storage?.getItem(KEY);if(raw){
         if(typeof raw!=='string'||new TextEncoder().encode(raw).length>CONTRIBUTION_QUEUE_BYTES)throw Error('Queue too large');
         const saved=JSON.parse(raw);if(saved.schemaVersion!==1||!Array.isArray(saved.candidates)||saved.candidates.length>200||saved.candidates.some(c=>!c||!['item','npc','zone'].includes(c.kind)||typeof c.id!=='string'||typeof c.name!=='string'))throw Error('Unsupported queue');
-        candidates=saved.candidates.map(candidate=>{const key=candidateKey(candidate.kind,candidate.name,candidate.zone),aliases=[...(candidate.aliasKeys||[]),...(candidate.key&&candidate.key!==key?[candidate.key]:[])];return {...candidate,key,aliasKeys:[...new Set(aliases)].slice(-8),fields:candidate.fields&&typeof candidate.fields==='object'?candidate.fields:{},sources:Array.isArray(candidate.sources)?candidate.sources:[],relations:Array.isArray(candidate.relations)?candidate.relations.slice(-100):[],evidence:Array.isArray(candidate.evidence)?candidate.evidence:[]};});sequence=Number(saved.sequence)||0;cursor=Number(saved.cursor)||0;
+        candidates=saved.candidates.map(candidate=>{
+            const key=candidateKey(candidate.kind,candidate.name,candidate.zone),aliases=[...(candidate.aliasKeys||[]),...(candidate.key&&candidate.key!==key?[candidate.key]:[])];
+            const loaded={...candidate,key,aliasKeys:[...new Set(aliases)].slice(-8),fields:candidate.fields&&typeof candidate.fields==='object'?candidate.fields:{},sources:Array.isArray(candidate.sources)?candidate.sources:[],relations:Array.isArray(candidate.relations)?candidate.relations.slice(-100):[],evidence:Array.isArray(candidate.evidence)?candidate.evidence:[]};
+            const identity=itemIdentity(candidate.name),reviewed=Boolean(candidate.planId||candidate.baseRecovery||candidate.matchesReviewed===true||candidate.reviewed===true||candidate.submittedAt||Object.values(loaded.fields).some(field=>field?.confirmed===true||field?.edited===true)||[...loaded.sources,...loaded.relations].some(relation=>relation?.confirmed===true));
+            if(candidate.kind==='item'&&identity.tier!==null&&candidate.title===candidate.name&&(!candidate.status||candidate.status==='needs-review')&&!reviewed){
+                loaded.name=identity.name;loaded.title=identity.name;
+                if(!Object.hasOwn(loaded.fields,'tier'))loaded.fields={...loaded.fields,tier:{value:identity.tier,confirmed:false}};
+                const id=`draft-name-migration-${contributionSourceToken(candidate.name)}`;
+                if(!loaded.evidence.some(entry=>entry.id===id))loaded.evidence=[...loaded.evidence,{id,at:new Date(now()).toISOString(),kind:'draft-migration',text:`Original unreviewed draft name: ${candidate.name}\nControlled base title: ${identity.name}\nObserved tier decoration: +${identity.tier}`,confidence:0}].slice(-6);
+                migrated=true;
+            }
+            return loaded;
+        });sequence=Number(saved.sequence)||0;cursor=Number(saved.cursor)||0;
         for(const key of (Array.isArray(saved.ignored)?saved.ignored:[]).slice(-2000))if(typeof key==='string'&&key.length<800)ignored.add(key);
         for(const id of (Array.isArray(saved.seenLogIds)?saved.seenLogIds:[]).slice(-2000))if(typeof id==='string'&&id.length<=240)seenLogIds.add(id);
     }}catch{readBlocked=true;onWarning('The saved contribution queue could not be read and was preserved. Recover it before saving new drafts.');}
     function save(){if(readBlocked)return false;try{const value=JSON.stringify({schemaVersion:1,sequence,cursor,candidates,ignored:[...ignored].slice(-2000),seenLogIds:[...seenLogIds].slice(-2000)});if(new TextEncoder().encode(value).length>CONTRIBUTION_QUEUE_BYTES)throw Error('Queue too large');storage?.setItem(KEY,value);return true;}catch{onWarning('Contributions remain in memory because their saved queue is full or unavailable. Review or remove drafts before closing Eye of Zomm.');return false;}}
+    if(migrated&&!readBlocked)save();
     function rememberRelation(candidate,relation,observation){
         if(!relation||!['mob-zone','zone-population','zone-loot','drop-source','spawn-location'].includes(relation.type))return;
         const name=clean(relation.name),zone=clean(relation.zone);if(!name||!zone)return;

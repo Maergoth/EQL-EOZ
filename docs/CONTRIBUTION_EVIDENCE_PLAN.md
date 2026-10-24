@@ -47,6 +47,16 @@ zone-specific keys remain aliases, including Ignore suppression. Historical
 duplicate reviewed drafts are preserved for manual reconciliation rather than
 silently deleting one or choosing conflicting verified fields.
 
+Existing untouched tier-named drafts receive one narrow load migration: only an
+item with a supported trailing tier, a title exactly equal to its original name,
+no saved plan/base recovery/match review, no confirmed or edited fields or
+relationships, and an unset/needs-review status is renamed to its base name and
+title. Its ID, aliases, sources and other fields remain; an absent tier field is
+filled without replacing an explicit tier. The original raw name is appended as
+bounded migration evidence. The migrated queue is saved immediately and loading
+it again is idempotent. Custom titles, planned, reviewed and submitted/partial
+historical drafts keep their names, titles, fields and review fingerprints.
+
 ## Queue and relationship contract
 
 The UI iterates `queue.snapshot()`, and may keep editing a selected draft while
@@ -146,7 +156,8 @@ writes):
   completeness, relationship retention, explicit versus speculative source,
   global base/tier/Exaltation item and blank-zone OCR enrichment, confirmed field
   protection, unchanged/changed base-review fingerprints, persistent
-  replay/Ignore and targeted `/loc` before/after restart/source/zone/timeout.
+  replay/Ignore, guarded durable legacy tier-title migration and targeted `/loc`
+  before/after restart/source/zone/timeout.
 - Existing `tests/contribution-queue.mjs` and `tests/loot-provenance.mjs`: edited
   field/plan persistence and unchanged parse totals, including zone isolation and
   named provider versus actual corpse wording.
