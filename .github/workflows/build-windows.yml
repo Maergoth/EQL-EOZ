@@ -46,6 +46,8 @@ jobs:
         run: npm run test:map-layout
       - name: Test map marker loot pane and instance identity
         run: npm run test:map-loot
+      - name: Test Character persistence across restarts and changed origins
+        run: npm run test:character-storage
       - name: Test cached frontend upgrade recovery
         run: npm run test:main-cache
       - name: Test native Map 3D and file isolation

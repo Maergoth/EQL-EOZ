@@ -1,5 +1,13 @@
 # Eye of Zomm — Product and UX Vision
 
+0.9.5 adds visible selected-item tier/progress controls with labeled catalog previews,
+private Character storage independent of the loopback port, automatic cross-session
+item reuse, explicit extra copies, two manual Any slots, strict compatible-slot
+placement and drag highlights. Removed-item suppression is scoped to a capture
+pass; fresh later passes and Rescan removed items recover valid reads. See
+[the current persistence plan](CHARACTER_INVENTORY_PERSISTENCE.md) for the
+archive audit, acceptance and limits.
+
 The 0.9.4 Character inventory follows [the current execution plan](CHARACTER_INVENTORY_REVIEW.md):
 compact equipment icons, identity and live stat estimates, loose physical items,
 bounded catalog name recovery and explicit review before unknown gear can equip.
@@ -12,7 +20,7 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 [release history](RELEASE_HISTORY.md) and [validation](../VALIDATION.md).
 
 Status: working product direction and road-to-v1 release contract
-Baseline: 0.9.4, extending released 0.9.3
+Baseline: 0.9.5, extending released 0.9.4
 Last updated: 2026-10-23
 
 Execution links: [implementation status](IMPLEMENTATION_STATUS.md) · [contributor handoff](HANDOFF.md) · [validation](../VALIDATION.md) · [Windows/game-client checklist](WINDOWS_MANUAL_TEST.md)

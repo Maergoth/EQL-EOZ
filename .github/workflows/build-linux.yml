@@ -37,6 +37,7 @@ jobs:
             npm run test:window-lifecycle
             npm run test:map-layout
             npm run test:map-loot -- --screenshots ci-screenshots/linux-map-loot
+            npm run test:character-storage
             npm run test:main-cache
             npm run test:map-overlay-3d
             npm run test:native-overlays -- --screenshots ci-screenshots/linux

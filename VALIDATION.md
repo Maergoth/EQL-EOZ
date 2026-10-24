@@ -1,4 +1,51 @@
-# Validation report — v0.9.4
+# Validation report — v0.9.5
+
+## 0.9.5 durable Character inventory
+
+The private installed-app audit found 26 journal item observations covering 16
+normalized names. Seventeen were suppressed by saved removal aliases before
+model intake; all 26 satisfied the recorded phase/source timing. The journal
+contains emitted OCR text and parsed observations, not every sampled frame or
+negative read, so this does not establish complete live tooltip recall. The
+installed app/profile was read only, using allowlisted Character keys; no
+private text, account data or player pixels enter fixtures or Git.
+
+Focused model, walkthrough, view and host/renderer storage suites pass. The
+actual main/preload storage fixture passes three separate Electron processes,
+including upgrade cache handling and an occupied preferred port that forces
+a new browser origin. Character values and visible equipment survive while an
+ordinary localStorage marker does not; foreign-frame storage calls are denied.
+A deliberate new walkthrough retains inventory while rebuilding placements and
+the fresh No Equipment baseline. Old abandoned origins are not automatically
+scanned for migration.
+
+Both native Character and full-main workspace gates pass: trusted keyboard
+tier/progress changes preserve focus and scroll, persist immediately and update
+HP estimates; cross-session item reuse, explicit-copy choice, pass-scoped Rescan,
+manual unequip stability, both Any slots and strict drag placement are covered.
+The full npm test suite, dependency audit (zero vulnerabilities) and production
+catalog relevance checks pass. Five actual synthetic UI captures were visually
+reviewed and archived under 0.9.5.
+
+Final review also reproduced malformed inner JSON in a valid storage envelope.
+The adapter now preserves and write-blocks malformed/unsupported per-key data
+before model mount; focused tests cover both keys, host/browser-only records,
+startup seed attempts and unchanged originals.
+
+The final native gates also pass equipped X and drag-to-inventory unassignment,
+direct focused wiki search, and same-name/different-server Character Select.
+Separate gear, metadata, baseline and flow survive selection/reload; switching
+stops capture, explicit resume remains necessary and foreign-profile journal
+rows cannot join an identically named item. Inactive profiles also reject
+foreign or unsolicited stat proposals; an explicit current-profile screenshot
+can supply a baseline without changing another character. The three-process actual-main gate
+also restores both roster entries and active equipment across cache/port changes.
+
+Final exact-head Windows/Linux and published-download results belong to the
+release PR/private ledger after completion. Synthetic fixtures do not
+establish all skins, transient live capture recall, native Wayland or production
+wiki writes.
+
 
 ## 0.9.4 compact Character inventory
 

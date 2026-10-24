@@ -18,6 +18,7 @@ import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
 import { mountWhatsNew } from './whats-new.js';
 import { FONT_PRESETS, DEFAULT_APPEARANCE, normalizeAppearance, applyAppearance, inheritViewerAppearance } from './appearance.js';
 import { mountCaptureWorkspace } from './capture-workspace.js';
+import { createCharacterStorage } from './character-storage.js';
 import { mountSystemFontSettings } from './system-font-settings.js';
 import { isItemStatModified } from './item-stat-presentation.js';
 
@@ -2358,9 +2359,11 @@ const appUpdatesUi = mountAppUpdates({
     }
 });
 const whatsNew = mountWhatsNew({ button:$('#open-whats-new'), navigate:view => setView(view),getVersion:()=>bridgeInfo?.version });
-const captureWorkspace = mountCaptureWorkspace({getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
+let captureWorkspace={consumeLog(){},refresh(){},dispose(){}};
+const characterStorage=await createCharacterStorage({onWarning:message=>showNotice(message,{tone:'warning'})});
+captureWorkspace = mountCaptureWorkspace({characterStorage,getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
     getAppearance:()=>settings.appearance,notify:showNotice});
-window.addEventListener('pagehide', () => { captureWorkspace.dispose();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
+window.addEventListener('pagehide', () => { captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

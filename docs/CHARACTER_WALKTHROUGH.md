@@ -1,6 +1,21 @@
 # Guided Character capture
 
-## Current 0.9.4 contract
+Character Select shows **Character (Server)** only after the validated first
+walkthrough step. New character uses a separate unregistered draft; switching
+preserves each character’s own inventory, equipment, baseline and walkthrough.
+An active Character capture stops before switching and never restarts by
+selection alone. The roster is one atomic, bounded private record; legacy
+current-character mirrors remain for migration/rollback. Journal replay requires
+the selected flow or an exact previously accepted observation reference, so
+shared item names cannot mix characters.
+
+The 0.9.5 inventory shortcuts include an equipped-item top-right X and
+dragging equipped gear back into Inventory. Both unassign the same saved card
+without deleting it, preserve explicit physical copies and keep it loose across
+held rereads. Add item opens and focuses the wiki catalog query immediately;
+searching does not create a blank inventory card.
+
+## Current 0.9.5 contract
 
 The owner requests a single start-to-finish Character walkthrough rather than
 separate capture/editor forms: identity, source setup inside the flow, unequip
@@ -12,6 +27,10 @@ uses the item details and editable values; wiki publication/upload review remain
 separate. The 0.9.4 follow-up adds canonical cached-item identity, bounded OCR
 name tolerance and known-only equipment placement. See
 [the inventory plan](CHARACTER_INVENTORY_REVIEW.md) for its acceptance ledger.
+The 0.9.5 follow-up adds visible selected-item tier controls, cross-session
+automatic-item dedupe, pass-scoped removal recovery, two universal slots and
+port-independent private storage. Its current audit and coverage are in
+[Character tier controls and durable inventory](CHARACTER_INVENTORY_PERSISTENCE.md).
 
 Unequip slowly, one item at a time. Keep the complete item tooltip or examine
 pane visible, including its name, metadata and footer, and wait for that item's
@@ -24,7 +43,9 @@ cards. A placed copy disappears from loose inventory and returns when unequipped
 or replaced. Another identical copy remains a separate card. An unmatched read
 stays loose with a red outline and yellow warning mark; select it to inspect the
 original reading and choose a cached-item match. Unknown items cannot equip,
-including through ANY confirmation, drag/drop or an incompatible-slot override.
+including either universal Any slot or drag/drop. Standard slots require actual
+compatibility; there is no incompatible-slot override. The board has 23 normal
+slots plus Any 1 and Any 2, which accept known items only by manual placement.
 
 Default Modern's local inventory XML identifies the AC row's first component as
 mitigation AC, the slash component as mitigation softcap and the last component
@@ -34,9 +55,11 @@ The walkthrough must display meaningful labels and preserve all observed values.
 Explicit item Haste and the pane's bounded written stat block must survive OCR,
 review, persistence and sharing; the wiki cannot supply invented observations.
 
-The guided flow originally shipped in 0.9.1. The current inventory follow-up
-starts from published 0.9.3 source `6569e8890feb66acc608d12805ba94a04d0231f3`
-on `codex/character-inventory-matching`. Keep published releases immutable.
+The guided flow originally shipped in 0.9.1. The 0.9.4 inventory work started
+from published 0.9.3 source `6569e8890feb66acc608d12805ba94a04d0231f3`.
+The current follow-up starts from published 0.9.4 source
+`1596770cd5ed7cf922c57bd973ed49f4f1070d14` on
+`codex/character-tier-persistence`. Keep published releases immutable.
 No installed-player profile is a test fixture. No production wiki test writes,
 private game captures or account data in Git. Preserve unrelated EQLWiki dirt.
 
@@ -46,6 +69,8 @@ private game captures or account data in Git. Preserve unrelated EQLWiki dirt.
   guided Character intake, inventory interaction, match picker and share dialog.
 - `app/character-inventory-view.js`: escaped compact identity/stat markup,
   equipment rows, loose-card icons, tier labels and item details.
+- `app/character-storage.js`, `desktop/character-storage.cjs`, main/preload:
+  file-authoritative Character/walkthrough storage and current-origin migration.
 - `app/character-model.js`, `character-share.js`, `character-catalog.js`: physical
   copies, slot constraints, tiers/augments, additive statistics and snapshot PNG.
 - `app/screen-read-parser.js`, `desktop/capture-reader.cjs`: bounded, pane-scoped
@@ -116,13 +141,14 @@ while Character owns the source.
 The 0.9.3 follow-up keeps new item admission active in Unequip, Re-equip, Slots
 and Review. Capture-time windows exclude Base, Details and source selection;
 fresh No Equipment timestamp/sequence and explicit manual-import guards are
-unchanged. Live and recovered items require the active session and confirmed
-current source/generation. Completion and cancellation close those windows.
+unchanged. Active-walkthrough live and same-session recovered items require the
+confirmed current source/generation. Completion and cancellation close those windows.
 Released Slots/Review drafts can recover their latest matching Re-equip boundary
-after Base acceptance, never the earlier Base interval. Active same-session
-journal rereads merge through the walkthrough's existing unique-copy identity
-rules, retain bounded evidence and preserve manual corrections; older sessions
-keep exact-observation replay behavior.
+after Base acceptance, never the earlier Base interval. In 0.9.5 these admission
+guards run before the model's cross-session automatic-item lookup. Eligible older
+journal rereads can update one uniquely matched saved item; exact IDs remain
+idempotent and deliberately removed/expired records stay blocked. Multiple
+physical copies require review rather than a guessed merge or extra card.
 
 ## Catalog identity and physical copies
 
@@ -141,9 +167,14 @@ equal matches require the picker; fragments and errors beyond that bound do not
 automatically choose an item. Search remains local, and a cache miss means only
 that the current cache could not resolve the read.
 
-Canonicalization happens before the walkthrough's same-copy and ambiguity
-checks. It does not merge distinct saved physical cards. Tier, fractional
-progress, augments, original aliases and removal guards still distinguish copies.
+Canonicalization happens before the model's automatic same-item lookup. A unique
+saved identity can receive rereads across tiers and capture sessions; OCR cannot
+establish that a changed tier represents another physical copy. Catalog Add and
+Second copy create explicit independent IDs. If several saved copies match,
+choose one; pending choices recheck current identity and capture/removal context.
+Existing cards are not silently collapsed or deleted. Timestamp/sequence guards
+keep older evidence from overwriting newer observations, and deliberate edits
+remain protected.
 Catalog identity never replaces observed item stats with wiki numbers. Choosing
 a match explicitly refreshes its catalog base cache; recapture and catalog
 reconciliation preserve existing reviewed base values.
@@ -155,6 +186,32 @@ match stays loose for selection, even though a new uniquely resolved capture can
 establish its identity. Manually typing a wiki title or checking a match field
 does not bypass this rule. These identity changes do not relax capture ownership,
 phase windows or fresh No Equipment timestamp/sequence checks.
+
+## Tier controls, removal passes and relaunch
+
+The selected item's tier/progress controls are outside Edit captured values.
+Their immediate updates preserve the focused control and scroll position.
+Choosing a different tier uses a labeled catalog-base preview with changed values
+green; observed values, original tier/progress and evidence remain intact.
+Use captured stats restores the observed basis. Missing or unsupported catalog
+data and unknown progress remain unknown. Tier 10 uses progress zero. Saving the
+advanced form does not restore a stale tier from when that form opened.
+
+X removes the physical card and blocks held/queued rereads for that reading pass,
+even if OCR changes its tier. A fresh eligible phase or source generation can
+recover it. Rescan removed items starts a new eligible time boundary in Unequip,
+Re-equip, Slots or Review, while older frames and pending old manual imports stay
+blocked. It does not admit Base-time items, start capture or weaken source/session
+ownership. Legacy ignores without timestamps recover conservatively through a
+fresh pass rather than authorizing their old journal history.
+
+Inventory and walkthrough state are loaded from the trusted main process's
+private Character file before mount. Present file keys win over browser mirrors;
+missing keys may migrate from the current origin. Normal relaunch and cache
+upgrade retain metadata, equipment, edits and cards even if the preferred local
+port is busy. Starting a new walkthrough deliberately clears layout/baseline
+while retaining all inventory IDs. Corrupt files are preserved/write-blocked and
+warn visibly; no old browser-origin scan or silent private-data replacement runs.
 
 ## Acceptance gates
 
@@ -182,6 +239,15 @@ phase windows or fresh No Equipment timestamp/sequence checks.
   exact-head Windows/Linux/package checks before any new publication.
 
 ## Current and historical validation
+
+The 0.9.5 local source suite, zero-vulnerability dependency audit, production
+catalog and both native Character/workspace gates passed. The separate
+three-process main/preload storage fixture passed same-origin restart, cache
+upgrade and forced-port-fallback restoration in the actual Character DOM.
+Focused model/walkthrough checks cover unique cross-session rereads, manual-copy
+ambiguity, protected edits, strict/Any slots, held removal and fresh Rescan.
+Platform/package/public-download acceptance still belongs to the release ledger;
+no installed profile or private game image is used as a fixture.
 
 The 0.9.4 catalog/model/walkthrough unit suites pass synthetic identity-resolution,
 unknown-placement, copy-view and legacy-recovery regressions. This source evidence

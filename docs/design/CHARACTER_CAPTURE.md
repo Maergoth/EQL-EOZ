@@ -1,5 +1,20 @@
 # Character capture data and share image
 
+Character Select shows **Character (Server)** only after the validated first
+walkthrough step. New character uses a separate unregistered draft; switching
+preserves each character’s own inventory, equipment, baseline and walkthrough.
+An active Character capture stops before switching and never restarts by
+selection alone. The roster is one atomic, bounded private record; legacy
+current-character mirrors remain for migration/rollback. Journal replay requires
+the selected flow or an exact previously accepted observation reference, so
+shared item names cannot mix characters.
+
+The 0.9.5 inventory shortcuts include an equipped-item top-right X and
+dragging equipped gear back into Inventory. Both unassign the same saved card
+without deleting it, preserve explicit physical copies and keep it loose across
+held rereads. Add item opens and focuses the wiki catalog query immediately;
+searching does not create a blank inventory card.
+
 The Character tab uses `app/character-model.js` for local editable data and
 `app/character-share.js` for a deterministic canvas PNG. Capture arbitration,
 OCR, authentication, clipboard/save and own-talk submission belong to their
@@ -11,13 +26,18 @@ wiki edit, load remote artwork or interpret an item's text as markup.
 | Module | Responsibility |
 | --- | --- |
 | `app/capture-workspace.js/css` | Guided flow integration, source/status controls, compact inventory interaction, match picker, editable proposals and share actions. |
-| `app/character-inventory-view.js` | Escaped identity/AA and stat markup, 23-slot compact equipment rows, loose physical-card icons, one tier label and item details. No capture or model mutation. |
+| `app/character-inventory-view.js` | Escaped identity/AA and stat markup, 23 normal plus two universal slots, loose-card icons, selected-tier controls and item details. No capture or model mutation. |
 | `app/character-walkthrough.js` | Resumable phase/session/source/time windows, fresh-base cutoff, bounded same-copy aliases, ignores and completion/cancellation. |
 | `app/character-catalog.js` | Local token search and tier preview, exact/bounded fuzzy identity resolution and explicit catalog-card creation. |
 | `app/character-model.js` | Bounded physical cards/evidence, known-only assignment, legacy identity reconciliation, separate observations and equipped estimates. |
 | `app/character-share.js` | Bounded deterministic canvas layout and local PNG encoding from assigned gear. |
+| `app/character-profiles.js` | Atomic per-character model/flow roster, first-step registration, legacy migration, preserved draft and safe identity selection. |
+| `app/character-storage.js` | File-authoritative model adapter, current-origin migration/browser mirror, immediate IPC writes and visible failures. |
+| `desktop/character-storage.cjs` | Fixed private file, bounded exact-main IPC, coalesced atomic saves, corruption preservation and quit draining. |
 
-The current 0.9.4 inventory contract is indexed in
+The current 0.9.5 contract is indexed in
+[Character tier controls and durable inventory](../CHARACTER_INVENTORY_PERSISTENCE.md).
+The preceding identity work remains in
 [Character inventory and catalog identity](../CHARACTER_INVENTORY_REVIEW.md).
 Remove/equip/unequip and slot confirmation all use the model boundary; the view
 cannot make an unresolved read eligible by changing markup or a checkbox.
@@ -54,8 +74,10 @@ import {
   characterEquipmentEligibility, characterLooseCandidates
 } from './character-model.js';
 import { renderCharacterShare } from './character-share.js';
+import { createCharacterStorage } from './character-storage.js';
 
-const character = createCharacterModel({ storage: localStorage, onWarning });
+const storage = await createCharacterStorage({ onWarning });
+const character = createCharacterModel({ storage, onWarning });
 const result = character.intake(observation, {
   wikiItem: matchingCachedItem, // optional; its stats are catalog base values
   catalogMatch: 'exact', // or 'fuzzy' from the bounded local resolver
@@ -80,19 +102,26 @@ Mutation results contain `ok`, `error` on failure, and `saved` when saving was
 attempted. `saved:false` means the current in-memory change exists but could not
 persist. An `onWarning` callback explains failures without stopping the model.
 Pass `storage:null` for an isolated fixture. Reads and snapshots are copies.
+With the desktop adapter, synchronous acceptance is not a disk acknowledgment:
+it starts IPC immediately. `await storage.flush()` checks pending writes and the
+host queue; asynchronous failures warn visibly. Normal Quit drains accepted host
+writes independently of renderer lifetime.
 
 | Method/export | Contract |
 | --- | --- |
 | `snapshot()` | Version-1 JSON state: metadata, candidates, equipment, statSnapshots, bounded legacy `pendingEquipment` and replay metadata. Keep this local. |
-| `intake(observation, {wikiItem?, icon?, catalogMatch?})` | Returns `{ok,candidate,deduplicated,saved}`. `wikiItem` must come from the local catalog; `catalogMatch` is `exact` or `fuzzy`. A removed replay returns `{ok:true,ignored:true,deduplicated:true,candidate:null}`. Accepts `observation.item` or capture parser field-array proposals. |
+| `intake(observation, {wikiItem?, icon?, catalogMatch?})` | Adds manual cards independently; eligible automatic reads reuse a unique saved identity across tiers/sessions. Returns `{ok,candidate,deduplicated,saved}`, or `{ok:true,ambiguous:true,candidate:null,choices}` without adding a card. `wikiItem` is a trusted local record. Removed/expired replay is ignored. |
+| `lookupObservation(observation, options?)` | Current read-only `new`/`match`/`ambiguous`/`ignored` decision with candidate ID/choices and reason. Exact references/removal cutoffs precede identity lookup. Recheck before applying a delayed copy choice. |
 | `updateCandidate(id, patch)` | Edits reviewed fields, without replacing the physical-copy ID, original observed name or evidence. An identity-changing name/title edit invalidates catalog eligibility and unassigns that copy. Typed match fields cannot establish catalog identity. |
-| `mergeObservation(id, observation, {wikiItem?,icon?,catalogMatch?})` | Explicit same-copy recapture selected by the walkthrough, including active same-session recovery. Other-session replay uses exact observation IDs. Returns candidate plus `mergedStatKeys`/`preservedStatKeys`; appends bounded evidence, merges only new unedited observed fields, and preserves the exact card/assignment. |
+| `mergeObservation(id, observation, {wikiItem?,icon?,catalogMatch?})` | Same-copy recapture selected by current lookup or an explicit revalidated choice. Returns `mergedStatKeys`/`preservedStatKeys`; appends bounded evidence, protects manual fields/assignments and prevents stale reads replacing newer values. |
+| `setTierPreview(id,{tier,fraction?})` | Selects a known catalog-base preview when available; captured stats/evidence and observed tier/fraction stay separate. Missing base/context remains unavailable/unknown. Tier 10 uses zero progress. |
+| `setObservedBasis(id)` | Restores original observed tier/fraction and effective captured stats without deleting the catalog cache or evidence. |
 | `resolveCatalog(id,item,{match?,icon?})` | Explicit trusted local record selection; `match` is `manual` (default), `exact` or `fuzzy`. Sets canonical identity and refreshes catalog base cache; preserves observed name/stats/text/evidence, tier/progress and physical ID. |
 | `invalidateCatalog(id)` | Clears identity eligibility and moves the physical card out of equipment without deleting it. |
 | `reconcileCatalog(resolve)` | Calls `resolve(candidate)` against the current pack. Only exact matches can recover bounded legacy placements; fuzzy/ambiguous/missing cards remain loose. Optional `result.icon` is validated. Existing reviewed base values remain intact; no physical copies are merged. |
 | `duplicateCandidate(id)` | Explicitly creates another physical copy with its own ID and no claimed capture evidence. |
 | `removeCandidate(id)` | Removes a card and its assignment. |
-| `assign(id, slotId, {replace?,allowIncompatible?})` | Requires catalog-known identity, then moves the same copy between slots. Occupied/incompatible/unknown slots return `needsConfirmation:true` until explicitly overridden. No override permits an unknown catalog item. |
+| `assign(id, slotId, {replace?})` | Requires known identity and a compatible normal slot, or deliberate universal placement. Incompatibility/unknown identity fails without override. Only occupied compatible slots require confirmation; `replace` retains the displaced card in inventory. |
 | `unassign(slotId)` | Clears the slot and keeps the inventory card. |
 | `setMetadata(patch)` | Name, server, level, race, up to three distinct classes, nullable nonnegative integer `aaCount`, named session. Unknown numeric values remain null. AA count is descriptive; it does not determine AA bonuses. |
 | `beginSnapshot(metadataPatch?)` | One save clears equipment assignments and the No Equipment baseline, merges metadata, and retains all inventory cards, removal markers and legacy equipped observations. |
@@ -110,9 +139,9 @@ Pass `storage:null` for an isolated fixture. Reads and snapshots are copies.
 | `characterStatLabel(key)` | Shared UI/PNG labels, including Mitigation AC, AC softcap, Evasion AC, Offense and Accuracy. |
 | `characterShareSummary(snapshot)` | Shareable JSON, deliberately excluding raw text, capture/session identifiers, source images and unassigned inventory. |
 
-`CHARACTER_SLOTS` contains 23 stable IDs, including charm and power source:
+`CHARACTER_SLOTS` contains 25 stable IDs: the original 23 plus two universal slots:
 `charm,ear1,head,face,ear2,neck,shoulders,arms,back,wrist1,wrist2,range,hands,
-primary,secondary,finger1,finger2,chest,legs,feet,waist,ammo,power`.
+primary,secondary,finger1,finger2,chest,legs,feet,waist,ammo,power,any1,any2`.
 Each has an English label and catalog slot kind. The UI can use exactly the same
 assign operation for drag/drop and keyboard-accessible card + slot selects.
 Replacement returns the displaced card ID; that card remains in inventory.
@@ -120,7 +149,9 @@ Pass `{autoAssign:true}` as an intake option to place a new captured card when
 safe and its catalog identity is known. Replayed evidence does not move a
 manually unassigned card. `ANY` remains
 an explicit slot kind and can be placed manually after review; it always defers
-automatic placement. A card with several meaningful slot kinds also defers even
+automatic placement. Any 1/Any 2 accept any known cached item manually, including
+one with missing normal-slot data; unknown identities cannot equip there. A card
+with several meaningful slot kinds also defers even
 if only one of those slots is free.
 
 ## Item and observation semantics
@@ -129,6 +160,8 @@ Each card retains its base display name (canonical when resolved), original
 `observedName`, catalog identity, wiki title/match state, exact icon ID, compatible slot
 kinds, nullable tier, fractional tier progress, required level, catalog base
 stats, observed examine stats, completeness flags, augments and bounded evidence.
+It also retains automatic/manual origin, last observed time/sequence,
+`observedTier`/`observedFraction` and a separate effective `statBasis`.
 Fractional progress is nullable: an unread value stays null, while an explicitly
 reviewed zero remains zero. Unknown progress is shown in sharing and kept distinct
 from zero during variant matching. Catalog-only values remain unknown until both
@@ -180,7 +213,7 @@ review:
 - `excluded`: add separately supplied augment stats once;
 - `unknown`: the derived result remains partial, even when a number is present.
 
-Observed examine stats take precedence and never pass through scaling again.
+Observed examine stats take precedence by default and never pass through scaling again.
 When only catalog base stats exist, an explicitly known tier uses the existing
 `scaleItemStat` helper, including fractional progress. Unknown tier is null and
 cannot silently become zero. Complete-item metadata may establish an omitted
@@ -214,18 +247,31 @@ Explicit `haste` maps to `HASTE` independently of `ATTACK_SPEED`.
 Synthetic interoperability checks cover these contracts;
 they do not certify another skin or publish any live character data.
 
-An observation ID within its session is idempotent. An explicit stable
-`item.instanceKey` within a session can accumulate evidence for the same card,
-but different tier/fraction/augment identities produce separate variants.
-Names, content-based journal dedup keys and identical stats alone never merge
-physical copies. The UI must use explicit duplicate-copy creation where a
-single examine cannot distinguish two identical items.
+An observation ID within its session is idempotent. A stable session/instance
+reference is checked before general identity lookup. In 0.9.5 automatic reads
+then reuse one uniquely matching saved identity across sessions and tier changes;
+a changed tier is not proof of another physical copy. Canonical known wiki
+identity is preferred, with base/observed names available for unresolved cards.
+Multiple matching copies require a choice and produce no extra automatic card.
+Manual catalog Add and Second copy create independent IDs. Existing legacy/manual
+cards are not silently merged or deleted. The UI revalidates current lookup and
+capture/removal context when the user applies a pending copy choice.
 
 Removal persists up to 1000 observation/session markers, so startup journal
 replay does not recreate a discarded OCR card. Up to 100 stable-instance/variant
 cutoffs also suppress older captures beyond the six-record evidence window.
-A new observation, session, manual add, or new examine after the cutoff remains
-available. Marker retention is bounded and contains no raw OCR text or pixels.
+A fresh manual add remains available. Automatic reads also pass the walkthrough
+removal guard below. Marker retention is bounded and contains no raw text/pixels.
+
+Walkthrough ignores retain removal time and phase start/source/generation, bounded
+to 120 identities. A held tooltip, tier fluctuation, stale queued/journal row or
+pre-removal import action cannot undo X. A fresh eligible phase/source generation
+or explicit `rescanItems()` starts a recovery boundary; only new eligible evidence
+can recover that identity. Rescan runs in Unequip, Re-equip, Slots or Review; it
+does not erase old cutoffs, admit Base-time items or start capture. Raw/canonical
+names are checked. Legacy ignores without timestamps retain a conservative prior
+pass. Manual imports need an explicit initiation token after removal and the new
+boundary, not merely a later completion timestamp.
 
 Same-copy recapture also keeps up to 6000 global `observationRefs`, independently
 of the six evidence texts per card. Each private record contains only observation
@@ -296,26 +342,64 @@ selection refreshes the selected record's base cache, independently of observed
 stats. Cards without prior capture evidence preserve old manual stat
 values conservatively across recapture/restart. Edit tracking starts with edits
 made under this contract; earlier captured cards do not encode which old values
-were manually changed. This method is explicitly selected by the walkthrough for
-an already established copy. Active same-session journal recovery uses the same
-unique identity, ignore and ambiguity checks before selecting it, preventing
-periodic rereads from creating several copies. Exact observation references
-remain idempotent, deliberate edits stay protected, and older-session replay
-does not infer physical identity from a matching name.
+were manually changed. Current automatic lookup and an explicit copy choice use
+the same method after admission/ignore guards. Exact references remain idempotent
+across source sessions; multiple physical copies require a current choice.
+
+### Selected tier and effective stat basis
+
+The selected item's slider/progress and Use captured stats action sit above the
+advanced editor. Inputs remain mounted during updates, preserving keyboard focus
+and scroll. An explicit tier selection starts at zero fractional progress;
+clearing progress retains null, and tier 10 uses zero only. Unknown tier remains
+an explicit option. The advanced Save handler does not carry stale tier fields.
+
+`statBasis:'catalog-tier-preview'` selects known base values through the existing
+forward scaler. Modified numbers are green and the UI labels their catalog
+provenance; captured observations are never rescaled or overwritten. Missing base
+stats and unsupported conditional Void adjustment remain null. Unknown progress
+cannot generate equipped catalog values. `setObservedBasis` restores the latest
+retained observed tier/progress and captured numbers. Augment uncertainty remains
+visible; a preview cannot certify the effects included in an examined item.
 
 ## Bounds and persistence
 
-The versioned localStorage key is `eql-eye-of-zomm-character-v1`. Up to 120 cards
+The model key is `eql-eye-of-zomm-character-v1`; the walkthrough key is
+`eql-eye-of-zomm-character-walkthrough-v1`. Up to 120 cards
 persist, with six evidence records/card, 48 supplied stat fields/block and eight
 augments/card. Strings and numerics have explicit bounds. The serialized state
-has a 1,500,000-character local-storage budget; oldest unassigned cards are
-evicted first. Equipped cards are protected; extreme protected-only payloads
-expire older evidence and cached icon pixels while preserving IDs and gear.
-Damaged state is normalized and
-duplicate assignments are removed on restore. Legacy placement metadata is
-bounded by the same 23 slots and is cleared after reconciliation or a new
-snapshot. Assignment/removal clears the affected pending links. Storage failure leaves the
-current in-memory review usable and visibly warns once.
+has a 1,500,000-character model budget. Reference history, redundant evidence and
+cached icon pixels yield before inventory. Full/oversized additions are refused
+without deleting saved physical cards; an oversized edit stays in memory with a
+save warning. Duplicate assignments are removed on normalization. Pending legacy
+placements are bounded by the same 25 slots and clear on reconciliation/new
+snapshot; assignment/removal clears affected links.
+
+In desktop 0.9.5, the renderer awaits `createCharacterStorage` before mount and
+passes it only to Character/model walkthrough state. Contribution/calibration
+and other browser preferences retain their stores. The main host writes fixed
+`userData/eye-of-zomm-character-storage.json`, independent of loopback port.
+`eyeOfZommCharacterStorage.read()` returns `{values,error}`;
+`write({key,value})` and `flush()` acknowledge `{ok:true}` after persistence or
+reject. The two legacy keys above remain bounded to 1,500,000 UTF-8 bytes each.
+The third fixed key, `eql-eye-of-zomm-character-profiles-v1`, stores up to 32
+characters in an 8,000,000-byte UTF-8 roster. Only the exact trusted main
+window/root frame can access these keys. Null is a present
+deletion tombstone, so stale browser data cannot resurrect a removed key.
+
+File-key presence is authoritative; only an absent key imports the current
+origin's old localStorage value. A browser mirror remains for rollback/recovery.
+One active synced atomic write and one coalesced current state bound work; Quit
+drains accepted writes and flushes DOM storage. HTTP cache upgrade clearing does
+not clear these stores. A corrupt outer file is preserved, gets at most one
+bounded recovery copy where possible, and blocks host writes. The renderer also
+validates each inner JSON object/schema version before migration or mirroring;
+malformed/unsupported entries block that key's set/remove operations instead of
+mounting an empty state that overwrites the original. Failures warn visibly while
+review remains usable. Abandoned older ephemeral origins are not scanned.
+
+The exact origin audit and real three-process restart/cache-upgrade/port-fallback
+proof are recorded in [the persistence guide](../CHARACTER_INVENTORY_PERSISTENCE.md).
 
 Icons keep original IDs and allow only bounded PNG/JPEG/WebP base64 data URLs.
 Remote URLs and SVG are excluded. The renderer checks raster headers before
@@ -327,7 +411,7 @@ unchanged.
 
 `renderCharacterShare(snapshot, {document?,appearance?,resolveIcon?})` returns a
 promise for `{canvas,dataUrl,blob,summary,width,height}`. The width is fixed at
-1800 px; height is deterministic from the full stat block and 23 gear cards,
+1800 px; height is deterministic from the full stat block and 25 gear slots,
 rounded to 64 px and bounded to 2400–8192 px / 15 million pixels. PNG payloads
 are bounded to 12 MB. Explicit overflow errors require editing excessive fields
 instead of producing clipped or silently incomplete exports.
@@ -346,6 +430,19 @@ authenticated service after its explicit preview/upload action. These modules
 do not contain credentials, issue upload requests or select a wiki user.
 
 ## Observed validation
+
+The 0.9.5 local full source suite, dependency audit (zero vulnerabilities),
+production catalog and both native Character/workspace gates passed. Focused
+checks cover selected-tier keyboard/focus/scroll behavior, catalog versus
+observed provenance, 25 strict/universal slots, cross-session unique-item dedupe,
+manual-copy ambiguity and stale choice guards, retained inventory and pass-scoped
+Rescan. Separate renderer/host storage units and the actual three-process
+main/preload fixture cover file authority, tombstones, cache upgrade, changed
+port, restored Character DOM, foreign-frame denial and outer-file corruption.
+Inner-entry preservation is a separate focused adapter regression. These are
+local synthetic/disposable-profile observations; final platform/package and
+anonymous public-download acceptance belong to the release ledger. No installed
+profile, game artwork/pixels or production wiki writes are test fixtures.
 
 The 0.9.4 focused catalog/model/walkthrough suites passed synthetic regressions
 for exact precedence, bounded one-edit/rn-m resolution, ambiguous and short-name

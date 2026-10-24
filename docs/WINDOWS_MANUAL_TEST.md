@@ -1,6 +1,28 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-## 0.9.4 Character inventory
+0.9.5 adds visible selected-item tier/progress controls with labeled catalog previews,
+private Character storage independent of the loopback port, automatic cross-session
+item reuse, explicit extra copies, two manual Any slots, strict compatible-slot
+placement and drag highlights. Removed-item suppression is scoped to a capture
+pass; fresh later passes and Rescan removed items recover valid reads. See
+[the current persistence plan](CHARACTER_INVENTORY_PERSISTENCE.md) for the
+archive audit, acceptance and limits.
+
+## 0.9.5 persistence, tier and placement
+
+1. Change a selected item’s tier/progress with Edit captured values closed. Check
+   green wiki-preview values, preserved original stats and Use captured stats.
+2. Restart the app and confirm inventory, equipment, identity and walkthrough
+   remain saved. A new walkthrough keeps inventory while rebuilding placements.
+3. Read the same item again; no automatic extra copy should appear. Add Second
+   copy manually and verify ambiguous reads request the intended physical copy.
+4. Drag known gear: compatible slots and both Any slots light up; incompatible
+   normal slots reject it. Any placement stays manual.
+5. Remove a bad read. The held tooltip must not recreate it. Use Rescan removed
+   items, show a fresh complete tooltip and confirm recovery. Old queued frames
+   cannot recover it. Verify actual live recall separately from fixture tests.
+
+## Earlier 0.9.4 Character inventory
 
 1. Use Default Modern. Unequip slowly, one item at a time, keeping the complete
    tooltip visible until its card appears. Verify one tier label, known-item
@@ -16,9 +38,9 @@
    game throughput separately from synthetic native walkthrough checks.
 
 
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.4-x64.exe`.
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.5-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.4` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.5` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
 
 ## 0.9.3 live item recovery
 

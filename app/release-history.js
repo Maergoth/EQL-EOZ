@@ -2,6 +2,71 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
   {
+    "version": "0.9.5",
+    "title": "Keep your inventory and recover missed item reads",
+    "changes": [
+      "Use Character Select to switch between Character (Server) saves after their first validated walkthrough step. Each keeps separate inventory, equipment, baseline and progress; switching stops Character reading without automatically restarting it.",
+      "Adjust selected-item tier and progress beside its stats, outside Edit captured values. Wiki-based previews show adjusted values in green and retain original captured statistics.",
+      "Keep Character inventory, placements and walkthrough state across restarts, upgrades and changed local ports. A new walkthrough retains inventory while rebuilding its placements and baseline.",
+      "Reuse one automatic item card across capture sessions and changing tiers. Add extra physical copies with Second copy; choose which saved copy to update when a read is ambiguous.",
+      "Use two manual Any slots. Valid slots light up while dragging, and incompatible normal placements are rejected.",
+      "Recover removed items during fresh later capture passes or with Rescan removed items. Stale queued reads and the held tooltip remain blocked.",
+      "Unequip with the item’s top-right X or by dragging equipped gear back into Inventory. Add item opens and focuses cached wiki search immediately without creating a blank card."
+    ],
+    "steps": [
+      {
+        "title": "Adjust tier beside the selected item",
+        "image": "0.9.5/character-tier-inventory",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Select an inventory or equipped item to adjust Item tier and Progress without opening Edit captured values. A tier change previews known wiki base stats, labels that preview and shows changed values in green. Original observed values remain available with Use captured stats. Extra physical copies are manual; screen reads update an existing saved card.",
+        "alt": "Synthetic selected Character item with visible tier slider and progress, separate inventory and the advanced editor closed.",
+        "caption": "Actual synthetic Character component capture. Native checks exercise trusted keyboard changes, focus and scroll retention, persistence and stat recalculation; no player data or game pixels.",
+        "imageSha256": "44c9213172511c3dc03989a8bd4aa49a6b643cba41a446f34c865cff3ade4031"
+      },
+      {
+        "title": "Recover removed items and use Any slots",
+        "image": "0.9.5/character-rescan-items",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "If you removed a bad read, choose Rescan removed items and show the complete tooltip again. Only fresh frames after the rescan can recover it. Known items can be placed manually into Any 1 or Any 2; normal slots accept only compatible items. Dragging highlights valid targets, and equipped copies leave loose inventory.",
+        "alt": "Synthetic Character walkthrough showing Rescan removed items, saved/equipped/loose counts and the 25-slot equipment board including Any 1 and Any 2.",
+        "caption": "Actual synthetic Character component. Native regressions distinguish held or stale reads from a fresh rescan and verify valid drag targets, occupied replacement and strict slot rejection.",
+        "imageSha256": "a7dc1fe74fe4a8e38326afd44f566ef014c49c2b9ca4fe636034ba0cfb4e84e6"
+      },
+      {
+        "title": "Choose a saved Character (Server)",
+        "image": "0.9.5/character-select-profiles",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Character Select lists characters after completing the first walkthrough step. Choose New character to begin another, or select a saved Character (Server) to restore its inventory, equipment, baseline and progress. Switching stops the current Character capture; resume explicitly when ready. Same-named characters on different servers remain separate.",
+        "alt": "Character Select shows a synthetic Second Realm character, saved re-equip progress and paused screen reading.",
+        "caption": "Actual synthetic native Character component. Regressions cover selected-profile isolation, inventory identity, explicit capture ownership and direct search; no player or game pixels.",
+        "imageSha256": "c7fa5d4044063c9a863450feb62ae8e5ae0cfd232083e9f0052b4026edfbd6ae"
+      },
+      {
+        "title": "Unequip straight from the equipment board",
+        "image": "0.9.5/character-equipped-x",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Hover or focus an equipped item to reveal its top-right X. Click it, or drag the item back into Inventory, to unequip the same saved physical card. Its values stay intact, and held tooltip rereads do not silently equip it again. Normal slots still reject incompatible items.",
+        "alt": "Synthetic equipment board showing an equipped head item with its top-right X and separate loose inventory.",
+        "caption": "Actual synthetic native Character component. Regressions cover selected-profile isolation, inventory identity, explicit capture ownership and direct search; no player or game pixels.",
+        "imageSha256": "1223e4fdcfbe8ee5130c6ffc7f32db33feb3c92c940d8a50a463a59bee08e8cf"
+      },
+      {
+        "title": "Add item opens wiki search immediately",
+        "image": "0.9.5/character-add-item-search",
+        "view": "character",
+        "action": "Open Character",
+        "copy": "Click Add item to open and focus cached wiki search. Type a name, choose the matching item and adjust its tier/progress before adding it. Opening search creates no blank inventory card. Extra physical copies remain deliberate; automatic reads update existing saved items.",
+        "alt": "Focused synthetic cached item search opened from Add item, with tier/progress controls and Add to inventory.",
+        "caption": "Actual synthetic native Character component. Regressions cover selected-profile isolation, inventory identity, explicit capture ownership and direct search; no player or game pixels.",
+        "imageSha256": "3b15faece5e73c2fcad1e6eb1aecfd31545c8d83dde99849017a215fcc50968a"
+      }
+    ]
+  },
+  {
     "version": "0.9.4",
     "title": "A compact Character inventory with wiki matching",
     "changes": [
