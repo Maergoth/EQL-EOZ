@@ -1,5 +1,18 @@
 # Wiki contribution integration design
 
+## Next-release review simplification
+
+The current flow supersedes the historical checkbox requirements below:
+**Preview wiki changes** opens the live-checked, account-bound complete page
+plan; **Publish wiki changes** is its single explicit final authorization.
+Destination, final duplicate-result and per-page approval checkboxes are
+removed. Nothing writes on Preview, resume or capture. Existing field/source
+confirmation metadata, host duplicate checks, blueprint revision, review
+digest, page revision/content guards and partial-retry reconciliation remain.
+New manual drop sources use the form's Zone and Raid Instance, leaving sources
+already recorded for other zones intact. See the
+[active form plan](../CONTRIBUTION_ITEM_FORM_PLAN.md) and its validation ledger.
+
 ## 0.9.7 reviewed log relationships
 
 Live log evidence is retained by the durable queue described in

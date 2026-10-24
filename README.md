@@ -192,8 +192,8 @@ rearming. Locations remain proposals for review, and EoZ never types commands.
 Correct the readable fields, choose **Raid Instance** when appropriate, and
 classify observed drops as **Common Loot** or **Unique Loot**. These are wiki
 sections, not measured drop probabilities. Optional unknown fields use the
-blueprint's supported placeholders. Match review and the final page diff remain
-required; individual fields no longer need separate Verified checkboxes.
+blueprint's supported placeholders. New drop sources use the **Zone** and
+**Raid Instance** above; there is no second Source Zone field.
 
 Use the screenshot **+** area to select/paste a PNG, review its caption/license
 and choose whether to publish it with the article. Local OCR is separate from
@@ -206,8 +206,9 @@ See the [next-release form plan](docs/CONTRIBUTION_ITEM_FORM_PLAN.md).
 
 Log in through the wiki's normal dedicated window when you are ready to submit.
 The app loads the current wiki blueprints, prepares a page plan and shows every
-planned change. Review each page and fresh duplicate check before the final
-publish action. Existing permissions and edit-conflict checks apply; a partial
+planned change. Choose **Preview wiki changes**, check the destination pages,
+fresh matches and complete diffs, then choose **Publish wiki changes**. There
+are no separate approval checkboxes. Existing permissions and edit-conflict checks apply; a partial
 result identifies unfinished pages so a retry does not repeat completed edits.
 Nothing publishes merely because a candidate was captured or previewed.
 

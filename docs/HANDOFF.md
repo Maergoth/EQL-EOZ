@@ -19,10 +19,15 @@ No updated database/dataset pull was triggered. See the closing ledger for actua
 ### Current integration contracts
 
 The next-release [item-form plan](CONTRIBUTION_ITEM_FORM_PLAN.md) covers fixed
-Classes/Slots multiselect dropdowns and paste-only icon matching inside Icon ID.
+Classes/Slots multiselect dropdowns, paste-only icon matching inside Icon ID,
+one Zone input and explicit Preview → Publish without repeated approval boxes.
 `app/contribution-choice-picker.js` preserves untouched legacy draft values;
 `app/icon-finder.js` compact mode retains local fingerprints and exact aliases.
 Source preparation does not publish the feature or modify installed profiles.
+The Preview action sets the existing internal destination-review flag; this is
+not an automatic publish. The desktop still validates live duplicate results,
+account, blueprint revision, plan digest and each page's revision/content.
+Resuming a partial plan shows its diffs and requires explicit Retry.
 
 - Character uses only confirmed current displayed stats. Equipped-hover tiers,
   catalog cards and Exaltations never change totals. Attached `(Exaltation)`

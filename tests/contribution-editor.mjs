@@ -23,6 +23,12 @@ assert.match(contributionMatchMarkup({fields:{},membership:'present',intent:'cre
 
 const identityCards=contributionMatchMarkup({kind:'npc',fields:{},intent:'update'},[{title:'A Loathing Lich'},{title:'A_Loathing_Lich'},{title:'A loathing lich'}]);
 assert.equal((identityCards.match(/data-use-existing=/g)||[]).length,1,'Case and underscore variants do not show duplicate cards');
-assert.match(identityCards,/This is the correct existing page/);assert.doesNotMatch(identityCards,/page identity and contribution type/);
+assert.match(identityCards,/data-use-existing="A Loathing Lich"/);assert.match(identityCards,/data-check-matches/);assert.match(identityCards,/name="intent"/);
+for(const intent of ['create','update']){
+    const destination=contributionMatchMarkup({kind:'item',fields:{},intent,matchesReviewed:true},[{title:'Synthetic Destination'}]);
+    assert.doesNotMatch(destination,/type="checkbox"|data-matches-reviewed|This is the correct existing page|I checked that this page does not already exist|page identity and contribution type/,'Destination review is performed by the explicit preview action, without a second approval checkbox.');
+    assert.match(destination,new RegExp(`value="${intent}" selected`));
+    assert.match(destination,/Use this page/);
+}
 assert.match(contributionFieldMarkup('location',wrap(''),{kind:'npc',requireLocation:false}),/placeholder="ex\. /);
 assert.doesNotMatch(contributionFieldMarkup('location',wrap(''),{kind:'npc',requireLocation:false}),/required/,'A source update does not demand a new spawn location');

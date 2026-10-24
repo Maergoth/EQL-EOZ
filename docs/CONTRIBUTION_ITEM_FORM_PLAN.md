@@ -1,4 +1,4 @@
-# Contribution item form: multiselects and inline icon paste
+# Contribution form: simpler review, multiselects and inline icon paste
 
 Prepare a separate next-release PR from published 0.9.9. Do not merge, release,
 refresh datasets or change installed profiles/wiki pages in this task.
@@ -17,6 +17,21 @@ this item form. Retain exact artwork aliases, user selection, image bounds,
 local fingerprint processing and stale-result/disposal guards. An icon paste
 must not trigger the form's general screenshot attachment handler.
 
+The follow-up request removes duplicate Source Zone entry and repeated approval
+checkboxes. Adding a drop source uses the current **Zone** and **Raid Instance**
+above; existing sources retain their own zone/instance. A missing zone focuses
+the existing field instead of creating a second input. Keep source inclusion
+choices and data filters, which select content rather than approve publication.
+
+The flow is **Preview wiki changes → Publish wiki changes**. Preview explicitly
+selects the current destination for a fresh guarded plan. Show all live matches,
+redirects, upload details, account and complete before/after page changes.
+Publish is the single final authorization; no destination, duplicate-result or
+per-page approval checkbox is needed. Preview/resume never writes automatically.
+Draft edits invalidate previews; a saved partial plan requires an explicit Retry.
+Keep the desktop account, live duplicate, blueprint revision, review-digest,
+create-only/content/revision guards and reconciliation of partial writes.
+
 ## Ownership and source map
 
 Worktree `D:/EQLWiki/.local/worktrees/eoz-item-form`, branch
@@ -29,7 +44,7 @@ Worktree `D:/EQLWiki/.local/worktrees/eoz-item-form`, branch
 - Root: contribution-editor.js and capture-workspace.js/CSS integration, native
   item-form checks/screenshots, developer documentation, final commit and PR.
 
-Existing review/identity gates, authenticated attributed page publication and
+Authenticated attributed page publication, identity/revision validation and
 private capture boundaries stay in force. The pending hover/discovery PRs are
 independent; this PR does not claim their changes are already released.
 
@@ -41,7 +56,12 @@ independent; this PR does not claim their changes are already released.
 - [x] Icon paste remains local and cannot attach a screenshot accidentally.
 - [x] Meaningful source/native checks, narrow/large-text visual review and
   updated documentation; synthetic captures only.
-- [ ] Commit/push, create/attach next-release PR and inspect initial CI.
+- [x] Commit/push, create/attach next-release PR #26 and inspect initial CI.
+- [x] Reuse Zone for new drop sources; preserve other-zone sources and require
+  a zone before adding a source.
+- [x] Replace repeated approvals with explicit Preview and one Publish/Retry,
+  retaining full diffs and host validation.
+- [x] Validate the review simplification; push its amendment to PR #26.
 
 
 ## Validation and maintenance
@@ -59,6 +79,19 @@ exact artwork aliases, no requests before explicit paste, bounded crops, stale
 replacement responses and disposal. Keyboard Tab/Shift+Tab return to the trigger
 before normal focus navigation; menus use available viewport/scroll-panel room.
 These are synthetic fixture checks, not an installed-app or live-game test.
+
+The simplification amendment passes the complete source suite and unchanged
+desktop wiki-client safeguards. The real-main/preload loopback flow verifies
+zero writes on Preview, all three related page diffs visible, a single Publish
+with no approval boxes, stale-review invalidation, and an explicit partial Retry
+after restart without repeated completed edits. The Chromium form check verifies
+blank-zone refusal/focus, current-Zone reuse, case deduplication and preservation
+of existing other-zone sources. The historical `test:workspace-098` command now
+forwards to the current superset fixture rather than expecting retired controls.
+
+![Full page previews retain one explicit Publish action](screenshots/contribution-single-publish.png)
+
+![Drop sources reuse the Zone above without a second zone input](screenshots/contribution-compact-drop-sources.png)
 
 ![Equipment slots multiselect, selected classes and inline Icon ID paste box](screenshots/item-form-multiselect-slots.png)
 
