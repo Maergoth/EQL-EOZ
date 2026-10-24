@@ -28,6 +28,10 @@ The Preview action sets the existing internal destination-review flag; this is
 not an automatic publish. The desktop still validates live duplicate results,
 account, blueprint revision, plan digest and each page's revision/content.
 Resuming a partial plan shows its diffs and requires explicit Retry.
+Only pages confirmed `applied` expose **View page** links, using digest-bound
+canonical titles on the wiki origin; these links survive partial-plan restart.
+Item blanks stay blank and explicit effects supersede stale placeholder lines;
+monster factual unknowns retain `?`. See the form plan for the validation ledger.
 
 - Character uses only confirmed current displayed stats. Equipped-hover tiers,
   catalog cards and Exaltations never change totals. Attached `(Exaltation)`

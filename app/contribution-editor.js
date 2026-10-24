@@ -38,3 +38,15 @@ export function contributionScreenshotMarkup(candidate){
     const attachment=candidate.attachment;
     return `<section class="contribution-image"><h3>Screenshot</h3><button type="button" class="contribution-image-drop" data-contribution-dropzone data-contribution-file aria-label="Select a screenshot or paste with Ctrl+V">${attachment?.thumbnail?`<img src="${e(attachment.thumbnail)}" alt="Selected contribution screenshot">`:'<span class="contribution-image-plus" aria-hidden="true">+</span><span>Select a screenshot or paste here</span>'}</button><div class="capture-actions"><button type="button" class="text-button" data-contribution-paste>Paste screenshot</button>${attachment?'<button type="button" class="text-button" data-remove-attachment>Remove screenshot</button>':''}</div><label>Image caption<input name="attachmentCaption" maxlength="1000" value="${e(attachment?.caption||'')}" placeholder="ex. A loathing lich at its spawn in Plane of Hate"></label><label>Image rights<select name="attachmentLicense"><option value="own-screenshot" ${!attachment?.license||attachment.license==='own-screenshot'?'selected':''}>My EverQuest screenshot</option><option value="permission" ${attachment?.license==='permission'?'selected':''}>I have permission to upload this image</option></select></label></section>`;
 }
+
+// A successful page result belongs to its reviewed canonical title. Never use
+// a result-provided URL, or present an unsuccessful page as already saved.
+export function contributionPublishedPagesMarkup(plan){
+    const rows=(Array.isArray(plan?.pages)?plan.pages:[]).flatMap(page=>{
+        if(page?.status!=='applied'||typeof page.title!=='string'||!page.title.trim())return [];
+        let titlePath;try{titlePath=encodeURIComponent(page.title);}catch{return [];}
+        const outcome=page.operation==='create'?'Created':['update','replace-reviewed'].includes(page.operation)?'Updated':'Saved';
+        return [`<li data-published-page="${e(page.title)}"><span><strong>${e(page.title)}</strong> <small>${outcome}</small></span> <a href="https://eqlwiki.com/${e(titlePath)}" target="_blank" rel="noopener noreferrer" aria-label="View page: ${e(page.title)}">View page</a></li>`];
+    });
+    return rows.length?`<section class="contribution-published-pages"><h3>Saved pages</h3><ul>${rows.join('')}</ul></section>`:'';
+}

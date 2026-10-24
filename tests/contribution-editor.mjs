@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {buildContributionDraft,extractContributionBlueprints,patchContributionPrimary,patchContributionRelationship,contributionItemEffects} from '../app/contribution-model.js';
-import {contributionFieldMarkup,contributionLootMarkup,contributionMatchMarkup,contributionScreenshotMarkup} from '../app/contribution-editor.js';
+import {contributionFieldMarkup,contributionLootMarkup,contributionMatchMarkup,contributionScreenshotMarkup,contributionPublishedPagesMarkup} from '../app/contribution-editor.js';
 const wrap=value=>({value,confirmed:true}),blueprints=extractContributionBlueprints('=== Item Page Blueprint ===\n<pre>{{Itempage|itemname=?|statsblock=?}}</pre>\n=== NPC Page Blueprint ===\n<pre>{{Namedmobpage|name=?}}</pre>\n=== Raid Encounter Blueprint ===\n<pre>{{Namedmobpage|name=?}}</pre>\n=== Zone Page Blueprint ===\n<pre>{| class="zoneTopTable"\n|}</pre>\n=== Spell Page Blueprint ===\n<pre>{{Spellpage\n|spellname=Spell\n|description=Description\n|classes=Classes\n|items_with_effect=Items\n|casting_time=Time\n|mana=Mana\n|slots=Effects\n}}</pre>',123);
 const item={kind:'item',name:'Synthetic Thorn',fields:{effectName:wrap('Synthetic Rampage'),effectType:wrap('Combat'),effectCastTime:wrap('Instant'),effectLevel:wrap(45)}};
 const draft=buildContributionDraft(item,blueprints);assert.deepEqual(draft.blockers,[]);assert.match(draft.text,/Classic Era/);assert.match(draft.text,/Effect: \[\[Synthetic Rampage\]\] \(Combat, Casting Time: Instant\) at Level 45/);assert.match(draft.text,/Exaltation capacity: 5/);
@@ -32,3 +32,29 @@ for(const intent of ['create','update']){
 }
 assert.match(contributionFieldMarkup('location',wrap(''),{kind:'npc',requireLocation:false}),/placeholder="ex\. /);
 assert.doesNotMatch(contributionFieldMarkup('location',wrap(''),{kind:'npc',requireLocation:false}),/required/,'A source update does not demand a new spawn location');
+
+const saved=contributionPublishedPagesMarkup({status:'partial',pages:[
+    {kind:'item',title:'Synthetic Blade',operation:'create',status:'applied'},
+    {kind:'zone',title:'Synthetic Vale',operation:'replace-reviewed',status:'applied'},
+    {kind:'npc',title:'A synthetic keeper',operation:'create',status:'applied'},
+    {kind:'spell',title:'Synthetic Effect',operation:'update',status:'applied'},
+    {title:'Unfinished related page',operation:'update',status:'failed'},
+    {title:'Pending related page',operation:'create',status:'pending'},
+    {title:'Unknown result',operation:'update',status:'mystery'}
+]});
+assert.match(saved,/<h3>Saved pages<\/h3>/);
+assert.equal((saved.match(/>View page<\/a>/g)||[]).length,4,'Every successfully applied page has its own link, independent of entity kind.');
+assert.match(saved,/Created/);assert.match(saved,/Updated/);
+for(const title of ['Synthetic Blade','Synthetic Vale','A synthetic keeper','Synthetic Effect']){
+    assert(saved.includes(`href="https://eqlwiki.com/${encodeURIComponent(title)}"`));
+    assert(saved.includes(`aria-label="View page: ${title}"`));
+}
+assert.doesNotMatch(saved,/Unfinished related page|Pending related page|Unknown result/,'Partial publication links only the pages which succeeded.');
+for(const title of ['<img src=x onerror="oops"> & bad','//evil.example/page','javascript:alert(1)']){
+    const hostile=contributionPublishedPagesMarkup({pages:[{title,status:'applied',operation:'create',result:{url:'javascript:alert(99)'}}]});
+    assert.doesNotMatch(hostile,/<img| onerror="oops"|href="javascript:|alert\(99\)/);
+    assert.match(hostile,/rel="noopener noreferrer"/);
+    const href=hostile.match(/href="([^"]+)"/)[1];assert.equal(new URL(href).origin,'https://eqlwiki.com');
+}
+assert.equal(contributionPublishedPagesMarkup({pages:[{title:'\ud800',status:'applied'}]}),'','Malformed title encoding cannot break rendering the remaining results.');
+for(const plan of [null,{}, {pages:[]},{pages:[{title:'Not saved',status:'pending'}]},{pages:[{title:'No status'}]},{pages:[{title:'',status:'applied'}]}])assert.equal(contributionPublishedPagesMarkup(plan),'','No saved-page section is rendered without successfully saved, named pages.');

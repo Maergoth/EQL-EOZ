@@ -9,6 +9,8 @@ clear selected summaries and keyboard support. Preserve unedited legacy draft
 values, optional blank fields and the existing array storage/submission format.
 Selecting classes must handle ALL/NONE consistently. Do not introduce free text
 that can produce mistyped abbreviations.
+Selected Classes/Slots must agree with visible `Class:`/`Slot:` stat lines,
+not only article categories. Existing pages change only explicitly edited fields.
 
 Icon matching belongs inside the existing Icon ID field: one focusable paste
 box, a local preview/status and closest-result choices after an explicit paste.
@@ -31,6 +33,18 @@ per-page approval checkbox is needed. Preview/resume never writes automatically.
 Draft edits invalidate previews; a saved partial plan requires an explicit Retry.
 Keep the desktop account, live duplicate, blueprint revision, review-digest,
 create-only/content/revision guards and reconciliation of partial writes.
+
+Successful publication must provide **View page** links for every confirmed
+saved page, whether an item, monster, zone, spell or related update. Use the
+canonical title saved in the plan, with a fixed wiki origin; show already-applied
+pages during a partial result and after restart. Pending, uncertain and failed
+pages must not claim success. Do not navigate automatically.
+
+Empty item template fields stay blank, including effect metadata. A chosen
+effect/proc must replace a stale `Effect: ?` line rather than be suppressed by
+it. Preserve unrelated item text and scoped existing-page edits. Keep `?` for
+missing factual monster fields such as HP and spawn location; keep the existing
+new-monster location requirement and all server-side edit guards.
 
 ## Ownership and source map
 
@@ -62,6 +76,10 @@ independent; this PR does not claim their changes are already released.
 - [x] Replace repeated approvals with explicit Preview and one Publish/Retry,
   retaining full diffs and host validation.
 - [x] Validate the review simplification; push its amendment to PR #26.
+- [x] Verify and push successful-page links for every page kind and partial
+  results, including resumed plans.
+- [x] Fix selected effect serialization and blank item fields; retain factual
+  monster unknowns and scoped existing-page patches.
 
 
 ## Validation and maintenance
@@ -89,9 +107,25 @@ blank-zone refusal/focus, current-Zone reuse, case deduplication and preservatio
 of existing other-zone sources. The historical `test:workspace-098` command now
 forwards to the current superset fixture rather than expecting retired controls.
 
+The later page-link/effect amendment passes focused contribution, editor,
+choice-picker, client, base-recovery and tier-zero checks. The real-main loopback
+workflow confirms links for the created item immediately during a partial
+result, retains those links after restart, and adds the successful monster and
+zone links after explicit Retry. Pure cases cover spell links too, fixed-origin
+escaping, and no success links for pending/failed/uncertain pages. The selected
+effect replaces a placeholder without losing other effects, including names
+with escaped entities. Explicit changes to existing effects and Class/Slot lines
+are scoped and idempotent; unknown item metadata stays empty and NPC factual
+unknowns/location requirements remain. The prior complete source-suite receipt
+belongs to the review simplification; this follow-up uses the focused checks
+and the same complete native contribution workflow, without repeating unrelated
+route/OCR checks. No production writes or installed-profile changes occurred.
+
 ![Full page previews retain one explicit Publish action](screenshots/contribution-single-publish.png)
 
 ![Drop sources reuse the Zone above without a second zone input](screenshots/contribution-compact-drop-sources.png)
+
+![Successful item, monster and zone submissions offer View page links](screenshots/contribution-saved-page-links.png)
 
 ![Equipment slots multiselect, selected classes and inline Icon ID paste box](screenshots/item-form-multiselect-slots.png)
 

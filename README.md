@@ -199,6 +199,7 @@ Use the screenshot **+** area to select/paste a PNG, review its caption/license
 and choose whether to publish it with the article. Local OCR is separate from
 uploading. Item **Classes** and **Equipment slots** use multiselect dropdowns
 with fixed choices. Select several entries; Classes also supports All/None.
+Selected values appear in the item stat block as well as its categories.
 Under **Icon ID**, paste a crop containing **just the icon** into the inline box,
 then select its matching artwork. Matching runs locally against the wiki's
 versioned index; original aliases and IDs are preserved. No icon crop uploads.
@@ -208,8 +209,12 @@ Log in through the wiki's normal dedicated window when you are ready to submit.
 The app loads the current wiki blueprints, prepares a page plan and shows every
 planned change. Choose **Preview wiki changes**, check the destination pages,
 fresh matches and complete diffs, then choose **Publish wiki changes**. There
-are no separate approval checkboxes. Existing permissions and edit-conflict checks apply; a partial
-result identifies unfinished pages so a retry does not repeat completed edits.
+are no separate approval checkboxes. Existing permissions and edit-conflict
+checks apply; a partial result identifies unfinished pages so a retry does not
+repeat completed edits.
+Saved pages include **View page** links for items, monsters, zones, spells and
+related updates, including pages completed before a partial result. Empty item
+fields stay blank; missing factual monster values retain `?` placeholders.
 Nothing publishes merely because a candidate was captured or previewed.
 
 For a tiered drop without a wiki base record, base recovery keeps the original

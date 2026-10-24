@@ -12,6 +12,9 @@ digest, page revision/content guards and partial-retry reconciliation remain.
 New manual drop sources use the form's Zone and Raid Instance, leaving sources
 already recorded for other zones intact. See the
 [active form plan](../CONTRIBUTION_ITEM_FORM_PLAN.md) and its validation ledger.
+Confirmed `applied` pages offer canonical **View page** links, including partial
+results and resumed plans. Empty item fields stay blank; explicit selected
+effects replace stale placeholders. Monster factual unknowns retain `?`.
 
 ## 0.9.7 reviewed log relationships
 
