@@ -22,12 +22,15 @@ export function durationLabel(milliseconds) {
     if (seconds >= 3600) return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds % 3600 / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
+function liveEncounter(encounters) {
+    return encounters.find(encounter => encounter.active) || encounters.reduce((latest,encounter) =>
+        !latest || number(encounter.lastAt || encounter.startAt) > number(latest.lastAt || latest.startAt) ? encounter : latest,null);
+}
 export function parseView(parse = {}, scope = 'live', tab = 'damage') {
     if (tab === 'session') scope = 'session';
     const encounters = Array.isArray(parse.encounters) ? parse.encounters : [];
-    const current = encounters.find(encounter => encounter.active) || null;
     const previous = encounters.find(encounter => !encounter.active) || null;
-    const chosen = scope === 'live' ? current : scope === 'previous' ? previous : encounters.find(encounter => String(encounter.id) === scope);
+    const chosen = scope === 'live' ? liveEncounter(encounters) : scope === 'previous' ? previous : encounters.find(encounter => String(encounter.id) === scope);
     const session = scope === 'session';
     const events = session ? encounters.flatMap(encounter => encounter.events || []) : chosen?.events || [];
     const types = { damage:'damage', healing:'heal', taken:'taken', runes:'rune' };
@@ -47,11 +50,11 @@ export function parseView(parse = {}, scope = 'live', tab = 'damage') {
     const source = session ? parse : chosen || {};
     const runeCapacity = Number.isFinite(source.totalRuneCapacity) ? number(source.totalRuneCapacity) : (source.breakdowns?.runes || []).reduce((sum,row) => sum + number(row.total), 0);
     const metrics = { damage:session ? number(parse.totalDamage) : number(chosen?.damage), healing:session ? number(parse.totalHealing) : number(chosen?.healing), taken:session ? number(parse.totalTaken) : number(chosen?.taken), dps:session ? number(parse.sessionDps) : number(chosen?.dps), runeCapacity };
-    return { scope, tab, character:parse.character || 'You', metrics, stats:parse,
+    return { scope, tab, character:parse.character || 'You', metrics, stats:parse, encounterId:chosen?.id || null,
         combatants:Array.isArray(source.combatants) ? source.combatants : [],
         combatantSeconds:session ? number(parse.combatantSeconds) : duration,
         name:session ? 'Whole session · all zones' : chosen?.name || (scope === 'live' ? 'Waiting for combat…' : 'No completed encounter'), ended:Boolean(chosen && !chosen.active),
-        title:session ? 'Session' : scope === 'live' ? current ? `Live · ${current.name || 'Encounter'}` : 'Live · waiting for combat' : scope === 'previous' ? previous ? `Previous · ${previous.name || 'Encounter'}` : 'Previous · no completed encounter' : chosen ? `${chosen.name || 'Encounter'} · saved encounter` : 'Selected encounter is no longer retained',
+        title:session ? 'Session' : scope === 'live' ? chosen ? `Live · ${chosen.name || 'Encounter'}${chosen.active ? '' : ' · ended'}` : 'Live · waiting for combat' : scope === 'previous' ? previous ? `Previous · ${previous.name || 'Encounter'}` : 'Previous · no completed encounter' : chosen ? `${chosen.name || 'Encounter'} · saved encounter` : 'Selected encounter is no longer retained',
         total, rate, duration, recordedTotal, rows:(aggregate || [...groups.values()]).sort((a,b) => b.total - a.total),
         events:session ? (parse.recentEvents || []).slice(0, 40) : events.slice().reverse().slice(0, 40),
         available:session || Boolean(chosen), truncated:!aggregate && (session && total > recordedTotal || Boolean(chosen?.eventsTruncated)), feedTruncated:session || Boolean(chosen?.eventsTruncated) };
@@ -91,9 +94,9 @@ function renderCombatantDetails(view, expanded) {
     const total = actors.reduce((sum,row) => sum + number(row[metric]),0);
     if (!actors.length) return empty('No recorded actions.');
     return `<div class="combatant-columns" aria-hidden="true"><span>Combatant · expand</span><span>${TAB_LABELS[metric]}</span><span>${rateLabel}</span></div>` + actors.map(actor => {
-        const key = JSON.stringify([view.scope,view.tab,actor.name]), rows = actor.breakdowns?.[metric] || [];
+        const key = JSON.stringify([view.scope,view.scope === 'session' ? null : view.encounterId,view.tab,actor.name]), rows = actor.breakdowns?.[metric] || [];
         const seconds = metric === 'damage' && view.scope === 'session' && actor.name?.toLowerCase() === view.character.toLowerCase() ? number(view.stats.sessionSeconds) : view.combatantSeconds;
-        return `<details class="combatant-details" data-combatant-key="${attr(key)}"${expanded.has(key) ? ' open' : ''}><summary title="${attr(actor.name)} · ${fmt(total ? number(actor[metric]) / total * 100 : 0)}% of logged ${metric}"><span class="combatant-name">${escapeHtml(actor.name)}</span><strong>${fmt(actor[metric])}</strong><span>${fmt(actor[rateKey])}</span></summary><table class="meter-table" aria-label="${attr(actor.name)} ${TAB_LABELS[metric]} breakdown"><thead><tr><th>${metric === 'taken' ? 'Attacker' : 'Ability'}</th><th>${TAB_LABELS[metric]}</th><th>${rateLabel}</th><th>%</th><th>Hits</th></tr></thead><tbody>${rows.map((row,index) => `<tr style="--amount:${rows[0]?.total ? (number(row.total) / number(rows[0].total) * 100).toFixed(1) : 0}%"><td class="meter-name" title="${attr(row.name)}"><span class="meter-rank">${index + 1}</span><span class="meter-label">${escapeHtml(row.name)}</span></td><td>${fmt(row.total)}</td><td>${seconds ? fmt(number(row.total) / seconds) : '—'}</td><td>${fmt(number(actor[metric]) ? number(row.total) / number(actor[metric]) * 100 : 0)}%</td><td>${fmt(row.count)}</td></tr>`).join('')}</tbody></table></details>`;
+        return `<details class="combatant-details" data-combatant-key="${attr(key)}"${expanded.has(key) ? ' open=""' : ''}><summary title="${attr(actor.name)} · ${fmt(total ? number(actor[metric]) / total * 100 : 0)}% of logged ${metric}"><span class="combatant-name">${escapeHtml(actor.name)}</span><strong>${fmt(actor[metric])}</strong><span>${fmt(actor[rateKey])}</span></summary><table class="meter-table" aria-label="${attr(actor.name)} ${TAB_LABELS[metric]} breakdown"><thead><tr><th>${metric === 'taken' ? 'Attacker' : 'Ability'}</th><th>${TAB_LABELS[metric]}</th><th>${rateLabel}</th><th>%</th><th>Hits</th></tr></thead><tbody>${rows.map((row,index) => `<tr style="--amount:${rows[0]?.total ? (number(row.total) / number(rows[0].total) * 100).toFixed(1) : 0}%"><td class="meter-name" title="${attr(row.name)}"><span class="meter-rank">${index + 1}</span><span class="meter-label">${escapeHtml(row.name)}</span></td><td>${fmt(row.total)}</td><td>${seconds ? fmt(number(row.total) / seconds) : '—'}</td><td>${fmt(number(actor[metric]) ? number(row.total) / number(actor[metric]) * 100 : 0)}%</td><td>${fmt(row.count)}</td></tr>`).join('')}</tbody></table></details>`;
     }).join('');
 }
 function summaryRows(rows, title) { return `<div class="summary-section">${escapeHtml(title)}</div><table class="summary-table"><tbody>${rows.map(([label,value]) => `<tr><td title="${label === 'Rune capacity granted' ? 'Logged capacity granted; damage absorbed is not measured.' : ''}">${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`).join('')}</tbody></table>`; }
@@ -353,7 +356,8 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             lastParseSession = parse.sessionNumber;
             const view = parseView(parse,scope,tab);
             const selector = $('#encounter-scope');
-            const options = `<option value="live">${attr(parse.encounters?.find(encounter => encounter.active)?.name || 'Waiting for combat…')} · Live</option><option value="previous">Previous encounter</option><option value="session">Whole session</option>` + (parse.encounters || []).slice(0,50).map(encounter => `<option value="${attr(encounter.id)}">${escapeHtml(encounter.name || 'Encounter')} · ${new Date(number(encounter.startAt)).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</option>`).join('');
+            const live = liveEncounter(parse.encounters || []);
+            const options = `<option value="live">${attr(live?.name || 'Waiting for combat…')} · Live${live && !live.active ? ' (ended)' : ''}</option><option value="previous">Previous encounter</option><option value="session">Whole session</option>` + (parse.encounters || []).slice(0,50).map(encounter => `<option value="${attr(encounter.id)}">${escapeHtml(encounter.name || 'Encounter')} · ${new Date(number(encounter.startAt)).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</option>`).join('');
             replace(selector, options + (!['live','previous','session'].includes(scope) && !(parse.encounters || []).some(encounter => String(encounter.id) === scope) ? `<option value="${attr(scope)}">Encounter no longer retained</option>` : ''));
             selector.value = scope; selector.hidden = tab === 'session';
             $('#overlay-title').hidden = tab !== 'session';
@@ -366,7 +370,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             }
             while (expandedCombatants.size > 1024) expandedCombatants.delete(expandedCombatants.values().next().value);
             replace($('#parse-body'), renderParseContent(view,expandedCombatants));
-            if (focusedCombatant && !parseSessionChanged) [...$('#parse-body').querySelectorAll('[data-combatant-key]')].find(details => details.dataset.combatantKey === focusedCombatant)?.querySelector('summary')?.focus({preventScroll:true});
+            if (focusedCombatant && !parseSessionChanged) ([...$('#parse-body').querySelectorAll('[data-combatant-key]')].find(details => details.dataset.combatantKey === focusedCombatant)?.querySelector('summary') || selector).focus({preventScroll:true});
         } else if (panel === 'intel') {
             const intel = s.intel || {};
             $('#overlay-title').textContent = s.zone || 'Zone & loot'; $('#class-filter').checked = Boolean(intel.myClassOnly);

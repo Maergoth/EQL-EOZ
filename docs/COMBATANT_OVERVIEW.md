@@ -5,6 +5,15 @@ and individual encounters. Damage, Healing and Taken each have a keyboard-access
 disclosure for every combatant with actions in that metric. Open one to inspect
 its abilities or incoming attackers. Disclosures stay open across log updates.
 
+Live follows the active encounter automatically. After combat ends it keeps
+the most recently active encounter visible, labelled **Live (ended)** with an
+ended badge. Its recorded duration, damage and rates remain fixed while idle.
+The next encounter replaces it automatically; the first empty session can still
+show Waiting for combat. Whole session, Previous and pinned history remain
+explicit selections. A held encounter keeps its open disclosures and keyboard
+focus. A new encounter starts with its own disclosures; if a focused old row
+disappears, keyboard focus returns to the encounter selector.
+
 One damage line credits damage to its logged attacker and damage taken to its
 recipient. Those describe the same hit; adding the columns together counts it
 twice. A heal credits the logged healer, using the effective amount before the
