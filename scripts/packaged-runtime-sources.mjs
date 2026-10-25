@@ -15,6 +15,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/assets/eye-of-zomm.svg',
     'app/styles.css',
     'app/app.js',
+    'app/crawl-mode.js',
     'app/capture-workspace.js',
     'app/contribution-history.js',
     'desktop/contribution-history.cjs',

@@ -27,6 +27,7 @@ import { collectDropObservation } from './drop-observations.js';
 import { createWikiResolver } from './wiki-identity.js';
 import { createTooltipHover } from './tooltip-delay.js';
 import { applyLiveWikiOverlay } from './live-wiki-overlay.js';
+import { createCrawlMode } from './crawl-mode.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -34,6 +35,7 @@ const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of
 const parser = new EQLogParser({getPack:()=>pack});
 let pack = { meta:{}, zones:[], npcs:[], items:[] };
 let basePack=pack,liveEntrySnapshot={schemaVersion:1,entries:[]},liveEntriesTimer=null;
+const crawlMode=createCrawlMode({getPack:()=>pack});
 let observationPack=null,observationResolver=null;
 const observationSession=globalThis.crypto.randomUUID();
 let observationPreference=true;
@@ -542,6 +544,7 @@ function mapSourceContextMatches(context) {
 }
 
 function clearSourceLocation() {
+    crawlMode.reset();
     cancelDiscoveryChecks();
     void discoveryContributionFlow?.cancelWhere(() => true,{close:true});
     captureWorkspace.cancelSource();
@@ -580,6 +583,7 @@ async function pollLog() {
             requiresFullRender = true;
         }
         if (data.reset) {
+            crawlMode.reset();
             parser.resetSourceContext();
             if(data.logPath)parser.setCharacterFromFilename(data.logPath);
             if(data.logContext)parser.seedLogContext(data.logContext);
@@ -642,8 +646,13 @@ function consumeText(text, allowTransientUi = true) {
         if (event?.type === 'location') latestLocation = { ...event.location };
         const originalAt = Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] || '');
         const freshTimerEvent = Number.isFinite(originalAt) && Math.abs(Date.now() - originalAt) <= 10000;
+        const crawlKill=crawlMode.snapshot().enabled&&['kill','zone','profile'].includes(event?.type)?crawlMode.consume(event,{
+            ...crawlContext(),live:allowTransientUi&&freshTimerEvent,at:parser.currentLineAt,
+            playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)},
+            event.type==='kill'?rareMobsForZone(state(),effectiveProfile(state()),{includeGeneric:true}).map(crawlCandidate):[]):null;
         let listedTarget = false;
-        if (allowTransientUi && freshTimerEvent && ['consider','kill'].includes(event?.type)) listedTarget = focusIntelForConsider(event.type === 'consider' ? event.target : {name:event.victim});
+        if(crawlKill)listedTarget=true;
+        else if (allowTransientUi && freshTimerEvent && ['consider','kill'].includes(event?.type)) listedTarget = focusIntelForConsider(event.type === 'consider' ? event.target : {name:event.victim});
         if(['profile','zone'].includes(event?.type))cancelDiscoveryChecks();
         if (!listedTarget && event?.type!=='kill') wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt,playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)});
         overlaySession.consume(event, { zone:parser.zone, character:parser.character, live:allowTransientUi && freshTimerEvent,
@@ -686,10 +695,21 @@ function state() {
     return parser.snapshot();
 }
 
+function crawlContext(s=state()) {
+    const context=parser.logContextSnapshot(),profile=effectiveProfile(s);
+    return {zone:s.zone,character:s.character,source:bridgeInfo?.logPath||'current-log',profile:JSON.stringify([profile.level,profile.classes.slice().sort()]),session:s.sessionNumber,
+        visit:context.visit,instanceId:context.instanceId,instance:context.instance};
+}
+function crawlCandidate(source) {
+    return {name:source.name,zone:source.zone,raidInstance:raidVariant(source),wikiTitle:source.npc?.wikiTitle||source.wikiTitle||source.name,
+        aliases:source.npc?.aliases||source.aliases||[],loc:source.loc,dropCount:source.allItems?.length??source.dropCount??0};
+}
+
 function startNewSession() {
     // Split at the current consumed cursor. Keep logOffset and partialLine so
     // the next poll completes unread lines without replaying the previous tail.
     parser.startNewSession();
+    crawlMode.reset();
     selectedEncounterId = '';
     clearTimeout(fightExpiryTimer);
     renderAll();
@@ -705,6 +725,7 @@ function focusIntelForConsider(target) {
     const matches = rareMobsForZone(s, effectiveProfile(s)).filter(source => npcNameKey(source.name) === npcNameKey(target.name));
     const source = matches.find(source => intelIdentity(source) === focusedIntelTarget?.id) || matches.find(source => !raidVariant(source)) || matches[0];
     if (!source) return;
+    if(crawlMode.isDefeated(crawlCandidate(source)))return true;
     focusedIntelTarget = { id:intelIdentity(source), name:source.name, zone:s.zone, raidInstance:raidVariant(source) };
     intelFocusSequence++;
     timerAlerts.blip();
@@ -733,12 +754,14 @@ const mapDataLoader = createMapDataLoader({ getManifest:() => api('/api/eq-files
 
 function overlaySessionSnapshot() {
     const s = state();
+    crawlMode.context(crawlContext(s));
+    const crawl=crawlMode.snapshot();
     const profile = effectiveProfile(s);
     const budget = { remaining:240 * 1024 };
     const canRoute = Boolean(settings.routingEnabled && s.zone && s.location);
     const sources = rareMobsForZone(s, profile, { includeGeneric:!settings.intelNamedOnly });
     const npcs = sources.map(source => ({
-        id:intelIdentity(source), name:source.name, raidInstance:raidVariant(source), level:source.npc?.avgLevel || 0,
+        id:intelIdentity(source), name:source.name, raidInstance:raidVariant(source), defeated:crawlMode.isDefeated(crawlCandidate(source)), level:source.npc?.avgLevel || 0,
         levelMin:source.npc?.levelMin || 0, levelMax:source.npc?.levelMax || 0,
         con:conForLevel(source.npc?.avgLevel, profile.level), named:isNamedSource(source.name), rare:true,
         distance:Number.isFinite(source.distance) ? source.distance : null,
@@ -748,18 +771,21 @@ function overlaySessionSnapshot() {
     }));
     const selected = focusedIntelTarget && zoneKey(focusedIntelTarget.zone) === zoneKey(s.zone) ? focusedIntelTarget : null;
     const navigation = activeRoute?.status === 'ready' && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? viewerApi()?.overlayNavigation?.() : null;
-    return { character:s.character, zone:s.zone, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
-        parse:compactParseSnapshot(s), intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
+    return { character:s.character, zone:s.zone, crawl, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
+        parse:compactParseSnapshot(s), intel:{ npcs, zone:s.zone, crawlEnabled:crawl.enabled, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
             packVersion:pack.meta?.manifestVersion || pack.meta?.version || '', profileKey:JSON.stringify([profile.classes.slice().sort(),settings.itemTier,settings.era]),
             focusedNpcId:selected?.id || '', focusSequence:intelFocusSequence },
         map:{ zone:s.zone, viewerZone:viewerZoneTarget(pack.zones,s.zone,parser.zoneShortName), dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
             focus:overlayMapFocus && overlayMapFocus.dataVersion === mapDataRevision && zoneKey(overlayMapFocus.zone) === zoneKey(s.zone) ? overlayMapFocus : null,
-            npcs:sources.filter(source => source.loc?.length >= 2).map(source => ({id:intelIdentity(source),name:source.name,loc:source.loc,raidInstance:raidVariant(source)})),
+            npcs:sources.filter(source => source.loc?.length >= 2).map(source => ({id:intelIdentity(source),name:source.name,loc:source.loc,raidInstance:raidVariant(source),defeated:crawlMode.isDefeated(crawlCandidate(source))})),
             route:{ points:navigation?.points || [], message:activeRoute && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? activeRoute.message : '' } } };
 }
 
 async function handleOverlayCommand({ action, payload = {} }) {
     if (action === 'session:new-session') { startNewSession(); return; }
+    if(action==='session:crawl-mode'){
+        crawlMode.context(crawlContext());crawlMode.setEnabled(payload.enabled);renderAll();return crawlMode.snapshot();
+    }
     const requestedZone = state().zone;
     const resolveNpc = () => {
         const currentZone = state().zone;
@@ -789,6 +815,7 @@ async function handleOverlayCommand({ action, payload = {} }) {
     }
     if (action === 'session:intel-drops') {
         const npc = resolveNpc(), profile = effectiveProfile(state());
+        if(crawlMode.isDefeated({...npc,zone:requestedZone}))throw new Error('This mob is defeated in Crawl mode until you enter the zone again.');
         const items = knownDropsForNpc(npc).filter(item => eraAllowed(item.era) && (!settings.intelMyClassOnly || (itemMatchesProfile(item,profile) && itemHasClassStats(item))));
         const budget = {remaining:1024*1024};
         return {items:items.map(item => overlayItemSummary(item,budget)),total:items.length};
@@ -1053,13 +1080,14 @@ function syncRareMobsToViewer(force = false) {
         loc:source.loc,
         level:Number(source.npc?.avgLevel) || 0,
         dropCount:source.allItems.length,
-        classDropCount:source.items.length
+        classDropCount:source.items.length,
+        defeated:crawlMode.isDefeated(crawlCandidate(source))
     }));
     const key = JSON.stringify([
         zoneKey(s.zone),
         pack.meta?.manifestVersion || pack.meta?.version || '',
         profile.classes.slice().sort(),
-        payload.map(entry => [entry.id, entry.name, entry.loc, entry.dropCount, entry.classDropCount])
+        payload.map(entry => [entry.id, entry.name, entry.loc, entry.dropCount, entry.classDropCount,entry.defeated])
     ]);
     if (!force && key === renderedRareViewerKey) return true;
     renderedRareViewerKey = key;

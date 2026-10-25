@@ -35,6 +35,7 @@ html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
 .eoz-rare-marker:hover,.eoz-rare-marker:focus-visible,.eoz-rare-marker.is-active{border-color:#fff0a6;background:rgba(76,58,15,.95);color:#fff6c9;outline:none}
 .eoz-rare-marker small{margin-left:5px;color:#a9b4bf;font:600 8px/1.2 system-ui,sans-serif}
 .eoz-rare-marker.is-raid{border-color:#cd8189;color:#efbdc3;background:rgba(35,13,23,.92)}
+.eoz-rare-marker.is-defeated{text-decoration:line-through;text-decoration-thickness:1px;filter:saturate(.25)}
 .eoz-route-guidance{position:absolute;z-index:22;top:12px;left:50%;transform:translateX(-50%);min-width:220px;max-width:min(520px,calc(100% - 28px));border:1px solid rgba(240,199,73,.66);border-radius:10px;background:rgba(8,14,22,.92);box-shadow:0 5px 20px rgba(0,0,0,.55);padding:7px 12px;color:#fff6c9;text-align:center;pointer-events:none;font-family:system-ui,sans-serif}
 .eoz-route-guidance[hidden]{display:none}
 .eoz-route-guidance strong{display:block;color:#f4d66e;font:700 14px/1.25 Georgia,serif}
@@ -730,7 +731,7 @@ function renderRareMobs() {
         shown += 1;
         candidate.marker.element.hidden = false;
         candidate.marker.element.style.transform = `translate(-50%, -100%) translate(${candidate.x.toFixed(1)}px, ${candidate.y.toFixed(1)}px)`;
-        candidate.marker.element.style.opacity = firstPerson ? String(Math.max(.46, 1.08 - candidate.distance / 1800)) : '1';
+        candidate.marker.element.style.opacity = String((firstPerson ? Math.max(.46, 1.08 - candidate.distance / 1800) : 1)*(candidate.marker.defeated ? .42 : 1));
     }
 }
 
@@ -951,7 +952,9 @@ window.eqlEyeOfZommViewer = {
             button.type = 'button';
             button.className = 'eoz-rare-marker';
             if(overlayMode&&record.raidInstance)button.classList.add('is-raid');
-            button.title = `Select ${name} · ${record.raidInstance?'Raid':'Normal'} Zone${hasZ?'':' · height unknown'}${record.dropCount ? ` · ${record.dropCount} known drops` : ''}`;
+            if(record.defeated===true)button.classList.add('is-defeated');
+            button.title = `Select ${name} · ${record.raidInstance?'Raid':'Normal'} Zone${hasZ?'':' · height unknown'}${record.defeated===true?' · defeated':''}${record.dropCount ? ` · ${record.dropCount} known drops` : ''}`;
+            button.setAttribute('aria-label',button.title);
             button.dataset.npc = name;
             button.append(document.createTextNode(name));
             if (record.classDropCount || record.dropCount) {
@@ -966,7 +969,7 @@ window.eqlEyeOfZommViewer = {
             rareLayer.append(button);
             const marker = {
                 element:button,
-                id:record.id,raidInstance:!!record.raidInstance,hasZ,
+                id:record.id,raidInstance:!!record.raidInstance,hasZ,defeated:record.defeated===true,
                 name,
                 eqZ:overlayMode&&!hasZ?null:resolvedEqZ,
                 position:ground.clone().add({ x:0, y:8, z:0 }),

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { EQLogParser } from '../app/parser.js';
+import { createCrawlMode } from '../app/crawl-mode.js';
 import { formatWorldLocationForGameMap, formatWorldLocationForPlayer } from '../app/coordinate-system.js';
 import { resolveZoneRecord, viewerZoneName,viewerZoneTarget,loggedZoneName } from '../app/zone-identity.js';
 
@@ -53,7 +54,7 @@ function harness() {
     };
     const operations = [];
     const context = vm.createContext({
-        parser, pack:{ zones }, normalizedZoneKeys:new Map(), resolveZoneRecord,viewerZoneTarget,loggedZoneName, formatWorldLocationForPlayer,
+        parser, crawlMode:createCrawlMode(),crawlContext:()=>({zone:parser.zone}),pack:{ zones }, normalizedZoneKeys:new Map(), resolveZoneRecord,viewerZoneTarget,loggedZoneName, formatWorldLocationForPlayer,
         settings:{ mapMode:'top' }, bridgeInfo:{ eqRootExists:true, logExists:true,eqRootPath:'synthetic-root-a',logPath:'eqlog_Synthetic_example.txt' },mapDataRevision:0,
         viewerFolderStatus:'ready', viewerZoneState:{ zone:'', status:'idle', message:'' },
         partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,latestLocationSync:null,

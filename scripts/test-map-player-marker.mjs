@@ -20,7 +20,7 @@ async function run({root,temporary,scaleFactor}){
     const execute=(fn,...args)=>window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
     try{
         await window.loadURL(origin+'/');
-        await execute(async()=>{const {mountMapOverlay}=await import('/app/map-overlay.js');window.mapSession={map:{zone:'Synthetic Vale',dataVersion:1,location:{x:0,y:0,z:0},npcs:[]}};window.markerMap=mountMapOverlay({root:document.getElementById('native-map-root'),getSession:()=>mapSession,bridge:{action:async()=>({status:'ready',lines:[[-100,-100,0,100,-100,0,180,40,40]],labels:[]})}});await new Promise(done=>setTimeout(done,40));});
+        await execute(async()=>{const {mountMapOverlay}=await import('/app/map-overlay.js');window.mapActions=[];window.mapSession={map:{zone:'Synthetic Vale',dataVersion:1,location:{x:0,y:0,z:0},npcs:[]}};window.markerMap=mountMapOverlay({root:document.getElementById('native-map-root'),getSession:()=>mapSession,bridge:{action:async(action,payload)=>{mapActions.push({action,payload});if(action==='session:map-data')return{status:'ready',lines:[[-100,-100,0,100,-100,0,180,40,40]],labels:[]};}}});await new Promise(done=>setTimeout(done,40));});
         const inspect=()=>execute(()=>{const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data,dpr=devicePixelRatio||1,rect=canvas.getBoundingClientRect();let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++){const at=(y*canvas.width+x)*4;if(pixels[at]<160&&pixels[at+1]>170&&pixels[at+2]>220&&pixels[at+3]>200){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}}return{background:getComputedStyle(document.querySelector('#overlay')).backgroundColor,canvasBackground:getComputedStyle(canvas).backgroundColor,cornerAlpha:ctx.getImageData(1,1,1,1).data[3],dpr,left:rect.width/2-(minX+.5)/dpr,right:(maxX+.5)/dpr-rect.width/2,up:rect.height/2-(minY+.5)/dpr,down:(maxY+.5)/dpr-rect.height/2};});
         // The dark outline erodes the opaque cyan tip differently across
         // rasterizers. Direction is its asymmetry, not an absolute tip length.
@@ -37,6 +37,26 @@ async function run({root,temporary,scaleFactor}){
         await execute(()=>{document.documentElement.style.setProperty('--panel-opacity','1');markerMap.render(mapSession);});result=await inspect();assert.equal(result.background,'rgb(7, 11, 18)');assert.equal(result.cornerAlpha,0,'Opacity is applied by the shell at both limits');
         await execute(()=>{mapSession.map.dataVersion++;markerMap.render(mapSession);});result=await inspect();assert(result.left<6&&result.up<6,'New log/map context returns to an unknown-direction dot');
         assert(!pointsLeft(result)&&!pointsUp(result),'A reset dot cannot masquerade as a direction');
+        const crawl=await execute(async()=>{
+            const input=document.querySelector('[data-map-crawl]');input.click();await Promise.resolve();
+            const pending={checked:input.checked,action:mapActions.at(-1)};
+            mapSession.crawl={enabled:true};mapSession.map.npcs=[{id:'crawl-keeper',name:'Crawl Keeper',zone:'Synthetic Vale',loc:[45,-35,0],defeated:true}];
+            const context=document.querySelector('canvas').getContext('2d'),arc=context.arc;let point;
+            context.arc=function(x,y,radius,...rest){if(radius===3)point={x,y};return arc.call(this,x,y,radius,...rest);};markerMap.render(mapSession);context.arc=arc;
+            const alpha=()=>context.getImageData(Math.floor(point.x*devicePixelRatio),Math.floor(point.y*devicePixelRatio),1,1).data[3],dimAlpha=alpha(),button=document.querySelector('[data-map-npc="crawl-keeper"]');button.focus();
+            const enabled={checked:input.checked,aria:button.getAttribute('aria-label'),strike:getComputedStyle(button).textDecorationLine,disabled:button.disabled};button.click();
+            const selection=mapActions.at(-1);mapSession.crawl.enabled=false;markerMap.render(mapSession);
+            return{pending,enabled,dimAlpha,restoredAlpha:alpha(),restoredStrike:getComputedStyle(button).textDecorationLine,restoredChecked:input.checked,selection,npcCount:mapSession.map.npcs.length,historyRetained:mapSession.map.npcs[0].defeated};
+        });
+        assert.deepEqual(crawl.pending,{checked:false,action:{action:'session:crawl-mode',payload:{enabled:true}}},'Crawl emits only the owner action and waits for its authoritative snapshot');
+        assert.equal(crawl.enabled.checked,true);assert.match(crawl.enabled.aria,/defeated/);assert.match(crawl.enabled.strike,/line-through/);assert.equal(crawl.enabled.disabled,false,'Defeated map destinations remain keyboard-selectable');
+        assert(crawl.dimAlpha>50&&crawl.dimAlpha<150,'The actual defeated canvas marker is translucent: '+crawl.dimAlpha);assert.equal(crawl.restoredAlpha,255);assert.equal(crawl.restoredChecked,false);assert.equal(crawl.restoredStrike,'none');
+        assert.equal(crawl.selection.action,'session:select-npc');assert.equal(crawl.selection.payload.id,'crawl-keeper');assert.equal(crawl.npcCount,1);assert.equal(crawl.historyRetained,true,'Disabling Crawl only restores presentation');
+        for(const [width,fontScale]of [[520,1],[360,1],[260,1],[520,1.5],[260,1.5]]){
+            window.setContentSize(width,420);await execute(fontScale=>{document.documentElement.style.setProperty('--font-scale',String(fontScale));document.querySelector('#overlay-header').classList.add('is-controls-open');markerMap.render(mapSession);},fontScale);
+            const controls=await execute(()=>{const row=document.querySelector('.native-map-slice'),crawl=document.querySelector('.native-map-crawl'),range=document.querySelector('[data-map-z]'),tolerance=document.querySelector('[data-map-tolerance]');return{row:row.getBoundingClientRect().toJSON(),crawl:crawl.getBoundingClientRect().toJSON(),range:range.getBoundingClientRect().toJSON(),tolerance:tolerance.getBoundingClientRect().toJSON(),last:row.lastElementChild===crawl};});
+            assert(controls.last&&controls.crawl.right<=controls.row.right+1&&controls.crawl.left>=controls.tolerance.right-1,'Crawl stays at the far right of Auto Z controls: '+JSON.stringify({width,fontScale,...controls}));assert(controls.range.width>=11,'The Z slider retains an interactive range');
+        }
         console.log('Native map component passed '+JSON.stringify({scaleFactor,left:{dpr:left.dpr,front:left.left,rear:left.right,cross:left.up-left.down},up:{front:up.up,rear:up.down,cross:up.left-up.right}}));
     }finally{await execute(()=>window.markerMap?.dispose()).catch(()=>{});window.destroy();await new Promise(done=>server.close(done));}app.exit(0);
 }

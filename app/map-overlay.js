@@ -31,6 +31,16 @@ export function drawMapPlayerMarker(context,point,heading){
     else context.arc(point.x,point.y,5,0,Math.PI*2);
     context.fill();context.stroke();
 }
+const mapNpcColor = npc => npc.raidInstance?'#e79b9b':npc.selected?'#fff0ad':'#d8b75c';
+export function drawMapNpcMarker(context,npc){
+    context.save();context.globalAlpha=npc.defeated===true ? .42 : 1;context.fillStyle=mapNpcColor(npc);
+    context.beginPath();context.arc(npc.screen.x,npc.screen.y,npc.selected?5:3,0,Math.PI*2);context.fill();context.restore();
+}
+export function drawMapNpcLabel(context,label,fontScale=1){
+    context.save();context.globalAlpha=label.defeated===true ? .42 : 1;context.fillStyle=mapNpcColor(label);context.fillText(label.text,label.x,label.y);
+    if(label.defeated===true){context.strokeStyle=context.fillStyle;context.lineWidth=Math.max(1,fontScale);context.beginPath();context.moveTo(label.x,label.y+label.height*.45);context.lineTo(label.x+label.width,label.y+label.height*.45);context.stroke();}
+    context.restore();
+}
 export function mapBounds(lines) {
     let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
     for (const line of lines || []) for (const index of [0,3]) { minX=Math.min(minX,line[index]);maxX=Math.max(maxX,line[index]);minY=Math.min(minY,line[index+1]);maxY=Math.max(maxY,line[index+1]); }
@@ -122,15 +132,18 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
 .native-map-tools button{flex:0 0 auto;min-width:20px;font-size:calc(11px * var(--font-scale,1));line-height:calc(18px * var(--font-scale));padding:1px 3px;white-space:nowrap}.native-map-tools>[data-map-action=mode]{min-width:30px;max-width:max(78px,5.5em);overflow:hidden;text-overflow:ellipsis}
 .native-map-slice{grid-column:1/-1;grid-row:2;display:flex;align-items:center;gap:5px;min-width:0;max-height:0;visibility:hidden;opacity:0;overflow:hidden;pointer-events:none;font-size:calc(11px * var(--font-scale,1));-webkit-app-region:no-drag}
 .native-map-header:is(:hover,:focus-visible,.is-controls-open) .native-map-slice,.native-map-header:has(:focus-visible) .native-map-slice{max-height:max(34px,calc(28px * var(--font-scale)));visibility:visible;opacity:1;overflow:visible;pointer-events:auto;padding:0 0 5px}
-.native-map-slice input[type=range]{flex:1;min-width:40px;accent-color:#d8b75c}.native-map-slice output{font-size:calc(10px * var(--font-scale,1));min-width:72px;color:#d8c895;white-space:nowrap}.native-map-slice label{display:flex;align-items:center;gap:3px;color:#9ba8b8}.native-map-slice input[type=number]{width:46px;padding:2px 3px;font-size:calc(10px * var(--font-scale,1))}
+.native-map-slice input[type=range]{flex:1 1 0;min-width:12px;accent-color:#d8b75c}.native-map-slice output{flex:0 1 72px;font-size:calc(10px * var(--font-scale,1));min-width:0;overflow:hidden;text-overflow:ellipsis;color:#d8c895;white-space:nowrap}.native-map-slice label{display:flex;align-items:center;gap:3px;color:#9ba8b8}.native-map-slice input[type=number]{width:46px;padding:2px 3px;font-size:calc(10px * var(--font-scale,1))}
+.native-map-slice .native-map-crawl{flex:0 0 auto;margin-left:auto;white-space:nowrap}.native-map-crawl input{margin:0;accent-color:#d8b75c}
 .native-map-slice button{flex:0 0 auto;font:inherit;padding:2px 4px;white-space:nowrap}.native-map-slice button[aria-pressed=true]{color:#f0d77f;border-color:#c9ae60;background:#4b421f}
 @media(max-width:360px){.native-map-tools{gap:2px}.native-map-tools button{font-size:calc(10px * var(--font-scale,1));padding:1px 2px}.native-map-tools>[data-map-action=mode]{max-width:48px}.native-map-header .native-map-title{font-size:calc(11px * var(--font-scale,1))}}
+@media(max-width:360px){.native-map-slice{gap:3px}.native-map-slice input[type=number]{width:32px}}
 .native-map-stage{position:relative;min-height:0;flex:1;overflow:hidden;border:1px solid #ffffff14;border-radius:4px;touch-action:none}.native-map-stage canvas{display:block;width:100%;height:100%;cursor:grab}.native-map-stage canvas:active{cursor:grabbing}
 .native-map-3d-stage{position:absolute;inset:0;min-height:0;opacity:var(--panel-opacity,.85)}.native-map-3d-stage iframe{width:100%;height:100%;border:0}
 .native-map-message{position:absolute;inset:15px;pointer-events:none;color:#a6b4c8;font-size:calc(12px * var(--font-scale,1));line-height:1.5}
 .native-map-note,.native-map-3d-status,.native-map-action-status{font-size:calc(10px * var(--font-scale,1));color:#9ba8b8;padding:5px 0 1px;overflow-wrap:anywhere;flex:0 0 auto}.native-map-3d-status:empty,.native-map-action-status:empty{display:none}.native-map-route{color:#e8d18b;font-size:calc(11px * var(--font-scale,1));overflow-wrap:anywhere;flex:0 0 auto}
 .native-map-npc-links{position:absolute;inset:0;pointer-events:none}.native-map-npc-link{position:absolute;opacity:0;pointer-events:none;padding:0!important;border:0!important;font:calc(11px * var(--font-scale)) var(--ui-font-family,"Segoe UI",sans-serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .native-map-npc-link:focus-visible{opacity:1;background:#101722!important;color:#fff0ad;outline:1px solid #f0d77f;min-width:24px;width:max-content!important;max-width:100%;z-index:2}
+.native-map-npc-link.is-defeated{text-decoration:line-through}.native-map-npc-link.is-defeated:focus-visible{color:#a39f8c}
 </style><div class="native-map"><div class="native-map-local-header"><div class="native-map-tools" role="toolbar" aria-label="Map controls"><button data-map-action="reset" title="Reset to Map, follow player, default zoom and Z slice">Reset</button><button data-map-action="follow" aria-pressed="true">Follow</button><button data-map-action="zoom-in" aria-label="Zoom in">+</button><button data-map-action="zoom-out" aria-label="Zoom out">−</button><button data-map-action="mode" aria-label="Map view: Map; switch to Top 3D">Map</button><div class="native-map-slice"><output data-map-slice-label for="native-map-z">Z ±25</output><input id="native-map-z" data-map-z type="range" min="-1" max="1" step="1" value="0" aria-label="Map Z slice"><label title="Show known elevations within this distance of the selected Z">± <input data-map-tolerance type="number" min="1" max="250" step="1" value="25" aria-label="Map Z tolerance"></label></div></div></div><div class="native-map-stage"><canvas aria-label="Current zone map"></canvas><div class="native-map-npc-links" role="group" aria-label="Named map destinations"></div><div class="native-map-3d-stage" hidden></div><div class="native-map-message"></div></div><div class="native-map-route"></div><div class="native-map-note"></div><div class="native-map-3d-status" role="status"></div></div>`;
     const tools=root.querySelector('.native-map-tools'),slice=tools.querySelector('.native-map-slice');
     const $=selector=>root.querySelector(selector)||tools.querySelector(selector)||slice.querySelector(selector),canvas=$('canvas'),context=canvas.getContext('2d');
@@ -147,6 +160,8 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     for(const button of tools.querySelectorAll('button'))if(!button.title)button.title=button.getAttribute('aria-label')||button.textContent;
     const actionStatus=document.createElement('div');actionStatus.className='native-map-action-status';actionStatus.setAttribute('role','status');$('.native-map').append(actionStatus);
     const autoZButton=document.createElement('button');autoZButton.type='button';autoZButton.textContent='Auto Z';autoZButton.dataset.mapAutoZ='1';autoZButton.setAttribute('aria-label','Follow logged player elevation automatically');slice.insertBefore(autoZButton,slice.firstChild);
+    const crawlLabel=document.createElement('label');crawlLabel.className='native-map-crawl';crawlLabel.title='Mark defeated monsters during this crawl';
+    const crawlInput=document.createElement('input');crawlInput.type='checkbox';crawlInput.dataset.mapCrawl='1';crawlInput.setAttribute('aria-label','Crawl mode');crawlLabel.append(crawlInput,document.createTextNode('Crawl'));slice.append(crawlLabel);
     let data=null,session={},zone='',dataVersion=null,generation=0,disposed=false,follow=true,autoZ=true,lastKnownPlayerZ=null,sliceCenter=null,sliceTolerance=25,zoom=1,center={x:0,y:0},baseScale=1,drag=null,targets=[],mode='map',three=null,threeMode=null,modeSerial=0,visible=true,lastFocus='',pendingFocus=null,playerHeading=null;
     const headingTracker=createMapHeadingTracker();
     const listeners=[],npcButtons=new Map();let headerCloseTimer=null;
@@ -183,7 +198,7 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
         for(const target of targets){const npc=target.marker,key=mapNpcKey(npc);keys.add(key);let button=npcButtons.get(key);
             if(!button){button=document.createElement('button');button.type='button';button.className='native-map-npc-link';button.dataset.mapNpc=key;npcButtons.set(key,button);$('.native-map-npc-links').append(button);}
             const box=target.label||{x:npc.screen.x-12,y:npc.screen.y-12,width:24,height:24};
-            button.textContent=npc.name;button.setAttribute('aria-label',`${npc.name}${npc.raidInstance?' · Raid Zone':' · Normal Zone'}; select destination`);button.setAttribute('aria-pressed',String(Boolean(npc.selected)));
+            button.textContent=npc.name;button.classList.toggle('is-defeated',npc.defeated===true);button.setAttribute('aria-label',`${npc.name}${npc.raidInstance?' · Raid Zone':' · Normal Zone'}${npc.defeated===true?' · defeated':''}; select destination`);button.setAttribute('aria-pressed',String(Boolean(npc.selected)));
             Object.assign(button.style,{left:`${box.x}px`,top:`${box.y}px`,width:`${box.width}px`,height:`${box.height}px`});
         }
         for(const [key,button]of npcButtons)if(!keys.has(key)){button.remove();npcButtons.delete(key);}
@@ -192,6 +207,7 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     function draw(){
         if(disposed)return;
         title.title=title.textContent||'Map';
+        syncCrawlControl();
         $('[data-map-action="follow"]').setAttribute('aria-pressed',String(follow));
         const map=session.map||{},player=map.location?worldToClientMap(map.location):null,elevations=mapElevationBounds(data?.lines,map.npcs,map.location);
         if(knownMapZ(map.location?.z))lastKnownPlayerZ=Number(map.location.z);
@@ -213,10 +229,10 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
         const computed=document.defaultView.getComputedStyle(canvas),fontScale=Number.parseFloat(document.defaultView.getComputedStyle(document.documentElement).getPropertyValue('--font-scale'))||1;
         const npcFont=`${11*fontScale}px ${computed.fontFamily}`,labelFont=`${10*fontScale}px ${computed.fontFamily}`;
         const markers=[];context.font=npcFont;
-        for(const npc of map.npcs||[]){if(!Array.isArray(npc.loc)||npc.loc.length<2||!onFloor(npc.loc[2]))continue;const point=screen(worldToClientMap({x:npc.loc[0],y:npc.loc[1]}),width,height);if(point.x<0||point.x>width||point.y<0||point.y>height)continue;const selected=map.selectedNpcId===npc.id;context.fillStyle=npc.raidInstance?'#e79b9b':selected?'#fff0ad':'#d8b75c';context.beginPath();context.arc(point.x,point.y,selected?5:3,0,Math.PI*2);context.fill();markers.push({...npc,screen:point,selected});}
+        for(const npc of map.npcs||[]){if(!Array.isArray(npc.loc)||npc.loc.length<2||!onFloor(npc.loc[2]))continue;const point=screen(worldToClientMap({x:npc.loc[0],y:npc.loc[1]}),width,height);if(point.x<0||point.x>width||point.y<0||point.y>height)continue;const marker={...npc,screen:point,selected:map.selectedNpcId===npc.id,defeated:session.crawl?.enabled===true&&npc.defeated===true};drawMapNpcMarker(context,marker);markers.push(marker);}
         const playerScreen=player?screen(player,width,height):null;
         const placed=layoutMapLabels({npcs:markers,npcNames:(map.npcs||[]).map(npc=>npc.name),labels:(data?.labels||[]).filter(label=>onFloor(label.z)).map(label=>({...label,screen:screen(label,width,height)})),width,height,fontScale,blocked:playerScreen?[{x:playerScreen.x-13,y:playerScreen.y-13,width:26,height:26}]:[],measureText:(text,kind)=>{context.font=kind==='npcs'?npcFont:labelFont;return context.measureText(text).width;}});
-        context.textBaseline='top';for(const label of placed.labels){context.font=labelFont;context.fillStyle='#8595aa';context.fillText(label.text,label.x,label.y);}for(const label of placed.npcs){context.font=npcFont;context.fillStyle=label.raidInstance?'#e79b9b':label.selected?'#fff0ad':'#d8b75c';context.fillText(label.text,label.x,label.y);}context.textBaseline='alphabetic';
+        context.textBaseline='top';for(const label of placed.labels){context.font=labelFont;context.fillStyle='#8595aa';context.fillText(label.text,label.x,label.y);}for(const label of placed.npcs){context.font=npcFont;drawMapNpcLabel(context,label,fontScale);}context.textBaseline='alphabetic';
         targets=mapNpcHitTargets(markers,placed.npcs);renderNpcButtons();
         if(player)drawMapPlayerMarker(context,screen(player,width,height),playerHeading);
         $('.native-map-message').textContent=!zone?'Waiting for a logged zone.':!data?'Loading local map…':data.status!=='ready'?data.message||'No map line data.':!player?'Type /loc in game to show your position.':'';
@@ -238,6 +254,8 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     });
     listen(root,'click',event=>{const key=event.target.closest?.('[data-map-npc]')?.dataset.mapNpc;if(key)selectNpc(targets.find(target=>mapNpcKey(target.marker)===key)?.marker);});
     listen(autoZButton,'click',()=>{autoZ=!autoZ;draw();});
+    listen(crawlInput,'change',async event=>{const enabled=event.target.checked;syncCrawlControl();actionStatus.textContent='';try{await bridge.action('session:crawl-mode',{enabled});}catch(error){if(!disposed)actionStatus.textContent=error?.message||'Crawl mode could not be changed.';}finally{if(!disposed)syncCrawlControl();}});
+    function syncCrawlControl(){crawlInput.checked=session.crawl?.enabled===true;}
     listen($('[data-map-z]'),'input',event=>{autoZ=false;sliceCenter=Number(event.target.value);draw();});listen($('[data-map-tolerance]'),'change',event=>{sliceTolerance=Math.max(1,Math.min(250,Number(event.target.value)||25));event.target.value=String(sliceTolerance);draw();});
     listen(canvas,'wheel',event=>{event.preventDefault();zoom=Math.max(.25,Math.min(40,zoom*(event.deltaY<0?1.2:1/1.2)));draw();},{passive:false});
     const pointerPoint=event=>{const rect=canvas.getBoundingClientRect();return{x:event.clientX-rect.left,y:event.clientY-rect.top};};
