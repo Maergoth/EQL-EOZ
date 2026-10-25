@@ -67,3 +67,49 @@ hints=createContributionQueue({storage:hintStorage,getPack:()=>hintPack});assert
     assert.equal(queue.consume({...image('Screenshot Mob'),subject:{kind:'monster',name:'Screenshot Mob'}}),null);
     console.log('Image enrichment queue: existing identities only, no derived relationships, bounded durable log origin and restart passed.');
 }
+
+{
+    const key='eql-eye-of-zomm-contributions-v1',now=Date.UTC(2026,9,25,18);
+    const catalog={meta:{wikiEntitiesComplete:true},items:[{name:'Brown Chitin Protector'},{name:'Rubicite Breastplate'}],wikiEntities:{items:['Brown Chitin Protector','Rubicite Breastplate'],npcs:[],titles:[]},npcs:[],zones:[]};
+    const legacy=(id,name,patch={})=>({id,kind:'item',name,title:name,zone:'',status:'needs-review',fields:{name:{value:name,confirmed:false},tier:{value:3,confirmed:false}},sources:[],relations:[],evidence:[{id:'log-'+id,kind:'game-log',event:'item-link',text:`Marketvoice tells General:1, '[${name} +3]'`,logLine:`[Sun Oct 25 18:00:00 2026] Marketvoice tells General:1, '[${name} +3]'`}],...patch});
+    const free=legacy('old-free','Free Brown Chitin Protector'),sales=legacy('old-sale','WTS FULL SET OF Rubicite Breastplate');
+    const preserved=[
+        legacy('manual',free.name,{manual:true}),
+        legacy('notes',free.name,{playerText:'Keep my work'}),
+        legacy('edited',free.name,{fields:{name:{value:free.name,edited:true}}}),
+        legacy('confirmed',free.name,{fields:{tier:{value:3,confirmed:true}}}),
+        legacy('stats',free.name,{fields:{INT:{value:9,confirmed:false}}}),
+        legacy('ocr',free.name,{evidence:[...free.evidence,{kind:'ocr',text:'Observed examine'}]}),
+        legacy('attachment',free.name,{attachment:{id:'kept-image'}}),
+        legacy('plan',free.name,{planId:'saved-review'}),
+        legacy('partial',free.name,{status:'partial'}),
+        legacy('submitted',free.name,{status:'submitted',submittedAt:'2026-10-25T17:00:00Z'}),
+        legacy('renamed',free.name,{title:'My corrected title'}),
+        legacy('loot',free.name,{evidence:[{kind:'game-log',event:'loot',logLine:free.evidence[0].logLine}]}),
+        legacy('source',free.name,{sources:[{npc:'A real source',zone:'Synthetic Vale',sourceEvidence:'explicit-corpse'}]}),
+        legacy('native',free.name,{evidence:[{kind:'game-log',event:'item-link',text:`Marketvoice tells General:1, ' ${'00007b'+'0'.repeat(50)}${free.name} +3 '`}]}),
+        legacy('escaped',free.name,{evidence:[{kind:'game-log',event:'item-link',text:`Marketvoice tells General:1, '\\aITEM 123 0:${free.name} +3\\/a'`}]}),
+        legacy('unknown','Free Uncatalogued Protector'),
+        legacy('no-evidence',free.name,{evidence:[]}),
+        legacy('ambiguous','Brown Chitin Protector and Rubicite Breastplate'),
+        legacy('multi-evidence',free.name,{evidence:[...free.evidence,{kind:'game-log',event:'item-link',text:"Marketvoice says, '[Unknown Relic +3]'"}]})
+    ];
+    const disk=new Map([[key,JSON.stringify({schemaVersion:1,candidates:[free,sales,...preserved]})]]);let fail=false;
+    const local={getItem:key=>disk.get(key),setItem:(key,value)=>{if(fail)throw Error('Synthetic save failure');disk.set(key,value);}};
+    const options={storage:local,getPack:()=>catalog,now:()=>now,autoReconcile:false};let q=createContributionQueue(options);
+    const original=JSON.stringify(q.snapshot()),saved=disk.get(key),dry=q.reconcile();
+    for(const id of ['old-free','old-sale']){const row=dry.rows.find(row=>row.id===id);assert.equal(row.action,'archive');assert.equal(row.classification,'chat-caption-covered');}
+    for(const candidate of preserved)assert.equal(dry.rows.find(row=>row.id===candidate.id).action,'keep',candidate.id+' must be retained');
+    assert.equal(disk.get(key),saved,'Dry runs do not change the saved queue');
+    fail=true;assert.equal(q.reconcile({apply:true}).applied,false);assert.equal(JSON.stringify(q.snapshot()),original,'A failed archive save retains all active evidence');assert.equal(q.archived().length,0);fail=false;
+    assert.equal(q.reconcile({apply:true}).applied,true);assert.equal(q.snapshot().length,preserved.length);assert.equal(q.archived().length,2);
+    for(const old of [free,sales]){const archived=q.archived().find(row=>row.id===old.id);assert.deepEqual(archived.evidence,old.evidence);assert.equal(archived.name,old.name);assert.equal(archived.archive.reason,'chat-caption-covered','The original wrong draft is reversible and never rewritten into a wiki page');}
+    const once=disk.get(key);q=createContributionQueue({...options,autoReconcile:true});assert.equal(q.reconcile({apply:true}).changed,false);assert.equal(disk.get(key),once,'Cleanup is durable and restart-idempotent');
+    const fullArchive=Array.from({length:200},(_,index)=>({...legacy('archived-'+index,'Archived Unknown '+index),archive:{reason:'old'}}));
+    const fullDisk=new Map([[key,JSON.stringify({schemaVersion:1,candidates:[free],archive:fullArchive})]]),full=createContributionQueue({...options,storage:{getItem:key=>fullDisk.get(key),setItem:(key,value)=>fullDisk.set(key,value)}});
+    full.reconcile({apply:true});assert.equal(full.archived().length,200);assert.deepEqual(full.snapshot()[0].reasons,[],'A full archive still removes the false gap claim without dropping its record');
+    const canonical={...catalog,items:[...catalog.items,{name:free.name}],wikiEntities:{...catalog.wikiEntities,items:[...catalog.wikiEntities.items,free.name]}};
+    const genuine=createContributionQueue({...options,getPack:()=>canonical,storage:{getItem:()=>JSON.stringify({schemaVersion:1,candidates:[free]})}});
+    assert.notEqual(genuine.reconcile().rows[0].classification,'chat-caption-covered','A full exact catalog title takes priority over its shorter suffix');
+    console.log('Legacy chat cleanup: exact procedural matches, reversible untouched-only archive, protected/encoded/ambiguous evidence, save rollback, archive bounds and restart idempotence passed.');
+}

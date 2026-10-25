@@ -10,6 +10,26 @@ with redirect resolution before a missing-item notice. Errors remain unverified.
 This exception does not add live loot-count classification or background wiki
 polling. The historical release records below describe their earlier behavior.
 
+## Untouched legacy chat captions
+
+Updating the parser does not remove already saved suggestions. Queue reconciliation
+also checks untouched chat-only item drafts against the current procedural item
+matcher. When every retained plaintext chat line resolves to the same different
+known item, a caption such as sales prose joined to that name is archived with
+its original evidence under `chat-caption-covered`. It is not renamed into a
+wiki contribution or permanently ignored. An archive failure rolls back the
+active queue; a full archive preserves the record while retiring its false gap.
+
+Manual, edited, confirmed, reviewed, planned, partial/submitted, attachment,
+numeric-stat, OCR, loot and source-bearing records are retained. Encoded links
+and retained native hex bodies remain untouched: a genuine longer item may
+contain a shorter known name. Missing, conflicting or ambiguous chat evidence
+cannot prove a legacy caption error. New flattened mentions retain their
+`plain-tiered-chat` interpretation in the private journal for later diagnosis.
+
+`tests/contribution-queue.mjs` covers dry runs, reversible original records,
+protected work, ambiguity, save rollback, archive bounds and restart idempotence.
+
 ## 0.9.10 contract
 
 The [chat/capture follow-up](CHAT_CAPTURE_FOLLOWUP_PLAN.md) supersedes the
