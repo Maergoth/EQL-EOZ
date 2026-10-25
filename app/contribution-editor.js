@@ -48,7 +48,7 @@ export function contributionMatchState(candidate={},matches=[]){
     return {direct,ambiguous:exact.length>1||candidate.membership==='ambiguous',matches:direct?[direct,...unique.filter(match=>match!==direct&&normalizeWikiIdentity(match.title)!==normalizeWikiIdentity(direct.title))]:unique};
 }
 export function contributionPotentialMatchesMarkup(matches=[],{direct=null}={}){
-    return uniqueMatches(matches).map(match=>`<div class="contribution-match-row" ${direct&&normalizeWikiIdentity(match.title)===normalizeWikiIdentity(direct.title)?'data-direct-match="true"':''}><a href="https://eqlwiki.com/${encodeURIComponent(match.title)}" target="_blank" rel="noopener">${e(match.title)}</a><button type="button" class="secondary-button" data-use-existing="${e(match.title)}">Use this page</button></div>`).join('')||'<p>No close pages found. Check the live wiki before creating a page.</p>';
+    return uniqueMatches(matches).map(match=>`<div class="contribution-match-row" ${direct&&normalizeWikiIdentity(match.title)===normalizeWikiIdentity(direct.title)?'data-direct-match="true"':''}><a href="https://eqlwiki.com/${encodeURIComponent(match.title)}" target="_blank" rel="noopener">${e(match.title)}</a><button type="button" class="secondary-button" data-use-existing="${e(match.title)}">Use this page</button></div>`).join('')||'<p>No close pages found in the available matches. Live matching runs automatically; preview checks again before creating a page.</p>';
 }
 export function contributionMatchesMarkup(candidate,matches=[]){
     const state=contributionMatchState(candidate,matches);
@@ -56,7 +56,7 @@ export function contributionMatchesMarkup(candidate,matches=[]){
 }
 export function contributionMatchMarkup(candidate,matches=[]){
     const update=candidate.intent==='update'||!['create','update'].includes(candidate.intent)&&candidate.membership==='present',reviewed=candidate.matchesReviewed===true,info=contributionQueueInfo(candidate);
-    return `<section class="contribution-match-first"><h3>Choose the destination page</h3><p class="contribution-page-type">${e(info.kind)} <span aria-hidden="true">›</span> ${update?'Update Page':'New Page'}</p><div data-match-results>${contributionMatchesMarkup(candidate,matches)}</div><button class="secondary-button" type="button" data-check-matches>Check live wiki</button><p class="settings-helper" data-live-matches-status role="status"></p><label>Page action<select name="intent"><option value="create" ${!update?'selected':''}>New Page</option><option value="update" ${update?'selected':''}>Update Page</option></select></label></section>`;
+    return `<section class="contribution-match-first"><h3>Choose the destination page</h3><p class="contribution-page-type">${e(info.kind)} <span aria-hidden="true">›</span> ${update?'Update Page':'New Page'}</p><div data-match-results>${contributionMatchesMarkup(candidate,matches)}</div><p class="settings-helper" data-live-matches-status role="status"></p><label>Page action<select name="intent"><option value="create" ${!update?'selected':''}>New Page</option><option value="update" ${update?'selected':''}>Update Page</option></select></label></section>`;
 }
 export function contributionScreenshotMarkup(candidate){
     const attachment=candidate.attachment;

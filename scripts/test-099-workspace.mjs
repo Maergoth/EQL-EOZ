@@ -138,7 +138,6 @@ async function run({root,temporary,screenshots}){
         assert.deepEqual(updatedSources.at(-1),{npc:'A new source keeper',zone:'Changed Vale',instance:'normal'},'The added monster uses the current Zone');
         await shot('contribution-compact-drop-sources','.contribution-source-editor');
         await execute(()=>{const zone=document.querySelector('[data-candidate-form]').elements.zone;zone.value='Synthetic Vale';zone.dispatchEvent(new Event('input',{bubbles:true}));});
-        await click('[data-check-matches]');
         await wait(()=>execute(()=>document.querySelector('[data-potential-matches]').textContent.includes('Synthetic Thorn')),'live page matches');
         assert.equal(await execute(()=>document.querySelectorAll('[data-use-existing]').length),1,'Repeated/case-variant live titles share a destination card');
         assert.equal(await execute(()=>{const row=document.querySelector('.contribution-match-row'),title=row.querySelector('a').getBoundingClientRect(),button=row.querySelector('button').getBoundingClientRect();return button.top>=title.bottom;}),true,'Use this page sits below the title');
