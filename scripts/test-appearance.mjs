@@ -40,6 +40,18 @@ try {
         const nativeShowInactive=BrowserWindow.prototype.showInactive;
         BrowserWindow.prototype.show=()=>{};BrowserWindow.prototype.showInactive=()=>{};
         global.fetch=async()=>{throw new Error('External network disabled for appearance smoke');};
+        const diagnostics=[];
+        const record=(kind,detail)=>{diagnostics.push({kind,...detail});if(diagnostics.length>50)diagnostics.shift();};
+        const sourceUrl=value=>{try{const url=new URL(value);return `${url.origin}${url.pathname}`;}catch{return String(value||'').slice(0,300);}};
+        const observeWindow=window=>{
+            const contents=window.webContents,id=contents.id;
+            contents.on('console-message',(event,level,message,line,source)=>{
+                const severity=event.level??level;
+                if(severity==='warning'||severity==='error'||Number(severity)>=2)record('console',{id,level:severity,message:String(event.message??message??'').slice(0,1200),line:event.lineNumber??line,source:sourceUrl(event.sourceId??source)});
+            });
+            contents.on('did-fail-load',(_event,code,description,url,mainFrame)=>record('load-failed',{id,code,description,url:sourceUrl(url),mainFrame}));
+            contents.on('render-process-gone',(_event,detail)=>record('renderer-gone',{id,reason:detail.reason,exitCode:detail.exitCode}));
+        };
         const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
         const until=async(predicate,label)=>{const end=Date.now()+10000;while(Date.now()<end){const result=await predicate();if(result)return result;await wait(60);}throw new Error(`Timed out: ${label}`);};
         const execute=(window,fn,...args)=>window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
@@ -62,8 +74,24 @@ try {
             if(!wasVisible)window.hide();
         };
         const mapSelectPalette=async()=>{
+            // This checks a real rendered control. A never-shown Linux owner
+            // can leave its WebGL iframe without a native drawable surface.
+            // Show nonactivatingly, then acknowledge native/document visibility
+            // before depending on the viewer's normal configured-folder boot.
+            nativeShowInactive.call(owner);
+            await until(async()=>owner.isVisible()&&await execute(owner,()=>!document.hidden),'visible appearance owner');
             await execute(owner,()=>document.querySelector('[data-view="map"]').click());
-            await until(()=>execute(owner,()=>{const select=document.querySelector('#zone-viewer')?.contentDocument?.querySelector('.eqlzv-select');return select&&!select.disabled&&select.options.length>1;}),'real enabled Map iframe selector');
+            try {
+                await until(()=>execute(owner,()=>{const select=document.querySelector('#zone-viewer')?.contentDocument?.querySelector('.eqlzv-select');return select&&!select.disabled&&select.options.length>1;}),'real enabled Map iframe selector');
+            } catch(error) {
+                let renderer;
+                try{renderer=await execute(owner,()=>{
+                    const frame=document.querySelector('#zone-viewer'),viewer=frame?.contentWindow,doc=frame?.contentDocument,select=doc?.querySelector('.eqlzv-select'),app=viewer?.eqlZoneViewer;
+                    return {hidden:document.hidden,ready:document.readyState,view:document.querySelector('.nav-button.is-active')?.dataset.view,mapSource:document.querySelector('#map-source-status')?.textContent,mapSubtitle:document.querySelector('#map-subtitle')?.textContent,frame:{src:frame?.getAttribute('src'),ready:doc?.readyState,hidden:doc?.hidden,viewport:{width:frame?.clientWidth,height:frame?.clientHeight},api:Boolean(viewer?.eqlEyeOfZommViewer),renderer:Boolean(app?.renderer),status:viewer?.eqlEyeOfZommViewer?.status?.(),sourceLabel:doc?.querySelector('.eqlzv-source-label')?.textContent,sourceFiles:app?.source?.fileEntries?.length,archiveCandidates:app?.source?.archiveCandidates?.().map(record=>({id:record.id,format:record.format})),selector:select?{disabled:select.disabled,options:[...select.options].map(option=>({value:option.value,text:option.textContent}))}:null}};
+                });}catch(snapshotError){renderer={error:snapshotError.message};}
+                await capture(owner,'map-selector-failure').catch(()=>{});
+                throw new Error(`${error.message}: ${JSON.stringify({platform:process.platform,ownerVisible:owner.isVisible(),renderer,events:diagnostics})}`);
+            }
             const sample=async palette=>execute(owner,async palette=>{
                 const root=document.documentElement,frame=document.querySelector('#zone-viewer');
                 for(const [property,value] of Object.entries(palette||{}))root.style.setProperty(property,value);
@@ -189,7 +217,7 @@ try {
             await capture(owner,'main-persisted');
             return {ok:true,nativePanels:4,liveFontSizes:[10,20],computedLabelSizes:[small.labelSize,large.labelSize],mapPalettes,family:true,mapCanvas:true,modal:true,reload:true,sharedSession:true,packagedSources:root.endsWith('.asar')};
         };
-        let started=false;app.on('browser-window-created',()=>{if(started)return;started=true;inspect().then(result=>{console.log('EOZ_APPEARANCE_SMOKE='+JSON.stringify(result));app.exit(0);}).catch(error=>{console.error(error.stack);app.exit(1);});});
+        let started=false;app.on('browser-window-created',(_event,window)=>{observeWindow(window);if(started)return;started=true;inspect().then(result=>{console.log('EOZ_APPEARANCE_SMOKE='+JSON.stringify(result));app.exit(0);}).catch(error=>{console.error(error.stack);app.exit(1);});});
         setTimeout(()=>{console.error('Appearance smoke exceeded 60 seconds');app.exit(2);},60000).unref();
         require(path.join(root,'desktop/main.cjs'));
     };
