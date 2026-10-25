@@ -11,7 +11,7 @@ assert.throws(()=>parseEditedStats('HP: 1,2'),/Use STAT: number/);
 assert.throws(()=>parseEditedStats('HP: 999999999999999999999'),/numeric value/);
 assert.deepEqual(parseEditedStats('DMG: 12\nWT: 0.1\nENDURANCE: 10'),{DMG:12,WT:.1,END:10});
 const observation=parseScreenRead({text:'Item: Synthetic Modern Blade +3\nClass: WAR\nRace: ALL\nSlot: PRIMARY\nTier 3 2/8\nAC 12\nBase Dmg 9\nDmg Bon 4\nDelay 24\nNo Trade\nWeight 2.5\nSize: SMALL\nModified: yes\nWorn Effect: Synthetic Haste',confidence:90})[0];
-const candidate=createContributionQueue({storage:null}).consume(observation);
+const itemQueue=createContributionQueue({storage:null});itemQueue.add({kind:'item',name:observation.subject.name},true);const candidate=itemQueue.consume(observation);
 const reviewed=withDefaultItemStatLines(candidate.fields);
 assert.deepEqual(reviewed.statLines,{value:['AC: 12','Weight: 2.5','Damage: 9','Damage Bonus: 4','Delay: 24','SV Void: 0'],confirmed:false});
 for(const key of ['fraction','fractionMaximum','modified','classes','slots','races','size','effects','noTrade'])assert.deepEqual(reviewed[key],candidate.fields[key],`${key} stays available separately for review`);

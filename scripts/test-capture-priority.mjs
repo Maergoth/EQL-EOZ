@@ -126,7 +126,7 @@ async function run({root,temporary,draw,privateImage,privateBackground,diagnosti
   pixelMode=selected!=='native';const records=[],admissions=[],stages=[],ocr=new OcrService();let release,firstRead=false,savedAt;
   const gate=new Promise(resolve=>release=resolve),recognize=ocr.recognize.bind(ocr);ocr.recognize=async(...args)=>{if(!firstRead){firstRead=true;savedAt=Date.now();if(!privateImage)await gate;}return recognize(...args);};
   const journal={sequence:0,async initialize(){},async append(record){return{...record,sequence:++this.sequence,recordedAt:new Date().toISOString()};},async close(){}};
-  const host=new CaptureHost({electron,origin,getMainWindow:()=>main,journal,ocr,onObservation:record=>records.push(record)});
+  const host=new CaptureHost({readingEnabled:true,electron,origin,getMainWindow:()=>main,journal,ocr,onObservation:record=>records.push(record)});
   const game=new BrowserWindow({show:false,width:1000,height:720,title:'EverQuest Synthetic Priority Fixture',webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true,backgroundThrottling:false}});
   await game.loadURL('data:text/html,'+encodeURIComponent('<title>EverQuest Synthetic Priority Fixture</title><style>body{margin:0;overflow:hidden}</style><body><script>'+fixtureCode+'<'+ '/script>'));game.showInactive();
   // Keep B's real encoder occupied beyond the3.5s examine exposure, so the

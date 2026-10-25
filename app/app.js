@@ -2508,7 +2508,7 @@ discoveryContributionFlow=createDiscoveryContributionFlow({
 const characterStorage=await createCharacterStorage({onWarning:message=>showNotice(message,{tone:'warning'})});
 captureWorkspace = mountCaptureWorkspace({characterStorage,contributionStorage:characterStorage,getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
     getAppearance:()=>settings.appearance,notify:showNotice,navigate:view=>setView(view),
-    onDiscoveryItem:observation=>discoveryContributionFlow.recordItem(observation),
+    onDiscoveryItem:(observation,match)=>discoveryContributionFlow.recordItem(observation,match),
     onDiscoveryLocation:location=>discoveryContributionFlow.recordLocation(location),
     onDiscoveryCapture:(request,result)=>discoveryContributionFlow.ready(request,result)});
 const stopLiveWikiEntries=window.eyeOfZommWiki?.onLiveEntriesChanged?.(acceptLiveWikiEntries);

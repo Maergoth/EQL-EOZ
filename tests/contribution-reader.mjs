@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {contributionReaderMatches} from '../app/contribution-reader.js';
+import {contributionReaderMatches,contributionReaderTarget} from '../app/contribution-reader.js';
 const now=Date.now(),candidate={kind:'item',name:'Synthetic Blade',title:'Synthetic Blade',status:'needs-review'},capture={owner:'contribution',phase:'running',sessionId:'reader-1',generation:4,source:{id:'window:game'}};
 const observation={kind:'ocr',owner:'contribution',parser:{name:'item-examine'},subject:{kind:'item',name:'Synthetic Blade (Exaltation) +5'},sessionId:'reader-1',capturedAt:new Date(now).toISOString(),input:{captureGeneration:4,sourceId:'window:game'}};
 const options={capture,candidate,startedAt:now-1000,now};
@@ -11,3 +11,18 @@ assert.equal(contributionReaderMatches(observation,{...options,candidate:{...can
 assert.equal(contributionReaderMatches(observation,{...options,startedAt:now-60000,now:now+31000}),false);
 assert(contributionReaderMatches({...observation,subject:{kind:'item',name:'Wiki Alias'}},{...options,resolveName:name=>name==='Wiki Alias'?'Synthetic Blade':name}));
 console.log('Contribution reader identity, provenance and review guards passed.');
+const logged=(id,name)=>({id,kind:'item',name,title:name,status:'needs-review',evidence:[{kind:'game-log'}]}),worn=logged('worn','Worn Great Blade');
+const read=name=>({...observation,subject:{kind:'item',name}});
+assert.equal(contributionReaderTarget(read('wom great blade'),[worn]),worn,'rn/m OCR confusion targets the existing chat/log item');
+assert.equal(contributionReaderTarget(read('Worn Great Blad'),[worn]),worn,'One missing character in a longer multiword name is recoverable');
+assert.equal(contributionReaderTarget(read('Wom Great Blade'),[worn,logged('other','Wom Great Blades')]),null,'Two plausible drafts require review rather than guessing');
+assert.equal(contributionReaderTarget(read('Worn Great Blade'),[worn,logged('other','Worn Great Blades')]),worn,'Exact identity has priority');
+for(const name of ['Other Great Blade','Worn Small Blade','Worn','Worn Great Sword'])assert.equal(contributionReaderTarget(read(name),[worn]),null,name);
+assert.equal(contributionReaderTarget(read('Worn Great Blade'),[{...worn,evidence:[],manual:true}]),null,'A manual/OCR-only entry is not a chat discovery');
+assert.equal(contributionReaderTarget(read('Worn Great Blade'),[{...worn,evidence:[]}],{linkedIds:['worn']})?.id,'worn','An explicit linked-item request can bind its known draft');
+assert.equal(contributionReaderTarget(read('Worn Great Blade'),[{...worn,status:'submitted'}]),null);
+assert.equal(contributionReaderTarget(read('Worn Great Blades'),[worn],{isKnownName:()=>true}),null,'An exact different published item identity must not be corrected into a queued item');
+assert.equal(contributionReaderTarget(read('Worn Great Blade'),[]),null,'A screenshot never creates a target');
+assert(contributionReaderMatches(read('wom great blade'),{...options,candidate:worn,candidates:[worn]}));
+assert.equal(contributionReaderMatches(read('wom great blade'),{...options,candidate:worn,candidates:[worn,logged('other','Wom Great Blades')]}),false);
+console.log('Existing log-backed OCR targeting: exact aliases, unique bounded typos, ambiguous/unknown/manual-only rejection passed.');

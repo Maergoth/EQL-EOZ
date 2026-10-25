@@ -16,7 +16,7 @@ assert.equal(preferredCaptureSource([{id:'screen:1',name:'EverQuest'},{id:'windo
 assert.equal(preferredCaptureSource([{id:'window:game',name:'EverQuest'},{id:'window:launcher',name:'EverQuest LaunchPad'}]),'window:game');
 assert.equal(preferredCaptureSource([{id:'window:game',name:'EverQuest Legends'},{id:'window:other',name:'EverQuest (Synthetic)'}]),null,'multiple game windows require a choice');
 function png(id='one',width=100,height=40){const header=Buffer.alloc(33);Buffer.from([137,80,78,71,13,10,26,10]).copy(header);header.writeUInt32BE(13,8);header.write('IHDR',12,'ascii');header.writeUInt32BE(width,16);header.writeUInt32BE(height,20);return Buffer.concat([header,Buffer.from(id)]);}
-function fixture(){
+function fixture({readingEnabled=true,onReadingEnabledChange}={}){
     let now=1000,ocrPending=null;const observations=[],copies=[],handlers=new Map(),crops=[],submitted=[];
     const contents=new EventEmitter();contents.mainFrame={url:`${origin}/`};contents.sent=[];contents.send=(...args)=>contents.sent.push(args);
     const main={webContents:contents,isDestroyed:()=>false};
@@ -29,7 +29,7 @@ function fixture(){
     const journal={sequence:0,records:[],async initialize(){},async append(value){const record={...value,schema:1,sequence:++this.sequence,recordedAt:new Date(now).toISOString()};this.records.push(record);return record;},async read(){return {records:this.records};},async close(){},async clear(){this.records=[];}};
     const electron={app:{isPackaged:false,getPath:()=>'/unused'},ipcMain:{handle:(channel,callback)=>handlers.set(channel,callback),removeHandler:channel=>handlers.delete(channel)},
         desktopCapturer:{getSources:async()=>sources},nativeImage:{createFromBuffer:bytes=>bytes.length>=24&&bytes.toString('ascii',12,16)==='IHDR'?picture(bytes.readUInt32BE(16),bytes.readUInt32BE(20)):image},clipboard:{writeImage:image=>copies.push(image)}};
-    const host=new CaptureHost({electron,origin,getMainWindow:()=>main,journal,ocr,now:()=>now,onObservation:value=>observations.push(value)});
+    const host=new CaptureHost({readingEnabled,onReadingEnabledChange,electron,origin,getMainWindow:()=>main,journal,ocr,now:()=>now,onObservation:value=>observations.push(value)});
     host.startSource=async()=>{host.phase='running';host.emitStatus();};
     return {host,main,event:{sender:contents,senderFrame:contents.mainFrame},journal,ocr,observations,copies,handlers,crops,submitted,
         tick(){now+=100;},advance(ms){now+=ms;},frame(id='one',width=100,height=40){return {bytes:png(id,width,height),width,height,capturedAt:now,captureGeneration:host.generation,owner:host.owner,sessionId:host.sessionId,sourceId:host.source?.id};},
@@ -38,6 +38,38 @@ function fixture(){
         async waitForRead(){for(let attempt=0;attempt<200;attempt++){if(ocrPending)return;await new Promise(resolve=>setTimeout(resolve,10));}throw Error('Synthetic read did not start.');}};
 }
 const f=fixture();
+{
+    const saved=[],blocked=fixture({readingEnabled:false,onReadingEnabledChange:value=>saved.push(value)});
+    try{
+        assert.equal(blocked.host.getStatus().readingEnabled,false);
+        for(const [action,value]of [['sources'],['start',{mode:'character',sourceId:'window:game'}],['start',{mode:'contribution',sourceId:'window:game'}],['resume'],['import-image',{mode:'character',source:'clipboard'}],['import-image',{mode:'contribution',source:'file'}],['preview'],['item-evidence',{}],['set-region',{}]]){
+            await assert.rejects(blocked.host.handle(blocked.event,action,value),/Screen reading is disabled/,action+' cannot bypass the unchecked master switch');
+        }
+        await assert.rejects(blocked.host.importPng(png(),{mode:'contribution'}),/Screen reading is disabled/);
+        await assert.rejects(blocked.host.captureScreenshot(),/Screen reading is disabled/);
+        assert.equal(blocked.host.submitFrame({}).accepted,false);assert.equal(blocked.ocr.calls,0);
+        await assert.rejects(blocked.host.handle({sender:{}},'set-reading-enabled',true),/main app/);
+        await assert.rejects(blocked.host.setReadingEnabled('true'),/Choose whether/);
+        await blocked.host.handle(blocked.event,'set-reading-enabled',true);
+        assert.equal(blocked.host.getStatus().readingEnabled,true);assert.equal(blocked.host.enabled,false,'Enabling grants permission without starting a reader');
+        await blocked.host.listSources();await blocked.host.start({mode:'contribution',sourceId:'window:game'});
+        await blocked.host.start({mode:'character',sourceId:'window:game'});assert(blocked.host.contributionResume);
+        blocked.host.ocr.stop=async()=>{};blocked.tick();blocked.host.submitFrame(blocked.frame('late-master-frame'));await blocked.waitForRead();
+        const stop=blocked.host.handle(blocked.event,'set-reading-enabled',false);assert.equal(blocked.host.readingEnabled,false);assert.equal(blocked.host.owner,null);assert.equal(blocked.host.contributionResume,null);
+        blocked.resolve();await stop;assert.equal(blocked.observations.length,0);assert.equal(blocked.journal.records.length,0,'A worker completion after disabling cannot journal or emit OCR');
+        await blocked.host.setReadingEnabled(true);assert.equal(blocked.host.owner,null,'Re-enabling cannot restore a retired Character or contribution reader');
+        await blocked.host.setReadingEnabled(false);
+        const logged=await blocked.host.ingestLogObservation({type:'kill',victim:'Synthetic log-only keeper'},{live:true,at:1000,zone:'Synthetic Vale',logId:'synthetic-log',cursor:1});
+        assert.equal(logged.accepted,true,'Text log contributions remain independent of OCR permission');
+        assert.deepEqual(saved,[true,false,true,false]);
+    }finally{await blocked.host.dispose();}
+    const imported=fixture();
+    try{
+        const pending=imported.host.importPng(png(),{mode:'character'});await imported.waitForRead();imported.host.ocr.stop=async()=>{};
+        const stop=imported.host.setReadingEnabled(false);imported.resolve(CHARACTER_TEXT);await stop;await pending;
+        assert.equal(imported.observations.length,0,'Disabling cancels screenshot OCR as well as continuous frames');assert.equal(imported.host.enabled,false);
+    }finally{await imported.host.dispose();}
+}
 try{
     await assert.rejects(f.host.handle({sender:{},senderFrame:f.main.webContents.mainFrame},'status'),/main app/);
     await assert.rejects(f.host.handle({sender:{},senderFrame:f.main.webContents.mainFrame},'preview'),/main app/);

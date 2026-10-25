@@ -37,6 +37,7 @@ const subscribe = (channel, callback) => {
     return () => ipcRenderer.removeListener(channel, listener);
 };
 contextBridge.exposeInMainWorld('eyeOfZommCapture', {
+    setReadingEnabled:value=>ipcRenderer.invoke('eye-of-zomm:capture','set-reading-enabled',value),
     status:()=>ipcRenderer.invoke('eye-of-zomm:capture','status'),
     sources:()=>ipcRenderer.invoke('eye-of-zomm:capture','sources'),
     start:value=>ipcRenderer.invoke('eye-of-zomm:capture','start',value),

@@ -62,7 +62,8 @@
     "check:item-scaling": "node scripts/sync-item-scaling.mjs --check",
     "generate:icons": "node scripts/generate-app-icons.mjs",
     "check:icons": "node scripts/check-app-icons.mjs",
-    "test:combatant-overview": "node scripts/test-combatant-overview.mjs"
+    "test:combatant-overview": "node scripts/test-combatant-overview.mjs",
+    "test:screen-reading-master": "node scripts/test-screen-reading-master.mjs"
   },
   "devDependencies": {
     "@tesseract.js-data/eng": "1.0.0",
