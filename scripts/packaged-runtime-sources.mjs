@@ -45,6 +45,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/discovery-contribution-flow.js',
     'app/wiki-identity.js',
     'app/generated-pets.js',
+    'app/chat-item-mentions.js',
     'app/contribution-reasons.js',
     'app/contribution-tier-zero.js',
     'app/drop-observations.js',
