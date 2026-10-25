@@ -71,3 +71,16 @@ retry.ui.dispose();
 console.log('Inline wiki notices: shared queue, visible 15-second deadlines, hover/focus/capture holds, safe choices, clipboard success and stale-source recovery passed.');
 
 assert.match(discoveryNoticeMarkup({...hostile,prompt:{name:'Synthetic mob',kind:'monster',hint:'Saved in Contribute: spawn /loc <script>'}}),/Saved in Contribute: spawn \/loc &lt;script&gt;/);
+
+const itemLink={...pending[0],kind:'item',purpose:'item-link',name:'Synthetic linked blade'};
+const linked=fixture(async(name,payload)=>{calls.push({name,payload});return {pendingCapture:true,captureRequest:'capture-1'};});
+linked.ui.render([itemLink]);assert.match(linked.root.innerHTML,/data-discovery-command="contribute"/);assert.doesNotMatch(linked.root.innerHTML,/>Screenshot</);
+linked.event('click','contribute');await flush();assert.match(linked.root.innerHTML,/Retry capture/);assert.match(linked.root.innerHTML,/until its item is read/);
+const beforeWaiting=calls.length;clock+=60000;linked.tick();assert.equal(calls.length,beforeWaiting,'Clicking Contribute pins the notice rather than completing it');
+linked.ui.render([{...itemLink,captureState:'retry',captureRequest:'capture-1',captureMessage:'Source selection cancelled. Retry or dismiss.'}]);assert.match(linked.root.innerHTML,/Source selection cancelled/);assert.doesNotMatch(linked.root.innerHTML,/is-complete/);
+clock+=60000;linked.tick();assert.equal(calls.length,beforeWaiting,'Cancellation remains retryable and dismissible without a busy lock');
+linked.ui.render([{...itemLink,captureState:'waiting',captureRequest:'capture-2'}]);linked.ui.render([{...itemLink,captureState:'captured',captureRequest:'capture-1'}]);assert.doesNotMatch(linked.root.innerHTML,/is-complete/,'An older capture request cannot complete a retried notice');
+linked.ui.render([{...itemLink,captureState:'captured',captureRequest:'capture-2'}]);assert.match(linked.root.innerHTML,/is-complete/);assert.match(linked.root.innerHTML,/Item captured/);
+linked.event('mouseover');linked.event('focusin');clock+=800;linked.tick();assert.match(linked.root.innerHTML,/Item captured/);
+linked.ui.render([{...itemLink,captureState:'waiting',captureRequest:'capture-2'}]);clock+=100;linked.tick();await flush();assert.equal(linked.root.innerHTML,'','Completion flashes for900ms and closes even when hovered/focused; stale waiting cannot restart it');linked.ui.dispose();
+const pinned=createDiscoveryNoticeQueue({now:()=>clock,maxVisible:1});pinned.reconcile([{...itemLink,captureState:'waiting',captureRequest:'capture-3'}]);clock+=120000;assert.deepEqual(pinned.tick(),[],'A remounted notice restores its pending capture hold from the owner snapshot');pinned.captureStatus(itemLink.id,'captured','', 'capture-3');pinned.hold(itemLink.id,'hidden',true);clock+=5000;assert.deepEqual(pinned.tick(),[],'The green completion interval is visible time');pinned.hold(itemLink.id,'hidden',false);clock+=900;assert.deepEqual(pinned.tick(),[itemLink.id]);

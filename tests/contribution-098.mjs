@@ -3,6 +3,7 @@ import {createContributionQueue} from '../app/contribution-queue.js';
 import {createWikiDiscovery} from '../app/wiki-discovery.js';
 import {CONTRIBUTION_QUEUE_KEY} from '../app/contribution-evidence.js';
 import {createItemBaseReview,applyItemBaseReview} from '../app/item-base-review.js';
+import {EQLogParser} from '../app/parser.js';
 let clock=Date.UTC(2026,9,24,14),cursor=0;
 let pack={meta:{wikiEntitiesComplete:true},wikiEntities:{items:['Known Cloak','Quest Token'],npcs:['Forest Warden'],titles:['Known Cloak','Quest Token','Forest Warden','Forest Glade']},items:[{name:'Known Cloak',wikiTitle:'Known Cloak',revisionId:12,dropSources:[{name:'Forest Warden',zone:'Forest Glade',instanceType:'normal'}]},{name:'Quest Token',dropSources:[{name:'Quest',zone:''}]}],npcs:[{name:'Forest Warden',zone:'Forest Glade'}],zones:[{name:'Forest Glade'}]};
 const values=new Map(),storage={getItem:key=>values.get(key),setItem:(key,value)=>values.set(key,value)},options={storage,getPack:()=>pack,now:()=>clock};
@@ -33,6 +34,31 @@ const pending=discovery.consume({type:'loot',item:'Unqueued Missing Gem',at:cloc
 assert.equal(event('kill',{victim:'Gtik'}).candidate,null);assert.equal(event('consider',{target:{name:'Jabaner'}}).candidate,null);assert(!q.snapshot().some(candidate=>['Gtik','Jabaner'].includes(candidate.name)));
 pack={...pack,npcs:[...pack.npcs,{name:'Gtik',zone:'Forest Glade'}],wikiEntities:{...pack.wikiEntities,npcs:[...pack.wikiEntities.npcs,'Gtik']}};assert.equal(event('kill',{victim:'Gtik'}).prompt,null,'Known pet-lookalike is positively present');
 assert.equal(q.add({kind:'npc',name:'Gtik'},true).name,'Gtik','Manual override remains possible');
+const ownedPet="A Sampleowner's pet";
+pack={...pack,npcs:[...pack.npcs,{name:ownedPet,zone:'Forest Glade'}],wikiEntities:{...pack.wikiEntities,npcs:[...pack.wikiEntities.npcs,ownedPet]}};
+for(const name of [ownedPet,'Sampleowner’s pet',"The corpse of Sampleowner's pet."]){
+    assert.equal(event('kill',{victim:name}).candidate,null);assert.equal(event('kill',{victim:name}).prompt,null);
+    assert.equal(event('consider',{target:{name,level:50}}).candidate,null);
+    const priorSources=q.snapshot().find(candidate=>candidate.kind==='item'&&candidate.name==='Known Cloak').sources.length;
+    event('loot',{item:'Known Cloak',source:name,sourceEvidence:{kind:'explicit-corpse'}});assert.equal(q.snapshot().find(candidate=>candidate.kind==='item'&&candidate.name==='Known Cloak').sources.length,priorSources,'Pet corpses never add an item source');
+    assert.equal(discovery.consume({type:'kill',victim:name,at:clock},{live:true,zone:'Forest Glade'}),null);
+}
+assert.equal(q.add({kind:'npc',name:ownedPet},true),null,'An explicit owner-pet label is never a new NPC page');
+assert(!q.snapshot().some(candidate=>candidate.kind==='npc'&&candidate.name.includes('Sampleowner')));
+assert(!q.snapshot().some(candidate=>candidate.sources.some(source=>source.npc.includes('Sampleowner'))));
+assert(event('kill',{victim:"Captain's guard"}).candidate,'A normal possessive NPC name stays eligible');
+assert(event('kill',{victim:'A pet goblin'}).candidate,'Pet-like common nouns alone do not identify an owned pet');
+const zoneProposal=q.consume({id:'synthetic-zone-pets',kind:'screen-read',owner:'contribution',subject:{kind:'zone',name:'Synthetic New Zone'},fields:[{key:'knownNPCs',value:[ownedPet,"Captain's guard"]}],input:{zone:'Synthetic New Zone'}});assert.deepEqual(zoneProposal.fields.knownNPCs.value,["Captain's guard"],'Observed zone NPC lists use the same pet classification');
+const observedParser=new EQLogParser();observedParser.parse('[Thu Aug 20 03:10:19 2026] You have entered Synthetic Vale.');
+for(const line of ["You have slain A Sampleowner's pet!",'Sampleowner’s pet glares at you threateningly -- looks like quite a gamble. (Lvl: 50)',"You slash A Sampleowner's pet for 12 points of damage."])observedParser.parse('[Thu Aug 20 03:10:23 2026] '+line);
+assert.equal(observedParser.snapshot().observed.length,0,'Owned pets never enter the parser’s found-NPC state through kill, consider or damage');
+observedParser.rememberNpc("Captain's guard");observedParser.rememberNpc('Gtik');assert.equal(observedParser.snapshot().observed.length,2,'Parser filtering remains limited to explicit owner-pet labels');
+
+const ownedDrafts=[{id:'owned-untouched',kind:'npc',name:ownedPet,title:ownedPet,zone:'Forest Glade',fields:{},sources:[],relations:[],evidence:[],status:'needs-review'},
+    {id:'owned-protected',kind:'npc',name:'Sampleowner’s pet',title:'Sampleowner’s pet',zone:'Forest Glade',fields:{notes:{value:'Preserve my local draft.',edited:true}},sources:[],relations:[],evidence:[],status:'needs-review'}];
+const petDisk=new Map([[CONTRIBUTION_QUEUE_KEY,JSON.stringify({schemaVersion:1,candidates:ownedDrafts})]]),petQueue=createContributionQueue({...options,storage:{getItem:key=>petDisk.get(key),setItem:(key,value)=>petDisk.set(key,value)}});
+assert.deepEqual(petQueue.archived().map(candidate=>[candidate.id,candidate.archive.reason]),[['owned-untouched','owned-pet']]);assert.deepEqual(petQueue.snapshot().map(candidate=>candidate.id),['owned-protected'],'Existing contributor edits remain private and intact');
+const protectedKill=petQueue.consumeLog({type:'kill',victim:'Sampleowner’s pet'},{live:true,zone:'Forest Glade',at:clock,logId:'synthetic-owned-pet',cursor:1});assert.equal(protectedKill.prompt,null,'A preserved old pet draft cannot re-arm a spawn prompt');assert.equal(petQueue.spawnStatus(),null);
 
 // Reconciliation keeps private original data in a bounded archive, never
 // destroys edited work or genuine source/verification tasks.

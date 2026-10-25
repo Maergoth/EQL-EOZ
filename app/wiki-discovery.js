@@ -1,6 +1,6 @@
 // Pure catalog membership and local suppression. This module never contacts the
 // wiki and never treats a partial/old dataset as evidence that an article is missing.
-import { createWikiResolver, normalizeWikiIdentity, wikiIdentityKey, itemBaseIdentity } from './wiki-identity.js';
+import { createWikiResolver, normalizeWikiIdentity, wikiIdentityKey, itemBaseIdentity, itemExaltationBaseIdentity } from './wiki-identity.js';
 import { classifyNpcEvidence } from './generated-pets.js';
 const IGNORE_KEY = 'eql-eye-of-zomm-wiki-discovery-ignored-v1';
 const MAX_PENDING = 20, MAX_IGNORED = 2000, MAX_SEEN = 4000;
@@ -56,7 +56,14 @@ export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis
     }
     function remember(set, key, limit) { set.add(key); if (set.size > limit) set.delete(set.values().next().value); }
     function consume(event, context = {}) {
-        if (context.live !== true || !event) return null;
+        if(event?.type==='item-links'){
+            let first=null;
+            for(const item of (Array.isArray(event.items)?event.items:[]).slice(0,8))if(typeof item==='string'&&item.length<=230){const prompt=consume({...event,type:'item-link',item},context);first??=prompt;}
+            return first;
+        }
+        // Considers and nearby casting are not evidence of an NPC death.
+        // Ignore them before advancing the live-log replay watermark.
+        if (context.live !== true || !event || !['kill','loot','item-link'].includes(event.type)) return null;
         const at = event.at ?? context.at, current = now();
         if (!finite(at) || !finite(current) || current - at > freshnessMs || at - current > 2000) return null;
         const source = clean(context.logId || 'current');
@@ -65,12 +72,14 @@ export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis
         watermarks.set(source, Math.max(previous ?? -Infinity, at));
         if (watermarks.size > 8) watermarks.delete(watermarks.keys().next().value);
         let kind, value;
-        if (event.type === 'consider') { kind = 'monster'; value = event.target?.name; }
-        else if (event.type === 'kill') { kind = 'monster'; value = event.victim; }
+        if (event.type === 'kill') { kind = 'monster'; value = event.victim; }
         else if (event.type === 'loot') { kind = 'item'; value = event.item; }
+        else if(event.type==='item-link'){kind='item';value=itemExaltationBaseIdentity(event.item);}
         else return null;
         const name = clean(value).slice(0, 240), canonical = wikiIdentityKey(kind,name).split('|').slice(1).join('|');
         if (!canonical) return null;
+        const players = new Set(['you','yourself',...(Array.isArray(context.playerNames)?context.playerNames.slice(0,200):[]).map(normalizeWikiIdentity)]);
+        if (kind === 'monster' && (event.isPlayer === true || event.victimIsPlayer === true || event.targetType === 'player' || event.isPet === true || players.has(normalizeWikiIdentity(name)))) return null;
         const index = currentCatalog(), key = `${kind}|${canonical}`,resolved=index.resolve(kind,name);
         let suppressed=false;try{suppressed=getSuppression(kind,name,{zone:context.zone||event.zone||'',purpose:'missing-page'})?.suppressed===true;}catch{/* Local state failure never proves an entity missing. */return null;}
         // Old Ignore keys erased grammatical articles. Preserve only that
@@ -79,7 +88,7 @@ export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis
         if (resolved.membership!=='missing' || suppressed || kind==='monster'&&!classifyNpcEvidence(name,resolved).eligible || ignored.has(key) || legacyIgnored.has(`${kind}|${legacyName}`) || seen.has(key)) return null;
         if (current - (cooldowns.get(key) ?? -Infinity) < cooldownMs || pending.size >= MAX_PENDING) return null;
         const id = `wiki-${kind}-${hash(key)}-${++sequence}`;
-        const prompt = { id, kind, name, zone:clean(context.zone || event.zone).slice(0, 160),...(event.type==='kill'?{hint:'Saved in Contribute. Record the monster’s spawn /loc there, then review its loot and zone.'}:{}) };
+        const prompt = { id, kind, name, zone:event.type==='item-link'?'':clean(context.zone || event.zone).slice(0, 160),...(event.type==='item-link'?{purpose:'item-link',hint:'Item linked in chat. Open its examine window to capture it for Contribute.'}:{}),...(event.type==='kill'?{hint:'Saved in Contribute. Record the monster’s spawn /loc there, then review its loot and zone.'}:{}) };
         pending.set(id, { key, prompt }); remember(seen, key, MAX_SEEN); cooldowns.set(key, current);
         if (cooldowns.size > MAX_SEEN) cooldowns.delete(cooldowns.keys().next().value);
         const failed = () => {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {itemBaseReviewPreview,createItemBaseReview,applyItemBaseReview,validateItemBaseReview} from '../app/item-base-review.js';
+import {itemBaseReviewPreview,itemBaseReviewChoices,proposeItemBaseReview,createItemBaseReview,applyItemBaseReview,validateItemBaseReview} from '../app/item-base-review.js';
+import {buildContributionDraft} from '../app/contribution-model.js';
 import {scaleItemStat} from '../app/item-scaling.js';
 const wrap=value=>({value,confirmed:false});
 const source={kind:'item',name:'Synthetic Provisional Mantle',fields:{tier:wrap(4),fraction:wrap(null),hp:wrap(42),mana:wrap(85),haste:wrap(16),weight:wrap(.7),resistCorruption:wrap(4),statLines:wrap(['HP: 42','Mana: 85','Haste: 16','An original contributor note.'])}};
@@ -15,11 +16,36 @@ assert.throws(()=>createItemBaseReview(source,{...options,reviewed:true,choices:
 assert.throws(()=>createItemBaseReview(source,{...options,reviewed:true,choices:{HP:30,MP:57}}),/one possible item progress state/,'Individually valid inverses cannot use contradictory fractional states');
 const review=createItemBaseReview(source,{...options,reviewed:true,choices:{HP:30,HASTE:12}}),patch=applyItemBaseReview(source,review);
 assert.equal(review.schemaVersion,2);assert.equal(review.modifiersExcluded,null);assert.equal(review.fraction,null);assert.deepEqual(review.choices,{HP:30,HASTE:12});
-assert(patch.fields.statLines.value.includes('An original contributor note.'));assert.equal(patch.fields.hp.value,42);assert.equal(patch.fields.tier.value,4);assert.equal(patch.fields.statLines.confirmed,false);
+assert(patch.fields.statLines.value.includes('An original contributor note.'));assert.equal(patch.fields.hp.value,42);assert.equal(patch.fields.tier.value,4);assert.equal(patch.fields.statLines.confirmed,true,'using editable provisional values needs no separate confirmation checkbox');
 const candidate={...source,...patch,fields:{...patch.fields,statLines:{...patch.fields.statLines,confirmed:true}}},validation=validateItemBaseReview(candidate);assert(validation.ok);
 assert.equal(validation.note,'These stats are reverse calculated from a tier 4 item. Please confirm with a tier 0 item and remove this message');
 for(const [field,value]of [['modified',true],['augmented',true],['augmentNames',['Synthetic Exaltation']]]){const blocked={...source,fields:{...source.fields,[field]:wrap(value)}};assert.equal(itemBaseReviewPreview(blocked,options).fields.HP.status,'unknown');assert.throws(()=>createItemBaseReview(blocked,{...options,reviewed:true,choices:{HP:30}}));}
 assert.equal(validateItemBaseReview({...candidate,fields:{...candidate.fields,hp:wrap(43)}}).ok,false);
 assert.equal(validateItemBaseReview({...candidate,fields:{...candidate.fields,statLines:wrap([...candidate.fields.statLines.value,'Weight: 0.7'])}}).ok,false);
 const cap=itemBaseReviewPreview({...source,fields:{...source.fields,tier:wrap(10)}},{tier:10,fraction:null,reviewMode:'provisional'});assert.equal(cap.provenance.fractionStates,1,'Tier ten cannot invent additional progress');
+const gauntlets={kind:'item',name:'Synthetic Bloodsoaked Gauntlets',fields:{tier:wrap(1),ac:wrap(18),hp:wrap(143),mana:wrap(104),endurance:wrap(104),resistCorruption:wrap(1),weight:wrap(32),statLines:wrap(['AC: 18','HP: 143','Mana: 104','Endurance: 104','SV Void: 1','Weight: 32'])}};
+const gauntletPreview=itemBaseReviewPreview(gauntlets,{tier:1,fraction:null,reviewMode:'provisional'}),defaults=itemBaseReviewChoices(gauntletPreview);
+assert.deepEqual(defaults,{AC:16,HP:124,MP:90,END:90,SV_CORRUPTION:0},'lower editable defaults share one possible progress state');
+const auto=proposeItemBaseReview(gauntlets);assert(auto);assert.deepEqual(auto.baseRecovery.choices,defaults);assert.equal(gauntlets.fields.hp.value,143,'observed evidence stays unchanged');
+assert(validateItemBaseReview({...gauntlets,...auto}).ok,'fresh provisional proposals are immediately usable in the reviewed wiki preview');
+const blueprints={entries:{item:{text:'{{Itempage|statsblock=}}'}}},draft=buildContributionDraft(gauntlets,blueprints);
+assert.deepEqual(draft.blockers,[]);for(const line of ['AC: 16','HP: 124','Mana: 90','Endurance: 90','SV Void: 0'])assert(draft.text.includes(line),line+' survives preparing without Apply');
+assert.doesNotMatch(draft.text,/statsblock =\s*\?/);assert.doesNotMatch(draft.text,/HP: 143|Mana: 104|Weight: 32|SV Void: 1/);
+assert.match(draft.text,/These stats are reverse calculated from a tier 1 item\. Please confirm with a tier 0 item and remove this message/);
+assert.throws(()=>createItemBaseReview(gauntlets,{tier:1,fraction:null,reviewMode:'provisional',reviewed:true,choices:{...defaults,HP:130}}),/one possible item progress state/,'a different individually valid HP base cannot contradict mana/endurance progress');
+const invalid={...gauntlets,baseRecovery:{...auto.baseRecovery,sourceFingerprint:''}};
+assert(buildContributionDraft(invalid,blueprints).blockers.length>0,'an invalid explicit edit cannot silently revert to automatic defaults');
+const onlyUnsupported={kind:'item',name:'Synthetic Contextual Item',fields:{tier:wrap(1),damageBonus:wrap(9),weight:wrap(32)}};
+assert.equal(proposeItemBaseReview(onlyUnsupported),null);
+assert.match(buildContributionDraft(onlyUnsupported,blueprints).text,/These stats are reverse calculated from a tier 1 item/,'tiered submissions retain the verification note even without calculable base statistics');
+const manual={kind:'item',name:'Synthetic Manual Relic',fields:{tier:wrap(4),hp:wrap(42),statLines:{value:['HP: 29','My note.'],confirmed:true,edited:true}}},manualBefore=structuredClone(manual),manualPatch=proposeItemBaseReview(manual);
+assert.equal(manualPatch.baseRecovery.choices.HP,29,'an explicit supported manual base constrains automatic proposals');assert(manualPatch.fields.statLines.value.includes('HP: 29'));assert(manualPatch.fields.statLines.value.includes('My note.'));assert.deepEqual(manual,manualBefore,'manual text and observed evidence are not mutated');
+const manualDraft=buildContributionDraft(manual,blueprints);assert.deepEqual(manualDraft.blockers,[]);assert.match(manualDraft.text,/HP: 29/);assert.doesNotMatch(manualDraft.text,/HP: 28/);
+for(const lines of [['HP: 31'],['HP: 29','HP: 30'],['HP 29 (manual)'],['Weight: 2'],[]]){
+    const edited={...manual,fields:{...manual.fields,statLines:{value:lines,confirmed:true,edited:true}}};
+    assert.throws(()=>proposeItemBaseReview(edited),/Review/);assert(buildContributionDraft(edited,blueprints).blockers.some(message=>/Review/.test(message)),'unsupported, duplicate or unclear explicit edits block instead of being replaced');
+    assert.deepEqual(edited.fields.statLines.value,lines);
+}
+const constrained={...gauntlets,fields:{...gauntlets.fields,mana:wrap(105),endurance:wrap(105),statLines:{value:['HP: 130'],confirmed:true,edited:true}}};
+const constrainedPatch=proposeItemBaseReview(constrained);assert.equal(constrainedPatch.baseRecovery.choices.HP,130);assert.equal(constrainedPatch.baseRecovery.choices.MP,95,'missing bases use the progress state compatible with explicit manual HP');
 console.log('Provisional recovery v2: bounded fractional union, common-state choices, explicit unknown modifier assumptions, unsupported omissions and exact tier-zero warning passed.');

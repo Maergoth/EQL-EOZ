@@ -199,7 +199,7 @@ try {
             assert.equal(panels().parse.isResizable(), false,'custom hit regions resize transparent overlays'); assert.equal(panels().parse.isMovable(), true);
             assert.equal(nativeCalls.get(panels().parse.id).filter(call => call[0] === 'setMovable').at(-1)[1],true);
             if(process.platform !== 'linux')assert.equal(panels().parse.isFocusable(),true);
-            await until(async()=>execute(panels().parse,()=>getComputedStyle(document.querySelector('#parse-drag-grip')).webkitAppRegion==='drag'),'unlocked dedicated Parse drag region');
+            await until(async()=>execute(panels().parse,()=>getComputedStyle(document.querySelector('#parse-drag-grip')).webkitAppRegion==='no-drag'),'unlocked dedicated Parse drag region');
             const parseGrip=await execute(panels().parse,()=>{const grip=document.querySelector('#parse-drag-grip'),rect=grip.getBoundingClientRect(),select=document.querySelector('#encounter-scope').getBoundingClientRect();return{width:rect.width,height:rect.height,right:rect.right,selectLeft:select.left,headerRegion:getComputedStyle(document.querySelector('#overlay-header')).webkitAppRegion,selectRegion:getComputedStyle(document.querySelector('#encounter-scope')).webkitAppRegion,tabRegion:getComputedStyle(document.querySelector('[data-tab="healing"]')).webkitAppRegion,resizeHint:getComputedStyle(document.querySelector('#overlay-resize-handle')).display,resizeCursor:getComputedStyle(document.querySelector('#overlay-resize-handle')).cursor};});
             assert(parseGrip.width>=24&&parseGrip.height>=20&&parseGrip.right<=parseGrip.selectLeft,'Parse has an exposed grip separate from encounter controls');
             assert.equal(parseGrip.headerRegion,'no-drag');assert.equal(parseGrip.selectRegion,'no-drag');assert.equal(parseGrip.tabRegion,'no-drag');assert.equal(parseGrip.resizeHint,'block');assert.equal(parseGrip.resizeCursor,'nwse-resize');
@@ -217,7 +217,11 @@ try {
             // Run visible trusted-pointer input after hidden capturePage checks:
             // Windows Viz can stall a hidden capture immediately after this
             // native show/resize/hide lifecycle, despite correct DOM/bounds.
-            const verifyPointerResize=async()=>{await control('show','parse');await control('lock','parse',false);await control('pass-through','parse',false);const pointerWindow=panels().parse,pointerBefore=pointerWindow.getBounds();
+            const verifyPointerResize=async()=>{const previousPanels=(await state()).panels;for(const id of ['map','intel','timers'])await control('hide',id);await control('show','parse');await control('lock','parse',false);await control('pass-through','parse',false);
+            // Other sections deliberately dock panels together. This case
+            // checks one independent southeast resize; shared dimensions have
+            // their own trusted-edge fixture and must not constrain its width.
+            await action('parse','move-start');await action('parse','move-end',{cancel:true});const pointerWindow=panels().parse,pointerBefore=pointerWindow.getBounds();
             await until(async()=>execute(pointerWindow,bounds=>Math.abs(document.documentElement.clientWidth-bounds.width)<=1&&Math.abs(document.documentElement.clientHeight-bounds.height)<=1,pointerBefore),'native resize viewport width and height are painted before pointer input');
             showNativeInactive.call(pointerWindow);await execute(pointerWindow,()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
             const resizePoint=await execute(pointerWindow,()=>{const rect=document.querySelector('#overlay-resize-handle').getBoundingClientRect();window.__resizePointer=[];for(const type of ['pointerdown','pointermove','pointerup'])document.querySelector('#overlay-resize-handle').addEventListener(type,event=>window.__resizePointer.push({type,trusted:event.isTrusted,x:event.screenX,y:event.screenY,clientX:event.clientX,clientY:event.clientY}));return{x:Math.round(rect.left+rect.width/2),y:Math.round(rect.top+rect.height/2)};});
@@ -229,6 +233,7 @@ try {
                 try{await until(()=>{const bounds=pointerWindow.getBounds();return Math.abs(bounds.width-(pointerBefore.width+24))<=1&&Math.abs(bounds.height-(pointerBefore.height+16))<=1;},'pointer handle changes real native bounds through bounded own-panel IPC');}catch(error){throw Error(`${error.message}; before=${JSON.stringify(pointerBefore)} actual=${JSON.stringify(pointerWindow.getBounds())} pointer=${JSON.stringify(await execute(pointerWindow,()=>({events:window.__resizePointer,status:document.querySelector('#overlay-status').textContent,active:document.body.classList.contains('is-resizing')})))}`);}
             }finally{pointerWindow.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,...pointerMoved});pointerWindow.hide();}
             await until(async()=>execute(pointerWindow,()=>!document.body.classList.contains('is-resizing')),'resize capture releases after pointer up');
+            for(const id of ['map','intel','timers'])if(previousPanels[id].visible)await control('show',id);
             };
             // This subsection verifies a Parse/Triggers pair. Other panels are
             // restored afterward; their collision guards remain production-real
@@ -236,14 +241,19 @@ try {
             await control('hide','map');await control('hide','intel');
             const resizeTarget={x:100,y:100,width:parseBeforeResize.width+86,height:parseBeforeResize.height+40};panels().parse.setBounds(resizeTarget);
             const actualTarget=panels().parse.getBounds(),timerWindow=panels().timers;
-            timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+9,width:actualTarget.width-8,height:84});
+            // Release docking deliberately excludes the group just detached in
+            // that gesture. First detach the seeded/default pair, then perform
+            // a fresh move toward Parse to exercise intentional reattachment.
+            await action('timers','move-start');await action('timers','move-end',{cancel:true});
+            timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+27,width:actualTarget.width-8,height:84});
+            await action('timers','move-start');await action('timers','move',{deltaX:-5,deltaY:-20});await action('timers','move-end');
             try{await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height&&bounds.width===actualTarget.width;},'Triggers touches current resized native Parse bounds and shares its width');}catch(error){throw Error(`${error.message}; target=${JSON.stringify(actualTarget)} timer=${JSON.stringify(timerWindow.getBounds())} workAreas=${JSON.stringify(fixtureScreen.getAllDisplays().map(display=>display.workArea))} preferences=${JSON.stringify((await state()).panels)}`);}
             // Native setBounds is fixture positioning, not user height intent.
             // Establish manual height through the real own-panel resize path.
             await action('timers','resize',{deltaWidth:0,deltaHeight:20});
             const timerBeforeResize=timerWindow.getBounds();
             const timerHandle=await execute(timerWindow,()=>{const handle=document.querySelector('#overlay-resize-handle'),grip=document.querySelector('#parse-drag-grip'),menu=document.querySelector('.hover-menu');return{cursor:getComputedStyle(handle).cursor,display:getComputedStyle(handle).display,grip:getComputedStyle(grip).webkitAppRegion,handle:handle.getBoundingClientRect().toJSON(),menu:menu.getBoundingClientRect().toJSON()};});
-            assert.equal(timerHandle.cursor,'nwse-resize');assert.equal(timerHandle.display,'block');assert.equal(timerHandle.grip,'drag');assert(timerHandle.handle.left>=timerHandle.menu.right,'Triggers resize corner is separate from its settings button');
+            assert.equal(timerHandle.cursor,'nwse-resize');assert.equal(timerHandle.display,'block');assert.equal(timerHandle.grip,'no-drag');assert(timerHandle.handle.left>=timerHandle.menu.right,'Triggers resize corner is separate from its settings button');
             await execute(timerWindow,()=>document.querySelector('#overlay-resize-handle').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',shiftKey:true,bubbles:true})));
             await until(()=>timerWindow.getBounds().height===timerBeforeResize.height+20,'Triggers keyboard corner resize changes real native height');
             assert.equal((await state()).panels.timers.manualHeight,true);
@@ -373,7 +383,7 @@ try {
                 name.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:list}));tooltip.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,relatedTarget:list}));
                 await new Promise(resolve=>setTimeout(resolve,220));const crossedGap=!tooltip.hidden;
                 const overflow=getComputedStyle(tooltip).overflowY,scrollable=tooltip.scrollHeight>tooltip.clientHeight;
-                tooltip.scrollTop=tooltip.scrollHeight;const scrolled=tooltip.scrollTop>0,note=tooltip.querySelector('.intel-tooltip-note').getBoundingClientRect(),box=tooltip.getBoundingClientRect(),endVisible=note.bottom<=box.bottom+1;
+                tooltip.scrollTop=tooltip.scrollHeight;const scrolled=tooltip.scrollTop>0,note=tooltip.querySelector('[data-item-detail="Notes"]').getBoundingClientRect(),box=tooltip.getBoundingClientRect(),endVisible=note.bottom<=box.bottom+1;
                 tooltip.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:list}));await new Promise(resolve=>setTimeout(resolve,220));const leftHidden=tooltip.hidden;
                 // Live snapshots can replace the row during the two dismissal
                 // waits. Exercise keyboard input on the current rendered item.
@@ -383,10 +393,11 @@ try {
             });
             assert(tooltipHover.icon.visible&&tooltipHover.text.visible&&tooltipHover.icon.fits&&tooltipHover.text.fits&&tooltipHover.keyboard&&tooltipHover.leftHidden&&tooltipHover.blurHidden,`Both item pictures/names reveal bounded stat blocks and dismiss on exit: ${JSON.stringify(tooltipHover)}`);
             assert(tooltipHover.crossedGap&&tooltipHover.overflow==='auto'&&tooltipHover.scrollable&&tooltipHover.scrolled&&tooltipHover.endVisible&&tooltipHover.keyboardScrolled,`Tall real stat-block markup remains fully readable by mouse and keyboard inside the native viewport: ${JSON.stringify(tooltipHover)}`);
-            assert.match(tooltipHover.text.text,/Tier 7[\s\S]*HP[\s\S]*\(/,'Tier-adjusted stat blocks include base values');
+            assert.match(tooltipHover.text.text,/\+7[\s\S]*HP/,'Tier-adjusted wiki Itemboxes show the selected tier');
+            assert.equal(await execute(intelWindow,()=>Boolean(document.querySelector('#intel-item-tooltip .wiki-itembox-value.is-scaled'))),true,'Tier-adjusted wiki values keep their green highlight');
             await execute(intelWindow,()=>document.querySelector('.item-name').dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse',clientX:70,clientY:150})));
             await action('intel','session:item-tier',{tier:0});
-            await until(async()=>execute(intelWindow,()=>{const tooltip=document.querySelector('#intel-item-tooltip');return !tooltip.hidden&&tooltip.querySelector('.intel-tooltip-title>span')?.textContent==='Base';}),'An already hovered item stat block updates to the latest tier without a new hover');
+            await until(async()=>execute(intelWindow,()=>{const tooltip=document.querySelector('#intel-item-tooltip');return !tooltip.hidden&&Boolean(tooltip.querySelector('.wiki-itembox-title strong'))&&!/\s\+\d+$/.test(tooltip.querySelector('.wiki-itembox-title strong').textContent)&&!tooltip.querySelector('.wiki-itembox-value.is-scaled');}),'An already hovered item stat block updates to the latest tier without a new hover');
             await screenshot(intelWindow,'intel-item-stats');
             await execute(intelWindow,()=>{document.querySelector('[data-intel-section-toggle="raid"]').click();});
             await action('map','session:select-npc',{npc:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true});
@@ -449,7 +460,7 @@ try {
                     const details=JSON.stringify({width,locked,...geometry});
                     assert(geometry.band.height>=36&&geometry.title.height>=36&&geometry.title.width>=28,`The full title band remains a usable hover target: ${details}`);
                     assert.equal(geometry.headerRegion,'no-drag',`Header hover must reach Chromium: ${details}`);assert.equal(geometry.titleRegion,'no-drag',`Zone title must not be a native drag region: ${details}`);
-                    assert.equal(geometry.gripRegion,locked?'no-drag':'drag',`Only the unlocked grip owns native dragging: ${details}`);
+                    assert.equal(geometry.gripRegion,'no-drag',`The grip uses the explicit pointer drag lifecycle: ${details}`);
                     assert(geometry.buttons.every(button=>button.top>=geometry.title.top&&button.bottom<=geometry.title.bottom&&button.right<=geometry.menu.left+1),`Title and every primary control share one unclipped row: ${details}`);
                     const last=geometry.buttons.at(-1),controlPoint={x:Math.round(last.left+last.width/2),y:Math.round(last.top+last.height/2)};
                     mapWindow.webContents.sendInputEvent({type:'mouseMove',...controlPoint});
@@ -657,18 +668,18 @@ try {
                     // mouse moves can coalesce without a fresh pointerover.
                     await until(async()=>execute(owner,()=>window.__mainItemPointer.some(event=>event.trusted&&Math.abs(event.x-5)<=1&&Math.abs(event.y-5)<=1)),'Native pointer departure is delivered before entering the item');
                     owner.webContents.sendInputEvent({type:'mouseMove',x:target.x,y:target.y});
-                    await until(async()=>execute(owner,name=>{const tooltip=document.querySelector('#item-tooltip');return !tooltip.hidden&&tooltip.querySelector('.itembox-title>span')?.textContent===name&&window.__mainItemPointer.some(event=>event.type==='pointerover'&&event.trusted&&event.name===name);},target.name),`Trusted main hover exposes stats from ${selector}`);
+                    await until(async()=>execute(owner,name=>{const tooltip=document.querySelector('#item-tooltip');return !tooltip.hidden&&tooltip.querySelector('.wiki-itembox-title strong')?.textContent.replace(/\s\+\d+$/,'')===name&&window.__mainItemPointer.some(event=>event.type==='pointerover'&&event.trusted&&event.name===name);},target.name),`Trusted main hover exposes stats from ${selector}`);
                 }catch(error){
                     const diagnostic=await execute(owner,(selector,point)=>{
                         const describe=node=>node?{tag:node.tagName,id:node.id,className:node.className,name:node.closest?.('[data-item-title]')?.dataset.itemTitle||'',text:node.textContent?.slice(0,120),rect:node.getBoundingClientRect().toJSON()}:null;
                         const tooltip=document.querySelector('#item-tooltip');
-                        return{hasFocus:document.hasFocus(),viewport:{width:innerWidth,height:innerHeight},activeView:document.querySelector('.view.is-active')?.dataset.viewPanel,activeElement:describe(document.activeElement),target:describe(document.querySelector(selector)),hit:describe(document.elementFromPoint(point.x,point.y)),events:window.__mainItemPointer,tooltip:{hidden:tooltip.hidden,display:getComputedStyle(tooltip).display,title:tooltip.querySelector('.itembox-title>span')?.textContent,text:tooltip.textContent.slice(0,350)},scroll:document.querySelector('.content').scrollTop};
+                        return{hasFocus:document.hasFocus(),viewport:{width:innerWidth,height:innerHeight},activeView:document.querySelector('.view.is-active')?.dataset.viewPanel,activeElement:describe(document.activeElement),target:describe(document.querySelector(selector)),hit:describe(document.elementFromPoint(point.x,point.y)),events:window.__mainItemPointer,tooltip:{hidden:tooltip.hidden,display:getComputedStyle(tooltip).display,title:tooltip.querySelector('.wiki-itembox-title strong')?.textContent,text:tooltip.textContent.slice(0,350)},scroll:document.querySelector('.content').scrollTop};
                     },selector,target);
                     throw new Error(`${error.message}: ${JSON.stringify({selector,point:target,native:{visible:owner.isVisible(),focused:owner.isFocused(),bounds:owner.getContentBounds()},...diagnostic})}`);
                 }
                 return execute(owner,(selector,target)=>{
                     const tooltip=document.querySelector('#item-tooltip'),node=document.querySelector(selector),identity=node.closest('[data-item-title]');
-                    return{...target,stats:tooltip.querySelectorAll('.tooltip-stat').length,description:identity.getAttribute('aria-describedby'),tabbable:identity.tabIndex>=0,href:identity.getAttribute('href')};
+                    return{...target,stats:tooltip.querySelectorAll('[data-item-stat]').length,description:identity.getAttribute('aria-describedby'),tabbable:identity.tabIndex>=0,href:identity.getAttribute('href')};
                 },selector,target);
             };
             const mainItemName=await mainHover('#item-list h3[data-item-title]');
@@ -687,7 +698,7 @@ try {
             assert.equal(mainNpcName.name,mainNpcIcon.name);assert(mainNpcName.stats>0&&mainNpcIcon.stats>0&&/^https?:/.test(mainNpcName.href||''),'NPC loot names and pictures both expose real local stats while preserving their Wiki link');
             owner.focus();await until(async()=>execute(owner,()=>document.hasFocus()),'Main keyboard hover checks use the active CI document');
             await execute(owner,()=>{const target=document.querySelector('#npc-list .known-drops [data-item-title]');target.focus();});
-            assert.equal(await execute(owner,()=>!document.querySelector('#item-tooltip').hidden&&document.activeElement.dataset.itemTitle===document.querySelector('#item-tooltip .itembox-title>span').textContent),true,'Main NPC loot remains available to keyboard focus');
+            assert.equal(await execute(owner,()=>!document.querySelector('#item-tooltip').hidden&&document.activeElement.dataset.itemTitle===document.querySelector('#item-tooltip .wiki-itembox-title strong').textContent.replace(/\s\+\d+$/,'')),true,'Main NPC loot remains available to keyboard focus');
             await append(['Unknown Elevation Watcher scowls at you (Lvl: 30)']);
             await until(async()=>{const intel=(await state()).snapshot.session.intel;return intel.npcs.some(npc=>npc.id===intel.focusedNpcId&&npc.name==='Unknown Elevation Watcher');},'Prepare a real observed NPC before testing changed-level redraws');
             await execute(owner,()=>{document.activeElement?.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));const search=document.querySelector('#npc-search');search.value='';search.dispatchEvent(new Event('input'));});

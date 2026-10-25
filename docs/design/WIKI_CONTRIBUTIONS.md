@@ -1,5 +1,41 @@
 # Wiki contribution integration design
 
+## Current 0.9.10 contract
+
+Use [the form/review plan](../CONTRIBUTION_ITEM_FORM_PLAN.md),
+[the discovery/evidence plan](../CONTRIBUTION_DISCOVERY_PLAN.md) and
+[the release checklist](../RELEASE_0910_PLAN.md) for the integrated source and
+acceptance status. Earlier versioned sections below retain their original
+design/validation record and do not reintroduce retired approval controls.
+
+The current flow is Preview wiki changes → Publish wiki changes. One overall
+**I reviewed these page changes** checkbox sits directly above Publish. There
+are no per-field, destination, duplicate-result or per-page approval checkboxes.
+Preview shows fresh canonical matches, account/media details and all page diffs;
+the final Publish/Retry action authorizes the exact reviewed plan. Draft edits,
+account/blueprint/destination changes invalidate it. Native review-digest,
+create-only/revision/content and partial-result guards remain mandatory.
+
+Items use canonical class/slot multiselects, one Zone, inline local icon paste,
+blank optional fields and preserved selected effects. Confirmed applied pages
+offer fixed-origin canonical links. Source updates retain reciprocal item/NPC/
+zone formatting and normal/raid context. Later EoZ monster creation can recover
+already-published matching item-source rows from bounded verified live evidence.
+Automatic reverse links for pages authored directly in the wiki are a separate
+wiki extension/template deployment, with its own cache/activation receipts.
+
+Automatic monster intake requires kill/death or explicit named-corpse evidence.
+Original triggering log lines/chat evidence remain private and never enter
+article text or observation telemetry. Encoded chat items can request fresh live
+examine OCR without asserting a drop source. Persistent contribution notices
+complete only on their current request's evidence and do not publish articles.
+
+Tiered base review automatically proposes compatible editable bases, preserving
+observed evidence and valid manual edits plus a tier-zero verification note.
+Character shares target the authenticated **User** page and use one Share action;
+preview/copy/save stay local. Character totals come only from the reviewed
+recorded sheet, never gear or catalog arithmetic.
+
 ## 0.9.7 reviewed log relationships
 
 Live log evidence is retained by the durable queue described in

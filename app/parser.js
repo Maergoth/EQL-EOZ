@@ -1,4 +1,5 @@
 import { loggedLocationToWorld } from './coordinate-system.js';
+import { isOwnedPetName } from './generated-pets.js';
 
 const LINE_RE = /^\[([^\]]+)\]\s*(.*)$/;
 const AUTO_ATTACK_VERBS = new Set(['hit', 'slash', 'crush', 'pierce', 'punch', 'claw', 'bite', 'maul']);
@@ -17,8 +18,25 @@ function normalizeName(name) {
 
 function stripLogLinks(text) {
     return String(text || '')
+        .replace(/\x12([0-9a-f]{56})([^\x12\r\n]{1,240})\x12/gi, (_match,body,label)=>nativeItemLinkName(body,label)||label)
         .replace(/\\a(?:ITEM|PC)\s+[^:]*:([^\\]*?)\\\/a/gi, '$1')
         .replace(/\\a(?:ITEM|PC)[^\\]*?\\\/a/gi, match => match.replace(/^.*?:/, '').replace(/\\\/a$/i, ''));
+}
+
+const safeItemLinkName=value=>{const name=normalizeName(value);return name.length>0&&name.length<=230&&!/[\u0000-\u001f\u007f\\<>\[\]{}|]/.test(name)&&/[\p{L}\p{N}]/u.test(name)?name:null;};
+function nativeItemLinkName(body,label){
+    // Current EQEmu/RoF2: a 56-character hex body inside 0x12 delimiters.
+    // https://github.com/EQEmu/EQEmu/blob/master/common/say_link.cpp
+    // Reserved proxy IDs represent quest/say links rather than real items.
+    const itemId=parseInt(body.slice(1,6),16);
+    return body[0]==='0'&&itemId>0&&itemId<0xfffff&&itemId!==999999?safeItemLinkName(label):null;
+}
+export function extractItemLinks(text){
+    const input=String(text||'').slice(0,16384),found=[],seen=new Set();
+    const add=(name,index)=>{if(name)found.push({name,index});};
+    for(const match of input.matchAll(/\\aITEM\s+(-?\d{1,10})(?:\s+-?\d{1,10}){1,8}:([^\\\r\n]{1,240})\\\/a/gi))if(Number(match[1])!==0)add(safeItemLinkName(match[2]),match.index);
+    for(const match of input.matchAll(/\x12([0-9a-f]{56})([^\x12\r\n]{1,240})\x12/gi))add(nativeItemLinkName(match[1],match[2]),match.index);
+    return found.sort((a,b)=>a.index-b.index).filter(link=>{const key=link.name.toLowerCase();if(seen.has(key))return false;seen.add(key);return true;}).slice(0,8).map(link=>link.name);
 }
 
 function trimSentence(text) {
@@ -47,6 +65,9 @@ function isCurrencyLoot(item) {
 export class EQLogParser {
     constructor() {
         this.character = '';
+        // Only /who identity rows establish other player names. A nearby spell
+        // cast alone cannot identify an actor as either a player or a monster.
+        this.knownPlayerNames = new Set();
         this.level = 0;
         this.classes = [];
         this.zone = '';
@@ -83,6 +104,7 @@ export class EQLogParser {
 
     resetSourceContext() {
         this.zone = '';this.zoneShortName = '';this.location = null;
+        this.knownPlayerNames.clear();
         this.lastKill = null;this.currentFight = null;this.currentLineAt = null;
         this.sourceEncounters = new WeakSet();this.currentSourceEvents = new WeakSet();
     }
@@ -128,7 +150,7 @@ export class EQLogParser {
     setCharacterFromFilename(path) {
         const name = String(path || '').split(/[\\/]/).pop() || '';
         const match = name.match(/^eqlog_([^_]+)_/i);
-        if (match) this.character = match[1];
+        if (match) { this.character = match[1]; this.knownPlayerNames.add(this.character.toLowerCase()); }
     }
 
     rememberEvent(event) {
@@ -201,10 +223,11 @@ export class EQLogParser {
         if (addToEncounter) this.totalOwnKills += 1;
         this.lastKill = { name: victim, zone: this.zone, at };
         this.rememberNpc(victim, { killed: true });
+        const playerEvidence=this.isPlayerTarget(victim)||this.knownPlayerNames.has(victim.toLowerCase())?{victimIsPlayer:true}:{};
         if (addToEncounter) {
-            return this.rememberCombatEvent({ type: 'kill', victim, encounterTarget: victim });
+            return this.rememberCombatEvent({ type: 'kill', victim, encounterTarget: victim, ...playerEvidence });
         }
-        return this.rememberEvent({ type: 'kill', victim });
+        return this.rememberEvent({ type: 'kill', victim, ...playerEvidence });
     }
 
     noteLoot(itemName, sourceName = '') {
@@ -254,7 +277,7 @@ export class EQLogParser {
 
     rememberNpc(name, fields = {}) {
         name = normalizeName(name);
-        if (!name) return;
+        if (!name || isOwnedPetName(name)) return;
         const key = `${this.zone.toLowerCase()}|${name.toLowerCase()}`;
         const previous = this.observed.get(key) || {
             name,
@@ -318,7 +341,8 @@ export class EQLogParser {
         const m = raw.match(LINE_RE);
         const parsedAt = m ? Date.parse(m[1]) : NaN;
         this.currentLineAt = Number.isFinite(parsedAt) ? parsedAt : Date.now();
-        const text = stripLogLinks((m ? m[2] : raw).trim()).replace(/^--(.*?)--$/, '$1');
+        const body=(m ? m[2] : raw).trim(),itemLinks=extractItemLinks(body);
+        const text = stripLogLinks(body).replace(/^--(.*?)--$/, '$1');
         if (!text) return null;
 
         let x;
@@ -336,6 +360,10 @@ export class EQLogParser {
         // contain an instance number. Only the current character's row is an
         // authoritative zone signal when /who returns multiple players.
         x = text.match(/^\[(\d+)\s+([A-Z]{3}(?:\/[A-Z]{3})*)\]\s+([^\s]+)\s+\([^)]+\).*?\bZONE:\s*(.*?)\s+\(([^()]+)\)\s*$/i);
+        if (x) {
+            this.knownPlayerNames.add(normalizeName(x[3]).toLowerCase());
+            if (this.knownPlayerNames.size>200) this.knownPlayerNames.delete(this.knownPlayerNames.values().next().value);
+        }
         if (x && (!this.character || x[3].toLowerCase() === this.character.toLowerCase())) {
             this.level = Number(x[1]);
             this.classes = x[2].toUpperCase().split('/');
@@ -489,6 +517,7 @@ export class EQLogParser {
             return this.noteLoot(x[2], x[3] || '');
         }
 
+        if(itemLinks.length)return this.rememberEvent({type:'item-links',items:itemLinks,evidence:{text:raw.slice(0,6000)}});
         return null;
     }
 

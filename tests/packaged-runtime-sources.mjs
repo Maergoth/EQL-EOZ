@@ -15,7 +15,9 @@ const requiredModules = [
     'app/map-overlay.js', 'app/map-overlay-data.js', 'app/wiki-discovery.js', 'app/wiki-discovery-ui.js',
     'app/trigger-match-core.js', 'app/trigger-matcher.js', 'app/workers/trigger-match.worker.js',
     'app/timer-alerts.js', 'desktop/discovery-host.cjs', 'desktop/overlay-host.cjs', 'desktop/overlay-docking.cjs', 'desktop/overlay-preload.cjs', 'app/character-walkthrough.js',
-    'app/contribution-evidence.js','app/capture-png.worker.js','app/inventory-export.js','desktop/inventory-file-host.cjs',
+    'app/contribution-evidence.js','app/contribution-choice-picker.js','app/contribution-review-view.js',
+    'app/character-itembox.js','app/catalog-itembox.js','app/wiki-itembox.css','app/overlay-drag.js','app/discovery-contribution-flow.js',
+    'app/capture-png.worker.js','app/inventory-export.js','desktop/inventory-file-host.cjs',
     'app/character-inventory-view.js','app/character-storage.js','app/character-profiles.js','desktop/character-storage.cjs',
     'app/zone-identity.js', 'app/viewer-zone-selection.js', 'app/zone-load-guard.js',
     'app/viewport-framing.js', 'app/established-route-guard.js', 'app/drop-certification.js', 'app/navigation-policy.js', 'app/route-validation.js', 'app/zoneviewer/ZoneViewerApp.js'

@@ -59,6 +59,7 @@ function harness() {
         partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,latestLocationSync:null,
         overlaySession:{ inputs:[], consume(event, context) { this.inputs.push({ event, context }); }, flush() {} },
         wikiDiscovery:{consume() {}},
+        discoveryContributionFlow:{cancelled:0,cancelWhere(){this.cancelled++;return Promise.resolve();}},
         observationPreference:false,sessionDraining:false,
         observedLogCursor:0,captureWorkspace:{cancelled:0,consumeLog() {},cancelSource(){this.cancelled++;}},
         $:node, state:() => parser.snapshot(), viewerApi:() => viewer,
@@ -121,6 +122,7 @@ for(const change of ['log','root','both','mode-only']){
     assert.equal(h.context.pendingViewerLocation===null,changed);
     assert.equal(h.viewer.clears,changed?1:0);
     assert.equal(h.context.captureWorkspace.cancelled,changed?1:0,'a real log/root replacement cancels the old armed spawn location');
+    assert.equal(h.context.discoveryContributionFlow.cancelled,changed?1:0,'a real source replacement cancels pinned discovery requests');
     assert.equal(h.context.mapDataRevision,changed?1:0,'one source change invalidates the map generation once');
     assert.equal(h.context.mapDataLoader.invalidations,change==='root'||change==='both'?1:0);
 }

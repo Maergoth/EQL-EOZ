@@ -69,7 +69,13 @@ try{
     await f.host.ingestLogObservation({type:'loot',item:'Synthetic Ring',quantity:1,source:'a synthetic rat',sourceEvidence:{kind:'recent-kill'}},{live:true,at:1000,zone:'Synthetic Zone',logId:'C:\\private\\eqlog.txt',cursor:1});
     await f.host.ingestLogObservation({type:'loot',item:'Synthetic Ring',quantity:1,source:'a synthetic rat',sourceEvidence:{kind:'recent-kill'}},{live:true,at:1000,zone:'Synthetic Zone',logId:'C:\\private\\eqlog.txt',cursor:2});
     assert.equal(f.journal.records.length,before+2,'legitimate repeated loot has distinct cursor provenance');
-    assert.equal(f.journal.records.at(-1).relations[0].reviewRequired,true);assert.doesNotMatch(JSON.stringify(f.journal.records),/private|eqlog\.txt/);
+    assert.equal(f.journal.records.at(-1).relations.find(relation=>relation.type==='drop-source').reviewRequired,true);assert.doesNotMatch(JSON.stringify(f.journal.records),/private|eqlog\.txt/);
+    const actualLine='[Sat Oct 24 12:00:00 2026] You have slain Synthetic <Watcher>!';
+    assert.equal((await f.host.ingestLogObservation({type:'kill',victim:'Synthetic <Watcher>'},{live:true,at:1000,zone:'Synthetic Zone',cursor:3,logId:'C:\\private\\eqlog.txt',logLine:actualLine+'\nSurrounding chat must not be stored.'})).accepted,true);
+    const triggered=f.journal.records.at(-1);assert.equal(triggered.input.event,'kill');assert.equal(triggered.evidence.logLine,actualLine);assert.match(triggered.evidence.text,/Log kill:/);assert.doesNotMatch(JSON.stringify(triggered),/Surrounding chat|private|eqlog\.txt/);
+    for(const event of [{type:'consider',target:{name:'Synthetic Other'}},{type:'cast-begin',spell:'Synthetic Spell'},{type:'kill',victim:'You'},{type:'kill',victim:'Synthetic Player',victimIsPlayer:true},{type:'kill',victim:'Synthetic Pet',isPet:true}])assert.equal((await f.host.ingestLogObservation(event,{live:true,at:1000,zone:'Synthetic Zone',cursor:4})).accepted,false);
+    assert.equal((await f.host.ingestLogObservation({type:'kill',victim:'Synthetic Player'},{live:true,at:1000,playerNames:['SYNTHETIC PLAYER'],cursor:5})).accepted,false);
+    assert.equal((await f.host.ingestLogObservation({type:'zone',zone:'Synthetic Other Zone'},{live:true,at:1000,cursor:6,logLine:'z'.repeat(5000)})).accepted,true);assert.equal(f.journal.records.at(-1).evidence.logLine.length,2048);
     assert.equal((await f.host.ingestLogObservation({type:'kill',victim:'Synthetic Rat'},{live:false,at:1000})).accepted,false);
     f.host.lastFrame={png:Buffer.from('synthetic'),at:1000,sourceId:'window:game'};
     await f.host.captureScreenshot();assert.equal(f.copies.length,1);assert.equal(f.host.owner,'contribution','screenshot retains capture ownership');
@@ -77,6 +83,37 @@ try{
     await assert.rejects(f.host.handleSource(f.event,'frame',f.frame()),/unavailable/);
 }finally{await f.host.dispose();}
 assert.equal(f.handlers.size,0,'shutdown unregisters both exact-frame IPC handlers');
+{
+    const guarded=fixture();
+    try{
+        await guarded.host.listSources();await guarded.host.start({mode:'contribution',sourceId:'window:game',sessionId:'popup-old'});
+        await guarded.host.start({mode:'contribution',sourceId:'window:game',sessionId:'replacement-reader'});
+        const unchanged=async(options)=>{
+            const before=guarded.host.getStatus(),revision=guarded.host.revision,stops=guarded.ocr.stops,sent=guarded.main.webContents.sent.length,resume=guarded.host.contributionResume;
+            assert.deepEqual(await guarded.host.stop(options),before);
+            assert.equal(guarded.host.revision,revision);assert.equal(guarded.ocr.stops,stops);assert.equal(guarded.main.webContents.sent.length,sent);assert.equal(guarded.host.contributionResume,resume,'mismatched cleanup does not mutate a pending resume');
+        };
+        await unchanged({mode:'contribution',expectedSessionId:'popup-old',expectedSourceId:'window:game'});
+        await unchanged({mode:'contribution',expectedSessionId:'replacement-reader',expectedSourceId:'screen:one'});
+        const beforeInvalid=guarded.host.getStatus();
+        for(const options of [{expectedSessionId:'replacement-reader'},{expectedSourceId:'window:game'},{expectedSessionId:'',expectedSourceId:'window:game'},{expectedSessionId:'x'.repeat(121),expectedSourceId:'window:game'},{expectedSessionId:'replacement-reader',expectedSourceId:''},{expectedSessionId:'replacement-reader',expectedSourceId:'x'.repeat(513)},{expectedSessionId:'replacement-reader',expectedSourceId:'window:\ngame'},{expectedSessionId:42,expectedSourceId:'window:game'}])await assert.rejects(guarded.host.stop({mode:'contribution',...options}),/expected capture session/);
+        assert.deepEqual(guarded.host.getStatus(),beforeInvalid,'invalid paired proof cannot change the current reader');
+        await guarded.host.handle(guarded.event,'stop',{mode:'contribution',expectedSessionId:'replacement-reader',expectedSourceId:'window:game'});
+        assert.equal(guarded.host.owner,null,'matching active proof stops only the owned contribution reader');
+        await guarded.host.start({mode:'contribution',sourceId:'window:game',sessionId:'popup-owned'});
+        await guarded.host.start({mode:'character',sourceId:'window:game',sessionId:'character-owned'});
+        await unchanged({mode:'contribution',expectedSessionId:'character-owned',expectedSourceId:'window:game'});
+        const characterGeneration=guarded.host.generation;
+        await guarded.host.stop({mode:'contribution',expectedSessionId:'popup-owned',expectedSourceId:'window:game'});
+        assert.equal(guarded.host.contributionResume,null,'matching queued contribution proof clears its own resume');assert.equal(guarded.host.owner,'character');assert.equal(guarded.host.sessionId,'character-owned');assert.equal(guarded.host.generation,characterGeneration,'canceling an owned resume does not interrupt Character capture');
+        await guarded.host.start({mode:'contribution',sourceId:'window:game',sessionId:'popup-old'});
+        await guarded.host.start({mode:'contribution',sourceId:'screen:one',sessionId:'other-queued'});
+        await unchanged({mode:'contribution',expectedSessionId:'popup-old',expectedSourceId:'window:game'});
+        await unchanged({mode:'contribution',expectedSessionId:'other-queued',expectedSourceId:'window:game'});
+        await guarded.host.stop({mode:'character'});
+        assert.equal(guarded.host.owner,'contribution');assert.equal(guarded.host.sessionId,'other-queued');assert.equal(guarded.host.source.id,'screen:one','stale popup cleanup preserves an unrelated queued reader for normal Character completion');
+    }finally{await guarded.host.dispose();}
+}
 {
     const reading=fixture();let destroyed=0;
     try{

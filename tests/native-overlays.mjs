@@ -181,6 +181,122 @@ test('all-panel docks persist, share touching dimensions, follow resize chains a
     await host.control('reset-layout');assert(PANEL_IDS.every(id=>host.getState().panels[id].dock===undefined));
 }));
 
+const savedDragGroup={panels:{
+    parse:{visible:true,locked:false,bounds:{x:400,y:200,width:500,height:220}},
+    timers:{visible:true,locked:false,bounds:{x:400,y:420,width:500,height:64},dock:{targetId:'parse',edge:'below'}},
+    map:{visible:true,locked:false,bounds:{x:900,y:200,width:300,height:220},dock:{targetId:'parse',edge:'right'}},
+    intel:{visible:true,locked:false,bounds:{x:900,y:420,width:300,height:200},dock:{targetId:'map',edge:'below'}}
+}};
+
+test('a gentle title drag detaches only incident docks and preserves every peer and the selected size',()=>fixture(async({host,overlayEvent,mainEvent,writes})=>{
+    const before=Object.fromEntries(PANEL_IDS.map(id=>[id,host.windows.get(id).getBounds()]));
+    const event=overlayEvent('parse');
+    assert.deepEqual(await host.handleOverlayRequest(event,'move-start'),{ok:true,bounds:before.parse});
+    assert.equal(host.preferences.panels.timers.dock,undefined,'the selected parent releases its direct children immediately');
+    assert.equal(host.preferences.panels.map.dock,undefined);
+    assert.deepEqual(host.preferences.panels.intel.dock,{targetId:'map',edge:'below'},'unrelated peer links remain intact');
+    for(const delta of [1,2,4]){
+        const result=await host.handleOverlayRequest(event,'move',{deltaX:delta,deltaY:delta});
+        assert.deepEqual(result.bounds,{...before.parse,x:before.parse.x+delta,y:before.parse.y+delta},'total movement is based on the initial bounds, with no magnetic resize');
+        host.windows.get('parse').emit('resize');
+        await host.handleOverlayRequest(overlayEvent('timers'),'content-height',180);
+        await publish(host,mainEvent);
+        for(const id of ['timers','map','intel'])assert.deepEqual(host.windows.get(id).getBounds(),before[id],'content ticks and duplicate native notifications do not move peers during a drag');
+    }
+    await host.handleOverlayRequest(event,'move-end');
+    assert.equal(host.preferences.panels.parse.dock,undefined,'the original connected group cannot pull a small drag back into place');
+    assert.deepEqual(host.windows.get('parse').getBounds(),{...before.parse,x:404,y:204});
+    await host.save();assert.deepEqual(writes.at(-1).panels.parse.bounds,host.windows.get('parse').getBounds());
+    await host.handleOverlayRequest(overlayEvent('map'),'resize',{width:340,height:240});
+    const map=host.windows.get('map').getBounds();
+    assert.deepEqual(host.windows.get('intel').getBounds(),{x:map.x,y:map.y+map.height,width:map.width,height:200},'the unrelated peer chain still follows explicit resize');
+    assert.deepEqual(host.windows.get('parse').getBounds(),{...before.parse,x:404,y:204},'a later peer resize cannot move the detached panel');
+}, {saved:savedDragGroup}));
+
+test('dragging a docked child releases its parent without a minimum breakaway distance',()=>fixture(async({host,overlayEvent})=>{
+    const parse=host.windows.get('parse').getBounds(),before=host.windows.get('timers').getBounds();
+    const event=overlayEvent('timers');
+    await host.handleOverlayRequest(event,'move-start');
+    assert.equal(host.preferences.panels.timers.dock,undefined);
+    for(const deltaY of [1,2,3])await host.handleOverlayRequest(event,'move',{deltaX:0,deltaY});
+    await host.handleOverlayRequest(event,'move-end');
+    assert.deepEqual(host.windows.get('timers').getBounds(),{...before,y:before.y+3});
+    assert.equal(host.preferences.panels.timers.manualHeight,false,'moving never changes the automatic height preference');
+    assert.deepEqual(host.windows.get('parse').getBounds(),parse);
+    assert.equal(host.preferences.panels.timers.dock,undefined);
+}, {saved:savedDragGroup}));
+
+test('release snapping uses a narrow new-target edge and cancellation leaves free placement intact',async()=>{
+    for(const {gap,cancel,snaps} of [{gap:8,cancel:false,snaps:true},{gap:9,cancel:false,snaps:false},{gap:3,cancel:true,snaps:false}])await fixture(async({host,overlayEvent})=>{
+        const event=overlayEvent('parse'),target=host.windows.get('map').getBounds();
+        await host.handleOverlayRequest(event,'move-start');
+        const moved=await host.handleOverlayRequest(event,'move',{deltaX:905,deltaY:350+gap});
+        assert.deepEqual(moved.bounds,{x:1005,y:450+gap,width:400,height:220},'the panel keeps its dimensions until pointer release');
+        const result=await host.handleOverlayRequest(event,'move-end',{cancel});
+        assert.deepEqual(result.bounds,snaps?{x:1000,y:450,width:500,height:220}:moved.bounds);
+        assert.deepEqual(host.preferences.panels.parse.dock,snaps?{targetId:'map',edge:'below'}:undefined);
+        assert.deepEqual(host.windows.get('map').getBounds(),target,'a new attachment never moves the target');
+        assert.equal(host.moveGestures.size,0);
+    },{saved:{panels:{parse:{visible:true,locked:false,bounds:{x:100,y:100,width:400,height:220}},map:{visible:true,locked:false,bounds:{x:1000,y:200,width:500,height:250}}}}});
+});
+
+test('native move-only fallback also detaches gently and same-size resize never recreates a dock',async()=>{
+    for(const announcesStart of [false,true])await fixture(async({host})=>{
+        const win=host.windows.get('timers'),before=win.getBounds();
+        const peers=Object.fromEntries(['parse','map','intel'].map(id=>[id,host.windows.get(id).getBounds()]));
+        if(announcesStart)win.emit('will-move',{preventDefault(){assert.fail('an unlocked native move is allowed');}});
+        for(const delta of [1,2,3]){win.bounds={...before,x:before.x+delta,y:before.y+delta};win.emit('move');win.emit('resize');}
+        assert.deepEqual(win.getBounds(),{...before,x:403,y:423});
+        assert.equal(host.preferences.panels.timers.dock,undefined);
+        for(const id of Object.keys(peers))assert.deepEqual(host.windows.get(id).getBounds(),peers[id]);
+        if(announcesStart)win.emit('moved');
+        else await new Promise(resolve=>setTimeout(resolve,275));
+        win.emit('resize');
+        assert.equal(host.moveGestures.size,0);assert.equal(host.nativeMoveTimers.size,0);
+        assert.equal(host.preferences.panels.timers.dock,undefined,'finishing native movement never snaps back');
+        assert.deepEqual(win.getBounds(),{...before,x:403,y:423});
+    },{saved:savedDragGroup});
+});
+
+test('own-panel drag validates owner, state and bounded total deltas',()=>fixture(async({host,overlayEvent})=>{
+    await host.control('show','parse');const event=overlayEvent('parse');
+    await assert.rejects(host.handleOverlayRequest(event,'move-start'),/Unlock/);
+    await host.control('lock','parse',false);
+    await assert.rejects(host.handleOverlayRequest(event,'move',{deltaX:1,deltaY:1}),/Start moving/);
+    const foreign={...event,senderFrame:{url:host.panelUrl('parse')}};
+    await assert.rejects(host.handleOverlayRequest(foreign,'move-start'),/unavailable/);
+    await host.handleOverlayRequest(event,'move-start');const before=host.windows.get('parse').getBounds();
+    for(const payload of [null,[],{deltaX:'1',deltaY:0},{deltaX:NaN,deltaY:0},{deltaX:0,deltaY:Infinity},{deltaX:20001,deltaY:0},{deltaX:0,deltaY:-20001}])await assert.rejects(host.handleOverlayRequest(event,'move',payload),/Invalid overlay movement/);
+    assert.deepEqual(host.windows.get('parse').getBounds(),before);
+    await host.handleOverlayRequest(event,'move-end',{cancel:true});
+    await host.control('pass-through','parse',true);await assert.rejects(host.handleOverlayRequest(event,'move-start'),/Unlock/);
+    await host.control('pass-through','parse',false);await host.control('hide','parse');await assert.rejects(host.handleOverlayRequest(event,'move-start'),/Unlock/);
+}));
+
+test('state changes, renderer loss and disposal end pending moves without a late release snap',async()=>{
+    for(const stop of ['lock','hide','pass-through','reset-layout','hide-all','crash','closed','dispose'])await fixture(async({host,overlayEvent})=>{
+        const event=overlayEvent('parse'),win=host.windows.get('parse');await host.handleOverlayRequest(event,'move-start');
+        await host.handleOverlayRequest(event,'move',{deltaX:2,deltaY:2});
+        if(stop==='crash')win.webContents.emit('render-process-gone');
+        else if(stop==='closed')win.destroy();
+        else if(stop==='dispose')host.dispose();
+        else if(['reset-layout','hide-all'].includes(stop))await host.control(stop);
+        else await host.control(stop,'parse',true);
+        assert.equal(host.moveGestures.size,0,`${stop} clears the gesture`);assert.equal(host.nativeMoveTimers.size,0);
+        if(!['closed','dispose'].includes(stop))await host.handleOverlayRequest(event,'move-end');
+        assert.equal(host.preferences.panels.parse.dock,undefined,`${stop} cannot release-snap after the lifecycle has ended`);
+    },{saved:savedDragGroup});
+});
+
+test('moving between different-sized monitors preserves the original width and height',()=>fixture(async({host,overlayEvent,screen})=>{
+    screen.displays=[display(),display(1920,0,800,600)];
+    const event=overlayEvent('parse');await host.handleOverlayRequest(event,'move-start');
+    const result=await host.handleOverlayRequest(event,'move',{deltaX:930,deltaY:0});
+    assert.deepEqual(result.bounds,{x:1920,y:0,width:1000,height:800},'translation can anchor to a smaller display without shrinking the overlay');
+    await host.handleOverlayRequest(event,'move-end',{cancel:true});
+    assert.deepEqual(host.windows.get('parse').getBounds(),result.bounds);
+},{saved:{panels:{parse:{visible:true,locked:false,bounds:{x:1000,y:100,width:1000,height:800}}}}}));
+
 test('north/west custom edges retain their opposite anchors and reject unsupported edge values',()=>fixture(async({host,overlayEvent})=>{
     await host.control('show','parse');await host.control('lock','parse',false);const win=host.windows.get('parse');win.setBounds({x:400,y:400,width:300,height:200});
     await host.handleOverlayRequest(overlayEvent('parse'),'resize',{edge:'nw',width:340,height:230});assert.deepEqual(win.getBounds(),{x:360,y:370,width:340,height:230});

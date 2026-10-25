@@ -1,6 +1,6 @@
 import { findPotentialMatches } from './contribution-model.js';
-import { CONTRIBUTION_QUEUE_KEY, CONTRIBUTION_QUEUE_BYTES, contributionSourceToken, logContributionObservation } from './contribution-evidence.js';
-import { createWikiResolver, normalizeWikiIdentity as contributionNameKey, itemBaseIdentity as itemIdentity, wikiIdentityKey, wikiEntityKind } from './wiki-identity.js';
+import { CONTRIBUTION_QUEUE_KEY, CONTRIBUTION_QUEUE_BYTES, contributionSourceToken, contributionLogLine, logContributionObservation } from './contribution-evidence.js';
+import { createWikiResolver, normalizeWikiIdentity as contributionNameKey, itemBaseIdentity as itemIdentity, itemExaltationBaseIdentity, wikiIdentityKey, wikiEntityKind } from './wiki-identity.js';
 import { contributionReasons } from './contribution-reasons.js';
 import { classifyNpcEvidence } from './generated-pets.js';
 import { collectTierZeroEvidence, tierZeroVerificationPreview, confirmTierZeroVerification } from './contribution-tier-zero.js';
@@ -14,6 +14,21 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
     function resolver(){const current=pack(),version=current.meta?.manifestVersion||current.meta?.version||'',entities=current.wikiEntities,complete=`${current.meta?.wikiEntitiesComplete===true}:${current.meta?.sample===true}`;if(catalogCache?.pack!==current||catalogCache.entities!==entities||catalogCache.version!==version||catalogCache.complete!==complete||catalogCache.items!==current.items||catalogCache.npcs!==current.npcs||catalogCache.zones!==current.zones)catalogCache={pack:current,entities,version,complete,items:current.items,npcs:current.npcs,zones:current.zones,resolver:createWikiResolver(current)};return catalogCache.resolver;}
     const canonicalKey=(kind,name,zone='')=>{const resolved=resolver().resolve(kind,name);return candidateKey(kind,resolved.canonicalTitle||name,zone);};
     const protectedDraft=candidate=>Boolean(candidate.planId||candidate.baseRecovery||candidate.baseVerification||candidate.attachment||candidate.manual===true||candidate.spawnRequest?.status==='captured'||candidate.matchesReviewed===true||candidate.reviewed===true||candidate.submittedAt||!['needs-review',''].includes(candidate.status||'')||candidate.playerText||candidate.title&&contributionNameKey(candidate.title)!==contributionNameKey(candidate.name)||Object.values(candidate.fields||{}).some(field=>field?.confirmed===true||field?.edited===true)||[...(candidate.sources||[]),...(candidate.relations||[])].some(relation=>relation?.confirmed===true||relation?.type==='spawn-location'));
+    const passivePopulation=relation=>['mob-zone','zone-population'].includes(relation?.type)&&relation.evidence==='consider';
+    function passiveFacts(candidate){
+        const relations=candidate.relations||[],evidence=candidate.evidence||[];
+        if(protectedDraft(candidate)||!relations.some(passivePopulation)||evidence.some(entry=>entry.kind!=='game-log'))return null;
+        if(candidate.kind==='npc'&&!(candidate.sources||[]).length&&relations.every(passivePopulation)&&evidence.every(entry=>entry.event==='consider'||!entry.event&&/^Log consider:/i.test(entry.text||''))&&Object.keys(candidate.fields||{}).every(key=>['name','level'].includes(key)))return {archive:true};
+        if(candidate.kind!=='zone')return null;
+        const retained=relations.filter(relation=>!passivePopulation(relation));
+        const removedNames=new Set(relations.filter(passivePopulation).map(relation=>contributionNameKey(relation.name)).filter(name=>!retained.some(relation=>['mob-zone','zone-population'].includes(relation.type)&&contributionNameKey(relation.name)===name)));
+        const fields=structuredClone(candidate.fields||{}),population=fields.knownNPCs;
+        if(Array.isArray(population?.value)){
+            population.value=population.value.filter(name=>!removedNames.has(contributionNameKey(name)));
+            if(!population.value.length)delete fields.knownNPCs;
+        }
+        return {archive:false,relations:retained,fields};
+    }
     const fieldValue=value=>Array.isArray(value)?value.slice(0,200).map(item=>typeof item==='string'?clean(item,512):typeof item==='number'&&Number.isFinite(item)?item:typeof item==='boolean'?item:null).filter(item=>item!==null):typeof value==='string'?clean(value,16000):typeof value==='number'&&Number.isFinite(value)||typeof value==='boolean'||value===null?value:null;
     const validField=key=>/^[A-Za-z][A-Za-z0-9_]{0,50}$/.test(key)&&!['constructor','prototype','__proto__'].includes(key);
     function attachmentValue(value){if(value===null)return null;const thumbnail=typeof value?.thumbnail==='string'&&/^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/]*={0,2}$/.test(value.thumbnail)&&value.thumbnail.length<=200000?value.thumbnail:null;if(!value||typeof value.attachmentId!=='string'||!value.attachmentId.trim()||value.attachmentId.length>240||!Number.isSafeInteger(value.width)||!Number.isSafeInteger(value.height)||value.width<1||value.height<1||value.width*value.height>16777216||!Number.isSafeInteger(value.bytes)||value.bytes<1||value.bytes>16*1024*1024)throw Error('Review a bounded screenshot attachment.');return {attachmentId:clean(value.attachmentId),thumbnail,width:value.width,height:value.height,bytes:value.bytes,caption:clean(value.caption,1000),license:clean(value.license,200)};}
@@ -75,7 +90,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         let candidate=candidates.find(c=>c.key===key||c.aliasKeys?.includes(key));
         if(!force&&!candidate&&['submitted','ignored'].includes(suppression(kind,name,{zone}).reason))return null;
         const classified=contributionReasons({...candidate,kind,name,zone,instance,fields:{...candidate?.fields,...Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{value}]))},relations:[...(candidate?.relations||[]),...relations]},resolver());
-        if(classified.excluded&&!force)return null;
+        if(classified.excluded==='owned-pet'||classified.excluded&&!force)return null;
         if(present==='present'&&!classified.reasons.length&&!force&&!candidate)return null;
         if(!candidate){if(candidates.length>=200){onWarning('The contribution queue is full. Review or remove a draft to save another discovery.');return null;}candidate={id:`contribution-${++sequence}`,key,aliasKeys:[],kind,name:resolved.canonicalTitle||name,title:resolved.canonicalTitle||name,zone:clean(zone),instance:['normal','raid'].includes(instance)?instance:'unknown',era:'',playerText:'',fields:{},sources:[],relations:[],evidence:[],status:'needs-review',membership:present};candidates.push(candidate);}
         if(force)candidate.manual=true;
@@ -85,7 +100,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
             if(candidate.fields[key]?.edited===true)continue;
             if(['knownLoot','knownNPCs'].includes(key)&&Array.isArray(value)){const previous=Array.isArray(candidate.fields[key]?.value)?candidate.fields[key].value:[],combined=[...new Map([...previous,...value].map(item=>[contributionNameKey(item),item])).values()].slice(0,100);if(JSON.stringify(combined)!==JSON.stringify(previous))candidate.fields[key]={...candidate.fields[key],value:combined,confirmed:false};}
             else if(!candidate.fields[key]?.confirmed)candidate.fields[key]={...candidate.fields[key],value,confirmed:false};}
-        if(evidence&&!candidate.evidence.some(e=>e.id===evidence.id)){const text=evidence.evidence?.text||(evidence.kind==='game-log'?`Observed ${clean(evidence.subject?.kind)}: ${clean(evidence.subject?.name)}${(Array.isArray(evidence.relations)?evidence.relations:[]).filter(relation=>relation.type==='drop-source').map(relation=>`\nReported source: ${clean(relation.name)} in ${clean(relation.zone)} (${clean(relation.evidence)})`).join('')}`:'');candidate.evidence.push({id:clean(evidence.id),at:clean(evidence.capturedAt),kind:clean(evidence.kind),text:clean(text,6000),confidence:Math.min(100,Number(evidence.confidence??evidence.fields?.[0]?.confidence)||0)});candidate.evidence=candidate.evidence.slice(-6);}
+        if(evidence&&!candidate.evidence.some(e=>e.id===evidence.id)){const text=evidence.evidence?.text||(evidence.kind==='game-log'?`Observed ${clean(evidence.subject?.kind)}: ${clean(evidence.subject?.name)}${(Array.isArray(evidence.relations)?evidence.relations:[]).filter(relation=>relation.type==='drop-source').map(relation=>`\nReported source: ${clean(relation.name)} in ${clean(relation.zone)} (${clean(relation.evidence)})`).join('')}`:'');candidate.evidence.push({id:clean(evidence.id),at:clean(evidence.capturedAt),kind:clean(evidence.kind),text:clean(text,6000),...(evidence.kind==='game-log'?{event:clean(evidence.input?.event,40),logLine:contributionLogLine(evidence.evidence?.logLine)}:{}),confidence:Math.min(100,Number(evidence.confidence??evidence.fields?.[0]?.confidence)||0)});candidate.evidence=candidate.evidence.slice(-6);}
         for(const relation of (Array.isArray(relations)?relations:[]).filter(r=>r?.type==='drop-source'))if(!candidate.sources.some(s=>contributionNameKey(s.npc)===contributionNameKey(relation.name)&&contributionNameKey(s.zone)===contributionNameKey(relation.zone)&&s.sourceEvidence===relation.evidence&&(s.instance||'unknown')===(relation.instance||'unknown')))candidate.sources.push({npc:clean(relation.name),zone:clean(relation.zone),instance:relation.instance||'unknown',confirmed:false,sourceEvidence:clean(relation.evidence)});
         for(const relation of (Array.isArray(relations)?relations:[]).slice(0,100))rememberRelation(candidate,relation,evidence);
         if(kind==='item'&&evidence)collectTierZeroEvidence(candidate,evidence,{now:now()});
@@ -97,8 +112,12 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         cursor=Math.max(cursor,Number(observation?.sequence)||0);
         const kind=observation?.subject?.kind==='monster'?'npc':observation?.subject?.kind;
         if(observation?.owner==='character'||!['item','npc','zone'].includes(kind)){save();return null;}
+        // Persisted journal replay follows the same rule as fresh parsing.
+        // Considers still drive Intel, but never create verification work.
+        if(observation.kind==='game-log'&&(observation.input?.event==='consider'||kind==='npc'&&observation.input?.event!=='kill')){save();return null;}
         if(kind==='npc'&&!classifyNpcEvidence(observation.subject.name,resolver().resolve(kind,observation.subject.name)).eligible){save();return null;}
         const fields=Object.fromEntries((observation.fields||[]).filter(f=>f.key!=='name').map(f=>[f.key,f.value]));
+        if(Array.isArray(fields.knownNPCs))fields.knownNPCs=fields.knownNPCs.filter(name=>classifyNpcEvidence(name,resolver().resolve('npc',name)).eligible);
         const itemName=kind==='item'?itemIdentity(observation.subject.name).name:null;
         const zone=observation.input?.zone||'',instance=observation.input?.instance||'unknown',relations=[...(observation.relations||[])].filter(relation=>!['drop-source','mob-zone','zone-population'].includes(relation.type)||classifyNpcEvidence(relation.name,resolver().resolve('npc',relation.name)).eligible).map(relation=>relation.type==='zone-loot'?{...relation,name:itemIdentity(relation.name).name}:relation);
         // Older game-log journal records predate explicit relationship entries.
@@ -122,10 +141,19 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         save();return result||relatedCandidate;
     }
     function consumeLog(event,context={}){
+        if(event?.type==='item-links'){
+            const linked=[];
+            for(const item of (Array.isArray(event.items)?event.items:[]).slice(0,8))if(typeof item==='string'&&item.length<=230){
+                const result=consumeLog({...event,type:'item-link',item},context);
+                if(result.candidate&&!linked.some(candidate=>candidate.id===result.candidate.id))linked.push(result.candidate);
+            }
+            return {candidate:linked[0]||null,candidates:linked,prompt:null,locationCaptured:null};
+        }
+        if(event?.type==='item-link'&&(typeof event.item!=='string'||resolver().resolve('item',itemExaltationBaseIdentity(event.item)).membership!=='missing'))return {candidate:null,prompt:null,locationCaptured:null};
         const observation=logContributionObservation(event,context,{now:now()});
         if(!observation)return {candidate:null,prompt:null,locationCaptured:null};
-        const at=Date.parse(observation.capturedAt),source=observation.input.logId,zone=observation.input.zone;
-        if(armed&&(armed.source!==source||contributionNameKey(armed.zone)!==contributionNameKey(zone)||now()>armed.expiresAt))armed=null;
+        const at=Date.parse(observation.capturedAt),source=observation.input.logId,zone=event.type==='item-link'?clean(context.zone):observation.input.zone;
+        if(armed&&(armed.source!==source||contributionNameKey(armed.zone)!==contributionNameKey(zone)||!armed.persistent&&now()>armed.expiresAt))armed=null;
         if(lastLog?.source===source&&at<lastLog.at)return {candidate:null,prompt:null,locationCaptured:null};
         lastLog={source,zone,at,cursor:observation.input.cursor};
         if(seenLogIds.has(observation.id))return {candidate:null,prompt:null,locationCaptured:null};
@@ -136,13 +164,13 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
             const candidate=pending&&candidates.find(value=>value.id===pending.candidateId&&value.kind==='npc'&&contributionNameKey(value.zone)===contributionNameKey(zone));
             if(!candidate||!afterBoundary){save();return {candidate:null,prompt:null,locationCaptured:null};}
             armed=null;const location=observation.location,display=[location.y,location.x,location.z].join(', ');
-            const evidence={...observation,subject:{kind:'monster',name:candidate.name},evidence:{text:`Player requested the next /loc for ${candidate.name} in ${zone}: ${display}. Spawn location still requires review.`}};
+            const evidence={...observation,subject:{kind:'monster',name:candidate.name},evidence:{text:`Player requested the next /loc for ${candidate.name} in ${zone}: ${display}. Spawn location still requires review.`,logLine:observation.evidence.logLine}};
             const updated=add({kind:'npc',name:candidate.name,zone,fields:{location:display},evidence,relations:[{type:'spawn-location',name:candidate.name,zone,evidence:'player-requested-next-loc',location,eventId:observation.id,at:observation.capturedAt}]});
             candidate.spawnRequest={...candidate.spawnRequest,status:'captured',capturedAt:observation.capturedAt,evidenceId:observation.id};save();
             return {candidate:updated?structuredClone(candidate):null,prompt:null,locationCaptured:{candidateId:candidate.id,name:candidate.name,zone,location,display}};
         }
         const candidate=consume(observation);let prompt=null;
-        if(event.type==='kill'){
+        if(event.type==='kill'&&classifyNpcEvidence(observation.subject.name,resolver().resolve('npc',observation.subject.name)).eligible){
             const target=candidates.find(value=>value.kind==='npc'&&value.key===canonicalKey('npc',observation.subject.name,zone));
             if(target&&zone&&!target.spawnRequest&&target.fields.location?.confirmed!==true&&target.membership==='missing'&&!suppression('npc',target.name,{zone,purpose:'spawn-location'}).suppressed){
                 target.spawnRequest={status:'requested',requestedAt:observation.capturedAt,evidenceId:observation.id};const result=armSpawnLocation(target.id);if(result.ok){prompt={candidateId:target.id,name:target.name,zone,armed:true,expiresAt:result.expiresAt};rememberState('npc',target.name,'notified','spawn-location',zone);}save();
@@ -150,15 +178,16 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         }
         return {candidate:prompt?structuredClone(candidates.find(value=>value.id===prompt.candidateId)):candidate,prompt,locationCaptured:null};
     }
-    function armSpawnLocation(candidateId){const candidate=candidates.find(value=>value.id===candidateId&&value.kind==='npc');if(!candidate||!lastLog?.zone||contributionNameKey(candidate.zone)!==contributionNameKey(lastLog.zone))return {ok:false,error:'Return to the monster’s zone before recording its spawn location.'};const armedAt=now();armed={candidateId,source:lastLog.source,zone:lastLog.zone,cursor:lastLog.cursor,armedAt,expiresAt:armedAt+300000};return {ok:true,candidateId,name:candidate.name,zone:candidate.zone,expiresAt:armed.expiresAt};}
+    function armSpawnLocation(candidateId,{persistent=false}={}){const candidate=candidates.find(value=>value.id===candidateId&&value.kind==='npc');if(!candidate||!lastLog?.zone||contributionNameKey(candidate.zone)!==contributionNameKey(lastLog.zone))return {ok:false,error:'Return to the monster’s zone before recording its spawn location.'};const armedAt=now();armed={candidateId,source:lastLog.source,zone:lastLog.zone,cursor:lastLog.cursor,armedAt,expiresAt:persistent===true?null:armedAt+300000,...(persistent===true?{persistent:true}:{})};return {ok:true,candidateId,name:candidate.name,zone:candidate.zone,expiresAt:armed.expiresAt,...(persistent===true?{persistent:true}:{})};}
     function reconcile({apply=false}={}){
         if(apply&&readBlocked)return {version:1,applied:false,changed:false,rows:[],active:candidates.length,archived:archive.length,blocked:true,persisted:false,error:'The preserved queue must be recovered before reconciliation.'};
         const rows=[],seen=new Map(),before=apply?{candidates:structuredClone(candidates),archive:structuredClone(archive),armed:structuredClone(armed)}:null;let changed=false;
         for(const candidate of [...candidates]){
-            const classification=contributionReasons(candidate,resolver()),resolved=classification.resolved,key=canonicalKey(candidate.kind,candidate.name,candidate.zone),protectedWork=protectedDraft(candidate),prior=seen.get(key),realGap=classification.reasons.some(reason=>['missing-source','missing-population','tier0-verification','identity-review'].includes(reason)),conflict=prior&&Object.entries(candidate.fields||{}).some(([field,value])=>prior.fields?.[field]&&!['knownLoot','knownNPCs'].includes(field)&&JSON.stringify(prior.fields[field].value)!==JSON.stringify(value.value)),duplicate=prior&&!protectedWork&&!protectedDraft(prior)&&!realGap&&!conflict;
+            const passive=passiveFacts(candidate),reviewCandidate=passive&&!passive.archive?{...candidate,fields:passive.fields,relations:passive.relations}:candidate;
+            const classification=contributionReasons(reviewCandidate,resolver()),resolved=classification.resolved,key=canonicalKey(candidate.kind,candidate.name,candidate.zone),protectedWork=protectedDraft(candidate),prior=seen.get(key),realGap=classification.reasons.some(reason=>['missing-source','missing-population','tier0-verification','identity-review'].includes(reason)),conflict=prior&&Object.entries(candidate.fields||{}).some(([field,value])=>prior.fields?.[field]&&!['knownLoot','knownNPCs'].includes(field)&&JSON.stringify(prior.fields[field].value)!==JSON.stringify(value.value)),duplicate=prior&&!protectedWork&&!protectedDraft(prior)&&!realGap&&!conflict;
             if(!prior)seen.set(key,candidate);
-            const obsolete=classification.excluded||resolved.membership==='present'&&!classification.reasons.length?'generated-pet'===classification.excluded?'generated-pet':'known-complete':duplicate?'duplicate':null;
-            const reason=protectedWork?'protected-work':prior&&conflict?'duplicate-conflict':obsolete||classification.reasons[0]||'unresolved',action=obsolete&&!protectedWork&&archive.length<200?'archive':'keep';
+            const obsolete=passive?.archive?'passive-monster-observation':classification.excluded||(resolved.membership==='present'&&!classification.reasons.length?'known-complete':duplicate?'duplicate':null);
+            const reason=protectedWork?'protected-work':prior&&conflict?'duplicate-conflict':obsolete||(passive?'passive-monster-observation':classification.reasons[0]||'unresolved'),action=obsolete&&!protectedWork&&archive.length<200?'archive':passive&&!passive.archive&&archive.length<200?'prune-passive-observations':'keep';
             rows.push({id:candidate.id,name:candidate.name,kind:candidate.kind,classification:reason,reasons:classification.reasons,action,canonicalTitle:resolved.canonicalTitle,membership:resolved.membership,...(prior?{duplicateOf:prior.id}:{})});
             if(!apply)continue;
             if(action==='archive'){
@@ -169,6 +198,10 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
                 }
                 archive.push({...structuredClone(candidate),archive:{version:1,reason:obsolete,at:new Date(now()).toISOString()}});candidates=candidates.filter(value=>value.id!==candidate.id);if(armed?.candidateId===candidate.id)armed=null;changed=true;
             }else{
+                if(action==='prune-passive-observations'){
+                    archive.push({...structuredClone(candidate),archive:{version:1,reason:'passive-monster-observation',at:new Date(now()).toISOString()}});
+                    candidate.fields=passive.fields;candidate.relations=passive.relations;changed=true;
+                }
                 const knownTarget=resolved.membership==='present'&&[resolved.canonicalTitle,candidate.name].some(title=>contributionNameKey(title)===contributionNameKey(candidate.title||candidate.name));
                 const patch={membership:resolved.membership,canonicalTitle:resolved.canonicalTitle,revisionId:resolved.record?.revisionId||null,reasons:classification.reasons,...(knownTarget?{intent:'update'}:protectedWork||candidate.matchesReviewed===true?{}:{intent:resolved.membership==='present'?'update':resolved.membership==='missing'?'create':'review'})};
                 if(Object.entries(patch).some(([key,value])=>JSON.stringify(candidate[key])!==JSON.stringify(value))){Object.assign(candidate,patch);changed=true;}
@@ -181,10 +214,23 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
     ensureReconciled();
     return{
         snapshot:()=>{ensureReconciled();return structuredClone(candidates);},cursor:()=>cursor,archived:()=>structuredClone(archive),reconcile,suppression,refreshCatalog:ensureReconciled,
-        spawnStatus(){if(armed&&now()>armed.expiresAt)armed=null;return armed?{...armed}:null;},
+        spawnStatus(){if(armed&&!armed.persistent&&now()>armed.expiresAt)armed=null;return armed?{...armed}:null;},
         tierZeroReview(id,options={}){return tierZeroVerificationPreview(candidates.find(value=>value.id===id),{...options,now:now()});},
         confirmTierZero(id,options={}){const candidate=candidates.find(value=>value.id===id);if(!candidate)throw Error('This contribution no longer exists.');const patch=confirmTierZeroVerification(candidate,{...options,now:now()});Object.assign(candidate,patch);candidate.planId=null;candidate.status='needs-review';candidate.reasons=contributionReasons(candidate,resolver()).reasons;save();return structuredClone(candidate);},
         add,consume,consumeLog,
+        sourceItemHints(candidate){
+            if(candidate?.kind!=='npc'||!candidate.zone||!['normal','raid'].includes(candidate.instance))return [];
+            const names=new Set([candidate.name,candidate.title].filter(Boolean).map(name=>contributionNameKey(resolver().resolve('npc',name).canonicalTitle||name))),zone=contributionNameKey(candidate.zone),titles=new Map();
+            for(const item of [...candidates,...archive]){
+                if(item.kind!=='item')continue;
+                const matches=(Array.isArray(item.sources)?item.sources:[]).slice(0,30).some(source=>source?.npc&&source.zone&&names.has(contributionNameKey(resolver().resolve('npc',source.npc).canonicalTitle||source.npc))&&contributionNameKey(source.zone)===zone&&source.instance===candidate.instance&&(source.confirmed===true||source.edited!==true&&source.sourceEvidence==='explicit-corpse'));
+                if(matches){const title=clean(item.title||item.name,230);if(title)titles.set(contributionNameKey(title),title);}
+                if(titles.size>=100)break;
+            }
+            // Hints bridge indexing delays; the host must verify the published
+            // item source before adding any loot to a reviewed monster plan.
+            return [...titles.values()];
+        },
         armSpawnLocation,
         cancelSpawnLocation(){armed=null;},
         update(id,patch){const candidate=candidates.find(c=>c.id===id);if(!candidate)return null;const attachment=Object.hasOwn(patch,'attachment')?attachmentValue(patch.attachment):undefined;const priorKey=candidate.key,priorTitle=contributionNameKey(candidate.title);for(const key of ['name','title','zone','instance','era','playerText','fields','sources','relations','status','matchesReviewed','planId','baseRecovery'])if(Object.hasOwn(patch,key))candidate[key]=structuredClone(patch[key]);if(Object.hasOwn(patch,'intent')&&['create','update','review'].includes(patch.intent))candidate.intent=patch.intent;
