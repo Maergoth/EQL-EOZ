@@ -4,6 +4,12 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
+**0.9.13: correct tier-zero verification category.** Ranked and recovered item
+pages now use the exact
+[Tier 0 Verification Needed](https://eqlwiki.com/Category:Tier_0_Verification_Needed)
+category title. Accepted tier-zero readings recognize app-marked membership in
+either capitalization while preserving manually assigned categories.
+
 **0.9.12: shared wiki item formulas and tier-zero verification.** Item-tier
 previews use the wiki-owned engine and rules bundled with the app. Each release
 resolves one formula snapshot for both Windows and Linux; installed apps receive

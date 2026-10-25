@@ -1,5 +1,8 @@
 # Eye of Zomm — Product and UX Vision
 
+0.9.13 corrects the canonical category to Tier 0 Verification Needed. The
+category-only hotfix preserves the existing contribution and formula flows.
+
 0.9.12 bundles the wiki-owned calculation engine and one release-time formula
 snapshot for both platforms, with no runtime formula checks. Item-tier previews
 agree with the wiki while recorded totals remain unchanged. New item pages

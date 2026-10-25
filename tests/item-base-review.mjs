@@ -29,7 +29,7 @@ assert(buildContributionDraft(applied,blueprints).blockers.some(value=>/Verify t
 const confirmed={...applied,fields:{...applied.fields,statLines:{...applied.fields.statLines,confirmed:true}}},draft=buildContributionDraft(confirmed,blueprints);
 assert.equal(validateItemBaseReview(normalizeContributionCandidate(confirmed)).ok,true,'normalization preserves the verified review contract');
 assert.deepEqual(draft.blockers,[]);assert.match(draft.text,/HP: 30<br>/);assert.match(draft.text,/STA: -2/);assert.match(draft.text,/These stats are reverse calculated from a tier 4 item\. Please confirm with a tier 0 item and remove this message/);assert.match(draft.text,/A contributor note in their own words/);
-assert.match(draft.text,/\[\[Category:Tier 0 verification needed\]\]/,'Reviewed recovered bases remain discoverable until a real tier-zero confirmation');
+assert.match(draft.text,/\[\[Category:Tier 0 Verification Needed\]\]/,'Reviewed recovered bases remain discoverable until a real tier-zero confirmation');
 assert.doesNotMatch(draft.text,/HP: 42|Weight: 0\.7|SV Void: 4|Damage Bonus: 41/,'omitted observed/unsupported numbers never enter the recovered wiki stat block');
 assert(draft.warnings.some(value=>/Unresolved base statistics/.test(value)));
 

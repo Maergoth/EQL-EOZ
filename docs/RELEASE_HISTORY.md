@@ -1,5 +1,12 @@
 # Browsable release history
 
+0.9.13 archives one visually reviewed actual Electron Chromium capture of the
+current contribution saved-plan review. The real contribution model generates
+a synthetic ranked item with Category:Tier 0 Verification Needed. Its After
+field is scrolled to show the category. The account and wiki bridge are isolated
+synthetic fixtures; no game/player pixels, production requests or publication.
+All earlier entries, captions and image hashes remain unchanged.
+
 0.9.12 archives one visually reviewed actual Electron Chromium capture of the
 current Character tooltip with a synthetic tier-five piercing weapon. Its real
 tier control and shared wiki frame show green Backstab 15, Accuracy +12.5% and

@@ -3,7 +3,7 @@
 import { ITEM_RECOVERY_FIELDS, itemRecoveryFingerprint, itemRecoverySource, itemRecoveryLabel, isItemNumericStatLine } from './item-base-review.js';
 import { normalizeWikiIdentity, itemBaseIdentity } from './wiki-identity.js';
 import { parseItemStatBlock } from './screen-read-parser.js';
-export const TIER_ZERO_VERIFICATION_CATEGORY='Tier 0 verification needed';
+export const TIER_ZERO_VERIFICATION_CATEGORY='Tier 0 Verification Needed';
 export const TIER_ZERO_CATEGORY_MARKER='<!-- EoZ: tier-zero verification category -->';
 // These two exact app-authored warnings are the only prose cleared when an
 // independent reviewed tier-zero reading replaces recovered base statistics.

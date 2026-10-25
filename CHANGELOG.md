@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.13 - Correct tier-zero verification category
+
+- Use the exact [Tier 0 Verification Needed](https://eqlwiki.com/Category:Tier_0_Verification_Needed) category title for new items with unverified ranked or recovered base values.
+- Recognize app-marked category membership in either capitalization when an accepted tier-zero reading clears it; preserve manually assigned categories.
+
 ## 0.9.12 - Shared wiki item formulas and tier-zero verification
 
 - Use one wiki-owned item calculation engine and revisioned rules for item-tier previews. Match wiki Backstab, weapon Accuracy, Void resist, weight and tier limits; recorded Character totals remain unchanged.

@@ -282,11 +282,12 @@ function removeTierZeroRecoveryNotes(source){
 }
 function syncTierZeroVerificationCategory(source,{required=false,verified=false}={}){
     const key=contributionNameKey(TIER_ZERO_VERIFICATION_CATEGORY),active=activeContributionText(source);
+    const escaped=TIER_ZERO_CATEGORY_MARKER.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const categoryName=TIER_ZERO_VERIFICATION_CATEGORY.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const expression=new RegExp(escaped+'[ \\t]*(?:\\r?\\n)?[ \\t]*(\\[\\[Category:'+categoryName+'\\]\\])','gi');
     if(verified){
         // Preserve manually assigned categories and protected examples. Only
         // remove a membership emitted with this exact application marker.
-        const escaped=TIER_ZERO_CATEGORY_MARKER.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-        const expression=new RegExp(escaped+'[ \\t]*(?:\\r?\\n)?[ \\t]*(\\[\\[Category:Tier 0 verification needed\\]\\])','g');
         let text=source;
         for(const match of [...source.matchAll(expression)].reverse()){
             const categoryAt=match.index+match[0].indexOf(match[1]);
@@ -294,6 +295,13 @@ function syncTierZeroVerificationCategory(source,{required=false,verified=false}
             text=text.slice(0,match.index)+text.slice(match.index+match[0].length);
         }
         return text;
+    }
+    // Older app versions emitted a differently capitalized category title.
+    // Canonicalize only their marked membership, retaining manual/protected text.
+    for(const match of [...source.matchAll(expression)].reverse()){
+        const categoryAt=match.index+match[0].indexOf(match[1]);
+        if(active.slice(categoryAt,categoryAt+match[1].length)!==match[1])continue;
+        source=source.slice(0,categoryAt)+category(TIER_ZERO_VERIFICATION_CATEGORY)+source.slice(categoryAt+match[1].length);
     }
     const noted=contributionTemplates(source,'Itempage').some(template=>template.fields.some(field=>field.name.toLowerCase()==='notes'&&tierZeroRecoveryNoteMatches(activeContributionText(field.value)).length>0));
     if(!required&&!noted)return source;
