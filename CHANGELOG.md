@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.12 - Shared wiki item formulas and tier-zero verification
+
+- Use one wiki-owned item calculation engine and revisioned rules for item-tier previews. Match wiki Backstab, weapon Accuracy, Void resist, weight and tier limits; recorded Character totals remain unchanged.
+- Resolve the wiki source once when preparing a release and give Windows and Linux the same formula snapshot. Installed apps keep their bundled formulas until the next app update, with no runtime formula polling or API requests.
+- Add new item pages created from unverified ranked or recovered bases to [Category:Tier 0 verification needed](https://eqlwiki.com/Category:Tier_0_verification_needed), retaining the tier-zero verification note.
+
 ## 0.9.11 - Automatic contribution reading and chat item detection
 
 - Start gentle local screen reading when Contribute opens, using the configured or unique game window or offering an inline source choice. Prompt users to open the selected item and keep Pause/Retry available. Preserve Character and preexisting readers; stop only the reader started for this view when it is no longer needed.

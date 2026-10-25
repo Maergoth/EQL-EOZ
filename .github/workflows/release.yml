@@ -46,6 +46,14 @@ jobs:
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
       - name: Fetch one verified production bootstrap for both platforms
         run: node scripts/fetch-bootstrap-pack.mjs --required
+      - name: Snapshot shared wiki formulas once for this app release
+        run: node scripts/sync-item-scaling.mjs --from-wiki-main
+      - name: Share the fixed formula snapshot for both platforms
+        uses: actions/upload-artifact@v4
+        with:
+          name: EoZ-release-item-scaling
+          path: app/vendor/item-scaling-*
+          if-no-files-found: error
       - name: Share the public filtered release bootstrap
         uses: actions/upload-artifact@v4
         with:
@@ -58,6 +66,7 @@ jobs:
     uses: ./.github/workflows/build-windows.yml
     with:
       bootstrap_artifact: EoZ-release-bootstrap
+      item_scaling_artifact: EoZ-release-item-scaling
       extended_ui_checks: false
     secrets: inherit
 
@@ -66,6 +75,7 @@ jobs:
     uses: ./.github/workflows/build-linux.yml
     with:
       bootstrap_artifact: EoZ-release-bootstrap
+      item_scaling_artifact: EoZ-release-item-scaling
       extended_ui_checks: false
 
   publish:
@@ -89,6 +99,13 @@ jobs:
           pattern: EQLWiki-Eye-of-Zomm-*-x64
           merge-multiple: true
           path: dist
+      - name: Download the same formula source receipt for release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: EoZ-release-item-scaling
+          path: app/vendor
+      - name: Verify fixed formula source provenance
+        run: node scripts/sync-item-scaling.mjs --check
       - name: Verify complete release asset set and checksums
         run: |
           node scripts/release-assets.mjs win32 --verify
@@ -120,6 +137,8 @@ jobs:
             fi
             body="$(gh release view "$RELEASE_TAG" --json body --jq .body)"
             [[ "$body" == *"Build source: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"* ]] || { echo 'Refusing to repair a draft without matching source ownership.'; exit 1; }
+            formula_sha="$(node -p "require('./app/vendor/item-scaling-source.json').commit")"
+            [[ "$body" == *"Shared item formulas: https://github.com/Maergoth/EQLWiki/commit/$formula_sha "* ]] || { echo 'Refusing to repair a draft with different wiki formulas.'; exit 1; }
             gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
             gh release edit "$RELEASE_TAG" --draft=false
           else

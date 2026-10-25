@@ -12,6 +12,9 @@ on:
       bootstrap_artifact:
         type: string
         default: ''
+      item_scaling_artifact:
+        type: string
+        default: ''
       extended_ui_checks:
         description: Run extended native and OCR interface checks
         type: boolean
@@ -35,6 +38,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Download the fixed shared formula snapshot
+        if: inputs.item_scaling_artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.item_scaling_artifact }}
+          path: app/vendor
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Audit dependencies

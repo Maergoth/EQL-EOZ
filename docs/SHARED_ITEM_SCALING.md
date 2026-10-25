@@ -1,88 +1,70 @@
 # Shared item formulas
 
-The wiki owns item rank calculations under
+The wiki owns item rank calculations in
 [`extensions/ItemLevelSlider`](https://github.com/Maergoth/EQLWiki/tree/main/extensions/ItemLevelSlider).
-Eye of Zomm uses an exact, checksummed copy of that extension's portable MIT
-`item-scaling-core.js`. It does not maintain an independent set of formulas.
-The source commit and all file hashes are recorded in
-`app/vendor/item-scaling-source.json`.
+Eye of Zomm uses that portable MIT engine and its revisioned JSON coefficient
+file. Each installed app version has fixed formulas. There is no formula API,
+startup/hourly source check, remote rule cache or runtime override.
 
-## Changing the balance rules
+## Release process
 
-Edit the wiki's **`item-scaling-rules.json`**, increment its integer `revision`,
-and use the wiki's normal reviewed deployment. Its slider loads these rules
-through ResourceLoader configuration. This public read-only endpoint returns
-the same rules:
+1. Change the wiki-owned engine/rules, increment the rules revision when balance
+   changes, and deploy the reviewed wiki change through its normal process.
+2. Push the next Eye of Zomm app version. The release coordinator resolves the
+   wiki's production `main` **once**, downloads the shared files at that immutable
+   commit and checks their source hashes/schema.
+3. Both Windows and Linux receive the **same** generated formula artifact before
+   source tests and packaging. A missing/incompatible source or failed formula
+   regression blocks the release; it never silently publishes stale formulas.
+4. Publish the normal app update. Users get the new bundled formulas through
+   that update. Older installations retain their own version's formulas.
 
-```
-GET https://eqlwiki.com/api.php?action=eqlitemscaling&format=json&formatversion=2
-```
+Release notes record the exact wiki source commit. The packaged
+`app/vendor/item-scaling-source.json` records that commit and each file's SHA-256.
+Both platforms' archive checks verify the bundled formula files against the
+shared snapshot. Existing published versions and their formula snapshots are
+never replaced in place.
 
-The response's `eqlitemscaling` object contains `schemaVersion`, `engineVersion`,
-`revision`, and `rules`. The core validates every section and bounds coefficients.
-It rejects unknown fields, unsupported algorithms, unreasonable values, older
-revisions, and a changed configuration with an unchanged revision.
+The item database mirror is independent. A formula change needs no item-data
+pull; it ships in a normal application update. Formula refreshes happen centrally
+when preparing app releases, not on players' machines. If a new algorithm needs
+adapter changes, update the app and compatibility fixtures before its release.
 
-The desktop host checks at startup when due and once per hour. It serves the
-accepted snapshot through local `/api/info`; normal renderer refreshes do not
-make wiki requests. The small JSON document is independent of the item database
-mirror. A balance-coefficient update needs neither a database export nor a new
-app installer. New tabs/page loads on the wiki use its deployed rules; an already
-open wiki tab retains its current page configuration until reloaded.
+## Development synchronization
 
-Accepted rules and check time are saved atomically in the private app profile.
-Offline startup uses saved rules or bundled defaults. Failures, malformed data,
-oversized responses and an unsupported future engine retain the last good rules.
-The request has a deadline and size bound. Downloaded JavaScript, expressions
-and arbitrary URLs are never evaluated.
-
-## Changing the algorithm
-
-A new calculation family/algorithm requires a reviewed wiki engine change and an
-app update. Increment `engineVersion` for an incompatible rules contract. An old
-app then keeps its supported snapshot until upgraded.
-
-Synchronize the reviewed wiki commit mechanically:
+For a reviewed wiki feature commit before it reaches production:
 
 ```sh
 npm run sync:item-scaling -- --ref FULL_WIKI_COMMIT_SHA
 npm run check:item-scaling
 node tests/wiki-item-scaling.mjs
 node tests/item-base-recovery.mjs
-node tests/item-scaling-host.mjs
+node tests/item-scaling-release.mjs
 ```
 
-For a committed local wiki checkout, append `--source-root PATH`. The helper
-verifies local bytes against that exact commit before recording provenance.
-Commit the generated vendor files together. Never edit them separately.
-`npm test` and packaging validate the bundled source hashes and generated rules.
-Refreshing bundled defaults to a newer rule revision improves new/offline installs;
-the native data refresh also delivers supported coefficient changes to existing
-installs without a release.
+For a committed local checkout, append `--source-root PATH`; the helper verifies
+working bytes against that exact commit. Commit the generated vendor files
+together, never edit a second formula implementation. Normal development/PR
+checks use these pinned files and do not query the live wiki.
 
-## Consumers and recorded data
+The release coordinator uses `--from-wiki-main` automatically. That command is
+release tooling and is not part of the installed app. It generates one artifact
+for both package builds; no platform independently resolves a later wiki commit.
+
+## Consumers and evidence
 
 `app/item-scaling.js` adapts catalog fields and whole-card context to the shared
-engine. All browsing, equipment previews and overlay item cards use this adapter.
-Backstab, weapon percentage Accuracy, listed Range, conditional Void resist,
-weight and capped/fractional rank semantics therefore come from the same source
-as the wiki. Unitless Accuracy is preserved; ammo-only items do not gain weapon
-Accuracy. Recorded examine values are not scaled twice.
+engine. Browsing, equipment previews and overlay cards use the same Backstab,
+percentage Accuracy, listed Range, conditional Void, weight and rank-cap rules
+as the wiki. Unitless Accuracy stays unchanged; ammo-only cards do not gain
+weapon Accuracy. Recorded examine values are never scaled twice.
 
-Reverse-calculation proposals use this same forward engine and record the rules
-identity. A changed snapshot invalidates older pending recovered-base reviews
-before publication. Unsupported/ambiguous inputs retain the existing review
-guards; aligned forward weight rounding does not certify its inverse. Recorded
-character-sheet totals remain the sole source for Character totals.
+Reverse-calculation proposals use the same forward engine and record its fixed
+rules identity. An app update can invalidate an older pending recovery review
+if its formula identity changed. Existing ambiguity/review guards remain;
+aligned weight rounding does not independently certify its inverse. Character
+totals still come solely from the recorded character sheet.
 
-## Rollout and verification
-
-Publish the wiki endpoint before releasing this app change. Before that, the
-app safely uses its bundled snapshot. Deploying an older rule revision never
-silently rolls back an app: to correct a balance coefficient, issue the desired
-values under a new revision.
-
-Focused source checks cover wiki DOM behavior and canonical math, app card and
-reverse-calculation behavior, native hourly/cache/error handling and generated
-source integrity. These checks use synthetic values; they do not constitute a
-new in-game calibration or a live wiki publication test.
+Focused checks cover canonical math/wiki DOM behavior, Character/cards/recovery,
+release snapshot integrity and the shared Windows/Linux artifact contract.
+Synthetic checks do not constitute new game calibration or live-site testing.

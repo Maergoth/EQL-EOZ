@@ -121,7 +121,6 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/vendor/item-scaling-rules.json',
     'app/vendor/item-scaling-rules.js',
     'app/vendor/item-scaling-source.json',
-    'desktop/item-scaling-host.cjs',
     'app/zone-identity.js',
     'app/viewer-zone-selection.js',
     'app/minimap-controls.js',

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { scaleItemStat, scaledItemStats, itemEffectiveLevel, applyItemScalingRules, getItemScalingRules, getItemScalingRevision, getItemScalingIdentity } from '../app/item-scaling.js';
+import { scaleItemStat, scaledItemStats, itemEffectiveLevel, getItemScalingRules, getItemScalingRevision, getItemScalingIdentity } from '../app/item-scaling.js';
+import * as scaling from '../app/item-scaling.js';
 
 // Synthetic Itembox-shaped records exercise the wiki's listed-Range contract:
 // bows, throwing weapons with melee skills, and ammunition all gain +10/rank.
@@ -41,13 +42,12 @@ assert.equal(itemEffectiveLevel(10,1023),10,'The cap has no fractional progress'
 assert.equal(scaleItemStat('WT',1,10,{fraction:1023}),.2,'Weight uses the same normalized capped state and exact ceiling as the wiki');
 assert.equal(scaleItemStat('WT',1,4,{fraction:9999}),scaleItemStat('WT',1,4,{fraction:15}),'Weight rejects excess fractional progress consistently');
 
-const bundled=structuredClone(getItemScalingRules()),beforeIdentity=getItemScalingIdentity(),next={...bundled,revision:bundled.revision+1,primary:{...bundled.primary,divisor:20}};
-assert.equal(applyItemScalingRules(next),true);assert.equal(getItemScalingRevision(),next.revision);assert.equal(scaleItemStat('HP',100,5),125,'A supported rules-only update changes app previews');
-assert.notEqual(getItemScalingIdentity(),beforeIdentity);next.primary.divisor=99;assert.equal(scaleItemStat('HP',100,5),125,'Accepted rules are immutable snapshots');
-assert.equal(applyItemScalingRules(Object.fromEntries(Object.entries(getItemScalingRules()).reverse())),false,'Equivalent object ordering is the same rules snapshot');
-assert.throws(()=>applyItemScalingRules(bundled),/backwards/);
-assert.throws(()=>applyItemScalingRules({...getItemScalingRules(),primary:{...getItemScalingRules().primary,divisor:10}}),/revision/);
-assert.throws(()=>applyItemScalingRules({...getItemScalingRules(),revision:getItemScalingRevision()+1,engineVersion:2}),/Unsupported/);
-assert.equal(applyItemScalingRules({...bundled,revision:getItemScalingRevision()+1}),true);
+const bundled=getItemScalingRules(),beforeIdentity=getItemScalingIdentity(),copy=structuredClone(bundled);
+assert.equal(getItemScalingRevision(),bundled.revision);assert(Object.isFrozen(bundled));assert(Object.isFrozen(bundled.primary));
+assert.throws(()=>{bundled.primary.divisor=20;},TypeError,'Bundled coefficients cannot be mutated');
+copy.revision++;copy.primary.divisor=20;
+assert.equal(scaleItemStat('HP',100,5),150,'An app version always uses its bundled formulas');
+assert.equal(getItemScalingIdentity(),beforeIdentity,'External rule-shaped data cannot alter the version identity');
+assert.equal(Object.hasOwn(scaling,'applyItemScalingRules'),false,'There is no runtime formula-update API');
 
 console.log('Wiki item-scaling parity passed: listed Range across weapon/ammo slots, fractions, cap, and base preservation.');

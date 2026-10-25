@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {itemRecoverySource,itemRecoveryFingerprint,itemBaseReviewPreview,createItemBaseReview,applyItemBaseReview,validateItemBaseReview,characterContributionFields} from '../app/item-base-review.js';
 import {buildContributionDraft,normalizeContributionCandidate} from '../app/contribution-model.js';
 import {createContributionQueue} from '../app/contribution-queue.js';
-import {applyItemScalingRules,getItemScalingRules} from '../app/item-scaling.js';
+import {getItemScalingIdentity,getItemScalingRevision} from '../app/item-scaling.js';
+import {recoverItemBaseStat} from '../app/item-base-recovery.js';
 
 const wrap=(value,confirmed=false)=>({value,confirmed});
 const make=()=>({kind:'item',name:'Synthetic Recovery Cloak +4',title:'Synthetic Recovery Cloak',zone:'Synthetic Vale',instance:'normal',era:'Classic Era',
@@ -28,6 +29,7 @@ assert(buildContributionDraft(applied,blueprints).blockers.some(value=>/Verify t
 const confirmed={...applied,fields:{...applied.fields,statLines:{...applied.fields.statLines,confirmed:true}}},draft=buildContributionDraft(confirmed,blueprints);
 assert.equal(validateItemBaseReview(normalizeContributionCandidate(confirmed)).ok,true,'normalization preserves the verified review contract');
 assert.deepEqual(draft.blockers,[]);assert.match(draft.text,/HP: 30<br>/);assert.match(draft.text,/STA: -2/);assert.match(draft.text,/These stats are reverse calculated from a tier 4 item\. Please confirm with a tier 0 item and remove this message/);assert.match(draft.text,/A contributor note in their own words/);
+assert.match(draft.text,/\[\[Category:Tier 0 verification needed\]\]/,'Reviewed recovered bases remain discoverable until a real tier-zero confirmation');
 assert.doesNotMatch(draft.text,/HP: 42|Weight: 0\.7|SV Void: 4|Damage Bonus: 41/,'omitted observed/unsupported numbers never enter the recovered wiki stat block');
 assert(draft.warnings.some(value=>/Unresolved base statistics/.test(value)));
 
@@ -97,8 +99,11 @@ assert.equal(converted.fraction,null);assert.equal(converted.augmented,true);ass
 const backstabSource={kind:'item',name:'Synthetic Backstab Blade',fields:{tier:wrap(5),fraction:wrap(4),backstabDamage:wrap(15),statLines:wrap(['Backstab DMG: 15'])}};
 const backstabReview=createItemBaseReview(backstabSource,{tier:5,fraction:4,modifiersExcluded:true,reviewed:true,choices:{BACKSTAB_DMG:12}});
 assert.deepEqual(backstabReview.choices,{BACKSTAB_DMG:12});assert.equal(applyItemBaseReview(backstabSource,backstabReview).fields.statLines.value[0],'Backstab DMG: 12');
-const previousRules=getItemScalingRules(),fingerprint=itemRecoveryFingerprint(confirmed);
-applyItemScalingRules({...previousRules,revision:previousRules.revision+1,backstab:{divisor:25}});
-assert.notEqual(itemRecoveryFingerprint(confirmed),fingerprint,'Saved recovery depends on the canonical rule identity');
-assert.equal(validateItemBaseReview(confirmed).ok,false,'A rule update invalidates a previously reviewed calculation before publication');
+const provenance=recoverItemBaseStat('BACKSTAB_DMG',15,{tier:5,fraction:4,augmentStatus:'excluded'}).provenance;
+assert.equal(provenance.rulesRevision,getItemScalingRevision());assert.equal(provenance.rulesIdentity,getItemScalingIdentity());
+assert.equal(JSON.parse(itemRecoveryFingerprint(confirmed)).at(-1),getItemScalingIdentity(),'Saved recovery fingerprints include the bundled formula identity');
+const staleFingerprint=JSON.parse(confirmed.baseRecovery.sourceFingerprint);staleFingerprint[staleFingerprint.length-1]='previous-version-formulas';
+const stale={...confirmed,baseRecovery:{...confirmed.baseRecovery,sourceFingerprint:JSON.stringify(staleFingerprint)}};
+assert.notEqual(stale.baseRecovery.sourceFingerprint,confirmed.baseRecovery.sourceFingerprint);
+assert.equal(validateItemBaseReview(stale).ok,false,'A review from a different bundled formula identity requires review');
 console.log('Item base review: explicit exact/range choices, context/source/stat invalidation, preserved prose and observations, verified outgoing text, inference markers and replay persistence passed.');

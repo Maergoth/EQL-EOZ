@@ -1,5 +1,10 @@
 # Eye of Zomm implementation status
 
+0.9.12 bundles the wiki-owned calculation engine and one release-time formula
+snapshot for both platforms, with no runtime formula checks. Item-tier previews
+agree with the wiki while recorded totals remain unchanged. New item pages
+with unverified ranked or recovered bases join Tier 0 verification needed.
+
 0.9.11 adds gentle automatic reading while Contribute is open, fresh matching
 item proposals and frame-bound screenshot/icon assistance. Tier-decorated plain
 chat mentions work when the client strips link codes. Manual edits, Character

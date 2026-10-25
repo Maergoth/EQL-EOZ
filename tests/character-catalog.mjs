@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { searchCharacterCatalog, resolveCharacterCatalog, characterCatalogCard, characterCatalogPreview, CHARACTER_CATALOG_LIMITS } from '../app/character-catalog.js';
 import { createCharacterModel, characterItemStats, characterShareSummary } from '../app/character-model.js';
-import {applyItemScalingRules,getItemScalingRules} from '../app/item-scaling.js';
 
 const ring={name:'Synthetic Émber Ring',wikiTitle:'Ring of the Ember Guardian',iconId:'Exact_Icon_007',slots:['Fingers'],requiredLevel:21,stats:{HP:100,STR:2,DEX:-2,DMG:13,DELAY:20,WT:2.3,ATK:50,SV_CORRUPTION:9}};
 const weapon={name:'Synthetic Quartz Blade',wikiTitle:'Test:Quartz Blade',slots:['Primary'],stats:{HP:20,DMG:11}};
@@ -90,8 +89,7 @@ const rogueCard=characterCatalogCard(rogue,{tier:5}),roguePreview=characterCatal
 assert.equal(characterItemStats(rogueCard).stats.BACKSTAB_DMG,15);assert.equal(characterItemStats(rogueCard).stats.ACCURACY,12.5);assert.equal(characterItemStats(rogueCard).stats.SV_CORRUPTION,5);
 for(const key of ['BACKSTAB_DMG','ACCURACY','SV_CORRUPTION'])assert.equal(roguePreview.rows.find(row=>row.key===key)?.value,characterItemStats(rogueCard).stats[key],`${key}: Character search and equipped previews share whole-card context`);
 const captured={...rogueCard,observedStats:{DMG:18,BACKSTAB_DMG:15,ACCURACY:12.9,SV_CORRUPTION:5,HP:777},observedStatsComplete:true,augmentStatus:'included'};
-const recorded={...captured.observedStats},rules=getItemScalingRules(),totalsBefore=structuredClone(restored.totals().computed);
-applyItemScalingRules({...rules,revision:rules.revision+1,primary:{...rules.primary,divisor:20}});
-assert.equal(characterItemStats(rogueCard).stats.HP,125,'Character previews adopt accepted shared rule updates');
-assert.deepEqual(characterItemStats(captured).stats,recorded,'Observed examine values remain immutable after a formula update');
-assert.deepEqual(restored.totals().computed,totalsBefore,'Formula changes never alter recorded character-sheet totals');
+const recorded={...captured.observedStats},totalsBefore=structuredClone(restored.totals().computed);
+assert.equal(characterItemStats({...rogueCard,tier:8}).stats.HP,180,'Character previews use the fixed bundled formula at another tier');
+assert.deepEqual(characterItemStats({...captured,tier:8}).stats,recorded,'Observed examine values remain immutable when selecting another tier');
+assert.deepEqual(restored.totals().computed,totalsBefore,'Item formula previews never alter recorded character-sheet totals');

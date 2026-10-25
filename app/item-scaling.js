@@ -1,28 +1,17 @@
 import './vendor/item-scaling-core.js';
 import bundledRules from './vendor/item-scaling-rules.js';
 
-// The wiki owns this pure engine and its declarative rules. Remote updates are
-// data only; native and renderer callers install the same validated snapshot.
+// Every app version ships the wiki-owned engine and reviewed rules together.
+// Formula changes arrive through app releases; no runtime refresh or override.
 const core=globalThis.EQLItemScalingCore;
-let engine=core.createEngine(bundledRules);
+const engine=core.createEngine(bundledRules);
 const canonical=value=>value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
 const identity=rules=>JSON.stringify(canonical(rules));
-let snapshotIdentity=identity(engine.rules);
+const snapshotIdentity=identity(engine.rules);
 export const getItemScalingRules=()=>engine.rules;
 export const getItemScalingRevision=()=>engine.revision;
 export const getItemScalingIdentity=()=>snapshotIdentity;
 export const itemStatFamily=key=>engine.statFamily(key);
-export function applyItemScalingRules(rules) {
-    const next=core.createEngine(rules);
-    if(next.revision<engine.revision)throw Error('Item scaling rules cannot move backwards.');
-    if(next.revision===engine.revision){
-        if(identity(next.rules)!==identity(engine.rules))throw Error('Item scaling rules changed without a new revision.');
-        return false;
-    }
-    engine=next;
-    snapshotIdentity=identity(engine.rules);
-    return true;
-}
 export const itemEffectiveLevel=(fullLevel,fraction=0)=>engine.effectiveLevel(fullLevel,fraction);
 export const scaleItemStat=(key,value,fullLevel,options={})=>value===null?null:engine.scaleStat(key,value,fullLevel,options);
 
