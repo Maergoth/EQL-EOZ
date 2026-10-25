@@ -25,6 +25,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/loot-set-coverage.js',
     'app/tooltip-delay.js',
     'app/contribution-reader.js',
+    'app/contribution-live-matches.js',
     'app/automatic-item-contribution.js',
     'app/automatic-source-results.js',
     'app/automatic-source-policy.js',
