@@ -157,6 +157,10 @@ assert.equal(categoryCount(corrected.text),0);assert(!corrected.text.includes(TI
 assert.equal(patchContributionPrimary(corrected.text,base).changed,false,'Verified correction does not re-add the category');
 const legacyCategory=backfilled.text.replace('[[Category:Tier 0 Verification Needed]]','[[Category:Tier 0 verification needed]]');
 assert.equal(categoryCount(patchContributionPrimary(legacyCategory,base).text),0,'Accepted tier-zero correction also clears older EoZ-marked category capitalization');
+const legacyExample=TIER_ZERO_CATEGORY_MARKER+'\n[[Category:Tier 0 verification needed]]',legacyUpdateSource=legacyCategory+'\n[[Category:Tier 0 verification needed|Manual sort]]\n<nowiki>'+legacyExample+'</nowiki>';
+const canonicalizedCategory=patchContributionPrimary(legacyUpdateSource,ordinaryUpdate);
+assert(canonicalizedCategory.text.includes(TIER_ZERO_CATEGORY_MARKER+'\n[[Category:Tier 0 Verification Needed]]'),'A future update normalizes older app-owned membership to the canonical wiki category');
+assert(canonicalizedCategory.text.includes('[[Category:Tier 0 verification needed|Manual sort]]'));assert(canonicalizedCategory.text.includes('<nowiki>'+legacyExample+'</nowiki>'));assert.equal(patchContributionPrimary(canonicalizedCategory.text,ordinaryUpdate).changed,false,'Category normalization is idempotent and leaves manual/protected memberships untouched');
 const manualCategory=patchContributionPrimary(beforeVerification+'\n'+verificationCategory+'\n[[Category:Hands|Manual sort]]\n',base);
 assert.equal(categoryCount(manualCategory.text),1,'A manually maintained verification category is not silently removed');assert(manualCategory.text.includes('|Manual sort]]'));
 const quotedWarning=beforeVerification.replace(oldWarning,'<nowiki>'+oldWarning+'</nowiki>'),quotedCorrected=patchContributionPrimary(quotedWarning,base);
