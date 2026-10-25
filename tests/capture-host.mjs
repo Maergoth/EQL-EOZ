@@ -425,3 +425,33 @@ console.log('Capture host: animated-world scene replacement, item-priority ROI/F
     }finally{await pasted.host.dispose();}
 }
 console.log('Capture clipboard import: explicit request only, image/dimension bounds, no file dialog, manual session and generation provenance passed.');
+{
+    const evidence=fixture(),area={x:.1,y:.1,width:.5,height:.6},size={width:800,height:600};
+    try{
+        await evidence.host.listSources();await evidence.host.start({mode:'contribution',sourceId:'window:game',sessionId:'item-evidence'});
+        evidence.tick();evidence.host.submitFrame({...evidence.frame('exact-item-frame',800,600),selectionKind:'visual-item',itemRegion:area,visualKey:'0123456789abcdef'});await evidence.waitForRead();evidence.resolve();await evidence.host.processing;
+        const record=evidence.observations[0],proof=record.input.captureEvidence;assert(proof,'Single item OCR with a selected ROI provides an image capability');assert.equal(proof.observationId,record.id);assert.equal(proof.frameId,record.input.frameId);
+        const nativeReading=evidence.host.getItemEvidence(proof),originalName=nativeReading.observation.subject.name;nativeReading.observation.subject.name='Mutated copy';record.subject.name='Renderer-side mutation';assert.equal(evidence.host.getItemEvidence(proof).observation.subject.name,originalName,'Automatic contributions retain the exact native OCR object rather than mutable renderer evidence');
+        await assert.rejects(evidence.host.handle({sender:{},senderFrame:evidence.main.webContents.mainFrame},'item-evidence',proof),/main app/);
+        const image=await evidence.host.handle(evidence.event,'item-evidence',proof);assert.deepEqual({width:image.width,height:image.height},{width:400,height:360});assert.equal(image.iconDataUrl,undefined,'An unproven icon crop is omitted');assert.deepEqual(image.proof,proof);
+        assert.equal(Buffer.from(image.dataUrl.split(',')[1],'base64').readUInt32BE(16),400);assert.doesNotMatch(JSON.stringify(evidence.journal.records),/data:image|base64|"png"/,'Only bounded capability metadata, never pixels, enters the journal');
+        evidence.host.lastFrame={png:png('unrelated-latest',800,600),at:1100,sourceId:'window:game'};assert.equal(evidence.host.itemEvidence(proof).dataUrl,image.dataUrl,'A later preview cannot replace the observation-bound crop');
+        for(const key of ['token','observationId','frameId','sessionId','generation','sourceId','capturedAt'])assert.throws(()=>evidence.host.itemEvidence({...proof,[key]:key==='generation'?proof.generation+1:'different'}),/no longer current/);
+        evidence.advance(30001);assert.throws(()=>evidence.host.itemEvidence(proof),/no longer current/);assert.equal(evidence.host.itemEvidenceFrames.size,0);
+        const context={frame:{owner:'contribution',sessionId:evidence.host.sessionId,generation:evidence.host.generation,sourceId:'window:game',capturedAt:31101,hash:'private-frame',kind:'visual-item',configuredRegion:false,region:area,size},image:evidence.host.electron.nativeImage.createFromBuffer(png('crop',800,600)),input:{region:{x:80,y:60,width:400,height:360},scale:3},result:{words:[]}};
+        const observation={kind:'ocr',owner:'contribution',sessionId:evidence.host.sessionId,capturedAt:new Date(31101).toISOString(),parser:{name:'item-examine'},subject:{kind:'item',name:'Synthetic Evidence'},fields:[]};
+        for(const [name,change] of [['scene',{frame:{...context.frame,kind:'scene'}}],['configured',{frame:{...context.frame,kind:'configured'}}],['calibrated-visual',{frame:{...context.frame,configuredRegion:true}}],['whole-scene',{input:{region:{x:0,y:0,width:800,height:600}}}]])assert.equal(evidence.host.prepareItemEvidence(observation,{...context,...change},name),null,'No '+name+' screenshot can be offered');
+        assert.equal(evidence.host.prepareItemEvidence({...observation,kind:'manual'},context,'manual'),null);assert.equal(evidence.host.prepareItemEvidence({...observation,owner:'character'},context,'character'),null);
+        let latest;for(let index=0;index<8;index++)latest=evidence.host.prepareItemEvidence(observation,context,'bounded-'+index);assert.equal(evidence.host.itemEvidenceFrames.size,6,'Ephemeral crops have a fixed count bound');
+        await evidence.host.handle(evidence.event,'clear-history');assert.equal(evidence.host.itemEvidenceFrames.size,0,'Clearing history revokes every image capability');latest=evidence.host.prepareItemEvidence(observation,context,'after-clear');
+        await evidence.host.start({mode:'character',sourceId:'window:game',sessionId:'character-owning-source'});assert.throws(()=>evidence.host.itemEvidence(latest),/no longer current/);assert.equal(evidence.host.itemEvidenceFrames.size,0,'Owner/session generation changes destroy old image capabilities');
+    }finally{await evidence.host.dispose();}
+}
+console.log('Capture item evidence: exact ROI/frame proof, main-frame guard, no scene/manual/Character images, private metadata, expiry/capacity and owner/session invalidation passed.');
+{
+    const logging=fixture();try{
+        const append=logging.journal.append.bind(logging.journal);logging.journal.append=async value=>{logging.host.advanceGeneration();return append(value);};
+        const result=await logging.host.ingestLogObservation({type:'loot',item:'Synthetic Concurrent Ring',source:'Synthetic Rat',sourceEvidence:{kind:'explicit-corpse'}},{live:true,at:1000,zone:'Synthetic Zone',cursor:1});
+        assert.equal(result.accepted,true);assert.equal(logging.observations.length,1,'A capture generation change during journal append cannot discard independent native game-log evidence');
+    }finally{await logging.host.dispose();}
+}

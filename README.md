@@ -4,6 +4,15 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
+**0.9.11: automatic contribution reading and chat item detection.** Open
+Contribute, then open the selected item’s examine window in EverQuest. A gentle
+reader proposes matching stats, stages a reliable item screenshot and helps
+find its icon. Pause it in place; manual edits and Character capture stay
+protected. A fresh, sufficiently clear new-item reading can create its page
+automatically after live duplicate checks; ambiguous cases stay for review.
+Tiered item mentions can now be recognized even when game logs omit link codes.
+See [the follow-up and release record](docs/CHAT_CAPTURE_FOLLOWUP_PLAN.md).
+
 **0.9.10: reliable overlays and streamlined wiki contributions.** Gently drag
 a snapped overlay to detach it; its size and neighbors stay put. Release near a
 new edge to dock. Item hovers across the app and native Intel now use the wiki's
@@ -221,8 +230,31 @@ Encoded item links in live chat also identify missing wiki items and offer
 starts or reuses the contribution reader, using a configured game window or
 asking for an explicit source inside Contribute. An active Character capture
 keeps ownership. The notice stays open until that item's fresh OCR reading is
-saved, flashes green, then closes. Plain chat names never count as item links,
-and chat links do not imply loot or a drop source.
+saved, flashes green, then closes. Some clients strip link codes from logs.
+For those clients, a bounded tier-decorated name in a quoted chat message can
+offer a **possible item** suggestion. Ordinary unranked text and ambiguous
+messages remain unsupported. Known, queued, submitted and ignored identities
+still suppress repeated suggestions. Chat mentions imply no loot or drop source.
+
+Opening **Contribute** starts gentle local reading when one safe game window
+can be selected; otherwise choose the source directly in that section. Open the
+selected item's complete examine window and leave it visible. Matching fresh
+readings fill proposal fields and, when a reliable item crop is available, stage
+a local screenshot and icon matches. Manual/reviewed fields and existing images
+stay intact. Choose an icon when artwork matches are ambiguous. **Pause automatic
+reading** keeps it stopped until explicitly restarted. Leaving Contribute stops
+the reader it started unless an accepted discovery request still needs it;
+Character and preexisting readers retain ownership. Eligible fresh new items
+can publish automatically after exact, redirect and near-duplicate checks,
+under the signed-in account. Only that item and its bound screenshot may be
+created automatically; ambiguous/incomplete readings retain the normal review.
+Loot logs can also append sources to existing item, mob and zone pages without
+replacing prior sources. These updates use actual native log reads, explicit
+corpse evidence or a witnessed same-zone kill within 60 seconds, and unique
+confident canonical/fuzzy page matches. Ambiguous titles/conflicts stay in
+Contribute. Reopening a log never publishes historical observations. Successful
+creations and updates link to saved pages. See [the follow-up record](docs/CHAT_CAPTURE_FOLLOWUP_PLAN.md)
+for implementation, verification and publication status.
 
 Choosing **Contribute** on a monster prompt similarly pins it and re-arms the
 next `/loc`, without a timeout while waiting. The captured location flashes the

@@ -1,5 +1,12 @@
 # Persistent contribution evidence
 
+Current follow-up: [chat detection and automatic Contribute reading](CHAT_CAPTURE_FOLLOWUP_PLAN.md).
+View entry is an additional explicit local capture scope. Only matching fresh
+item evidence may fill the selected draft; native frame capabilities bind staged
+  cropped images to the accepted observation/source/session/generation. A narrow
+native gate can create one new item from eligible fresh evidence after live
+duplicate checks; other screenshots/article edits keep the reviewed submission.
+
 ## Current 0.9.10 evidence and review contract
 
 The release combines PR25 kill/evidence intake, PR26 form/review simplification

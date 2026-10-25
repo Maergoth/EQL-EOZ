@@ -4,12 +4,13 @@ import { createWikiResolver, normalizeWikiIdentity as contributionNameKey, itemB
 import { contributionReasons } from './contribution-reasons.js';
 import { classifyNpcEvidence } from './generated-pets.js';
 import { collectTierZeroEvidence, tierZeroVerificationPreview, confirmTierZeroVerification } from './contribution-tier-zero.js';
+import { automaticSourceReceiptKey } from './automatic-source-results.js';
 
 const KEY=CONTRIBUTION_QUEUE_KEY;
 const clean=(value,max=240)=>String(value??'').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim().slice(0,max);
 const candidateKey=(kind,name,zone='')=>`${kind}|${contributionNameKey(kind==='item'?itemIdentity(name).name:name)}|${kind==='item'?'':contributionNameKey(zone)}`;
 export function createContributionQueue({storage=globalThis.localStorage,getPack=()=>({}),onWarning=()=>{},now=Date.now,autoReconcile=true}={}){
-    let candidates=[],archive=[],sequence=0,cursor=0,catalogCache=null,lastReconciled=null,lastLog=null,armed=null,readBlocked=false,migrated=false;const ignored=new Set(),seenLogIds=new Set(),registry=new Map();
+    let candidates=[],archive=[],automaticSourceReceipts=[],sequence=0,cursor=0,catalogCache=null,lastReconciled=null,lastLog=null,armed=null,readBlocked=false,migrated=false;const ignored=new Set(),seenLogIds=new Set(),registry=new Map();
     const pack=()=>{try{return getPack()||{};}catch{return {};}};
     function resolver(){const current=pack(),version=current.meta?.manifestVersion||current.meta?.version||'',entities=current.wikiEntities,complete=`${current.meta?.wikiEntitiesComplete===true}:${current.meta?.sample===true}`;if(catalogCache?.pack!==current||catalogCache.entities!==entities||catalogCache.version!==version||catalogCache.complete!==complete||catalogCache.items!==current.items||catalogCache.npcs!==current.npcs||catalogCache.zones!==current.zones)catalogCache={pack:current,entities,version,complete,items:current.items,npcs:current.npcs,zones:current.zones,resolver:createWikiResolver(current)};return catalogCache.resolver;}
     const canonicalKey=(kind,name,zone='')=>{const resolved=resolver().resolve(kind,name);return candidateKey(kind,resolved.canonicalTitle||name,zone);};
@@ -51,11 +52,15 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         if(saved.archive!==undefined&&(!Array.isArray(saved.archive)||saved.archive.length>200))throw Error('Unsupported archive');
         if((saved.archive||[]).some(candidate=>!candidate||!['item','npc','zone'].includes(candidate.kind)||typeof candidate.id!=='string'||typeof candidate.name!=='string'))throw Error('Unsupported archived candidate');
         archive=saved.archive||[];
+        automaticSourceReceipts=(Array.isArray(saved.automaticSourceReceipts)?saved.automaticSourceReceipts:[]).slice(-500).filter(key=>{
+            if(typeof key!=='string'||key.length>1000)return false;
+            try{const values=JSON.parse(key);return Array.isArray(values)&&values.length===4&&values.slice(0,3).every(value=>typeof value==='string'&&value.length>0&&value.length<=240)&&['normal','raid'].includes(values[3]);}catch{return false;}
+        });
         for(const key of (Array.isArray(saved.ignored)?saved.ignored:[]).slice(-2000))if(typeof key==='string'&&key.length<800)ignored.add(key);
         for(const id of (Array.isArray(saved.seenLogIds)?saved.seenLogIds:[]).slice(-2000))if(typeof id==='string'&&id.length<=240)seenLogIds.add(id);
         for(const entry of (Array.isArray(saved.registry)?saved.registry:[]).slice(-2000))if(entry&&typeof entry.key==='string'&&entry.key.length<800&&['queued','submitted','partial','ignored','notified'].includes(entry.state))registry.set(entry.key,entry);
     }}catch{readBlocked=true;onWarning('The saved contribution queue could not be read and was preserved. Recover it before saving new drafts.');}
-    function save(){if(readBlocked)return false;try{const value=JSON.stringify({schemaVersion:1,sequence,cursor,candidates,archive,registry:[...registry.values()].slice(-2000),ignored:[...ignored].slice(-2000),seenLogIds:[...seenLogIds].slice(-2000)});if(new TextEncoder().encode(value).length>CONTRIBUTION_QUEUE_BYTES)throw Error('Queue too large');storage?.setItem(KEY,value);return true;}catch{onWarning('Contributions remain in memory because their saved queue is full or unavailable. Review or remove drafts before closing Eye of Zomm.');return false;}}
+    function save(){if(readBlocked)return false;try{const value=JSON.stringify({schemaVersion:1,sequence,cursor,candidates,archive,automaticSourceReceipts,registry:[...registry.values()].slice(-2000),ignored:[...ignored].slice(-2000),seenLogIds:[...seenLogIds].slice(-2000)});if(new TextEncoder().encode(value).length>CONTRIBUTION_QUEUE_BYTES)throw Error('Queue too large');storage?.setItem(KEY,value);return true;}catch{onWarning('Contributions remain in memory because their saved queue is full or unavailable. Review or remove drafts before closing Eye of Zomm.');return false;}}
     function rememberState(kind,name,state,purpose='missing-page',zone=''){const resolved=resolver().resolve(kind,name),key=`${wikiIdentityKey(kind,resolved.canonicalTitle||name)}|${purpose}|${purpose==='spawn-location'?contributionNameKey(zone):''}`,prior=registry.get(key);if(prior?.state==='submitted'&&['queued','partial'].includes(state))return;registry.delete(key);registry.set(key,{key,state,at:new Date(now()).toISOString()});while(registry.size>2000)registry.delete(registry.keys().next().value);}
     function suppression(rawKind,name,{zone='',purpose='missing-page'}={}){const kind=wikiEntityKind(rawKind),key=canonicalKey(kind,name,zone),resolved=resolver().resolve(kind,name),entityKey=wikiIdentityKey(kind,resolved.canonicalTitle||name),entry=registry.get(`${entityKey}|${purpose}|${purpose==='spawn-location'?contributionNameKey(zone):''}`),candidate=candidates.find(value=>value.kind===kind&&(value.key===key||value.aliasKeys?.includes(key)||wikiIdentityKey(kind,resolver().resolve(kind,value.name).canonicalTitle||value.name)===entityKey&&(kind==='item'||!zone||contributionNameKey(value.zone)===contributionNameKey(zone))));
         const ignoredMatch=[...ignored].some(value=>value===key||value.startsWith(`${kind}|`)&&canonicalKey(kind,value.split('|')[1],kind==='item'?'':value.split('|')[2])===key);
@@ -214,6 +219,12 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
     ensureReconciled();
     return{
         snapshot:()=>{ensureReconciled();return structuredClone(candidates);},cursor:()=>cursor,archived:()=>structuredClone(archive),reconcile,suppression,refreshCatalog:ensureReconciled,
+        sourceReceiptKeys:()=>[...automaticSourceReceipts],
+        recordAutomaticSourceReceipt(result){
+            if(result?.status!=='submitted')return false;
+            const key=automaticSourceReceiptKey(result,{resolver:resolver()});if(!key)return false;
+            automaticSourceReceipts=[...automaticSourceReceipts.filter(value=>value!==key),key].slice(-500);save();return true;
+        },
         spawnStatus(){if(armed&&!armed.persistent&&now()>armed.expiresAt)armed=null;return armed?{...armed}:null;},
         tierZeroReview(id,options={}){return tierZeroVerificationPreview(candidates.find(value=>value.id===id),{...options,now:now()});},
         confirmTierZero(id,options={}){const candidate=candidates.find(value=>value.id===id);if(!candidate)throw Error('This contribution no longer exists.');const patch=confirmTierZeroVerification(candidate,{...options,now:now()});Object.assign(candidate,patch);candidate.planId=null;candidate.status='needs-review';candidate.reasons=contributionReasons(candidate,resolver()).reasons;save();return structuredClone(candidate);},

@@ -1,5 +1,11 @@
 # Contribution discovery: current 0.9.10 contract
 
+The [chat/capture follow-up](CHAT_CAPTURE_FOLLOWUP_PLAN.md) supersedes the
+encoded-only chat boundary below: tier-decorated plain chat can produce a
+possible-item suggestion, with the same canonical/suppression guards. It also
+adds low-frequency reading while the Contribute view is active. See that record
+for source and package status; the historical 0.9.10 receipts remain unchanged.
+
 The 0.9.10 release integrates the kill-evidence work from [PR25](https://github.com/Maergoth/EQL-EOZ/pull/25) with the persistent request flow from PR27. See [the release checklist](RELEASE_0910_PLAN.md) for final integration, exact-head checks and publication receipts. The earlier implementation record below is preserved as historical evidence; its next-release/no-version-change statements describe that original PR, not the current release authorization.
 
 Automatic monster discovery requires a fresh kill/death event or an explicit named-corpse loot source. Considers and nearby spell casts may still serve combat/Intel behavior but cannot admit a monster contribution. Known players, generated pets and owner-labelled pets are excluded. Durable queue intake and journal replay enforce the same boundary. Conservative reconciliation archives only proven untouched passive-only tasks; edited, manual/OCR-supported and submitted/partial work remains protected.

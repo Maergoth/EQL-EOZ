@@ -130,7 +130,7 @@ class WikiClient {
         if(content.length>MAX_PAGE)throw new WikiError('size','The wiki page is too large for an automatic contribution.');
         return {title:page.title,pageId:page.pageid??null,missing:page.missing===true,redirect:page.redirect===true,content,revision:revision?.revid??null,timestamp:revision?.timestamp??null,startTimestamp:data.curtimestamp||new Date(this.now()).toISOString()};
     }
-    async findMatches({ name, kind='item' }={}) {
+    async findMatches({ name, kind='item',requireComplete=false }={}) {
         const {contributionTitle,contributionNameKey,findPotentialMatches}=await models(),title=contributionTitle(name);
         if(!['item','npc','zone','spell'].includes(kind))throw new WikiError('kind','Choose item, npc, zone or spell.');
         const variants=[title,...new Set([title.replace(/[\u2018\u2019`]/g,"'"),title.replace(/[\u2018\u2019']/g,'`')])].slice(0,3);
@@ -139,16 +139,43 @@ class WikiClient {
             this.request({action:'query',list:'prefixsearch',pssearch:title,psnamespace:'0',pslimit:'12'}),
             this.request({action:'query',list:'search',srsearch:title.replace(/[^\p{L}\p{N} ]/gu,' '),srwhat:'title',srnamespace:'0',srlimit:'12',srprop:''})
         ]);
+        if(requireComplete){
+            for(const [response,key]of [[prefix,'prefixsearch'],[search,'search']])if(response.warnings||response.continue||!Array.isArray(response.query?.[key])||response.query[key].length>=12||response.query[key].some(page=>page.ns!==0||!Number.isInteger(page.pageid)||page.pageid<1||typeof page.title!=='string')||key==='search'&&(!Number.isSafeInteger(response.query?.searchinfo?.totalhits)||response.query.searchinfo.totalhits<0||response.query.searchinfo.totalhits>response.query.search.length))throw new WikiError('duplicate-incomplete','The live duplicate check is incomplete. Review this item manually.');
+            if(exact.warnings||exact.continue||!Array.isArray(exact.query?.pages)||!exact.query.pages.length||exact.query.pages.some(page=>page.ns!==0||typeof page.title!=='string'||page.invalid||page.missing!==true&&(!Number.isInteger(page.pageid)||page.pageid<1)))throw new WikiError('duplicate-incomplete','The exact-title check is incomplete. Review this item manually.');
+            const mappings=new Map();for(const key of ['normalized','converted','redirects'])for(const row of exact.query[key]||[]){if(typeof row.from!=='string'||typeof row.to!=='string')throw new WikiError('duplicate-incomplete','Invalid wiki title resolution.');mappings.set(row.from,row.to);}
+            for(const variant of new Set(variants)){let title=variant;const seen=new Set();while(mappings.has(title)){if(seen.has(title))throw new WikiError('duplicate-incomplete','Ambiguous title resolution.');seen.add(title);title=mappings.get(title);}if(!exact.query.pages.some(page=>page.title===title))throw new WikiError('duplicate-incomplete','A requested title was omitted from the duplicate check.');}
+        }
         const records=new Map();
         for(const record of [...(exact.query?.pages||[]).filter(page=>!page.missing),...(prefix.query?.prefixsearch||[]),...(search.query?.search||[])]) if(record.ns===0&&record.pageid)records.set(record.pageid,{pageId:record.pageid,title:record.title});
         const spellingMatches=[...records.values()].filter(record=>contributionNameKey(record.title)===contributionNameKey(title));
         let canonical=null;
         if(spellingMatches.length){
             canonical=await this.request({action:'query',prop:'info',titles:[...new Set(spellingMatches.map(record=>record.title))].slice(0,36).join('|'),redirects:'1',converttitles:'1'});
+            if(requireComplete&&(canonical.warnings||canonical.continue||!Array.isArray(canonical.query?.pages)||!canonical.query.pages.length))throw new WikiError('duplicate-incomplete','Canonical page checks are incomplete.');
             for(const record of spellingMatches)records.delete(record.pageId);
             for(const page of canonical.query?.pages||[])if(page.ns===0&&page.pageid&&!page.missing)records.set(page.pageid,{pageId:page.pageid,title:page.title});
         }
-        return {matches:findPotentialMatches(title,[...records.values()],20),exact:(exact.query?.pages||[]).map(page=>({title:page.title,pageId:page.pageid??null,missing:page.missing===true})),redirects:[...(exact.query?.redirects||[]),...(canonical?.query?.redirects||[])],normalized:[...(exact.query?.normalized||[]),...(canonical?.query?.normalized||[])],checkedAt:new Date(this.now()).toISOString()};
+        return {matches:findPotentialMatches(title,[...records.values()],20),exact:(exact.query?.pages||[]).map(page=>({title:page.title,pageId:page.pageid??null,missing:page.missing===true})),redirects:[...(exact.query?.redirects||[]),...(canonical?.query?.redirects||[])],normalized:[...(exact.query?.normalized||[]),...(canonical?.query?.normalized||[])],checkedAt:new Date(this.now()).toISOString(),...(requireComplete?{complete:true,rawCandidates:[...records.values()]}:{})};
+    }
+    async assertCapturedCatalog(title,titles){
+        const {contributionNameKey}=await models(),key=contributionNameKey(title);
+        const distance=(a,b)=>{if(Math.abs(a.length-b.length)>2)return 3;let row=Array.from({length:b.length+1},(_,index)=>index);for(let i=1;i<=a.length;i++){const next=[i];for(let j=1;j<=b.length;j++)next[j]=Math.min(next[j-1]+1,row[j]+1,row[j-1]+(a[i-1]===b[j-1]?0:1));row=next;}return row[b.length];};
+        if(!Array.isArray(titles)||titles.length>100000||titles.some(name=>typeof name!=='string'))throw new WikiError('duplicate-incomplete','The item-title catalog is incomplete.');
+        if(titles.some(name=>distance(key,contributionNameKey(name))<=2))throw new WikiError('duplicate-review','An existing or similar wiki page needs review. No automatic item was created.');
+    }
+    async assertNewCapturedItem(title){
+        const result=await this.findMatches({name:title,kind:'item',requireComplete:true});
+        if(!result.complete||result.matches.length||result.redirects.length||result.exact.some(page=>!page.missing))throw new WikiError('duplicate-review','An existing or similar wiki page needs review. No automatic item was created.');
+        await this.assertCapturedCatalog(title,result.rawCandidates.map(page=>page.title));
+        return result;
+    }
+    async prepareCapturedItem(candidate,{guard=()=>{}}={}){
+        await guard();const account=await this.expectedUser();if(!account.canCreate||candidate.attachment&&!account.canUpload)throw new WikiError('automatic-account','This account cannot create the item and its screenshot.');await this.assertNewCapturedItem(candidate.title||candidate.name);
+        const {contributionItemEffects}=await models();for(const effect of candidate.fields?.effects?.value||[])if(contributionItemEffects({fields:{effects:{value:[effect],confirmed:true}}}).length!==1)throw new WikiError('automatic-review','The observed item effect needs manual review.');
+        for(const effect of contributionItemEffects(candidate))if((await this.contributionPage(effect.name,'spell')).missing)throw new WikiError('automatic-review','The item effect needs a spell page. Review both pages before publishing.');
+        const plan=await this.preparePlan({candidate,relatedPages:[],matchesReviewed:true});
+        if(plan.blockers.length||plan.pages.length!==1||plan.pages[0].operation!=='create'||plan.pages[0].role!=='primary'||plan.expectedUser?.id!==account.user.id||plan.expectedUser?.name!==account.user.name){const error=new WikiError('automatic-review','This item needs a complete manual review before publishing.');error.plan=plan;throw error;}
+        await guard();const stored=this.plans.get(plan.id);stored.automaticItem={candidateId:candidate.id,title:plan.pages[0].title,evidenceId:candidate.captureObservationId,frameId:candidate.captureFrameId};stored.reviewDigest=this.digest(stored);await this.persist();return safePlan(stored);
     }
     async contributionPage(title,kind){
         let state=await this.page(title,{resolveRedirects:true});if(!state.missing)return state;
@@ -212,7 +239,7 @@ class WikiClient {
         result.url=`${this.origin}/index.php?title=Help%3AContents&oldid=${page.revision}`;
         this.blueprintCache={checkedAt:this.now(),value:result};return copy(result);
     }
-    digest(plan) {return hash(JSON.stringify({id:plan.id,wikiOrigin:plan.wikiOrigin,expectedUser:plan.expectedUser,blueprintRevision:plan.blueprintRevision,pages:plan.pages.map(page=>({title:page.title,beforeHash:page.beforeHash,afterHash:page.afterHash,baseRevision:page.baseRevision})),...(plan.recoveredLoot?.length?{recoveredLoot:plan.recoveredLoot}:{}),...(plan.attachment?{attachment:{id:plan.attachment.id,filename:plan.attachment.filename,sha256:plan.attachment.sha256,caption:plan.attachment.caption,license:plan.attachment.license}}:{}),blockers:plan.blockers,matchesReviewed:plan.matchesReviewed}));}
+    digest(plan) {return hash(JSON.stringify({id:plan.id,wikiOrigin:plan.wikiOrigin,expectedUser:plan.expectedUser,blueprintRevision:plan.blueprintRevision,pages:plan.pages.map(page=>({title:page.title,beforeHash:page.beforeHash,afterHash:page.afterHash,baseRevision:page.baseRevision})),...(plan.recoveredLoot?.length?{recoveredLoot:plan.recoveredLoot}:{}),...(plan.attachment?{attachment:{id:plan.attachment.id,filename:plan.attachment.filename,sha256:plan.attachment.sha256,caption:plan.attachment.caption,license:plan.attachment.license}}:{}),...(plan.automaticItem?{automaticItem:plan.automaticItem}:{}),...(plan.automaticSource?{automaticSource:plan.automaticSource}:{}),blockers:plan.blockers,matchesReviewed:plan.matchesReviewed}));}
     async preparePlan({ candidate, relatedPages=[], matchesReviewed=false, editedText=null,sourceItemHints=[] }={}) {
         await this.load();
         const {buildContributionDraft,contributionTitle,contributionNameKey,patchContributionRelationship,patchContributionPrimary,contributionItemEffects,normalizeContributionCandidate,contributionTemplates}=await models();
@@ -360,7 +387,7 @@ class WikiClient {
         plan.reviewDigest=this.digest(plan);this.plans.set(plan.id,plan);if(this.plans.size>30)this.plans.delete(this.plans.keys().next().value);await this.persist();return safePlan(plan);
     }
     async getPlan(id) {await this.load();const plan=this.plans.get(id);if(!plan)throw new WikiError('plan','This contribution review is unavailable. Prepare a new review.');return safePlan(plan);}
-    async submitPlanAttachment(plan) {
+    async submitPlanAttachment(plan,{beforeWrite=null}={}) {
         const attachment=plan.attachment;if(!attachment)return true;
         try{
             const {bytes,record}=await this.attachments.get(attachment.id);
@@ -369,8 +396,9 @@ class WikiClient {
             const found=await this.request({action:'query',prop:'imageinfo',titles:`File:${attachment.filename}`,iiprop:'sha1|user'}),info=found.query?.pages?.[0]?.imageinfo?.[0];
             if(info){if(info.sha1!==crypto.createHash('sha1').update(bytes).digest('hex')||info.user!==plan.expectedUser.name)throw new WikiError('file-exists','A different file already uses this reviewed filename. No image was overwritten.');attachment.status='applied';delete attachment.error;await this.persist();return true;}
             const {literalWikiText}=await models(),token=await this.csrf(plan.expectedUser),form=new FormData();
-            for(const [key,value]of Object.entries({action:'upload',format:'json',formatversion:'2',errorformat:'plaintext',filename:attachment.filename,text:`Screenshot supplied by [[User:${plan.expectedUser.name}]].\n${literalWikiText(attachment.caption)}\n${literalWikiText(attachment.license)}`,comment:'Player-reviewed Eye of Zomm contribution screenshot',assert:'user',assertuser:plan.expectedUser.name,token}))form.set(key,value);
+            for(const [key,value]of Object.entries({action:'upload',format:'json',formatversion:'2',errorformat:'plaintext',filename:attachment.filename,text:`Screenshot supplied by [[User:${plan.expectedUser.name}]].\n${literalWikiText(attachment.caption)}\n${literalWikiText(attachment.license)}`,comment:plan.automaticItem?'Eye of Zomm captured item screenshot':'Player-reviewed Eye of Zomm contribution screenshot',assert:'user',assertuser:plan.expectedUser.name,token}))form.set(key,value);
             form.set('file',new Blob([bytes],{type:'image/png'}),attachment.filename);attachment.status='unknown';await this.persist();
+            if(beforeWrite)await beforeWrite('upload',plan);
             const response=await this.request({}, {post:true,form});if(response.upload?.result!=='Success')throw new WikiError('upload-warning','The wiki did not accept this screenshot. Review its warning before retrying.');
             attachment.status='applied';delete attachment.error;await this.persist();return true;
         }catch(error){attachment.status=error.code==='unknown-write'?'unknown':'failed';attachment.error={code:error.code||'attachment',message:safeMessage(error.message)};await this.persist();return false;}
@@ -387,7 +415,7 @@ class WikiClient {
             for(const item of batch){const page=requested.get(item.title),reviewed=plan.pages.find(page=>page.title===item.title),content=page?.revisions?.[0]?.slots?.main?.content,reviewedResult=!item.alias&&reviewed&&typeof content==='string'&&hash(content)===hash(normalizeWikiSubmissionText(reviewed.afterText));if(page.missing||Boolean(page.redirect)!==Boolean(item.alias)||page.revisions?.[0]?.revid!==item.revision&&!reviewedResult)throw new WikiError('source-changed',item.title+': the published drop source or monster redirect changed after review. Prepare a new Preview before publishing.');}
         }
     }
-    async submitPlan({ planId, reviewDigest }={}) {
+    async submitPlan({ planId, reviewDigest }={}, {beforeWrite=null}={}) {
         await this.load();if(this.busy)throw new WikiError('busy','A wiki submission is already in progress.');
         const plan=this.plans.get(planId);if(!plan||reviewDigest!==plan.reviewDigest||reviewDigest!==this.digest(plan))throw new WikiError('review','This contribution changed. Prepare and review it again.');
         if(plan.blockers.length)throw new WikiError('review',plan.blockers.join(' '));
@@ -396,11 +424,16 @@ class WikiClient {
             await this.expectedUser(plan.expectedUser);
             const blueprint=await this.blueprints({force:true});if(blueprint.revision!==plan.blueprintRevision)throw new WikiError('blueprint-changed','The wiki blueprints changed. Prepare a new review.');
             await this.verifyRecoveredLoot(plan);
-            if(!await this.submitPlanAttachment(plan)){plan.status=plan.pages.some(page=>page.status==='applied')?'partial':'needs-attention';await this.persist();return safePlan(plan);}
+            if(beforeWrite)await beforeWrite('start',plan);
+            if(!await this.submitPlanAttachment(plan,{beforeWrite})){plan.status=plan.pages.some(page=>page.status==='applied')?'partial':'needs-attention';await this.persist();return safePlan(plan);}
             for(const page of plan.pages){
                 if(page.status==='applied')continue;
                 await this.expectedUser(plan.expectedUser);
                 const state=await this.page(page.title);
+                // A fresh automatic attempt must never claim an identical page
+                // created by somebody else as its own successful publication.
+                // Explicit manual retries retain uncertain-write reconciliation.
+                if(beforeWrite&&plan.automaticItem&&!state.missing)throw new WikiError('duplicate-review','This item now exists. Review the saved result on the wiki.');
                 // Also handle plans saved before submission normalization was
                 // added, without changing their approved review digest.
                 const afterText=normalizeWikiSubmissionText(page.afterText);
@@ -409,7 +442,8 @@ class WikiClient {
                 const token=await this.csrf(plan.expectedUser);
                 page.status='unknown';page.result={code:'pending-write',message:'Waiting for the wiki to confirm this page.'};await this.persist();
                 try{
-                    const params={action:'edit',title:page.title,text:afterText,summary:'Player-reviewed Eye of Zomm contribution',assert:'user',assertuser:plan.expectedUser.name,token,starttimestamp:page.startTimestamp,watchlist:'preferences',...(page.operation==='create'?{createonly:'1'}:{nocreate:'1',baserevid:String(page.baseRevision)})};
+                    const params={action:'edit',title:page.title,text:afterText,summary:plan.automaticItem?'Eye of Zomm captured item contribution':plan.automaticSource?'Eye of Zomm loot source observation':'Player-reviewed Eye of Zomm contribution',assert:'user',assertuser:plan.expectedUser.name,token,starttimestamp:page.startTimestamp,watchlist:'preferences',...(page.operation==='create'?{createonly:'1'}:{nocreate:'1',baserevid:String(page.baseRevision)})};
+                    if(beforeWrite)await beforeWrite('edit',plan);
                     const result=await this.request(params,{post:true});
                     if(result.edit?.result!=='Success')throw new WikiError(result.edit?.code||'edit-result',result.edit?.info||'The wiki did not confirm this edit. Open the wiki editor to resolve any challenge.');
                     page.status='applied';page.result={revision:result.edit.newrevid||result.edit.oldrevid,pageId:result.edit.pageid,nochange:Boolean(result.edit.nochange)};await this.persist();

@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {contributionReaderMatches} from '../app/contribution-reader.js';
+const now=Date.now(),candidate={kind:'item',name:'Synthetic Blade',title:'Synthetic Blade',status:'needs-review'},capture={owner:'contribution',phase:'running',sessionId:'reader-1',generation:4,source:{id:'window:game'}};
+const observation={kind:'ocr',owner:'contribution',parser:{name:'item-examine'},subject:{kind:'item',name:'Synthetic Blade (Exaltation) +5'},sessionId:'reader-1',capturedAt:new Date(now).toISOString(),input:{captureGeneration:4,sourceId:'window:game'}};
+const options={capture,candidate,startedAt:now-1000,now};
+assert(contributionReaderMatches(observation,options));
+for(const change of [{kind:'manual'},{owner:'character'},{sessionId:'old-reader'},{subject:{kind:'item',name:'Other Blade'}},{parser:{name:'character-stats'}},{capturedAt:new Date(now-2000).toISOString()},{capturedAt:new Date(now+1000).toISOString()},{input:{captureGeneration:3,sourceId:'window:game'}},{input:{captureGeneration:4,sourceId:'screen:other'}}])assert.equal(contributionReaderMatches({...observation,...change},options),false,JSON.stringify(change));
+assert.equal(contributionReaderMatches(observation,{...options,capture:{...capture,phase:'paused'}}),false);
+for(const status of ['submitted','partial','needs-attention'])assert.equal(contributionReaderMatches(observation,{...options,candidate:{...candidate,status}}),false);
+assert.equal(contributionReaderMatches(observation,{...options,candidate:{...candidate,planId:'reviewed-preview'}}),false);
+assert.equal(contributionReaderMatches(observation,{...options,startedAt:now-60000,now:now+31000}),false);
+assert(contributionReaderMatches({...observation,subject:{kind:'item',name:'Wiki Alias'}},{...options,resolveName:name=>name==='Wiki Alias'?'Synthetic Blade':name}));
+console.log('Contribution reader identity, provenance and review guards passed.');

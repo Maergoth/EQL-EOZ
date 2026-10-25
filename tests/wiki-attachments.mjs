@@ -25,6 +25,12 @@ try{
  cancel=true;assert.equal((await host.handle(event,'prepare-attachment',{candidateId:'candidate_01',kind:'item',source:'file'})).cancelled,true);assert.equal(imports,1);
  assert.equal((await host.handle(event,'icon-catalog',{page:0})).action,'icon-catalog');assert.equal(icons,1);
  await host.handle(event,'discard-attachment',{attachmentId:pasted.attachmentId});await assert.rejects(client.attachments.get(pasted.id),/unavailable/);
+ const proof={token:'native-owned-crop'},beforeImports=imports,beforeDialogs=dialogs;let evidenceReads=0;
+ host.onCaptureEvidence=value=>{assert.deepEqual(value,proof);evidenceReads++;return{png};};
+ const captured=await host.handle(event,'prepare-attachment',{candidateId:'candidate_03',kind:'item',source:'capture',captureEvidence:proof});assert(captured.attachmentId);assert.equal(evidenceReads,2,'Native evidence is checked before and after local staging');assert.equal(imports,beforeImports,'A proven live crop does not re-OCR or advance the capture generation');assert.equal(dialogs,beforeDialogs,'Native capture evidence opens no file dialog');
+ await assert.rejects(host.handle(event,'prepare-attachment',{candidateId:'candidate_04',kind:'npc',source:'capture',captureEvidence:proof}),/current item examine/);
+ const beforeRecords=client.attachments.records.size;evidenceReads=0;host.onCaptureEvidence=()=>{if(++evidenceReads>1)throw Error('stale capture evidence');return{png};};
+ await assert.rejects(host.handle(event,'prepare-attachment',{candidateId:'candidate_05',kind:'item',source:'capture',captureEvidence:proof}),/stale capture evidence/);assert.equal(client.attachments.records.size,beforeRecords,'A source change during staging discards the unbound attachment');
  let resolveOld;client.status=()=>new Promise(resolve=>{resolveOld=resolve;});const oldStatus=host.publishStatus();client.status=async()=>({authenticated:false,user:null});await host.logout();resolveOld({authenticated:true,user:{id:99,name:'Stale Account'}});await oldStatus;assert.equal(forwarded.at(-1).authenticated,false);assert(!forwarded.some(value=>value.user?.id===99),'A delayed pre-logout status cannot restore an old observation owner');host.dispose();
  console.log('Wiki attachments: explicit file/clipboard admission, predecode bytes/dimensions, private restart/hash/candidate bounds, capacity, main-frame guard, item-only OCR and discard passed.');
 }finally{assert.equal(path.dirname(stateDir),path.resolve(os.tmpdir()));await fs.rm(stateDir,{recursive:true,force:true});}

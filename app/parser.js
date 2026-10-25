@@ -39,6 +39,24 @@ export function extractItemLinks(text){
     return found.sort((a,b)=>a.index-b.index).filter(link=>{const key=link.name.toLowerCase();if(seen.has(key))return false;seen.add(key);return true;}).slice(0,8).map(link=>link.name);
 }
 
+const CHAT_ITEM_WORDS=new Set(('amulet armor armour axe band belt blade boots bow bracelet bracer bracers breastplate buckler cap cape charm chestplate circlet cloak club coif crown dagger earrings earring eye eyepatch gauntlets gem girdle gloves greaves hammer helm helmet hood jerkin leggings mace mask necklace orb pants pauldrons pendant plate rapier ring robe sandals sash scepter scimitar shield shoes shroud sleeves spear staff stone sword talisman tome tunic vambraces veil vest wand wraps').split(' '));
+function tieredChatItemMention(text){
+    // EQ can write chat links as plain display text. Admit only a named,
+    // tier-decorated name inside an actual quoted chat payload. A whole
+    // payload can be a one-word name; trailing prose needs an equipment-shaped
+    // prefix. These are possible mentions, not proof of an encoded link.
+    const chat=String(text||'').slice(0,16384).match(/^(?:You|[\p{L}][\p{L}'’-]{0,63}) (?:tells? (?:you|the (?:guild|group|raid)|[\p{L}][\p{L}\d_-]{0,40}:\d{1,3})|says?(?: out of character)?|shouts?|auctions?),[ \t]*'([^\r\n]{1,2048})'$/u);
+    if(!chat)return [];
+    const match=chat[1].match(/^(.{1,230}?)[ \t]+\+(10|[0-9])(?:[ \t]+(.*))?$/u);
+    if(!match||/\+\d/.test(match[3]||''))return [];
+    const name=safeItemLinkName(match[1]),words=name?.split(' ')||[],connectors=new Set(['of','the','and','a','an','to','for','in','with','from','at','on']);
+    if(!name||name.length<4||/^(?:Damage Shield|Spell Shield|Armor Class|Attack Speed|Damage Bonus|Haste|Attack|Mana|Endurance|Accuracy|Avoidance)$/i.test(name)||/\b(?:Spell|Buff|Stats?|Level)$/i.test(name))return [];
+    if(!words.length||words.length>10||/^(?:I|You|We|They|This|These|Those|That|My|Your|Our|Need|Want|Looking|Selling|Buying)$/i.test(words[0]))return [];
+    if(!words.every(word=>connectors.has(word)||/^[\p{Lu}][\p{L}\d]*(?:['’-][\p{L}\d]+)*$/u.test(word)))return [];
+    if((match[3]||'').trim()&&(words.length<2||!words.some(word=>CHAT_ITEM_WORDS.has(word.toLowerCase()))))return [];
+    return [`${name} +${match[2]}`];
+}
+
 function trimSentence(text) {
     return normalizeName(text).replace(/[.!]+$/, '').trim();
 }
@@ -518,6 +536,8 @@ export class EQLogParser {
         }
 
         if(itemLinks.length)return this.rememberEvent({type:'item-links',items:itemLinks,evidence:{text:raw.slice(0,6000)}});
+        const itemMentions=tieredChatItemMention(body);
+        if(itemMentions.length)return this.rememberEvent({type:'item-links',items:itemMentions,itemLinkFormat:'plain-tiered-chat',evidence:{text:raw.slice(0,6000),interpretation:'possible-tiered-item-mention'}});
         return null;
     }
 

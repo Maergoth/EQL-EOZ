@@ -88,7 +88,7 @@ export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis
         if (resolved.membership!=='missing' || suppressed || kind==='monster'&&!classifyNpcEvidence(name,resolved).eligible || ignored.has(key) || legacyIgnored.has(`${kind}|${legacyName}`) || seen.has(key)) return null;
         if (current - (cooldowns.get(key) ?? -Infinity) < cooldownMs || pending.size >= MAX_PENDING) return null;
         const id = `wiki-${kind}-${hash(key)}-${++sequence}`;
-        const prompt = { id, kind, name, zone:event.type==='item-link'?'':clean(context.zone || event.zone).slice(0, 160),...(event.type==='item-link'?{purpose:'item-link',hint:'Item linked in chat. Open its examine window to capture it for Contribute.'}:{}),...(event.type==='kill'?{hint:'Saved in Contribute. Record the monster’s spawn /loc there, then review its loot and zone.'}:{}) };
+        const prompt = { id, kind, name, zone:event.type==='item-link'?'':clean(context.zone || event.zone).slice(0, 160),...(event.type==='item-link'?{purpose:'item-link',hint:event.itemLinkFormat==='plain-tiered-chat'?'Possible item mentioned in chat. Open its examine window to capture it for Contribute.':'Item linked in chat. Open its examine window to capture it for Contribute.'}:{}),...(event.type==='kill'?{hint:'Saved in Contribute. Record the monster’s spawn /loc there, then review its loot and zone.'}:{}) };
         pending.set(id, { key, prompt }); remember(seen, key, MAX_SEEN); cooldowns.set(key, current);
         if (cooldowns.size > MAX_SEEN) cooldowns.delete(cooldowns.keys().next().value);
         const failed = () => {

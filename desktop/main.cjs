@@ -16,6 +16,8 @@ const { OverlayHost } = require('./overlay-host.cjs');
 const { safeMapFile } = require('./overlay-map-policy.cjs');
 const { DiscoveryHost } = require('./discovery-host.cjs');
 const { CaptureHost } = require('./capture-host.cjs');
+const { AutomaticLogReader } = require('./automatic-log-reader.cjs');
+const { AutomaticLootSources } = require('./automatic-loot-sources.cjs');
 const { WikiHost } = require('./wiki-host.cjs');
 const { DropObservationHost } = require('./drop-observation-host.cjs');
 const { IconFinderHost } = require('./icon-finder-host.cjs');
@@ -54,6 +56,10 @@ let appUpdater = null;
 let overlayHost = null;
 let discoveryHost = null;
 let captureHost = null;
+let automaticLogReader = null;
+let automaticLootSources = null;
+let automaticCatalog = null;
+let automaticCatalogKey = '';
 let wikiHost = null;
 let observationHost = null;
 let iconFinderHost = null;
@@ -195,6 +201,7 @@ async function readConfig() {
 function updateConfig(values) {
     const operation=configWriteQueue.catch(()=>{}).then(async()=>{
         const config=await readConfig(), next={...config,...values};
+        if(['eqRootPath','logPath','logSelection'].some(key=>Object.hasOwn(values,key)&&config[key]!==next[key]))automaticLogReader?.reset();
         delete next.alwaysOnTop;
         await atomicWriteJson(configPath(),next);
         desktopSettings=windowSettings(next);
@@ -490,10 +497,11 @@ async function performStaticDataPackUpdate(force = false) {
 async function readLogWindow(offsetValue) {
     const logPath = await resolveLogPath();
     if (!logPath || !fs.existsSync(logPath)) {
+        automaticLogReader?.reset();
         return { logPath, logExists: false, startOffset: 0, newOffset: 0, reset: true, text: '' };
     }
 
-    const handle = await fsp.open(logPath, 'r');
+    const handle = await fsp.open(logPath, 'r').catch(error=>{automaticLogReader?.reset();throw error;});
     try {
         const stat = await handle.stat();
         const length = stat.size;
@@ -510,7 +518,7 @@ async function readLogWindow(offsetValue) {
         const buffer = Buffer.alloc(remaining);
         const { bytesRead } = remaining ? await handle.read(buffer, 0, remaining, offset) : { bytesRead: 0 };
 
-        return {
+        const result = {
             logPath,
             logExists: true,
             startOffset,
@@ -519,9 +527,21 @@ async function readLogWindow(offsetValue) {
             reset,
             text: bytesRead ? buffer.subarray(0, bytesRead).toString('utf8') : ''
         };
+        // Only actual configured-file bytes authorize automatic source edits.
+        // Renderer-proposed log observations continue to populate local drafts.
+        await automaticLogReader?.ingest(result).catch(()=>{});
+        return result;
     } finally {
         await handle.close();
     }
+}
+
+async function automaticWikiCatalog(){
+    const file=fs.existsSync(productionPackPath())?productionPackPath():bundledBootstrapPath();
+    const stat=await fsp.stat(file).catch(()=>null),key=stat?`${file}:${stat.mtimeMs}:${stat.size}`:'';
+    if(!key)return {};
+    if(key!==automaticCatalogKey){const loaded=await readJson(file,null);if(!loaded)return {};automaticCatalog=loaded;automaticCatalogKey=key;}
+    return automaticCatalog||{};
 }
 
 async function eqFileManifest() {
@@ -893,7 +913,14 @@ async function bootstrap() {
         stateDir:path.join(userDataDir(),'wiki-contributions'),version:APP_VERSION,
         onStatus:status=>{void observationHost?.accountChanged(status);if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:wiki-state',status);},
         onAttachmentPrepared:({png})=>captureHost.importPng(png,{mode:'contribution'}),
+        onCaptureEvidence:proof=>captureHost.getItemEvidence(proof),
+        onItemCatalog:automaticWikiCatalog,
         onIconRequest:(action,value)=>iconFinderHost.handle(action,value)});
+    const sourceReceipt=result=>{if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:automatic-source-result',{
+        ...result,itemTitle:result.item||'',npcTitle:result.npc||'',zoneTitle:result.zone||''});};
+    automaticLootSources=new AutomaticLootSources({client:wikiHost.client,onResult:sourceReceipt,onDeferred:sourceReceipt});
+    automaticLogReader=new AutomaticLogReader({getPack:automaticWikiCatalog,onReset:()=>automaticLootSources.cancel(),
+        onObservation:record=>automaticLootSources.observe(record)});
     iconFinderHost = new IconFinderHost({session:wikiHost.session,stateDir:path.join(userDataDir(),'wiki-icons'),nativeImage:electron.nativeImage});
     observationHost = new DropObservationHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
         stateDir:path.join(userDataDir(),'drop-observations'),client:wikiHost.client,version:APP_VERSION});
@@ -982,7 +1009,7 @@ app.on('before-quit', event => {
             quitting=false;rendererDrain.resume();
             dialog.showErrorBox('Eye of Zomm could not save pending observations','The app has been left open. Check available disk space and try closing it again.');return;
         }
-        stopDataPackRefresh();overlayHost?.dispose();discoveryHost?.dispose();wikiHost?.dispose();iconFinderHost?.dispose();shareHost?.dispose();inventoryFileHost?.dispose();appUpdater?.shutdown();
+        stopDataPackRefresh();automaticLogReader?.dispose();automaticLootSources?.dispose();overlayHost?.dispose();discoveryHost?.dispose();wikiHost?.dispose();iconFinderHost?.dispose();shareHost?.dispose();inventoryFileHost?.dispose();appUpdater?.shutdown();
         try { server?.close(); } catch {}
         await Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain,characterStorage?.close(),observationHost?.close()]);
         rendererDrain?.dispose();electron.session.defaultSession.flushStorageData();quitReady=true;app.quit();
