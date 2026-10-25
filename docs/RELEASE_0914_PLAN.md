@@ -149,8 +149,9 @@ The final coverage revision adds native zero-request/no-write regressions,
 separate quiet decisions, colon namespace proof, failed-attempt History
 retention and independently validated optional zone-summary retries. The full
 native manual workspace, discovery workspace and overlay suites pass locally.
-Final source/parser/exporter checks and refreshed dataset verification remain
-release gates. Genuine unbounded Research-component groups cannot currently
+Final source/parser/exporter checks, including independent literal-card proof
+review, pass locally. Refreshed dataset and cross-platform release verification
+remain gates. Genuine unbounded Research-component groups cannot currently
 prove finite membership; small global counts can remain incomplete and must
 withhold Unique placement rather than invent a proof. This limitation does not
 invalidate positive coverage or a verified Common lower bound of six.

@@ -21,7 +21,7 @@ const classificationPack=(version,count=6)=>{
     return {...pack(version),meta:{...pack(version).meta,sample:false,wikiEntitiesComplete:true,lootSourceCountsVersion:2,wikiRelationshipCoverageVersion:1},
         wikiEntities:{items:['Synthetic Gear','Statless Shared Material','Synthetic Staff: Water'],npcs:npcNames,titles:['Synthetic Gear','Statless Shared Material','Synthetic Staff: Water',...npcNames]},
         npcs:npcNames.map((name,index)=>({name,wikiTitle:name,zone:index%2?'Second Zone':'Synthetic Zone',aliases:index===0?['Guardian Redirect']:[]})),
-        items:[{name:'Synthetic Gear',wikiTitle:'Synthetic Gear',...counts}],
+        items:[{name:'Synthetic Gear',wikiTitle:'Synthetic Gear',contributionCard:{schemaVersion:1,complete:true,questContext:true},...counts}],
         wikiRelationshipCoverage:{'Statless Shared Material':{schemaVersion:1,kind:'item',wikiTitle:'Statless Shared Material',revisionId:73,state:'broad',complete:false,edges:[{npc:npcNames[0],zone:'',instance:'normal',field:'dropsfrom',precision:'npc',verifiedNpc:true,source:{wikiTitle:'Statless Shared Material',revisionId:73,field:'dropsfrom',section:'',instance:'normal'}}],scopes:[{zone:'',instance:'normal',field:'dropsfrom',state:'broad',reason:'generic-source-group'}],collectionRefs:[]}},
         lootSourceCounts:{'Synthetic Gear':counts,'Statless Shared Material':counts,'Synthetic Staff: Water':{lootSourceCount:2,lootSourceCountComplete:false,lootSourceNpcs:npcNames.slice(0,2)}}};
 };
@@ -225,11 +225,13 @@ test('global loot counts and NPC aliases survive verified installation and nativ
         assert.equal(installed.meta.lootSourceCountsVersion,2);
         assert.deepEqual(installed.lootSourceCounts,value.lootSourceCounts,'Statless/missing-item count index is retained outside the browse-item array');
         assert.deepEqual(installed.wikiRelationshipCoverage,value.wikiRelationshipCoverage,'Statless scoped positive facts and broad capabilities survive verified installation');
+        assert.deepEqual(installed.items[0].contributionCard,value.items[0].contributionCard,'Verified installation retains full-card absence proof without reinterpreting quest context');
         assert.deepEqual(installed.items[0].lootSourceNpcs,value.items[0].lootSourceNpcs);
         assert.equal(installed.items[0].lootSourceCountComplete,true);
         assert.deepEqual(installed.npcs[0].aliases,['Guardian Redirect']);
         const first=await api.automaticWikiCatalog();assert.deepEqual(JSON.parse(JSON.stringify(first.lootSourceCounts)),value.lootSourceCounts,'Native contribution provider sees the full installed pack');
         assert.deepEqual(JSON.parse(JSON.stringify(first.wikiRelationshipCoverage)),value.wikiRelationshipCoverage);
+        assert.deepEqual(JSON.parse(JSON.stringify(first.items[0].contributionCard)),value.items[0].contributionCard);
         const replacement=classificationPack('global-counts-v2',7);await api.cache(replacement,'global-counts-v2');
         const next=await api.automaticWikiCatalog();assert.equal(next.lootSourceCounts['Statless Shared Material'].lootSourceCount,7,'Provider reloads new file generation instead of retaining stale counts');assert.notEqual(first,next);
     });
@@ -240,6 +242,7 @@ test('native offline catalog fallback preserves bundled global count provenance'
     await withRuntime(()=>{throw Error('The offline catalog must not contact the wiki or dataset host');},async api=>{
         const bundled=await api.automaticWikiCatalog();assert.deepEqual(JSON.parse(JSON.stringify(bundled.lootSourceCounts)),value.lootSourceCounts);assert.equal(bundled.meta.lootSourceCountsVersion,2);assert.deepEqual(Array.from(bundled.npcs[0].aliases),['Guardian Redirect']);assert.equal(api.calls.length,0);
         assert.deepEqual(JSON.parse(JSON.stringify(bundled.wikiRelationshipCoverage)),value.wikiRelationshipCoverage);
+        assert.deepEqual(JSON.parse(JSON.stringify(bundled.items[0].contributionCard)),value.items[0].contributionCard);
     },{bundledPack:value});
 });
 
@@ -442,6 +445,7 @@ test('bootstrap packaging preserves complete and incomplete global count records
     assert.equal(result.code,0,result.output);const bundled=JSON.parse(result.bundled);
     assert.equal(bundled.meta.lootSourceCountsVersion,2);assert.deepEqual(bundled.lootSourceCounts,value.lootSourceCounts);assert.deepEqual(bundled.items[0].lootSourceNpcs,value.items[0].lootSourceNpcs);assert.deepEqual(bundled.npcs[0].aliases,['Guardian Redirect']);assert.equal(bundled.meta.bundledAtBuild,true);
     assert.equal(bundled.meta.wikiRelationshipCoverageVersion,1);assert.deepEqual(bundled.wikiRelationshipCoverage,value.wikiRelationshipCoverage);
+    assert.deepEqual(bundled.items[0].contributionCard,value.items[0].contributionCard);
 });
 
 test('renderer fallback retains the whole producer count index for contribution previews',async()=>{
@@ -450,6 +454,7 @@ test('renderer fallback retains the whole producer count index for contribution 
     vm.runInContext(rendererSource.slice(start,end),context);await vm.runInContext('loadPack()',context);
     assert.deepEqual(context.pack.lootSourceCounts,value.lootSourceCounts);assert.equal(context.pack.meta.lootSourceCountsVersion,2);assert.deepEqual(context.pack.npcs[0].aliases,['Guardian Redirect']);assert.equal(calls.length,2);
     assert.deepEqual(context.pack.wikiRelationshipCoverage,value.wikiRelationshipCoverage);
+    assert.deepEqual(context.pack.items[0].contributionCard,value.items[0].contributionCard);
 });
 
 test('the renderer skips primary caches with missing or nonnumeric schema versions', async () => {

@@ -14,6 +14,8 @@ assert(collector.includes("require_once __DIR__ . '/../extensions/DynamicZoneLis
 assert(parser.includes('final class EqlNpcLootWikitext'), 'The matching source parser is mirrored.');
 assert(parser.includes('static function contributionCoverage'), 'Producer and parser share affected-field coverage.');
 assert(parser.includes('static function authoredPageKind'), 'Actual entity identity is independent from field capability.');
+assert(parser.includes('static function itemContributionCard'), 'Quiet-card completeness has a shared pure authored-source proof.');
+assert(source.includes("'contributionCard' => $contributionCard"), 'Every rich item carries source proof, including incomplete cards.');
 assert(source.includes("'lootSourceCountsVersion' => 2"), 'The producer marks verified real-NPC count metadata.');
 assert(source.includes("'lootSourceCounts' => (object)$lootSourceCounts"), 'The catalog includes statless item counts, preserving an empty JSON object.');
 assert(source.includes("'lootSetsVersion' => 1"), 'The producer versions explicit set membership.');
@@ -33,6 +35,10 @@ assert.equal(schema.properties.wikiRelationshipCoverage.additionalProperties.$re
 assert(source.includes("'wikiRelationshipCoverage' => (object)$this->wikiRelationshipCoverage"), 'Statless affected-field facts remain in the top-level map.');
 assert(!source.includes('automaticContributionPolicies'),'Whole-page lexical prototypes are absent from the final producer.');
 assert.equal(schema.properties.lootSets.additionalProperties.$ref, '#/$defs/lootSet');
+assert.equal(schema.properties.items.items.properties.contributionCard.$ref, '#/$defs/contributionCard');
+assert.deepEqual(schema.$defs.contributionCard.required, ['schemaVersion', 'complete', 'questContext']);
+assert.equal(schema.$defs.contributionCard.properties.schemaVersion.const, 1);
+assert.equal(schema.$defs.contributionCard.additionalProperties, false);
 assert.deepEqual(schema.$defs.lootSet.required, ['items', 'complete']);
 assert.equal(schema.$defs.lootSet.properties.items.maxItems, 1000);
 for (const field of schema.$defs.lootSourceCount.required) {
@@ -157,7 +163,10 @@ echo json_encode(['locations'=>$out, 'five'=>$five, 'six'=>$six, 'incomplete'=>$
     'legacyTarget'=>EqlNpcLootWikitext::globalItemTemplateTarget($legacyHover),
     'legacyTrailing'=>EqlNpcLootWikitext::globalItemTemplateTarget(str_replace('</onlyinclude>', '{{Unknown}}</onlyinclude>', $legacyHover)),
     'legacyDynamic'=>EqlNpcLootWikitext::globalItemTemplateTarget(str_replace('AC: 2', '{{{value|AC: 2}}}', $legacyHover)),
-    'candidateMemo'=>$candidateIdentity->memo()]);
+    'candidateMemo'=>$candidateIdentity->memo(),
+    'literalCard'=>EqlNpcLootWikitext::itemContributionCard('{{Itempage|itemname=Basic card|statsblock=AC: 2<br>WT: 0.1|relatedquests=* [[Synthetic quest]]|foraged=* [[Synthetic Vale]]|soldby={{ItemWhereTable|{{ItemWhereRow|[[Synthetic Vale]]|[[Merchant]]}}}}}}'),
+    'unknownCard'=>EqlNpcLootWikitext::itemContributionCard('{{Itempage|itemname=Basic card|statsblock=AC: 2|custom_modifier=Hidden}}'),
+    'truncatedCard'=>EqlNpcLootWikitext::itemContributionCard('{{Itempage|itemname=Basic card|statsblock='.implode('<br>',array_fill(0,16,'WT: 0.1')).'<br>Effect: Hidden}}')]);
 `;
 const result = spawnSync('php', [], {
     input:php,
@@ -198,4 +207,7 @@ assert.deepEqual(actual.ground, countRecord(['Ground Spawn Keeper']), 'Canonical
 assert.deepEqual(actual.overflow, countRecord(['Guardian 1'], false), 'Result budgets cannot prove a small complete count.');
 assert.deepEqual(actual.missing, countRecord(['Guardian 1']), 'NPC-authored statless and missing materials receive catalog counts.');
 assert.deepEqual(actual.candidateMemo, {'Guardian 1':{title:'Guardian 1',pageId:1,public:true,complete:true}}, 'A categorized redirect never memoizes its own page ID; the public canonical candidate does.');
+assert.deepEqual(actual.literalCard, {schemaVersion:1, complete:true, questContext:true}, 'Known acquisition and quest-link context is represented without inventing importance.');
+assert.equal(actual.unknownCard.complete, false, 'Omitted auxiliary modifiers cannot authorize quiet decisions.');
+assert.equal(actual.truncatedCard.complete, false, 'Effects beyond the sixteen-line rich bound cannot hide behind complete proof.');
 console.log('Exporter schema, location and mirrored global loot-count fixtures passed.');

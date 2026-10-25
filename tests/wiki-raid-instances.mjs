@@ -110,9 +110,10 @@ define('NS_MAIN', 0);
 $fixtures = json_decode(getenv('EOZ_RAID_FIXTURES'), true);
 $source = file_get_contents(getenv('EOZ_EXPORTER_SOURCE'));
 $source = str_replace("require_once __DIR__ . '/Maintenance.php';", '', $source);
-// This harness isolates the pre-existing raid/source methods; the separate
-// exporter check exercises the mirrored global-count modules themselves.
+// This harness isolates raid/source methods, including the shared pure rich
+// card proof; the separate exporter check covers global-count modules.
 $source = str_replace("require_once __DIR__ . '/ItemLootSourceCounts.php';", '', $source);
+eval(substr(file_get_contents(getenv('EOZ_LOOT_PARSER')), 5));
 $source = preg_replace('/^use [^;]+;\\r?$/m', '', $source);
 $source = str_replace("__DIR__ . '/zone-catalog.json'", "getenv('EOZ_CATALOG_PATH')", $source);
 $source = preg_replace('/\\$maintClass = BuildEyeOfZommPack::class;[\\s\\S]*$/', '', $source);
@@ -181,7 +182,7 @@ $commentRows = $call('parseDropSourceLines', "<!-- Hidden structured row\\n{{Ite
 echo json_encode(['npcs'=>$npcs,'items'=>$items,'bounded'=>$call('parseDropSources', $many),'wikiEntities'=>$call('wikiEntityIndex'),'commentRows'=>$commentRows,'lootCounts'=>$firstLootCounts,'repeatLootCounts'=>$repeatLootCounts]);
 `;
 const result = spawnSync('php', [], { input:php, encoding:'utf8', env:{ ...process.env,
-    EOZ_EXPORTER_SOURCE:sourcePath, EOZ_CATALOG_PATH:catalogPath, EOZ_RAID_FIXTURES:JSON.stringify(fixtures) } });
+    EOZ_EXPORTER_SOURCE:sourcePath, EOZ_LOOT_PARSER:fileURLToPath(new URL('../server/NpcLootWikitext.php', import.meta.url)), EOZ_CATALOG_PATH:catalogPath, EOZ_RAID_FIXTURES:JSON.stringify(fixtures) } });
 if (result.error?.code === 'ENOENT') throw new Error('Raid exporter checks require PHP.');
 assert.equal(result.status, 0, result.stderr || 'Actual exporter raid fixture harness must complete.');
 const actual = JSON.parse(result.stdout);
@@ -190,6 +191,7 @@ const records = name => actual.npcs.filter(record => record.name === name);
 const sources = name => actual.items.find(record => record.name === name).dropSources;
 const raid = name => records(name).filter(record => record.raidInstance);
 const byTitle = title => actual.items.find(record => record.wikiTitle === title);
+assert.deepEqual(byTitle('Synthetic canonical helm').contributionCard,{schemaVersion:1,complete:true,questContext:false},'Actual mirrored exporter includes complete literal rich-card metadata proof');
 assert(byTitle('Synthetic canonical helm').dropSources.some(source=>source.name==='Synthetic loot priest'),'NPC known_loot joins the canonical item page even when its display name differs');
 assert.equal(byTitle('Synthetic display collision').dropSources.length,0,'A display-name collision must not redirect another page’s loot');
 assert.equal(byTitle('Synthetic case charm').dropSources[0].name,'Synthetic case looter','First-letter and underscore normalization resolves the exact canonical item title');

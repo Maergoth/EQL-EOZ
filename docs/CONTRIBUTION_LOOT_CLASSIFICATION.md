@@ -56,6 +56,18 @@ Missing metadata, meaningful statistics, effects, instrument properties and
 unrecognized lines cannot prove this policy. The source count is evaluated before
 adding the newly observed monster. No item or monster names are hardcoded.
 
+Quiet material/basic-card decisions additionally require the producer's rich
+`contributionCard: {schemaVersion: 1, complete, questContext}` proof. Completeness
+means one literal public Itempage with unique static fields, known card and
+acquisition fields, literal stats and every nonempty stat line present within
+the sixteen-line rich export. Unknown auxiliary modifiers, dynamic/protected
+stats, unknown context templates, variants and truncated lines withhold proof.
+The producer compares the exact exported lines and current anonymous source;
+old packs without proof remain reviewable. Standard merchant, forage, recipe
+and related-quest fields are context. A quest link sets `questContext` without
+declaring an important reward; binding, effects and special modifiers still
+protect important items independently.
+
 `app/automatic-source-policy.js` applies this narrow rule to automatic item,
 monster and zone source-gap proposals. The native automatic publisher checks the
 same policy before account or live page resolution, so an ordinary common

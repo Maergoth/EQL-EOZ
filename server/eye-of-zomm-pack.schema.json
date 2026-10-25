@@ -195,6 +195,9 @@
               "type": "string"
             }
           },
+          "contributionCard": {
+            "$ref": "#/$defs/contributionCard"
+          },
           "notes": {
             "type": "string"
           },
@@ -269,6 +272,17 @@
     }
   },
   "$defs": {
+    "contributionCard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "schemaVersion", "complete", "questContext" ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "complete": { "type": "boolean" },
+        "questContext": { "type": "boolean" }
+      },
+      "description": "Current public authored Itempage metadata is literal, known and fully represented by the bounded rich card. Quest links are context, not proof of importance. Missing or incomplete proof cannot authorize a quiet routine decision."
+    },
     "lootSet": {
       "type": "object",
       "required": [

@@ -1,8 +1,8 @@
 # Automatic contribution coverage
 
-Status: local implementation and source/native validation completed after the
-October 25, 2026 research review. Staged promotion and the independently rebuilt
-dataset remain release gates.
+Status: local implementation, source/native validation and the final independent
+card-proof review completed after the October 25, 2026 research review. Staged
+promotion and the independently rebuilt dataset remain release gates.
 
 ## Purpose
 
@@ -94,6 +94,16 @@ qualifier/template remains reviewable, and a live page already fetched must
 still pass the card check. Recognized aggregate source prose includes the
 observed "common drop from low-level humanoids" pattern; it never creates
 individual monster identities or drop edges.
+
+Quiet material/basic decisions additionally require producer-owned
+`contributionCard` version-1 completeness proof. A missing auxiliary field in a
+rich record is not proof that the source lacked it. The producer checks the
+original literal card, duplicate/unknown fields, supported context wrappers and
+display-line truncation; unsupported metadata withholds quiet eligibility.
+Ordinary related-quest lists, vendors, recipes and foraging are acquisition
+context, not importance by themselves. Explicit role/modifier fields and power
+signals still prevent suppression. A current page already fetched must satisfy
+the same card constraints, so cached and live paths cannot silently disagree.
 
 Unknown monsters remain discoveries even when they drop an ordinary material.
 Ask the player whether the monster is Notable and retain its spawn review. A
@@ -189,6 +199,15 @@ there were no unexplained misses. Native publisher regressions produce zero
 requests for cached positives and zero writes or Published receipts for live
 either-side/set coverage. These are read-only dataset checks and isolated
 synthetic publication fixtures, not live article edits.
+
+The final independent card review checked eleven current public card projections,
+five cached/live policy examples, seventeen adversarial mutations, four invalid
+proof forms and manual contribution availability. Rusty Dagger, Rusty Spear and
+Cloth Cap were quiet in the same broad scope on both paths; Shattered Emerald of
+Corruption and Handmaiden's Handwrap stayed reviewable. Unknown fields, dynamic
+expansions, case-distinct MediaWiki names, duplicate fields, hidden markup and
+an effect beyond the exported line limit could not borrow a complete proof.
+The complete final source suite passed with the reviewed producer mirrors.
 
 Required regressions include both authored directions, zero-HTTP cached positives,
 stale snapshot/live positives, finite sets and pools, conditional collections,
