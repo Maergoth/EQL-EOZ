@@ -1,5 +1,11 @@
 # Eye of Zomm — Product and UX Vision
 
+0.9.11 adds gentle automatic reading while Contribute is open, fresh matching
+item proposals and frame-bound screenshot/icon assistance. Tier-decorated plain
+chat mentions work when the client strips link codes. Manual edits, Character
+ownership and reviewed wiki publication remain protected. See
+[the follow-up and release record](CHAT_CAPTURE_FOLLOWUP_PLAN.md).
+
 0.9.10 makes gently dragged overlays detach immediately and dock only on
 release, uses shared wiki-style item cards throughout, and makes contributions
 Preview → Publish with clear destinations and saved-page links. Accepted chat

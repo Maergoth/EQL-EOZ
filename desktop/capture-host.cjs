@@ -11,6 +11,7 @@ const CHANNEL = 'eye-of-zomm:capture', SOURCE_CHANNEL = 'eye-of-zomm:capture-sou
 const MODES = new Set(['contribution','character']);
 const FRAME_QUEUE_LIMIT=12,FRAME_QUEUE_BYTES=48*1024*1024,FRAME_QUEUE_AGE=15000,OCR_INTERVAL=250,SCREEN_DEDUP_MS=3000;
 const ITEM_QUEUE_AGE=60000;
+const ITEM_EVIDENCE_TTL=30000,ITEM_EVIDENCE_LIMIT=6,ITEM_EVIDENCE_BYTES=16*1024*1024;
 const clean = (value, length = 240) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,length);
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const isOwnWindow = name => /^Eye of Zomm|^EQLWiki - Eye of Zomm/i.test(name);
@@ -43,6 +44,7 @@ class CaptureHost {
         this.captureDiagnostics={accepted:0,visualCandidates:0,emptyReads:0,completedReads:0,semanticDuplicates:0,rejections:{},sourceDropped:0,sceneReplacements:0,sceneCopies:0,lastEncodeMs:null,lastSourceQueueMs:null,lastTransportMs:null,lastSubmissionMs:null,lastQueueMs:null,lastReadMs:null,lastSelection:null};
         this.processing = null; this.skippedFrames = 0; this.lastObservationAt = null; this.disposed = false;
         this.contributionResume = null; this.hold = false; this.sequence = 0; this.seen = new Map();
+        this.itemEvidenceFrames=new Map();
         this.region=null;this.referenceSize=null;this.sourceSize=null;this.calibrationWarning=null;
         this.readWarning=null;this.frameWarning=null;this.readErrors=0;this.nextReadAt=0;
         this.parseModule = import(pathToFileURL(path.join(__dirname,'..','app','screen-read-parser.js')).href);
@@ -86,9 +88,10 @@ class CaptureHost {
         if (action==='pause') return this.pause();
         if (action==='resume') return this.resume();
         if (action==='read') return this.journal.read(value);
-        if (action==='clear-history') { await this.journal.clear(); return this.getStatus(); }
+        if (action==='clear-history') { this.itemEvidenceFrames.clear();await this.journal.clear(); return this.getStatus(); }
         if (action==='import-image') return this.importImage(value);
         if (action==='preview') return this.preview();
+        if (action==='item-evidence') return this.itemEvidence(value);
         if (action==='set-region') return this.setRegion(value);
         if (action==='observe-log') return this.ingestLogObservation(value?.event,value?.context);
         throw new Error('Unknown screen-reading action.');
@@ -108,7 +111,7 @@ class CaptureHost {
         if (this.processing) await this.processing.catch(()=>{});
     }
     clearPending(){this.pending=[];this.queuedBytes=0;if(this.readDelay){clearTimeout(this.readDelay.timer);this.readDelay.resolve();this.readDelay=null;}}
-    advanceGeneration(at=this.now()){this.generation++;this.generationStartedAt=at;this.lastReadAt=null;this.lastReadItemCount=null;this.priorityReads=0;}
+    advanceGeneration(at=this.now()){this.generation++;this.generationStartedAt=at;this.lastReadAt=null;this.lastReadItemCount=null;this.priorityReads=0;this.itemEvidenceFrames.clear();}
     recentlySeen(key){return this.seen.has(key)&&this.now()-this.seen.get(key)<SCREEN_DEDUP_MS;}
     discardQueued(index=0){const [frame]=this.pending.splice(index,1);if(frame)this.queuedBytes-=frame.png.length;return frame;}
     rejectFrame(reason){this.captureDiagnostics.rejections[reason]=(this.captureDiagnostics.rejections[reason]||0)+1;}
@@ -241,6 +244,46 @@ class CaptureHost {
         const thumbnail=scale===1?image:image.resize({width:Math.max(1,Math.round(sourceSize.width*scale)),height:Math.max(1,Math.round(sourceSize.height*scale)),quality:'best'});
         return {dataUrl:thumbnail.toDataURL(),sourceSize,sourceId:this.source.id,owner:this.owner,sessionId:this.sessionId,region:this.region,referenceSize:this.referenceSize};
     }
+    pruneItemEvidence(){
+        for(const [token,entry] of this.itemEvidenceFrames)if(this.now()-Date.parse(entry.proof.capturedAt)>ITEM_EVIDENCE_TTL)this.itemEvidenceFrames.delete(token);
+    }
+    prepareItemEvidence(observation,context,id){
+        const {frame,image,input,result}=context||{};
+        if(observation.kind!=='ocr'||observation.owner!=='contribution'||observation.subject?.kind!=='item'||observation.parser?.name!=='item-examine'||!frame?.region||frame.kind!=='visual-item'||frame.configuredRegion)return null;
+        if(frame.owner!==this.owner||frame.sessionId!==this.sessionId||frame.generation!==this.generation||frame.sourceId!==this.source?.id||this.phase!=='running'||this.hold||this.now()-frame.capturedAt>ITEM_EVIDENCE_TTL)return null;
+        const crop=input?.region,size=frame.size;
+        if(!crop||!size||!['x','y','width','height'].every(key=>Number.isSafeInteger(crop[key]))||crop.x<0||crop.y<0||crop.width<32||crop.height<32||crop.x+crop.width>size.width||crop.y+crop.height>size.height||crop.width*crop.height>3*1024*1024||crop.x===0&&crop.y===0&&crop.width===size.width&&crop.height===size.height)return null;
+        // Only the detected item's exact visual ROI is retained. A configured
+        // rectangle may include unrelated UI despite parsing just one item.
+        // Scenes, calibration rectangles and ambiguous reads are never attached.
+        const cropped=image.crop(crop),png=cropped.toPNG();if(cropped.isEmpty()||png.length>8*1024*1024)return null;
+        const proof={token:crypto.randomBytes(24).toString('hex'),observationId:id,frameId:frame.hash,sessionId:frame.sessionId,generation:frame.generation,sourceId:frame.sourceId,capturedAt:observation.capturedAt};
+        let iconDataUrl;
+        // Default Modern hover panes leave a distinct icon cell to the left of
+        // aligned Class/Race labels. Other layouts retain manual icon paste.
+        if(frame.kind==='visual-item'&&Number.isFinite(input.scale)&&input.scale>0){
+            const words=Array.isArray(result?.words)?result.words:[],classWord=words.find(word=>/^class:?$/i.test(String(word.text||'').trim())&&word.bbox),box=classWord?.bbox;
+            const race=box&&words.find(word=>/^race:?$/i.test(String(word.text||'').trim())&&word.bbox&&Math.abs(word.bbox.x0-box.x0)<(box.y1-box.y0)*1.5&&word.bbox.y0>box.y0&&word.bbox.y0-box.y0<(box.y1-box.y0)*4);
+            const font=box?(box.y1-box.y0)/input.scale:0,left=box?box.x0/input.scale:0,top=box?box.y0/input.scale:0;
+            if(race&&font>=6&&font<=36&&left>=font*3.5&&left<=font*9&&top>=font*2&&top<=font*7){
+                const inset=Math.max(2,Math.floor(font*.5)),edge=Math.floor(left-font*1.5);
+                if(edge>=24&&edge<=128&&inset+edge<crop.width&&inset+edge<crop.height){
+                    const icon=cropped.crop({x:inset,y:inset,width:edge,height:edge}),pixels=icon.toBitmap?.({scaleFactor:1});let colored=0;
+                    if(pixels)for(let index=0;index<pixels.length;index+=4)if(Math.max(pixels[index],pixels[index+1],pixels[index+2])-Math.min(pixels[index],pixels[index+1],pixels[index+2])>30)colored++;
+                    if(colored>=Math.max(10,edge*edge*.01)){const bytes=icon.toPNG();if(bytes.length<=1024*1024)iconDataUrl='data:image/png;base64,'+bytes.toString('base64');}
+                }
+            }
+        }
+        const nativeObservation=JSON.parse(JSON.stringify({...observation,id})),bytes=png.length+(iconDataUrl?.length||0)+Buffer.byteLength(JSON.stringify(nativeObservation));
+        this.pruneItemEvidence();while(this.itemEvidenceFrames.size>=ITEM_EVIDENCE_LIMIT||[...this.itemEvidenceFrames.values()].reduce((sum,entry)=>sum+entry.bytes,0)+bytes>ITEM_EVIDENCE_BYTES)this.itemEvidenceFrames.delete(this.itemEvidenceFrames.keys().next().value);
+        this.itemEvidenceFrames.set(proof.token,{proof,observation:nativeObservation,png,bytes,width:crop.width,height:crop.height,...(iconDataUrl?{iconDataUrl}:{})});return proof;
+    }
+    getItemEvidence(proof){
+        this.pruneItemEvidence();const entry=proof&&this.itemEvidenceFrames.get(proof.token),keys=['token','observationId','frameId','sessionId','generation','sourceId','capturedAt'];
+        if(this.disposed||this.phase!=='running'||this.hold||this.owner!=='contribution'||!entry||keys.some(key=>entry.proof[key]!==proof[key])||entry.proof.generation!==this.generation||entry.proof.sessionId!==this.sessionId||entry.proof.sourceId!==this.source?.id)throw Error('This item image is no longer current. Keep its examine window visible for a fresh reading, or paste a screenshot.');
+        return {...entry,observation:JSON.parse(JSON.stringify(entry.observation)),proof:{...entry.proof},png:Buffer.from(entry.png)};
+    }
+    itemEvidence(proof){const entry=this.getItemEvidence(proof);return{proof:entry.proof,dataUrl:'data:image/png;base64,'+entry.png.toString('base64'),width:entry.width,height:entry.height,...(entry.iconDataUrl?{iconDataUrl:entry.iconDataUrl}:{})};}
     async setRegion({region=null,referenceSize=null,sourceId,sessionId}={}) {
         if(this.disposed||this.phase!=='running'||this.hold||!this.lastFrame||sourceId!==this.source?.id||sessionId!==this.sessionId)throw new Error('Capture changed. Open a fresh calibration preview.');
         const selection=normalizeCaptureRegion(region,referenceSize);
@@ -301,7 +344,7 @@ class CaptureHost {
         }
         while(this.pending.length>=FRAME_QUEUE_LIMIT||this.queuedBytes+png.length>FRAME_QUEUE_BYTES){const scene=this.pending.findIndex(frame=>frame.kind==='scene');this.discardQueued(scene<0?0:scene);this.noteOverflow('capacity');}
         const selection=this.region?{region:{...this.region},referenceSize:{...this.referenceSize}}:automatic;
-        const frame = {...base,key,kind,priority:kind==='visual-item'||kind==='configured',
+        const frame = {...base,key,kind,priority:kind==='visual-item'||kind==='configured',configuredRegion:Boolean(this.region),
             region:selection?.region||null,referenceSize:selection?.referenceSize||null};
         const scene=this.pending.findIndex(frame=>frame.kind==='scene');this.pending.splice(kind==='scene'||scene<0?this.pending.length:scene,0,frame);this.queuedBytes+=png.length;
         this.captureDiagnostics.accepted++;if(kind==='visual-item')this.captureDiagnostics.visualCandidates++;
@@ -336,7 +379,8 @@ class CaptureHost {
                 const {parseScreenRead} = await this.parseModule;
                 const observations = parseScreenRead({...read.result,owner:frame.owner,sessionId:frame.sessionId,
                     capturedAt:new Date(frame.capturedAt).toISOString(),input:{...read.input,frameId:frame.hash,captureGeneration:frame.generation,sourceId:frame.sourceId,...(frame.kind!=='legacy'?{captureSelection:this.region?'configured':frame.kind}: {})}});
-                for (const observation of observations) await this.saveObservation(observation,frame.generation);
+                const evidenceContext=observations.length===1&&observations[0].subject?.kind==='item'?{frame,image,input:read.input,result:read.result}:null;
+                for (const observation of observations) await this.saveObservation(observation,frame.generation,evidenceContext);
                 if(!isCurrent())continue;
                 this.lastReadAt=this.now();this.lastReadItemCount=observations.filter(observation=>observation.subject?.kind==='item').length;
                 this.priorityReads=frame.priority?this.priorityReads+1:0;
@@ -356,14 +400,18 @@ class CaptureHost {
         }
     }
     remember(key) { this.seen.set(key,this.now());if(this.seen.size>2000)this.seen.delete(this.seen.keys().next().value); }
-    async saveObservation(observation,generation=this.generation) {
+    async saveObservation(observation,generation=this.generation,evidenceContext=null) {
         const values=(observation.fields||[]).map(field=>[field.key,field.value]).sort((a,b)=>a[0].localeCompare(b[0]));
         const semantic = JSON.stringify([observation.owner,observation.sessionId,observation.subject,values,observation.relations||[],
             observation.kind==='game-log'?[observation.input?.logId,observation.input?.cursor,observation.capturedAt]:null]);
         const key=digest(semantic);if(observation.kind!=='manual'&&(observation.kind==='game-log'?this.seen.has(key):this.recentlySeen(key))){this.captureDiagnostics.semanticDuplicates++;return null;}
-        if(generation!==this.generation || this.disposed)return null;
-        const record=await this.journal.append({...observation,id:crypto.randomUUID(),dedupKey:key});
-        if(generation!==this.generation || this.disposed)return null;
+        if(observation.kind!=='game-log'&&generation!==this.generation || this.disposed)return null;
+        const id=crypto.randomUUID();let proof;
+        try{proof=this.prepareItemEvidence(observation,evidenceContext,id);}catch{/* OCR fields remain useful when a bounded image crop is unavailable. */}
+        let record;
+        try{record=await this.journal.append({...observation,...(proof?{input:{...observation.input,captureEvidence:proof}}:{}),id,dedupKey:key});}
+        catch(error){if(proof)this.itemEvidenceFrames.delete(proof.token);throw error;}
+        if(observation.kind!=='game-log'&&generation!==this.generation || this.disposed)return null;
         this.remember(key);this.lastObservationAt=record.recordedAt;
         const main=this.getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('eye-of-zomm:capture-observation',record);
         try{this.onObservation(record);}catch{}

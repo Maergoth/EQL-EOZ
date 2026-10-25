@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.11 - Automatic contribution reading and chat item detection
+
+- Start gentle local screen reading when Contribute opens, using the configured or unique game window or offering an inline source choice. Prompt users to open the selected item and keep Pause/Retry available. Preserve Character and preexisting readers; stop only the reader started for this view when it is no longer needed.
+- Fill unedited item proposals from fresh matching examine readings. Stage a reliable cropped screenshot from the exact accepted frame and suggest local icon matches when a Default Modern icon crop is available. Preserve manual fields and existing images.
+- Recognize conservative tier-decorated item mentions when EverQuest strips chat link codes from logs. Label these as possible items and retain catalog checks, duplicate suppression and local-only evidence.
+- Automatically create eligible new item pages from fresh matching native examine evidence after live exact, redirect and near-duplicate checks. Retain account attribution, create-only/retry guards and tier-zero notes; ambiguous readings and unrelated edits stay in the normal review. Link successful creations to their pages.
+- Append logged drop sources automatically while preserving prior item/mob/zone sources, stats and prose. Resolve canonical/redirect/unique confident fuzzy titles; correlate inferred loot with a witnessed recent same-zone kill. Ambiguous/conflicting updates remain for review. Actual native log reads authorize writes; initial replay and renderer-proposed records cannot. Relation-specific receipts allow later mobs to add sources.
+
+See [the implementation and release record](docs/CHAT_CAPTURE_FOLLOWUP_PLAN.md).
+
 ## 0.9.10 - Reliable overlays and streamlined wiki contributions
 
 - Gently drag a snapped overlay to detach it without resizing it or moving its neighbors. Dock only when released within eight pixels of a new panel; the detached group cannot pull it back during that drag. Resize grips remain clear of drag surfaces.

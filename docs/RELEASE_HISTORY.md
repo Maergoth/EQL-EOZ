@@ -1,5 +1,12 @@
 # Browsable release history
 
+0.9.11 archives one visually reviewed actual Chromium capture of automatic
+Contribute reading: the selected-item prompt, one-second status, Pause control,
+staged synthetic screenshot and adjacent icon section. It uses isolated fake
+source/OCR/wiki APIs, Arial13px and a purple placeholder image. The shown icon
+ID is manually entered to verify preservation. No game/player pixels or
+production requests appear; older images and hashes remain unchanged.
+
 0.9.10 archives four fresh captures: actual Electron main/native Intel shared
 wiki Itembox at Calibri 17px, plus actual integrated Chromium screenshot/inline
 icon evidence and class/slot multiselects. The form uses synthetic records and

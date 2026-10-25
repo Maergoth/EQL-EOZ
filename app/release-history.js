@@ -2,6 +2,28 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "0.9.11",
+  "title": "Automatic contribution reading and chat item detection",
+  "changes": [
+    "Start gentle local item reading when Contribute opens, with a selected-item examine prompt, inline source choice and Pause/Retry. Preserve Character and preexisting readers.",
+    "Automatically create eligible new item pages after fresh examine proof and live duplicate checks. Append new loot sources from actual native logs, preserving prior sources and using canonical or unique confident fuzzy page matches. Keep ambiguous cases for review.",
+    "Fill unedited proposals from fresh matching examine text. Stage a detected item screenshot from its exact accepted frame and offer local icon matches when available. Manual fields and existing images stay intact.",
+    "Recognize conservative tier-decorated chat mentions when the game strips link codes. Keep duplicate suppression and label these as possible items without inventing loot sources."
+  ],
+  "steps": [
+    {
+      "title": "Open Contribute and examine the selected item",
+      "image": "0.9.11/contribute-auto",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Contribute starts reading a safe game window about once per second, or offers a source choice. Open the selected item’s complete examine window. Fresh matching text fills proposals; detected item crops can stage a screenshot and suggest icon matches. Pause in place. Eligible new items publish after live duplicate checks; ambiguous readings keep the review flow. Fresh loot logs can append sources while preserving previous drops.",
+      "alt": "Contribute editor with a selected synthetic item, active one-second reader, named examine prompt, Pause control and a staged synthetic screenshot beside the icon field.",
+      "caption": "Actual Chromium contribution component with synthetic sources, item text and purple placeholder image, isolated storage/APIs and Arial13px. The icon ID shown was manually entered to verify edit preservation. No game/player pixels or production wiki requests.",
+      "imageSha256": "aafc551677d9142fd9e06efafe31fe8728ba207b84702b90a2063d2487adf5a6"
+    }
+  ]
+},
+{
   "version": "0.9.10",
   "title": "Reliable overlays and streamlined wiki contributions",
   "changes": [

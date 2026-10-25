@@ -1,4 +1,5 @@
-// Log facts become reviewable suggestions, never an inferred spawn or wiki edit.
+// Private log facts feed local proposals. Automatic publication is authorized
+// separately by the native actual-log witness and its append-only write gate.
 import { createWikiResolver, normalizeWikiIdentity, itemBaseIdentity, itemExaltationBaseIdentity } from './wiki-identity.js';
 
 export const CONTRIBUTION_QUEUE_KEY = 'eql-eye-of-zomm-contributions-v1';

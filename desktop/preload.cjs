@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('eyeOfZommCapture', {
     observeLog:value=>ipcRenderer.invoke('eye-of-zomm:capture','observe-log',value),
     importImage:value=>ipcRenderer.invoke('eye-of-zomm:capture','import-image',value),
     preview:()=>ipcRenderer.invoke('eye-of-zomm:capture','preview'),
+    itemEvidence:value=>ipcRenderer.invoke('eye-of-zomm:capture','item-evidence',value),
     setRegion:value=>ipcRenderer.invoke('eye-of-zomm:capture','set-region',value),
     onStatus:callback=>subscribe('eye-of-zomm:capture-status',callback),
     onObservation:callback=>subscribe('eye-of-zomm:capture-observation',callback)
@@ -69,6 +70,9 @@ contextBridge.exposeInMainWorld('eyeOfZommObservations',{
 });
 contextBridge.exposeInMainWorld('eyeOfZommWiki', {
     prepareAttachment:value=>ipcRenderer.invoke('eye-of-zomm:wiki','prepare-attachment',value),
+    prepareCapturedItem:value=>ipcRenderer.invoke('eye-of-zomm:wiki','prepare-captured-item',value),
+    submitCapturedItem:value=>ipcRenderer.invoke('eye-of-zomm:wiki','submit-captured-item',value),
+    cancelCapturedItem:value=>ipcRenderer.invoke('eye-of-zomm:wiki','cancel-captured-item',value),
     discardAttachment:value=>ipcRenderer.invoke('eye-of-zomm:wiki','discard-attachment',value),
     iconCatalog:value=>ipcRenderer.invoke('eye-of-zomm:wiki','icon-catalog',value),
     iconMatch:value=>ipcRenderer.invoke('eye-of-zomm:wiki','icon-match',value),
@@ -85,6 +89,7 @@ contextBridge.exposeInMainWorld('eyeOfZommWiki', {
     uploadCharacter:value=>ipcRenderer.invoke('eye-of-zomm:wiki','upload-character',value),
     characterSheetCapability:()=>ipcRenderer.invoke('eye-of-zomm:wiki','character-sheet-capability'),
     shareCharacter:value=>ipcRenderer.invoke('eye-of-zomm:wiki','share-character',value),
+    onAutomaticSourceResult:callback=>subscribe('eye-of-zomm:automatic-source-result',callback),
     onStatus:callback=>subscribe('eye-of-zomm:wiki-state',callback)
 });
 contextBridge.exposeInMainWorld('eyeOfZommShare', {

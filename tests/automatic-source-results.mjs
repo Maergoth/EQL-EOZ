@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {automaticSourceReceiptKey,automaticSourceDraftKeys,automaticSourceDraftComplete} from '../app/automatic-source-results.js';
+import {createContributionQueue} from '../app/contribution-queue.js';
+const pack={meta:{wikiEntitiesComplete:true,version:'synthetic'},wikiEntities:{items:['Known Blade'],npcs:['Known Mob','Other Mob'],zones:['Known Zone']},items:[{name:'Known Blade',dropSources:[]}],npcs:[{name:'Known Mob',zone:'Known Zone'},{name:'Other Mob',zone:'Known Zone'}],zones:[{name:'Known Zone'}]};
+const source={itemTitle:'Known Blade',npcTitle:'Known Mob',zoneTitle:'Known Zone',instance:'normal',status:'submitted'},key=automaticSourceReceiptKey(source,{pack});
+const candidate={id:'source-gap',kind:'item',name:'Known Blade',title:'Known Blade',membership:'present',intent:'update',reasons:['missing-source'],status:'needs-review',fields:{},sources:[{npc:'Known Mob',zone:'Known Zone',instance:'normal',sourceEvidence:'explicit-corpse',confirmed:false}]};
+assert.deepEqual(automaticSourceDraftKeys(candidate,{pack}),[key]);assert(automaticSourceDraftComplete(candidate,[key],{pack}));
+assert.equal(automaticSourceDraftComplete({...candidate,sources:[...candidate.sources,{npc:'Other Mob',zone:'Known Zone',instance:'normal',sourceEvidence:'explicit-corpse'}]},[key],{pack}),false,'A different new source remains visible');
+for(const patch of [{reasons:['missing-source','tier0-verification']},{membership:'missing',intent:'create'},{manual:true},{playerText:'Contributor notes'},{planId:'pending-review'},{fields:{hp:{value:20,edited:true}}},{sources:[{...candidate.sources[0],confirmed:true}]}])assert.equal(automaticSourceDraftComplete({...candidate,...patch},[key],{pack}),false,'Other work stays visible: '+JSON.stringify(patch));
+assert.equal(automaticSourceReceiptKey({...source,instance:'raid'},{pack})===key,false,'Instance receipts never cross scopes');
+const data=new Map(),storage={getItem:key=>data.get(key)||null,setItem:(key,value)=>data.set(key,value)};let queue=createContributionQueue({storage,getPack:()=>pack});
+const add=npc=>queue.add({kind:'item',name:'Known Blade',zone:'Known Zone',instance:'normal',relations:[{type:'drop-source',name:npc,zone:'Known Zone',instance:'normal',evidence:'explicit-corpse',item:'Known Blade'}]});
+let draft=add('Known Mob');assert(draft);assert.equal(queue.recordAutomaticSourceReceipt({...source,status:'deferred'}),false);assert.deepEqual(queue.sourceReceiptKeys(),[]);
+assert(queue.recordAutomaticSourceReceipt(source));assert.equal(queue.snapshot().length,1,'Raw draft facts remain stored');assert(automaticSourceDraftComplete(queue.snapshot()[0],queue.sourceReceiptKeys(),{pack}));
+queue=createContributionQueue({storage,getPack:()=>pack});assert(automaticSourceDraftComplete(queue.snapshot()[0],queue.sourceReceiptKeys(),{pack}),'Canonical source receipts survive reload');
+add('Other Mob');assert.equal(automaticSourceDraftComplete(queue.snapshot()[0],queue.sourceReceiptKeys(),{pack}),false,'New facts restore the source-only draft after reload');assert.notEqual(queue.suppression('item','Known Blade').reason,'submitted','A receipt does not globally mark the item submitted');
+console.log('Automatic source receipts: granular persistence, future sources and protected drafts passed.');

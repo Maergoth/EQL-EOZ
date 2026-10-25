@@ -1,5 +1,6 @@
 'use strict';
-// Explicitly selected/pasted PNGs only. Never a background screenshot archive.
+// Explicitly selected/pasted PNGs or current request-bound Contribute item
+// crops only. Never a background screenshot archive.
 const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
 const MAX_TOTAL=96*1024*1024,MAX_COUNT=20;
 async function readBoundedFile(file,limit=12*1024*1024){const handle=await fs.open(file,'r');try{const stat=await handle.stat();if(!stat.isFile()||stat.size>limit)throw Error('Select a PNG smaller than 12 MiB.');const buffer=Buffer.alloc(Math.min(limit+1,stat.size+1));let offset=0;while(offset<buffer.length){const {bytesRead}=await handle.read(buffer,offset,buffer.length-offset,offset);if(!bytesRead)break;offset+=bytesRead;}if(offset>stat.size||offset>limit)throw Error('The screenshot changed during selection. Select it again.');return buffer.subarray(0,offset);}finally{await handle.close();}}

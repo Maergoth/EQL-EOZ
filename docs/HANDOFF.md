@@ -1,5 +1,11 @@
 # Eye of Zomm contributor handoff
 
+0.9.11 adds gentle automatic reading while Contribute is open, fresh matching
+item proposals and frame-bound screenshot/icon assistance. Tier-decorated plain
+chat mentions work when the client strips link codes. Manual edits, Character
+ownership and reviewed wiki publication remain protected. See
+[the follow-up and release record](CHAT_CAPTURE_FOLLOWUP_PLAN.md).
+
 0.9.10 extends published 0.9.9 with reliable overlay detachment, shared wiki item
 cards, simpler contribution forms/reviews and persistent fresh-evidence discovery
 flows. Read [the active release plan](RELEASE_0910_PLAN.md) for PR24–27 integration,
