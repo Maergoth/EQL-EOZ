@@ -41,6 +41,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/catalog-itembox.js',
     'app/wiki-itembox.css',
     'app/overlay-drag.js',
+    'app/combatants.js',
     'app/discovery-contribution-flow.js',
     'app/wiki-identity.js',
     'app/generated-pets.js',

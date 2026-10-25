@@ -48,24 +48,28 @@ export function parseView(parse = {}, scope = 'live', tab = 'damage') {
     const runeCapacity = Number.isFinite(source.totalRuneCapacity) ? number(source.totalRuneCapacity) : (source.breakdowns?.runes || []).reduce((sum,row) => sum + number(row.total), 0);
     const metrics = { damage:session ? number(parse.totalDamage) : number(chosen?.damage), healing:session ? number(parse.totalHealing) : number(chosen?.healing), taken:session ? number(parse.totalTaken) : number(chosen?.taken), dps:session ? number(parse.sessionDps) : number(chosen?.dps), runeCapacity };
     return { scope, tab, character:parse.character || 'You', metrics, stats:parse,
+        combatants:Array.isArray(source.combatants) ? source.combatants : [],
+        combatantSeconds:session ? number(parse.combatantSeconds) : duration,
         name:session ? 'Whole session · all zones' : chosen?.name || (scope === 'live' ? 'Waiting for combat…' : 'No completed encounter'), ended:Boolean(chosen && !chosen.active),
         title:session ? 'Session' : scope === 'live' ? current ? `Live · ${current.name || 'Encounter'}` : 'Live · waiting for combat' : scope === 'previous' ? previous ? `Previous · ${previous.name || 'Encounter'}` : 'Previous · no completed encounter' : chosen ? `${chosen.name || 'Encounter'} · saved encounter` : 'Selected encounter is no longer retained',
         total, rate, duration, recordedTotal, rows:(aggregate || [...groups.values()]).sort((a,b) => b.total - a.total),
         events:session ? (parse.recentEvents || []).slice(0, 40) : events.slice().reverse().slice(0, 40),
         available:session || Boolean(chosen), truncated:!aggregate && (session && total > recordedTotal || Boolean(chosen?.eventsTruncated)), feedTruncated:session || Boolean(chosen?.eventsTruncated) };
 }
-export function renderParseContent(view) {
+export function renderParseContent(view, expanded = new Set()) {
     if (view.tab === 'session') {
         const s = view.stats;
-        const rows = [['Damage',fmt(s.totalDamage)],['Healing',fmt(s.totalHealing)],['Damage taken',fmt(s.totalTaken)],['Own kills',fmt(s.totalOwnKills)],['Items looted',fmt(s.totalLoot)],['Encounters',fmt(s.encounterCount ?? s.encounters?.length)]];
+        const rows = [['Damage',fmt(s.totalDamage)],['Healing',fmt(s.totalHealing)],['Damage taken',fmt(s.totalTaken)],['AA Gained',fmt(s.totalAaGained)],['Own kills',fmt(s.totalOwnKills)],['Items looted',fmt(s.totalLoot)],['Encounters',fmt(s.encounterCount ?? s.encounters?.length)]];
         if (Number.isFinite(s.zoneCount)) rows.push(['Zones visited',fmt(s.zoneCount)]);
         rows.push(['Session elapsed',durationLabel(number(s.sessionSeconds) * 1000)]);
         return '<div class="session-actions"><button type="button" data-new-session>New session</button><span>Split the parse here; keep your running triggers.</span></div>' + summaryRows(rows, 'Whole session');
     }
     if (view.tab === 'overview') {
         if (!view.available) return empty('Waiting for combat…');
-        return `<table class="meter-table overview-table" aria-label="Your encounter overview"><thead><tr><th>Name</th><th>Damage</th><th>DPS</th><th>Heal</th><th>Taken</th></tr></thead><tbody><tr title="Your logged actions" style="--amount:100%"><td class="meter-name"><span class="meter-rank">1</span><span class="meter-label">${escapeHtml(view.character)}</span></td><td>${fmt(view.metrics.damage)}</td><td>${fmt(view.metrics.dps)}</td><td>${fmt(view.metrics.healing)}</td><td>${fmt(view.metrics.taken)}</td></tr></tbody></table>`;
+        const rows = view.combatants.length ? view.combatants : [{name:view.character,...view.metrics}];
+        return `<table class="meter-table overview-table" aria-label="Logged combatants overview"><thead><tr><th>Name</th><th>Damage</th><th>DPS</th><th>Heal</th><th>Taken</th></tr></thead><tbody>${rows.map((row,index) => `<tr title="Logged actions; names do not imply player or NPC status" style="--amount:${rows[0]?.damage ? Math.min(100,number(row.damage) / number(rows[0].damage) * 100).toFixed(1) : 0}%"><td class="meter-name" title="${attr(row.name)}"><span class="meter-rank">${index + 1}</span><span class="meter-label">${escapeHtml(row.name)}</span></td><td>${fmt(row.damage)}</td><td>${fmt(row.dps)}</td><td>${fmt(row.healing)}</td><td>${fmt(row.taken)}</td></tr>`).join('')}</tbody></table>` + combatantCaption(view);
     }
+    if (view.combatants.length && ['damage','healing','taken'].includes(view.tab)) return renderCombatantDetails(view,expanded) + (view.tab === 'healing' ? summaryRows([['Rune capacity granted',fmt(view.metrics.runeCapacity)]], 'Your rune capacity granted') + '<div class="meter-caption">Logged capacity granted; damage absorbed is not measured. Excluded from healing and HPS.</div>' : '') + combatantCaption(view);
     const metric = TAB_LABELS[view.tab] || 'Damage';
     const heading = view.tab === 'taken' ? 'Attacker' : 'Ability';
     const rateLabel = view.tab === 'damage' ? 'DPS' : view.tab === 'healing' ? 'HPS' : 'DTPS';
@@ -75,6 +79,22 @@ export function renderParseContent(view) {
         const rate = view.tab === 'taken' && Number.isFinite(row.rate) ? row.rate : view.duration ? row.total / view.duration : null;
         return `<tr style="--amount:${width.toFixed(1)}%"><td class="meter-name" title="${attr(row.name)}"><span class="meter-rank">${index + 1}</span><span class="meter-label">${escapeHtml(row.name)}</span></td><td>${fmt(row.total)}</td><td>${rate === null ? '—' : fmt(rate)}</td><td>${fmt(percent)}%</td><td>${row.count === null ? '—' : fmt(row.count)}</td></tr>`;
     }).join('')}</tbody></table>` + (!view.rows.length ? empty(view.available ? 'No recorded actions.' : 'Waiting for combat…') : '') + (view.truncated ? '<div class="meter-caption">Retained events</div>' : '') + (view.tab === 'healing' ? summaryRows([['Rune capacity granted',fmt(view.metrics.runeCapacity)]], 'Rune capacity granted') + '<div class="meter-caption">Logged capacity granted; damage absorbed is not measured. Excluded from healing and HPS.</div>' : '');
+}
+function combatantCaption(view) {
+    return '<div class="meter-caption">Logged combatants only; pets keep their own names. Damage given and damage taken describe the same hits; do not add them together.</div>' +
+        (view.scope === 'session' ? `<div class="meter-caption">Other combatant rates use ${durationLabel(view.combatantSeconds * 1000)} of observed combat. Your DPS keeps its existing outgoing-damage clock.</div>` : '<div class="meter-caption">Rates use this encounter’s duration. Overlapping disconnected fights have separate encounters.</div>') +
+        (view.stats.encounterHistoryLimited ? '<div class="meter-caption">Encounter history was regrouped from retained events. Older encounter details may be incomplete; whole-session combatant totals are retained.</div>' : '');
+}
+function renderCombatantDetails(view, expanded) {
+    const metric = view.tab, rateKey = {damage:'dps',healing:'hps',taken:'dtps'}[metric], rateLabel = {damage:'DPS',healing:'HPS',taken:'DTPS'}[metric];
+    const actors = view.combatants.filter(row => number(row[metric]) > 0 || number(row[`${metric}Hits`]) > 0).slice().sort((a,b) => number(b[metric]) - number(a[metric]));
+    const total = actors.reduce((sum,row) => sum + number(row[metric]),0);
+    if (!actors.length) return empty('No recorded actions.');
+    return `<div class="combatant-columns" aria-hidden="true"><span>Combatant · expand</span><span>${TAB_LABELS[metric]}</span><span>${rateLabel}</span></div>` + actors.map(actor => {
+        const key = JSON.stringify([view.scope,view.tab,actor.name]), rows = actor.breakdowns?.[metric] || [];
+        const seconds = metric === 'damage' && view.scope === 'session' && actor.name?.toLowerCase() === view.character.toLowerCase() ? number(view.stats.sessionSeconds) : view.combatantSeconds;
+        return `<details class="combatant-details" data-combatant-key="${attr(key)}"${expanded.has(key) ? ' open' : ''}><summary title="${attr(actor.name)} · ${fmt(total ? number(actor[metric]) / total * 100 : 0)}% of logged ${metric}"><span class="combatant-name">${escapeHtml(actor.name)}</span><strong>${fmt(actor[metric])}</strong><span>${fmt(actor[rateKey])}</span></summary><table class="meter-table" aria-label="${attr(actor.name)} ${TAB_LABELS[metric]} breakdown"><thead><tr><th>${metric === 'taken' ? 'Attacker' : 'Ability'}</th><th>${TAB_LABELS[metric]}</th><th>${rateLabel}</th><th>%</th><th>Hits</th></tr></thead><tbody>${rows.map((row,index) => `<tr style="--amount:${rows[0]?.total ? (number(row.total) / number(rows[0].total) * 100).toFixed(1) : 0}%"><td class="meter-name" title="${attr(row.name)}"><span class="meter-rank">${index + 1}</span><span class="meter-label">${escapeHtml(row.name)}</span></td><td>${fmt(row.total)}</td><td>${seconds ? fmt(number(row.total) / seconds) : '—'}</td><td>${fmt(number(actor[metric]) ? number(row.total) / number(actor[metric]) * 100 : 0)}%</td><td>${fmt(row.count)}</td></tr>`).join('')}</tbody></table></details>`;
+    }).join('');
 }
 function summaryRows(rows, title) { return `<div class="summary-section">${escapeHtml(title)}</div><table class="summary-table"><tbody>${rows.map(([label,value]) => `<tr><td title="${label === 'Rune capacity granted' ? 'Logged capacity granted; damage absorbed is not measured.' : ''}">${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`).join('')}</tbody></table>`; }
 function itemIcon(value) {
@@ -179,6 +199,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     let state = {}, scope = 'live', tab = 'damage', disposed = false, status = '', request = 0, stateGeneration = 0, noticeGeneration = 0, lastNoticeId = '', unsubscribe, mapController, measuredTimerHeight = 0;
     let intelQuery = '', lastIntelFocus = '', lastIntelFocusEvent = '', draftIntelTier = null, intelActionKey = '', activeItemTooltip = null, itemTooltipHideTimer = null, lastParseSession = null;
     const expandedIntel = new Set(), collapsedIntelSections = new Set(), intelLoading = new Map(), intelDropCache = new Map(), intelErrors = new Map();
+    const expandedCombatants = new Set();
     let lastIntelContent='',lastSessionAvailability=null,intelDistances=[],intelDropRevision=0;
     const itemTooltipHover=createTooltipHover({show:showItemTooltip,valid:target=>!disposed && state.sessionAvailable===true && state.preferences?.visible!==false && target?.isConnected && !target.closest('[hidden]'),setTimeout,clearTimeout});
     const listeners = [];
@@ -327,7 +348,8 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         $('#session-restart').hidden = !(Number(state.sessionRestartCount) > 0);
         if (panel === 'parse') {
             const parse = s.parse || {};
-            if (lastParseSession !== null && parse.sessionNumber !== lastParseSession) scope = 'live';
+            const parseSessionChanged = lastParseSession !== null && parse.sessionNumber !== lastParseSession;
+            if (parseSessionChanged) { scope = 'live'; expandedCombatants.clear(); }
             lastParseSession = parse.sessionNumber;
             const view = parseView(parse,scope,tab);
             const selector = $('#encounter-scope');
@@ -338,7 +360,13 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             if (tab === 'session') $('#overlay-title').textContent = 'Whole session · all zones';
             $('#encounter-stats').hidden = tab === 'session' || !view.available;
             replace($('#encounter-stats'), `${view.ended ? '<span class="ended">ended</span>' : ''}<span>${durationLabel(view.duration * 1000)}</span><span class="header-total">${fmt(view.metrics.damage)} <small>dmg</small></span><span><strong>${fmt(view.metrics.dps)}</strong> <small>dps</small></span>`);
-            replace($('#parse-body'), renderParseContent(view));
+            const focusedCombatant = document.activeElement?.tagName === 'SUMMARY' ? document.activeElement.closest('[data-combatant-key]')?.dataset.combatantKey : null;
+            for (const details of parseSessionChanged ? [] : $('#parse-body').querySelectorAll('[data-combatant-key]')) {
+                if (details.open) expandedCombatants.add(details.dataset.combatantKey); else expandedCombatants.delete(details.dataset.combatantKey);
+            }
+            while (expandedCombatants.size > 1024) expandedCombatants.delete(expandedCombatants.values().next().value);
+            replace($('#parse-body'), renderParseContent(view,expandedCombatants));
+            if (focusedCombatant && !parseSessionChanged) [...$('#parse-body').querySelectorAll('[data-combatant-key]')].find(details => details.dataset.combatantKey === focusedCombatant)?.querySelector('summary')?.focus({preventScroll:true});
         } else if (panel === 'intel') {
             const intel = s.intel || {};
             $('#overlay-title').textContent = s.zone || 'Zone & loot'; $('#class-filter').checked = Boolean(intel.myClassOnly);

@@ -55,6 +55,8 @@ jobs:
       - name: Test native overlay windows
         if: inputs.extended_ui_checks
         run: npm run test:native-overlays
+      - name: Test logged combatant overview and AA gains
+        run: npm run test:combatant-overview
       - name: Test all-panel native resize and touching overlay docks
         if: inputs.extended_ui_checks
         run: npm run test:overlay-resize

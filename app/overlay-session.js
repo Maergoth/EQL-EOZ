@@ -1,4 +1,5 @@
 import { TimerEngine } from './timer-engine.js';
+import { compactCombatants } from './combatants.js';
 
 const STORAGE_KEY = 'eql-eye-of-zomm-timers-v1';
 const text = (value, limit = 240) => String(value ?? '').slice(0, limit);
@@ -7,7 +8,7 @@ const TIMER_ACTIONS = new Set(['save-definition', 'remove-definition', 'fire-def
 
 function eventSummary(event) {
     const result = {};
-    for (const key of ['type', 'source', 'kind', 'victim', 'attacker', 'item', 'zone']) if (event[key] != null) result[key] = text(event[key]);
+    for (const key of ['type', 'source', 'kind', 'victim', 'attacker', 'actor', 'item', 'zone']) if (event[key] != null) result[key] = text(event[key]);
     for (const key of ['at', 'amount', 'quantity']) if (Number.isFinite(event[key])) result[key] = event[key];
     if (event.target) result.target = typeof event.target === 'object' ? { name:text(event.target.name), level:amount(event.target.level) } : text(event.target);
     return result;
@@ -55,12 +56,15 @@ export function compactParseSnapshot(source = {}) {
         totalTaken:amount(source.totalTaken), totalTakenHits:amount(source.totalTakenHits), takenSeconds:amount(source.takenSeconds),
         sessionTakenPerSecond:amount(source.sessionTakenPerSecond), totalKills:amount(source.totalKills), totalOwnKills:amount(source.totalOwnKills),
         totalLoot:amount(source.totalLoot), encounterCount:amount(source.encounterCount),
+        totalAaGained:amount(source.totalAaGained), combatants:compactCombatants(source.combatants), combatantSeconds:amount(source.combatantSeconds),
+        encounterHistoryLimited:Boolean(source.encounterHistoryLimited),
         sessionDps:amount(source.sessionDps), sessionSeconds:amount(source.sessionSeconds), breakdowns:withTakenRates(breakdowns, source.takenSeconds),
         encounters:encounters.slice(0, 20).map(encounter => ({
             id:text(encounter.id), name:text(encounter.name), active:Boolean(encounter.active),
             startAt:amount(encounter.startAt), lastAt:amount(encounter.lastAt), duration:amount(encounter.duration),
             damage:amount(encounter.damage), healing:amount(encounter.healing), dps:amount(encounter.dps),
             taken:amount(encounter.taken), takenHits:amount(encounter.takenHits), takenPerSecond:amount(encounter.takenPerSecond),
+            combatants:compactCombatants(encounter.combatants),
             breakdowns:withTakenRates(aggregate(encounter.events), encounter.duration), eventsTruncated:(encounter.events?.length || 0) > 120,
             events:(encounter.events || []).slice(-120).map(eventSummary)
         })),
@@ -91,8 +95,10 @@ export function fitOverlaySnapshot(snapshot) {
         encounter.eventsTruncated ||= encounter.events.length > 20;
         encounter.events = encounter.events.slice(-20);
         shrinkBreakdowns(encounter.breakdowns, 24);
+        encounter.combatants = compactCombatants(encounter.combatants, 40, 12);
     }
     shrinkBreakdowns(parse.breakdowns, 60);
+    parse.combatants = compactCombatants(parse.combatants, 80, 16);
     if (snapshotBytes(snapshot) <= limit) return snapshot;
     if (parse.encounters) parse.encounters = parse.encounters.slice(0, 3);
     // Drop details remain available through the lazy broker for every NPC.
@@ -102,10 +108,12 @@ export function fitOverlaySnapshot(snapshot) {
     // player totals; defer details to the complete app.
     return { ...snapshot, session:{ character:text(session.character), zone:text(session.zone),
         logStatus:'Open the main app for full session details.', timers:session.timers, notice:session.notice,
-        parse:{ totalDamage:parse.totalDamage, totalHealing:parse.totalHealing, totalRuneCapacity:parse.totalRuneCapacity,
+        parse:{ character:text(parse.character || session.character),totalDamage:parse.totalDamage, totalHealing:parse.totalHealing, totalRuneCapacity:parse.totalRuneCapacity,
             sessionNumber:parse.sessionNumber, sessionStartedAt:parse.sessionStartedAt, sessionDps:parse.sessionDps, sessionSeconds:parse.sessionSeconds,
             totalTaken:parse.totalTaken, totalTakenHits:parse.totalTakenHits, takenSeconds:parse.takenSeconds, sessionTakenPerSecond:parse.sessionTakenPerSecond,
             totalKills:parse.totalKills, totalOwnKills:parse.totalOwnKills, totalLoot:parse.totalLoot, encounterCount:parse.encounterCount,
+            totalAaGained:parse.totalAaGained, combatantSeconds:parse.combatantSeconds, combatants:compactCombatants(parse.combatants, 24, 4),
+            encounterHistoryLimited:parse.encounterHistoryLimited,
             breakdowns:Object.fromEntries(['damage', 'healing', 'runes', 'taken', 'takenAbilities'].map(key => [key, [{ name:key === 'taken' ? 'Other attackers' : 'Other abilities',
                 total:(parse.breakdowns?.[key] || []).reduce((sum, row) => sum + amount(row.total), 0),
                 count:(parse.breakdowns?.[key] || []).reduce((sum, row) => sum + amount(row.count), 0),

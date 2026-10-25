@@ -228,6 +228,11 @@ Create manual countdowns or literal/regex log triggers on the main **Triggers** 
 
 The independent **Parse** window has **Overview / Damage / Healing / Taken / Session** tabs and encounter selection. Healing includes a separately labeled rune-capacity subsection; capacity is not measured absorption or healing. **New session** in Combat or the Parse Session tab clears parse/loot totals while retaining the live log position, profile, map and triggers. One shared session reads the log for every panel. The optional swing bar defaults off; enable **Triggers → Swing → Show swing estimate** if desired. It estimates your outgoing melee rounds from logged hits and misses; one-second log timestamps limit its precision. See [trigger and countdown behavior](docs/TIMERS.md).
 
+Overview shows logged combatants for Whole session and individual encounters.
+Damage, Healing and Taken expand per combatant into ability/attacker details;
+Session includes **AA Gained**, counted from explicit earned-point messages.
+See [combatant scopes, rates and log limitations](docs/COMBATANT_OVERVIEW.md).
+
 ![Timer trigger editor with synthetic match preview](app/assets/whats-new/timers.png)
 
 Unlock an overlay to move/resize it. Locking leaves its tabs and menus interactive; **Ignore mouse** passes clicks through. Recover from Settings, the tray, or **Ctrl+Shift+O** when registered. Layout, opacity and font scale are saved separately for each panel. Closing the main window while overlays are visible keeps their shared session running; use **Quit Eye of Zomm** in the tray to exit.
