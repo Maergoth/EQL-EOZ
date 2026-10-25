@@ -81,8 +81,31 @@ async function run({root,temporary,screenshots}) {
         await new Promise(done=>setTimeout(done,50));
         assert.equal(await execute(() => document.activeElement.tagName),'SUMMARY');
         assert.equal(await execute(() => document.activeElement.parentElement.open),true,'Space expands the focused combatant');
+        window.setContentSize(650,640);
+        await execute(async()=>{
+            const {EQLogParser}=await import('/app/parser.js'),realNow=Date.now;
+            const live=fixture.live={parser:new EQLogParser(),realNow,clock:realNow()};Date.now=()=>live.clock;
+            live.parser.setCharacterFromFilename('eqlog_Synthetic_example.txt');live.parser.startNewSession(live.clock);
+            live.add=(delay,body)=>{live.clock+=delay*1000;return live.parser.parse(`[${new Date(live.clock).toISOString()}] ${body}`);};
+            live.publish=()=>{fixture.state.snapshot.session.parse=fixture.compactParseSnapshot(live.parser.snapshot());fixture.push(fixture.state);};
+            live.add(0,'You hit a synthetic sentry for 100 points of damage.');live.add(2,'You hit a synthetic sentry for 50 points of damage.');live.publish();live.firstId=fixture.state.snapshot.session.parse.encounters[0].id;
+            const selector=document.querySelector('#encounter-scope');selector.value='live';selector.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('[data-tab="damage"]').click();
+            const details=document.querySelector('.combatant-details');details.open=true;details.querySelector('summary').focus();live.summary=details.querySelector('summary');
+        });
+        assert.match(await execute(()=>document.querySelector('#encounter-scope').selectedOptions[0].textContent),/a synthetic sentry · Live$/);
+        await capture('live-active-encounter');
+        const held=await execute(()=>{fixture.live.clock+=20000;fixture.live.publish();return{scope:document.querySelector('#encounter-scope').value,label:document.querySelector('#encounter-scope').selectedOptions[0].textContent,header:document.querySelector('#encounter-stats').textContent,ended:document.querySelector('.ended')?.textContent,open:document.querySelector('.combatant-details').open,focus:document.activeElement===fixture.live.summary};});
+        assert.equal(held.scope,'live');assert.match(held.label,/Live \(ended\)/);assert.equal(held.ended,'ended');assert.equal(held.open,true);assert.equal(held.focus,true);assert.match(held.header,/75/);
+        const idle=await execute(()=>{fixture.live.clock+=600000;fixture.live.publish();return{header:document.querySelector('#encounter-stats').textContent,body:document.querySelector('#parse-body').textContent};});
+        assert.equal(idle.header,held.header);assert.doesNotMatch(idle.body,/Waiting for combat/);await capture('live-held-ended-encounter');
+        const next=await execute(()=>{fixture.live.add(5,'You hit a synthetic scout for 40 points of damage.');fixture.live.add(2,'You hit a synthetic scout for 60 points of damage.');fixture.live.publish();return{scope:document.querySelector('#encounter-scope').value,label:document.querySelector('#encounter-scope').selectedOptions[0].textContent,header:document.querySelector('#encounter-stats').textContent,ended:Boolean(document.querySelector('.ended')),open:document.querySelector('.combatant-details').open,focus:document.activeElement.id};});
+        assert.equal(next.scope,'live');assert.match(next.label,/a synthetic scout · Live$/);assert.equal(next.ended,false);assert.equal(next.open,false);assert.equal(next.focus,'encounter-scope');assert.match(next.header,/50/);await capture('live-next-encounter');
+        await execute(()=>{document.querySelector('[data-tab="overview"]').click();const selector=document.querySelector('#encounter-scope');selector.value=fixture.live.firstId;selector.dispatchEvent(new Event('change',{bubbles:true}));fixture.live.publish();});
+        assert.equal(await execute(()=>document.querySelector('#encounter-scope').value),await execute(()=>fixture.live.firstId));assert.match(await execute(()=>document.querySelector('#parse-body').textContent),/a synthetic sentry/);
+        await execute(()=>{const selector=document.querySelector('#encounter-scope');selector.value='session';selector.dispatchEvent(new Event('change',{bubbles:true}));fixture.live.publish();Date.now=fixture.live.realNow;});
+        assert.equal(await execute(()=>document.querySelector('#encounter-scope').value),'session');
         assert.deepEqual(errors,[]);
-        console.log('Native combatant overview: actual parser and compact snapshot reach whole-session/individual Overview, Damage/Healing/Taken disclosures, preserved expansion on new logs, AA counter and keyboard focus in a sandboxed native window.');
+        console.log('Native combatant overview: actual parser and compact snapshot reach whole-session/individual Overview, Damage/Healing/Taken disclosures, AA and keyboard controls; Live holds ended encounters with frozen rates and focus, then follows the next fight while explicit history/session selections stay put.');
     } finally { window.destroy(); await new Promise(done=>server.close(done));app.quit(); }
 }
 try {

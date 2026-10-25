@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { JSDOM } from 'jsdom';
 import { EQLogParser } from '../app/parser.js';
 import { compactParseSnapshot, fitOverlaySnapshot } from '../app/overlay-session.js';
-import { parseView, renderParseContent } from '../app/overlay.js';
+import { parseView, renderParseContent, mountOverlay } from '../app/overlay.js';
 import { compactCombatants } from '../app/combatants.js';
 const start = Date.parse('2026-10-25T12:00:00Z');
 const line = (second, body) => `[${new Date(start + second * 1000).toISOString()}] ${body}`;
@@ -138,3 +140,37 @@ const fallback = fitOverlaySnapshot({schemaVersion:1,session:{parse:limited,time
 assert(new TextEncoder().encode(JSON.stringify(fallback)).length < 1800*1024);
 assert.equal(fallback.session.parse.totalAaGained,7); assert.deepEqual(sums(fallback.session.parse.combatants),sums(limited.combatants));
 console.log('Combatant overview: own/nearby damage, DoTs, heals, pets, uncertainty, encounter/source/zone boundaries, retention, AA points, expandable rendering and transport conservation passed.');
+
+// Mount the production renderer: Live keeps its completed fight on screen,
+// preserves held controls, then follows a new fight without touching history.
+{
+    const dom=new JSDOM(await readFile(new URL('../app/overlay.html',import.meta.url),'utf8'),{url:'http://127.0.0.1/overlay.html?panel=parse',pretendToBeVisual:true}),{document}=dom.window;
+    const liveParser=make();
+    const at=second=>start+second*1000;
+    const snapshot=second=>{const actualNow=Date.now;Date.now=()=>at(second);try{return compactParseSnapshot(liveParser.snapshot());}finally{Date.now=actualNow;}};
+    const state={sessionAvailable:true,preferences:{visible:true,locked:true,fontScale:1},snapshot:{session:{parse:snapshot(0)}}};
+    const view=mountOverlay({document,panel:'parse',bridge:{getState:async()=>state,onState:()=>()=>{}},setInterval:()=>1,clearInterval:()=>{}});
+    const update=second=>{state.snapshot.session.parse=snapshot(second);view.render(state);};
+    const selector=document.querySelector('#encounter-scope');
+    const scope=value=>{selector.value=value;selector.dispatchEvent(new dom.window.Event('change',{bubbles:true}));};
+    try{
+        await new Promise(done=>setImmediate(done));assert.match(document.querySelector('#parse-body').textContent,/Waiting for combat/);
+        liveParser.parse(line(0,'You hit a synthetic sentry for 100 points of damage.'));
+        liveParser.parse(line(2,'You hit a synthetic sentry for 50 points of damage.'));update(2);
+        const firstId=state.snapshot.session.parse.encounters[0].id;
+        assert.equal(selector.value,'live');assert.match(selector.selectedOptions[0].textContent,/a synthetic sentry · Live$/);assert.equal(document.querySelector('.ended'),null);
+        const details=document.querySelector('.combatant-details');details.open=true;const summary=details.querySelector('summary');summary.focus();
+        update(22);assert.equal(selector.value,'live');assert.match(selector.selectedOptions[0].textContent,/Live \(ended\)/);assert.equal(document.querySelector('.ended').textContent,'ended');
+        assert.equal(document.querySelector('.combatant-details'),details);assert(details.open);assert.equal(document.activeElement,summary,'Idle hold preserves disclosure nodes and focus');
+        const heldHeader=document.querySelector('#encounter-stats').textContent;assert.match(heldHeader,/75/);assert.doesNotMatch(document.querySelector('#parse-body').textContent,/Waiting for combat/);
+        update(600);assert.equal(document.querySelector('#encounter-stats').textContent,heldHeader,'Ten minutes idle cannot dilute recorded duration/DPS');
+        liveParser.parse(line(601,'You hit a synthetic scout for 40 points of damage.'));
+        liveParser.parse(line(603,'You hit a synthetic scout for 60 points of damage.'));update(603);
+        assert.equal(selector.value,'live');assert.match(selector.selectedOptions[0].textContent,/a synthetic scout · Live$/);assert.equal(document.querySelector('.ended'),null);
+        assert.equal(document.querySelector('.combatant-details').open,false,'A new encounter has its own disclosure state');assert.equal(document.activeElement,selector,'A replaced focused encounter returns focus to its selector');
+        document.querySelector('[data-tab="overview"]').click();assert.match(document.querySelector('#parse-body').textContent,/a synthetic scout/);assert.doesNotMatch(document.querySelector('#parse-body').textContent,/a synthetic sentry/);
+        scope(firstId);update(604);assert.equal(selector.value,firstId);assert.match(document.querySelector('#parse-body').textContent,/a synthetic sentry/);
+        scope('session');update(605);assert.equal(selector.value,'session');assert.match(document.querySelector('#parse-body').textContent,/a synthetic sentry/);assert.match(document.querySelector('#parse-body').textContent,/a synthetic scout/);
+        console.log('Mounted Parse Live: empty start, active→ended hold, frozen rates, stable disclosures/focus, automatic next encounter and unchanged explicit history/session scopes passed.');
+    }finally{view.dispose();dom.window.close();}
+}
