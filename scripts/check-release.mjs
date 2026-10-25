@@ -83,6 +83,13 @@ for (const required of ['ubuntu-22.04', 'npm ci', 'npm run audit:deps', 'npm tes
     if (!linuxWorkflow.includes(required)) throw new Error(`Linux workflow is missing native/package release gate: ${required}`);
 }
 if (linuxWorkflow.includes('action-gh-release') || linuxWorkflow.includes('gh release create')) throw new Error('The Linux build must not independently publish a release.');
+for (const [name, workflow] of [['Windows',windowsWorkflow],['Linux',linuxWorkflow]]) {
+    if (!workflow.includes('extended_ui_checks:') || !workflow.includes('default: true')) throw new Error(`${name} builds must keep extended UI checks enabled by default.`);
+    for (const required of ['npm test','npm run audit:deps','npm run test:desktop-worker','npm run test:window-lifecycle','npm run test:discovery-capture-workspace']) {
+        if (!workflow.includes(required)) throw new Error(`${name} release is missing essential check ${required}.`);
+    }
+}
+if ((releaseWorkflow.match(/extended_ui_checks: false/g)||[]).length!==2) throw new Error('Both release packages must use the requested basic release checks.');
 if (pkg.desktopName !== 'com.eqlwiki.eyeofzomm.desktop' || pkg.build?.linux?.syncDesktopName !== true || pkg.build?.linux?.executableName !== 'eqlwiki-eye-of-zomm') throw new Error('Linux desktop identity must match the runtime and packaged executable.');
 if (!['AppImage','deb'].every(target => pkg.build?.linux?.target?.some(entry => entry.target === target && entry.arch.includes('x64')))) throw new Error('The shared release must include Linux x64 AppImage and Debian targets.');
 

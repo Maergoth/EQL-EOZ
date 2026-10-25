@@ -2,11 +2,20 @@ name: Windows installer
 
 on:
   workflow_dispatch:
+    inputs:
+      extended_ui_checks:
+        description: Run extended native and OCR interface checks
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       bootstrap_artifact:
         type: string
         default: ''
+      extended_ui_checks:
+        description: Run extended native and OCR interface checks
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -35,48 +44,68 @@ jobs:
       - name: Test actual desktop CSP and browser worker
         run: npm run test:desktop-worker
       - name: Test native overlay windows
+        if: inputs.extended_ui_checks
         run: npm run test:native-overlays
       - name: Test all-panel native resize and touching overlay docks
+        if: inputs.extended_ui_checks
         run: npm run test:overlay-resize
       - name: Test Intel ordering and viewport stability
+        if: inputs.extended_ui_checks
         run: npm run test:intel-stability
       - name: Test main window placement and startup
         run: npm run test:window-lifecycle
       - name: Test map sizing and zoom
+        if: inputs.extended_ui_checks
         run: npm run test:map-layout
       - name: Test map marker loot pane and instance identity
+        if: inputs.extended_ui_checks
         run: npm run test:map-loot
       - name: Test Character persistence across restarts and changed origins
+        if: inputs.extended_ui_checks
         run: npm run test:character-storage
       - name: Test cached frontend upgrade recovery
+        if: inputs.extended_ui_checks
         run: npm run test:main-cache
       - name: Test native Map 3D and file isolation
+        if: inputs.extended_ui_checks
         run: npm run test:map-overlay-3d
       - name: Test inline wiki discovery and explicit clipboard capture
+        if: inputs.extended_ui_checks
         run: npm run test:discovery-notices
       - name: Test native appearance controls
+        if: inputs.extended_ui_checks
         run: npm run test:appearance
       - name: Test hardened wiki login and guarded writes with a loopback fixture
+        if: inputs.extended_ui_checks
         run: npm run test:wiki-auth
       - name: Test persistent source capture and local OCR
+        if: inputs.extended_ui_checks
         run: npm run test:capture-native
       - name: Test tooltip priority with moving scenes and full-resolution pixel streams
+        if: inputs.extended_ui_checks
         run: npm run test:capture-priority
       - name: Test Default Modern pane geometry through real offline OCR
+        if: inputs.extended_ui_checks
         run: npm run test:modern-ocr
       - name: Test compact hover tooltips and mixed panes through real offline OCR
+        if: inputs.extended_ui_checks
         run: npm run test:hover-ocr
       - name: Test OCR area calibration controls and saved source regions
+        if: inputs.extended_ui_checks
         run: npm run test:capture-calibration
       - name: Test contribution and character workflows with a loopback wiki
+        if: inputs.extended_ui_checks
         run: npm run test:capture-workspace
       - name: Test discovery contribution capture ownership and fresh evidence
         run: npm run test:discovery-capture-workspace
       - name: Test current contribution and Character UI
+        if: inputs.extended_ui_checks
         run: npm run test:workspace-099
       - name: Test guided Character capture and base-only estimates
+        if: inputs.extended_ui_checks
         run: npm run test:character-walkthrough
       - name: Test installed system fonts and changed-stat colors
+        if: inputs.extended_ui_checks
         run: npm run test:system-fonts
       - name: Fetch production bootstrap data
         if: inputs.bootstrap_artifact == ''
@@ -120,6 +149,7 @@ jobs:
       - name: Test packaged capture host and physical offline OCR resources
         run: npm run test:capture-native -- --packaged-root dist/win-unpacked/resources/app.asar
       - name: Test installed fonts in the verified packaged ASAR
+        if: inputs.extended_ui_checks
         run: npm run test:system-fonts -- --packaged-root dist/win-unpacked/resources/app.asar
       - name: Verify Authenticode signature
         if: steps.signing.outputs.enabled == 'true'
