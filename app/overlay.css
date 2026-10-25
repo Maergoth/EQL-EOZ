@@ -62,7 +62,11 @@ body[data-panel=intel] #panel-content{display:flex;flex-direction:column;overflo
 .encounter-stats{min-width:0;overflow:hidden}
 .chrome-button{width:max(18px,calc(18px * var(--font-scale)));height:max(20px,calc(20px * var(--font-scale)))}
 .swing-idle,body[data-panel=timers] .empty{height:auto;min-height:calc(22px * var(--font-scale))}
-.intel-filter-row{grid-template-columns:auto minmax(16px,1fr) auto}
+.intel-filter-row{grid-template-columns:auto minmax(16px,1fr) auto auto}
+.intel-crawl-label{white-space:nowrap;font-size:.95em}
+.npc-row.is-defeated{opacity:.48}
+.npc-row.is-defeated .npc-name{text-decoration:line-through;text-decoration-thickness:1px;cursor:default}
+.npc-row.is-defeated .row-actions{display:none!important}
 .item-stats .is-scaled,.intel-item-tooltip dd.is-scaled{color:#86dc8c;font-weight:700}.intel-item-tooltip dd.is-scaled small{color:#8d98a8;font-weight:400}
 /* Transparent native windows have no dependable platform resize border.
    Dedicated body-level hit regions stay outside every draggable ancestor. */

@@ -5,6 +5,7 @@ import {wikiLocationToWorld} from '../app/coordinate-system.js';
 import {EQLogParser} from '../app/parser.js';
 import {catalogBaseStats,scaledItemStats} from '../app/item-scaling.js';
 import {characterCatalogDetails} from '../app/character-item-card.js';
+import {createCrawlMode} from '../app/crawl-mode.js';
 
 // Execute the actual main owner's action handler. These fixtures prove camera
 // preview cannot become a logged player position or choose a different source.
@@ -23,7 +24,8 @@ const context=vm.createContext({
     settings:{itemTier:0},prefs:{save:settings=>calls.push(['saved',settings.itemTier])},
     renderAll:()=>calls.push(['render']),refreshItemTooltip:()=>calls.push(['tooltip']),
     mapDataRevision:3,overlayMapFocus:null,overlayMapFocusSequence:0,focusedIntelTarget:null,intelFocusSequence:0,
-    window:{eyeOfZommOverlays:{control:async(...args)=>calls.push(args)}}
+    window:{eyeOfZommOverlays:{control:async(...args)=>calls.push(args)}},
+    crawlMode:createCrawlMode(),crawlContext:()=>({zone:current.zone})
 });
 vm.runInContext(`${source.slice(from,to)};this.handle=handleOverlayCommand;`,context);
 const originalLocation=current.location;
@@ -43,6 +45,21 @@ assert.equal(context.settings.itemTier,10);assert(calls.some(call=>call[0]==='sa
 assert(calls.some(call=>call[0]==='render'));assert(calls.some(call=>call[0]==='tooltip'));
 for(const tier of [-1,11,1.5,'5',NaN])await assert.rejects(context.handle({action:'session:item-tier',payload:{tier}}),/Base to 10/);
 assert.equal(context.settings.itemTier,10,'Invalid overlay values cannot corrupt the shared item level');
+await context.handle({action:'session:crawl-mode',payload:{enabled:true}});
+assert.equal(context.crawlMode.snapshot().enabled,true);
+
+// Exercise the real context adapter too: explicit profile overrides must
+// invalidate a visit even when the detected log character has not changed.
+const crawlFrom=source.indexOf('function crawlContext('),crawlTo=source.indexOf('function startNewSession(',crawlFrom);
+let effective={level:26,classes:['MNK']};
+const crawlOwner=vm.createContext({parser:{logContextSnapshot:()=>({visit:1,instanceId:'',instance:'unknown'})},
+    bridgeInfo:{logPath:'fixture'},state:()=>({...normal,character:'Fixture',sessionNumber:1}),effectiveProfile:()=>effective});
+vm.runInContext(source.slice(crawlFrom,crawlTo)+';this.context=crawlContext;',crawlOwner);
+const beforeProfile=crawlOwner.context();effective={level:26,classes:['WAR']};
+assert.notEqual(crawlOwner.context().profile,beforeProfile.profile,'A manual class-profile change is a context reset');
+effective={level:27,classes:['MNK']};assert.notEqual(crawlOwner.context().profile,beforeProfile.profile,'Effective level changes are tracked too');
+await assert.rejects(context.handle({action:'session:crawl-mode',payload:{enabled:'true'}}),/whether Crawl/);
+assert.equal(context.crawlMode.snapshot().enabled,true);
 
 // Execute the same owner reset and line-consumption functions used by the main
 // button and native Session tab. Splitting never rewinds/reopens the log, drops
@@ -63,7 +80,7 @@ const splitContext=vm.createContext({parser,partialLine:'[Wed Oct 21 12:00:02 20
     // Collection/outbox behavior has its own fixtures; splitting a session must
     // retain these owner-action assertions regardless of telemetry preference.
     observationPreference:false,
-    bridgeInfo:{logPath:'synthetic-log'},state:()=>parser.snapshot()});
+    bridgeInfo:{logPath:'synthetic-log'},state:()=>parser.snapshot(),crawlMode:createCrawlMode(),crawlContext:()=>({zone:parser.zone})});
 splitContext.observedLogCursor=0;
 splitContext.captureWorkspace={consumeLog:(...args)=>contributionCalls.push(args)};
 vm.runInContext(`${source.slice(resetFrom,resetTo)};${source.slice(consumeFrom,consumeTo)};${source.slice(from,to)};this.handle=handleOverlayCommand;this.consume=consumeText;`,splitContext);

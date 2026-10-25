@@ -795,6 +795,9 @@ test('overlay preload exposes no filesystem, updater, raw IPC, or Electron event
 });
 
 test('malformed command objects do not escape the command allowlist', () => {
+    assert.deepEqual(sessionCommand('session:crawl-mode',{enabled:true}),{enabled:true});
+    for(const enabled of [undefined,1,'true',null])assert.throws(()=>sessionCommand('session:crawl-mode',{enabled}),/Invalid Crawl/);
+    assert.throws(()=>sessionCommand('session:crawl-mode',{enabled:true,npc:'Synthetic Keeper'}),/Invalid Crawl/);
     assert.deepEqual(sessionCommand('session:new-session', {}), {});
     assert.throws(() => sessionCommand('session:new-session', {logOffset:0}), /does not accept options/);
     assert.throws(() => sessionCommand('session:class-filter', { panel:'timers', enabled:true }), /Invalid/);
@@ -805,6 +808,19 @@ test('malformed command objects do not escape the command allowlist', () => {
     assert.throws(() => sessionCommand('session:intel-drops', {npc:'Synthetic Keeper',raidInstance:'true'}),/Invalid/);
     assert.throws(() => sessionCommand('session:map-data', {zone:{name:'Unrest'}}),/Invalid/);
 });
+
+test('Crawl commands are issued only by authenticated Map or Intel panels',()=>fixture(async({host,mainEvent,overlayEvent,commands})=>{
+    await publish(host,mainEvent);
+    for(const id of ['map','intel','parse','timers'])await host.control('show',id);
+    for(const id of ['map','intel'])await host.handleOverlayRequest(overlayEvent(id),'session:crawl-mode',{enabled:true});
+    assert.deepEqual(commands.slice(-2).map(row=>row[1]),[
+        {panel:'map',action:'session:crawl-mode',payload:{enabled:true}},
+        {panel:'intel',action:'session:crawl-mode',payload:{enabled:true}}
+    ]);
+    for(const id of ['parse','timers'])await assert.rejects(host.handleOverlayRequest(overlayEvent(id),'session:crawl-mode',{enabled:true}),/available in Map/);
+    const wrong=overlayEvent('map');wrong.senderFrame={url:wrong.senderFrame.url};
+    await assert.rejects(host.handleOverlayRequest(wrong,'session:crawl-mode',{enabled:true}),/unavailable/);
+}));
 
 test('opening a selected NPC rechecks its zone and native routing keeps the main window hidden', async () => {
     const source = await readFile(new URL('../app/app.js', import.meta.url), 'utf8');

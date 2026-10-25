@@ -94,6 +94,7 @@ export const intelNpcKey = (npc, context = '') => {
     return JSON.stringify([String(intel.zone || ''),Boolean(intel.myClassOnly),String(intel.packVersion || ''),String(intel.profileKey || ''),intelTierValue(intel.itemTier),String(npc?.id || npc?.name || ''),isRaidSource(npc)]);
 };
 export const intelTierValue = value => Math.max(0,Math.min(10,Math.trunc(Number(value)||0)));
+const crawlDefeated = (npc,intel) => intel?.crawlEnabled === true && npc?.defeated === true;
 export const intelSectionKey = (intel,raid) => JSON.stringify([String(intel?.zone || ''),raid ? 'raid' : 'normal']);
 export function intelMobAction(command,npc,zone) {
     const payload = {npc:npc.name,zone,raidInstance:isRaidSource(npc)};
@@ -120,21 +121,22 @@ export function renderIntel(intel = {}, {query = '', expanded = new Set(), loadi
         const section = raid ? 'raid' : 'normal', label = raid ? 'Raid Zone' : 'Normal Zone', closed = collapsedSections.has(intelSectionKey(intel,raid));
         return `<section class="intel-group ${raid ? 'is-raid' : ''}${closed ? ' is-collapsed' : ''}" data-intel-section="${section}" aria-label="${label}"><h2><button type="button" class="intel-section-toggle" data-intel-section-toggle="${section}" aria-expanded="${!closed}" aria-controls="intel-section-${section}"><span class="intel-section-chevron" aria-hidden="true">${closed ? '▸' : '▾'}</span>${label}<span class="intel-section-count">${sources.length}${closed ? ' · collapsed' : ''}</span></button></h2><div id="intel-section-${section}" class="intel-section-content"${closed ? ' hidden' : ''}>${sources.length ? sources.map(({npc,index}) => {
             const key = intelNpcKey(npc,intel);
-            const open = expanded.has(key);
+            const defeated = crawlDefeated(npc,intel);
+            const open = !defeated && expanded.has(key);
             const cached = dropCache.get(key);
             const drops = Array.isArray(cached?.items) ? cached.items : Array.isArray(npc.drops) ? npc.drops : [];
-            const shown = open ? drops : drops.slice(0,3);
+            const shown = defeated ? [] : open ? drops : drops.slice(0,3);
             const total = number(cached?.total ?? npc.dropCount ?? drops.length);
             const previewCount = Math.min(3,(npc.drops || []).length);
             const pending = open && loading.has(key) && drops.length < total;
-            const focused = Boolean(intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
-            return `<article class="npc-row con-${conKey(npc.con)} ${focused ? 'is-focused' : ''}" data-intel-key="${attr(key)}" ${focused ? 'aria-current="true"' : ''}><div class="npc-summary${actionKey === key ? ' is-actions-open' : ''}"><div class="npc-heading"><button type="button" class="npc-name" aria-label="${attr(`Actions for ${npc.name}`)}" aria-describedby="npc-actions-${index}">${escapeHtml(npc.name)}</button>${raid ? '<span class="raid-source-badge">Raid</span>' : ''}<small>${npc.level || npc.levelMax ? `L${escapeHtml(npc.level || (npc.levelMin === npc.levelMax ? npc.levelMax : `${npc.levelMin}–${npc.levelMax}`))}` : ''}<span data-intel-distance-index="${index}">${Number.isFinite(npc.distance) ? ` · ${fmt(npc.distance)}u` : ''}</span></small></div><div class="npc-meta">${npc.named ? 'Named' : npc.rare ? 'Rare' : 'NPC'} · ${knownDropLabel({...npc,drops,dropCount:total},intel.myClassOnly,shown.length)}${npc.waypoint ? ' · waypoint available' : ''}</div><div id="npc-actions-${index}" class="row-actions" role="group" aria-label="${attr(`Actions for ${npc.name}`)}"><button type="button" data-npc-action="details" data-npc-index="${index}">Details</button><button type="button" data-npc-action="route" data-npc-index="${index}" ${!intel.canRoute || !npc.waypoint ? 'disabled title="Enable maps and use a current logged location in the main app"' : ''}>Route</button><button type="button" data-npc-action="copy-waypoint" data-npc-index="${index}" ${!npc.waypoint ? 'disabled' : ''}>Copy /waypoint</button><button type="button" data-npc-action="wiki" data-npc-index="${index}">Wiki</button><button type="button" data-npc-action="map" data-npc-index="${index}" ${!npc.waypoint ? 'disabled title="No known location for this mob"' : 'title="Open native Map at this mob"'}>Map</button></div></div><div class="npc-drop-list" ${pending ? 'aria-busy="true"' : ''}>${shown.map((item,itemIndex) => renderItem(item,itemIndex,`intel:${index}`)).join('')}</div>${total > previewCount ? `<button type="button" class="show-more-drops" data-intel-expand="${attr(key)}" data-npc-index="${index}" aria-expanded="${open}">${open ? 'Show Less' : `Show More (${Math.max(0,total - previewCount)})`}</button>` : ''}${pending ? '<div class="npc-meta">Loading remaining drops…</div>' : ''}${open && errors.has(key) ? `<div class="intel-drop-error" role="status">${escapeHtml(errors.get(key))}</div><button type="button" class="show-more-drops" data-intel-retry="${attr(key)}" data-npc-index="${index}">Retry loading drops</button>` : ''}</article>`;
+            const focused = !defeated && Boolean(intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
+            return `<article class="npc-row con-${conKey(npc.con)}${defeated ? ' is-defeated' : ''} ${focused ? 'is-focused' : ''}" data-intel-key="${attr(key)}" ${focused ? 'aria-current="true"' : ''}><div class="npc-summary${!defeated && actionKey === key ? ' is-actions-open' : ''}"><div class="npc-heading"><button type="button" class="npc-name" aria-label="${attr(defeated ? `${npc.name} · defeated in Crawl mode` : `Actions for ${npc.name}`)}" ${defeated ? 'disabled' : `aria-describedby="npc-actions-${index}"`}>${escapeHtml(npc.name)}</button>${raid ? '<span class="raid-source-badge">Raid</span>' : ''}<small>${npc.level || npc.levelMax ? `L${escapeHtml(npc.level || (npc.levelMin === npc.levelMax ? npc.levelMax : `${npc.levelMin}–${npc.levelMax}`))}` : ''}<span data-intel-distance-index="${index}">${Number.isFinite(npc.distance) ? ` · ${fmt(npc.distance)}u` : ''}</span></small></div><div class="npc-meta">${defeated ? 'Defeated · ' : ''}${npc.named ? 'Named' : npc.rare ? 'Rare' : 'NPC'} · ${knownDropLabel({...npc,drops,dropCount:total},intel.myClassOnly,shown.length)}${npc.waypoint ? ' · waypoint available' : ''}</div><div id="npc-actions-${index}" class="row-actions"${defeated ? ' hidden inert' : ''} role="group" aria-label="${attr(`Actions for ${npc.name}`)}"><button type="button" data-npc-action="details" data-npc-index="${index}">Details</button><button type="button" data-npc-action="route" data-npc-index="${index}" ${!intel.canRoute || !npc.waypoint ? 'disabled title="Enable maps and use a current logged location in the main app"' : ''}>Route</button><button type="button" data-npc-action="copy-waypoint" data-npc-index="${index}" ${!npc.waypoint ? 'disabled' : ''}>Copy /waypoint</button><button type="button" data-npc-action="wiki" data-npc-index="${index}">Wiki</button><button type="button" data-npc-action="map" data-npc-index="${index}" ${!npc.waypoint ? 'disabled title="No known location for this mob"' : 'title="Open native Map at this mob"'}>Map</button></div></div><div class="npc-drop-list" ${pending ? 'aria-busy="true"' : ''}>${shown.map((item,itemIndex) => renderItem(item,itemIndex,`intel:${index}`)).join('')}</div>${!defeated && total > previewCount ? `<button type="button" class="show-more-drops" data-intel-expand="${attr(key)}" data-npc-index="${index}" aria-expanded="${open}">${open ? 'Show Less' : `Show More (${Math.max(0,total - previewCount)})`}</button>` : ''}${pending ? '<div class="npc-meta">Loading remaining drops…</div>' : ''}${open && errors.has(key) ? `<div class="intel-drop-error" role="status">${escapeHtml(errors.get(key))}</div><button type="button" class="show-more-drops" data-intel-retry="${attr(key)}" data-npc-index="${index}">Retry loading drops</button>` : ''}</article>`;
         }).join('') : `<div class="intel-empty">${needle ? 'No matching mobs.' : raid ? 'No raid-instance mobs in this zone.' : 'No matching named or rare mobs.'}</div>`}</div></section>`;
     }).join('');
 }
 export function panelMarkup(panel) {
     if (panel === 'parse') return `<nav class="parse-tabs" aria-label="Parse metrics">${TABS.map(tab => `<button type="button" data-tab="${tab}" aria-pressed="${tab === 'damage'}" class="${tab === 'damage' ? 'is-active' : ''}">${TAB_LABELS[tab]}</button>`).join('')}</nav><div id="parse-body"></div>`;
-    if (panel === 'intel') return '<div class="intel-controls"><div class="panel-toolbar intel-filter-row"><label class="intel-tier-label" for="intel-item-tier">Item level <output id="intel-item-tier-value" for="intel-item-tier">Base</output></label><input id="intel-item-tier" type="range" min="0" max="10" step="1" value="0" aria-label="Item level"><label class="intel-class-label"><input id="class-filter" type="checkbox"> My Class</label></div><input id="intel-search" class="intel-search" type="search" maxlength="160" placeholder="Find named or rare mob…" aria-label="Search named and rare mobs"><span id="intel-attention" class="sr-only" role="status" aria-live="polite"></span></div><div id="intel-body" class="intel-mob-list" role="region" aria-label="Named and rare mob loot"></div>';
+    if (panel === 'intel') return '<div class="intel-controls"><div class="panel-toolbar intel-filter-row"><label class="intel-tier-label" for="intel-item-tier">Item level <output id="intel-item-tier-value" for="intel-item-tier">Base</output></label><input id="intel-item-tier" type="range" min="0" max="10" step="1" value="0" aria-label="Item level"><label class="intel-class-label"><input id="class-filter" type="checkbox"> My Class</label><label class="intel-crawl-label" title="Keep defeated mobs dimmed until the next zone entry"><input id="intel-crawl-mode" type="checkbox"> Crawl</label></div><input id="intel-search" class="intel-search" type="search" maxlength="160" placeholder="Find named or rare mob…" aria-label="Search named and rare mobs"><span id="intel-attention" class="sr-only" role="status" aria-live="polite"></span></div><div id="intel-body" class="intel-mob-list" role="region" aria-label="Named and rare mob loot"></div>';
     if (panel === 'map') return '<div id="native-map-root"></div>';
     return '<div class="timer-display"><div id="timer-list"></div><div id="swing-body"></div></div>';
 }
@@ -243,20 +245,21 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         if (height !== measuredTimerHeight) {measuredTimerHeight = height; void Promise.resolve(bridge?.action?.('content-height',height)).catch(() => {});}
     }
     const currentIntelNpc = key => (session().intel?.npcs || []).find(npc => intelNpcKey(npc,session().intel) === key);
+    const defeatedIntelNpc = npc => session().crawl?.enabled === true && npc?.defeated === true;
     async function loadIntelDrops(npc,key) {
-        if (disposed || state.sessionAvailable !== true || intelLoading.has(key) || !bridge?.action) return;
+        if (disposed || defeatedIntelNpc(npc) || state.sessionAvailable !== true || intelLoading.has(key) || !bridge?.action) return;
         const token = Symbol(key);
         intelLoading.set(key,token); intelErrors.delete(key); render();
         try {
             const result = await bridge.action('session:intel-drops',{npc:npc.name,zone:session().intel?.zone || session().zone,raidInstance:isRaidSource(npc)});
-            if (disposed || intelLoading.get(key) !== token || !currentIntelNpc(key)) return;
+            if (disposed || intelLoading.get(key) !== token || !currentIntelNpc(key) || defeatedIntelNpc(currentIntelNpc(key))) return;
             if (!Array.isArray(result?.items)) throw new Error(result?.error || 'The remaining drops could not be loaded.');
             intelDropCache.set(key,{items:result.items,total:number(result.total ?? result.items.length)});
             intelDropRevision++;
             // Keep memory bounded across long sessions with many visited zones.
             while (intelDropCache.size > 80) intelDropCache.delete(intelDropCache.keys().next().value);
         } catch (error) {
-            if (!disposed && currentIntelNpc(key)) intelErrors.set(key,String(error?.message || 'The remaining drops could not be loaded.'));
+            if (!disposed && currentIntelNpc(key) && !defeatedIntelNpc(currentIntelNpc(key))) intelErrors.set(key,String(error?.message || 'The remaining drops could not be loaded.'));
         } finally {
             if (intelLoading.get(key) === token) intelLoading.delete(key);
             if (!disposed && currentIntelNpc(key)) render();
@@ -342,13 +345,18 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             replace($('#encounter-stats'), `${view.ended ? '<span class="ended">ended</span>' : ''}<span>${durationLabel(view.duration * 1000)}</span><span class="header-total">${fmt(view.metrics.damage)} <small>dmg</small></span><span><strong>${fmt(view.metrics.dps)}</strong> <small>dps</small></span>`);
             replace($('#parse-body'), renderParseContent(view));
         } else if (panel === 'intel') {
-            const intel = s.intel || {};
+            const intel = {...s.intel,crawlEnabled:s.crawl?.enabled === true};
             $('#overlay-title').textContent = s.zone || 'Zone & loot'; $('#class-filter').checked = Boolean(intel.myClassOnly);
+            $('#intel-crawl-mode').checked = s.crawl?.enabled === true;
+            for(const npc of intel.npcs || [])if(crawlDefeated(npc,intel)){
+                const key=intelNpcKey(npc,intel);expandedIntel.delete(key);intelErrors.delete(key);
+                if(intelActionKey===key)intelActionKey='';
+            }
             if (state.sessionAvailable !== true || draftIntelTier === intelTierValue(intel.itemTier)) draftIntelTier = null;
             const tier = draftIntelTier ?? intelTierValue(intel.itemTier);
             $('#intel-item-tier').value = String(tier); $('#intel-item-tier-value').textContent = tier ? `Tier ${tier}` : 'Base';
             $('#intel-item-tier').setAttribute('aria-valuetext',tier ? `Tier ${tier}` : 'Base item stats');
-            const focused = (intel.npcs || []).find(npc => intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
+            const focused = (intel.npcs || []).find(npc => !crawlDefeated(npc,intel) && intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
             const key = focused ? intelNpcKey(focused,intel) : '';
             const focusEvent = JSON.stringify([intel.zone,intel.focusedNpcId,intel.focusSequence]);
             const focus = focused ? `${key}|${focusEvent}` : '';
@@ -414,13 +422,14 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     listen($('#panel-font'),'change',event => { void action('font-scale',Number(event.target.value)); });
     listen($('#encounter-scope'),'change',event => { scope = event.target.value; render(); });
     listen($('#class-filter'),'change',event => { void action('session:class-filter',{panel,enabled:event.target.checked}); });
+    listen($('#intel-crawl-mode'),'change',event => { void action('session:crawl-mode',{enabled:event.target.checked}); });
     listen($('#intel-item-tier'),'input',event => { draftIntelTier = intelTierValue(event.target.value); $('#intel-item-tier-value').textContent = draftIntelTier ? `Tier ${draftIntelTier}` : 'Base'; event.target.setAttribute('aria-valuetext',draftIntelTier ? `Tier ${draftIntelTier}` : 'Base item stats'); });
     listen($('#intel-item-tier'),'change',event => { draftIntelTier = intelTierValue(event.target.value); void action('session:item-tier',{tier:draftIntelTier}); });
     listen($('#intel-search'),'input',event => { intelQuery = event.target.value; render(); });
     // Only entering the mob name opens pointer actions. Keep the group open
     // while crossing its metadata or buttons; keyboard focus works separately.
     listen($('#intel-body'),'pointerover',event => {
-        const name = event.target.closest?.('.npc-name'); if (!name) return;
+        const name = event.target.closest?.('.npc-name'); if (!name || name.closest('.is-defeated')) return;
         const summary = name.closest('.npc-summary');
         intelActionKey = summary.closest('[data-intel-key]').dataset.intelKey;
         $('#intel-body').querySelectorAll('.npc-summary.is-actions-open').forEach(row => row.classList.remove('is-actions-open'));
@@ -488,13 +497,13 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             [...$('#intel-body').querySelectorAll('[data-intel-section-toggle]')].find(target => target.dataset.intelSectionToggle === button.dataset.intelSectionToggle)?.focus({preventScroll:true});
         }
         if (button.dataset.npcAction) {
-            const npc = s.intel?.npcs?.[Number(button.dataset.npcIndex)]; if (!npc) return;
+            const npc = s.intel?.npcs?.[Number(button.dataset.npcIndex)]; if (!npc || defeatedIntelNpc(npc)) return;
             const command = intelMobAction(button.dataset.npcAction,npc,s.intel?.zone || s.zone);
             void action(command.action,command.payload);
         }
         if (button.dataset.intelExpand || button.dataset.intelRetry) {
             const key = button.dataset.intelExpand || button.dataset.intelRetry;
-            const npc = currentIntelNpc(key); if (!npc) return;
+            const npc = currentIntelNpc(key); if (!npc || defeatedIntelNpc(npc)) return;
             if (expandedIntel.has(key) && !button.dataset.intelRetry) expandedIntel.delete(key);
             else {
                 expandedIntel.add(key);
