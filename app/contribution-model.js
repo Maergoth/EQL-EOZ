@@ -286,7 +286,8 @@ function syncTierZeroVerificationCategory(source,{required=false,verified=false}
         // Preserve manually assigned categories and protected examples. Only
         // remove a membership emitted with this exact application marker.
         const escaped=TIER_ZERO_CATEGORY_MARKER.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-        const expression=new RegExp(escaped+'[ \\t]*(?:\\r?\\n)?[ \\t]*(\\[\\[Category:Tier 0 verification needed\\]\\])','g');
+        const categoryName=TIER_ZERO_VERIFICATION_CATEGORY.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+        const expression=new RegExp(escaped+'[ \\t]*(?:\\r?\\n)?[ \\t]*(\\[\\[Category:'+categoryName+'\\]\\])','gi');
         let text=source;
         for(const match of [...source.matchAll(expression)].reverse()){
             const categoryAt=match.index+match[0].indexOf(match[1]);

@@ -2,7 +2,7 @@
 
 New item contributions made from ranked or reverse-calculated observations carry
 their existing tier-zero verification note and
-`[[Category:Tier 0 verification needed]]`. Manual preview/publish and automatic
+`[[Category:Tier 0 Verification Needed]]`. Manual preview/publish and automatic
 captured-item publication use the same serializer. An ordinary tier-zero or
 unranked draft is not assigned a fabricated verification state.
 
