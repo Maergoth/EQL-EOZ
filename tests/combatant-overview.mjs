@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './dot-cast-order.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { EQLogParser } from '../app/parser.js';
@@ -57,7 +58,10 @@ for (const scope of ['session',compact.encounters[0].id]) {
 assert.doesNotMatch(renderParseContent(parseView({...compact,combatants:[{name:'<script>bad</script>',damage:1,dps:1}]},'session','overview')),/<script>/);
 
 // Anchored grammar must not read quoted chat, misses or absorption as damage.
-for (const body of ["Ally says, 'a synthetic rat hits YOU for 999 points of damage.'", "Ally tells you, 'You have gained an ability point!'", 'a synthetic rat tries to hit Ally, but misses!', 'a synthetic rat begins casting Synthetic Flame.']) assert.equal(parser.parse(line(12,body)),null,body);
+for (const body of ["Ally says, 'a synthetic rat hits YOU for 999 points of damage.'", "Ally tells you, 'You have gained an ability point!'", 'a synthetic rat tries to hit Ally, but misses!']) assert.equal(parser.parse(line(12,body)),null,body);
+const beforeCastNames=JSON.stringify(parser.snapshot().combatants);
+assert.equal(parser.parse(line(12,'a synthetic rat begins casting Synthetic Flame.')).type,'combatant-cast-begin');
+assert.equal(JSON.stringify(parser.snapshot().combatants),beforeCastNames,'A nearby cast start is context only, not a combatant action');
 parser.parse(line(13,'You gain a rune for 1,000 points of absorption.'));
 assert.equal(actor(parser.snapshot(),'Synthetic').healing,5);
 assert.equal(parser.snapshot().totalRuneCapacity,1000);

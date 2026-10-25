@@ -10,6 +10,10 @@ function eventSummary(event) {
     const result = {};
     for (const key of ['type', 'source', 'kind', 'victim', 'attacker', 'actor', 'item', 'zone']) if (event[key] != null) result[key] = text(event[key]);
     for (const key of ['at', 'amount', 'quantity']) if (Number.isFinite(event[key])) result[key] = event[key];
+    if(['cast-order','prior-explicit-tick'].includes(event.actorAttribution)){
+        result.actorAttribution=event.actorAttribution;
+        for(const key of ['attributionEvidenceAt','attributionCastAt','attributionCastOrder'])if(Number.isFinite(event[key]))result[key]=event[key];
+    }
     if (event.target) result.target = typeof event.target === 'object' ? { name:text(event.target.name), level:amount(event.target.level) } : text(event.target);
     return result;
 }

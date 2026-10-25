@@ -27,6 +27,7 @@ const requiredModules = [
     'desktop/contribution-gap-verifier.cjs','app/contribution-discovery-gate.js',
     'app/zone-blueprint.js','app/zone-creation-view.js','app/contribution-queue-controls.js','app/log-context.js','desktop/log-context-history.cjs',
     'app/zone-identity.js', 'app/viewer-zone-selection.js', 'app/viewer-archive-discovery.js', 'app/viewer-archive-header.js', 'app/viewer-gltf-images.js', 'app/viewer-terrain-indices.js', 'app/zone-load-guard.js',
+    'app/dot-cast-order.js',
     'app/viewport-framing.js', 'app/established-route-guard.js', 'app/drop-certification.js', 'app/navigation-policy.js', 'app/route-validation.js', 'app/zoneviewer/ZoneViewerApp.js'
 ];
 assert.deepEqual(packagedArchivePaths('linux'), ['dist/linux-unpacked/resources/app.asar'], 'Linux package verification cannot select a stale Windows archive');

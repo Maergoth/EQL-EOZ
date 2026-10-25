@@ -109,8 +109,35 @@ async function run({root,temporary,screenshots}) {
         assert.equal(await execute(()=>document.querySelector('#encounter-scope').value),await execute(()=>fixture.live.firstId));assert.match(await execute(()=>document.querySelector('#parse-body').textContent),/a synthetic sentry/);
         await execute(()=>{const selector=document.querySelector('#encounter-scope');selector.value='session';selector.dispatchEvent(new Event('change',{bubbles:true}));fixture.live.publish();Date.now=fixture.live.realNow;});
         assert.equal(await execute(()=>document.querySelector('#encounter-scope').value),'session');
+        await execute(async()=>{
+            const {EQLogParser}=await import('/app/parser.js'),parser=new EQLogParser(),start=Date.now()-10000;
+            parser.setCharacterFromFilename('eqlog_Synthetic_example.txt');
+            const add=(second,text)=>parser.parse(`[${new Date(start+second*1000).toISOString()}] ${text}`);
+            add(0,'You begin casting Synthetic Rot.');add(0,"Ally's pet begins casting Synthetic Rot.");
+            const first=add(1,'a synthetic north target has taken 11 damage by Synthetic Rot.');
+            const second=add(2,'a synthetic south target has taken 13 damage by Synthetic Rot.');
+            add(3,'a synthetic north target has taken 7 damage by Synthetic Rot.');
+            add(4,'Other begins casting Synthetic Rot.');
+            const overlap=add(5,'a synthetic south target has taken 3 damage by Synthetic Rot.');
+            const explicit=add(6,'a synthetic south target has taken 5 damage from Synthetic Rot by Other.');
+            add(7,'a synthetic south target has taken 2 damage by Synthetic Rot.');
+            fixture.fifo={first,second,overlap,explicit,observed:parser.snapshot().observed.length};
+            fixture.state.snapshot.session.parse=fixture.compactParseSnapshot(parser.snapshot());fixture.push(fixture.state);
+            const selector=document.querySelector('#encounter-scope');selector.value='session';selector.dispatchEvent(new Event('change',{bubbles:true}));
+            document.querySelector('[data-tab="overview"]').click();
+        });
+        assert.deepEqual(await execute(()=>{
+            const parse=fixture.state.snapshot.session.parse;return {own:parse.totalDamage,pet:parse.combatants.find(row=>row.name==="Ally's pet").damage,
+                other:parse.combatants.find(row=>row.name==='Other').damage,unknown:parse.combatants.find(row=>row.name==='Unknown attacker').damage,
+                observed:fixture.fifo.observed,first:fixture.fifo.first.actorAttribution,petActor:fixture.fifo.second.actor,ambiguous:fixture.fifo.overlap.actorKnown,explicit:fixture.fifo.explicit.actorAttribution??null,
+                retained:parse.recentEvents.filter(event=>event.actorAttribution==='cast-order').length};
+        }),{own:18,pet:13,other:5,unknown:5,observed:0,first:'cast-order',petActor:"Ally's pet",ambiguous:false,explicit:null,retained:3},'Actual parser/compaction/native UI carries FIFO credits, explicit authority, ambiguous Unknown and provenance without wiki observations');
+        const fifoNames=await execute(()=>[...document.querySelectorAll('.overview-table .meter-label')].map(node=>node.textContent));
+        for(const name of ['Synthetic',"Ally's pet",'Other','Unknown attacker'])assert(fifoNames.includes(name),`${name}: ${JSON.stringify(fifoNames)}`);
+        assert(!fifoNames.includes('Ally'),'Inferred pet damage cannot merge into its owner');
+        await capture('dot-cast-order-native-overview');
         assert.deepEqual(errors,[]);
-        console.log('Native combatant overview: actual parser and compact snapshot reach whole-session/individual Overview, Damage/Healing/Taken disclosures, AA and keyboard controls; Live holds ended encounters with frozen rates and focus, then follows the next fight while explicit history/session selections stay put.');
+        console.log('Native combatant overview: actual parser and compact snapshot reach whole-session/individual Overview, Damage/Healing/Taken disclosures, AA and keyboard controls; Live holds ended encounters with frozen rates and focus, then follows the next fight. FIFO DoTs retain own/pet credits and provenance, explicit named authority, ambiguous Unknown and no wiki observations.');
     } finally { window.destroy(); await new Promise(done=>server.close(done));app.quit(); }
 }
 try {

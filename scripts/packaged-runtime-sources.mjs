@@ -4,6 +4,7 @@
 // bootstrap must also match the verified pack fetched for this build.
 import { RELEASE_HISTORY } from '../app/release-history.js';
 export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
+    'app/dot-cast-order.js',
     'app/appearance.js',
     'app/appearance-presets.json',
     'app/appearance-presets.generated.js',

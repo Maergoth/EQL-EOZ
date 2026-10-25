@@ -3,6 +3,7 @@ import { isOwnedPetName } from './generated-pets.js';
 import {LogContext} from './log-context.js';
 import { createCombatants, accumulateCombatants, combatantSnapshot, combatantRecipient } from './combatants.js';
 import { rankedChatItemMentions } from './chat-item-mentions.js';
+import { DotCastOrder } from './dot-cast-order.js';
 
 const LINE_RE = /^\[([^\]]+)\]\s*(.*)$/;
 const AUTO_ATTACK_VERBS = new Set(['hit', 'slash', 'crush', 'pierce', 'punch', 'claw', 'bite', 'maul']);
@@ -110,6 +111,7 @@ export class EQLogParser {
         this.lastCombatAt = null;
         this.currentFight = null;
         this.encounterGapSeconds = 15;
+        this.dotCasts = new DotCastOrder();
         this.combatEvents = [];
         this.combatEventsDropped = false;
         this.encounterHistoryLimited = false;
@@ -131,6 +133,7 @@ export class EQLogParser {
     }
 
     resetSourceContext() {
+        this.dotCasts.reset();
         this.zone = '';this.zoneShortName = '';this.location = null;
         this.knownPlayerNames.clear();
         this.lastKill = null;this.currentFight = null;this.currentLineAt = null;
@@ -144,6 +147,7 @@ export class EQLogParser {
     seedLogContext(seed){if(!this.logContext.restore(seed))return false;this.zone=this.logContext.zone;this.zoneShortName=this.logContext.shortName;this.location=null;this.lastKill=null;return true;}
 
     startNewSession(at = Date.now()) {
+        this.dotCasts.reset();
         this.sessionNumber++;
         this.totalDamage = 0;
         this.totalHealing = 0;
@@ -183,6 +187,7 @@ export class EQLogParser {
         const seconds = Math.max(3, Math.min(300, Math.round(Number(value) || 15)));
         if (seconds === this.encounterGapSeconds) return;
         this.encounterGapSeconds = seconds;
+        this.dotCasts.reset();
         this.rebuildEncounters();
     }
 
@@ -263,6 +268,11 @@ export class EQLogParser {
 
     rememberCombatEvent(event) {
         event.character = this.character || 'You';
+        if(event.kind==='dot'&&!event.actorAttribution){
+            if(event.type==='damage')this.dotCasts.named(event.character,event.victim,event.source,this.dotContext());
+            else if(event.type==='taken'&&event.attackerKnown!==false)this.dotCasts.named(event.attacker,event.target,event.source,this.dotContext());
+            else if(event.type==='combatant-damage'&&event.actorKnown!==false)this.dotCasts.named(event.actor,event.target,event.source,this.dotContext());
+        }
         const saved = this.rememberEvent(event);
         this.currentSourceEvents.add(saved);this.eventZones.set(saved,this.zone);
         this.eventSources.set(saved,this.sourceContextId);this.eventVisits.set(saved,this.logContext.visit);
@@ -287,6 +297,7 @@ export class EQLogParser {
 
     noteKill(victim, { addToEncounter = true } = {}) {
         victim = normalizeName(victim);
+        this.dotCasts.targetDeath(this.isPlayerTarget(victim)?this.character||'You':victim,this.dotContext());
         const at = this.currentLineAt || Date.now();
         const key = this.observationKey(this.zone, victim);
         this.killCounts.set(key, (this.killCounts.get(key) || 0) + 1);
@@ -364,7 +375,7 @@ export class EQLogParser {
         this.observed.set(key, previous);
     }
 
-    noteDamage(victim, amount, source, kind) {
+    noteDamage(victim, amount, source, kind, {observeNpc=true,attribution=null}={}) {
         const n = parseNumber(amount);
         if (!Number.isFinite(n) || n < 0) return null;
         const now = this.currentLineAt || Date.now();
@@ -372,7 +383,7 @@ export class EQLogParser {
         this.lastCombatAt = now;
         this.totalDamage += n;
         victim = normalizeName(victim);
-        this.rememberNpc(victim, {
+        if(observeNpc)this.rememberNpc(victim, {
             damageDone: (this.observed.get(`${this.zone.toLowerCase()}|${victim.toLowerCase()}`)?.damageDone || 0) + n
         });
         if (!this.currentFight || this.currentFight.victim !== victim || now - this.currentFight.lastAt > 15000) {
@@ -380,7 +391,7 @@ export class EQLogParser {
         }
         this.currentFight.damage += n;
         this.currentFight.lastAt = now;
-        const event = { type: 'damage', victim, encounterTarget: victim, amount: n, source: source || kind, kind };
+        const event = { type: 'damage', victim, encounterTarget: victim, amount: n, source: source || kind, kind,...attribution };
         if (kind === 'melee') {
             event.skill = normalizeName(source).toLowerCase();
             event.swingEligible = AUTO_ATTACK_VERBS.has(event.skill);
@@ -393,21 +404,21 @@ export class EQLogParser {
         return target === 'you' || Boolean(this.character && target === this.character.toLowerCase());
     }
 
-    noteOtherCombat(actor, target, amount, source, kind, healing = false, { actorKnown = true } = {}) {
+    noteOtherCombat(actor, target, amount, source, kind, healing = false, { actorKnown = true, attribution = null } = {}) {
         actor = combatName(actor); target = combatName(target);
         const n = parseNumber(amount);
         if (!actor || !target || !Number.isFinite(n) || n < 0) return null;
         target = combatantRecipient(actorKnown ? this.isPlayerTarget(actor) ? this.character || 'You' : actor : '',target,this.character || 'You');
         if (!target) return null;
         if (this.isPlayerTarget(actor)) {
-            if (!healing) return this.noteDamage(target, n, source, kind);
+            if (!healing) return this.noteDamage(target, n, source, kind,{observeNpc:!attribution,attribution});
             this.totalHealing += n;
             return this.rememberCombatEvent({type:'heal', target, amount:n, source, kind});
         }
-        if (!healing && this.isPlayerTarget(target)) return this.noteTaken(actorKnown ? actor : '',n,source,kind,target);
+        if (!healing && this.isPlayerTarget(target)) return this.noteTaken(actorKnown ? actor : '',n,source,kind,target,{attribution});
         return this.rememberCombatEvent({type:healing ? 'combatant-heal' : 'combatant-damage', actor,
             target:this.isPlayerTarget(target) ? this.character || 'You' : target, amount:n, source, kind,
-            ...(!actorKnown ? {actorKnown:false} : {}),
+            ...(!actorKnown ? {actorKnown:false} : {}),...attribution,
             encounterTarget:healing ? '' : actorKnown ? `${actor} → ${target}` : target});
     }
 
@@ -422,7 +433,17 @@ export class EQLogParser {
         return score(first) > score(last) ? first : score(last) > score(first) ? last : null;
     }
 
-    noteTaken(attacker, amount, source, kind, target = 'You') {
+    dotContext(){return{context:JSON.stringify([this.sourceContextId,this.logContext.visit,this.zone]),at:this.currentLineAt||Date.now(),gapMs:this.encounterGapSeconds*1000};}
+
+    noteUnnamedDot(target,amount,ability){
+        target=combatName(target);if(!target)return null;
+        if(this.isPlayerTarget(target))target=this.character||'You';
+        const inferred=this.dotCasts.resolve(target,ability,this.dotContext());
+        const attribution=inferred?Object.fromEntries(Object.entries(inferred).filter(([name])=>name!=='actor')):null;
+        return this.noteOtherCombat(inferred?.actor||'Unknown attacker',target,amount,ability,'dot',false,{actorKnown:Boolean(inferred),attribution});
+    }
+
+    noteTaken(attacker, amount, source, kind, target = 'You', {attribution=null}={}) {
         const n = parseNumber(amount);
         if (!this.isPlayerTarget(target) || !Number.isFinite(n) || n < 0) return null;
         const at = this.currentLineAt || Date.now();
@@ -436,7 +457,7 @@ export class EQLogParser {
         // damage/currentFight/session-DPS clocks or NPC damageDone observations.
         return this.rememberCombatEvent({ type:'taken', attacker, target:this.character || 'You',
             encounterTarget:attacker, amount:n, source:normalizeName(source) || 'Unknown ability', kind,
-            ...(!attackerKnown ? {attackerKnown:false} : {}) });
+            ...(!attackerKnown ? {attackerKnown:false} : {}),...attribution });
     }
 
     parse(rawLine, { recordSession = true } = {}) {
@@ -584,11 +605,26 @@ export class EQLogParser {
         }
 
         x = text.match(/^You begin casting (.+?)[.!]*$/i);
-        if (x) return this.rememberEvent({ type:'cast-begin', spell:trimSentence(x[1]) });
+        if (x) {const spell=trimSentence(x[1]);this.dotCasts.start(this.character||'You',spell,this.dotContext());return this.rememberEvent({ type:'cast-begin', spell });}
+
+        x=text.match(/^(.+?) begins casting (.+?)\.$/i);
+        if(x&&combatName(x[1])){const actor=this.isPlayerTarget(x[1])?this.character||'You':combatName(x[1]),spell=trimSentence(x[2]);this.dotCasts.start(actor,spell,this.dotContext());return this.rememberEvent({type:'combatant-cast-begin',actor,spell});}
 
         if (/^Your (?:casting|spell) (?:is|was|has been) interrupted[.!]*$/i.test(text)) {
+            this.dotCasts.fail(this.character||'You','',this.dotContext());
             return this.rememberEvent({ type:'cast-interrupt' });
         }
+
+        x=text.match(/^(.+?) spell is interrupted\.$/i)||text.match(/^(.+?) can't cast spells while stunned!$/i);
+        if(x&&combatName(x[1])){const actor=this.isPlayerTarget(x[1])?this.character||'You':combatName(x[1]);this.dotCasts.fail(actor,'',this.dotContext());return this.rememberEvent({type:this.isPlayerTarget(actor)?'cast-interrupt':'combatant-cast-failed',actor});}
+        x=text.match(/^(.+?) tries to cast a spell on (.+?), but (.+?) are protected\.$/i);
+        if(x&&combatName(x[1])&&combatName(x[2])&&normalizeName(x[2]).toLowerCase()===normalizeName(x[3]).toLowerCase()){const actor=this.isPlayerTarget(x[1])?this.character||'You':combatName(x[1]);this.dotCasts.fail(actor,'',this.dotContext());return this.rememberEvent({type:this.isPlayerTarget(actor)?'cast-interrupt':'combatant-cast-failed',actor});}
+        x=text.match(/^(.+?) resisted your (.+?)\.$/i);
+        if(x&&combatName(x[1])){this.dotCasts.fail(this.character||'You',trimSentence(x[2]),this.dotContext());return this.rememberEvent({type:'cast-interrupt'});}
+        if(/^Your target is (?:too far away|out of range), get closer!$|^You cannot see your target\.$/i.test(text)){this.dotCasts.fail(this.character||'You','',this.dotContext());return this.rememberEvent({type:'cast-interrupt'});}
+        x=text.match(/^Your (.+?) spell has worn off of (.+?)\.$/i);
+        if(x&&combatName(x[2])){const target=this.isPlayerTarget(x[2])?this.character||'You':combatName(x[2]);this.dotCasts.ended(this.character||'You',target,trimSentence(x[1]),this.dotContext());return this.rememberEvent({type:'dot-wearoff'});}
+        if(/^You have been slain by .+?!$|^You died\.$/i.test(text)){this.dotCasts.targetDeath(this.character||'You',this.dotContext());return null;}
 
         // Nearby actions retain their logged actors and recipients. The own
         // paths above run first, so a single line never earns damage twice.
@@ -596,12 +632,12 @@ export class EQLogParser {
         if (x) return this.noteOtherCombat(x[1],x[2],x[3],x[5],'spell');
         x = text.match(/^(.+?) ha(?:s|ve) taken ([\d,]+) damage from (.+?) by (.+?)\.(?:\s*\([^)]+\))?$/i);
         if (x) return this.noteOtherCombat(x[4],x[1],x[2],x[3],'dot');
-        // Caster-omitting DoTs supply an amount and recipient, not evidence of
-        // who cast them. The shared Unknown label cannot connect fights.
+        // Caster-omitting DoTs may use the user-selected cast-order assumption.
+        // Without an unambiguous bounded pairing, Unknown cannot join fights.
         x = text.match(/^You have taken ([\d,]+) damage from (.+?)\.$/i);
-        if (x) return this.noteTaken('',x[1],x[2],'dot');
+        if (x) return this.noteUnnamedDot('You',x[1],x[2]);
         x = text.match(/^(.+?) has taken ([\d,]+) damage by (.+?)\.$/i);
-        if (x) return this.noteOtherCombat('Unknown attacker',x[1],x[2],x[3],'dot',false,{actorKnown:false});
+        if (x) return this.noteUnnamedDot(x[1],x[2],x[3]);
         // The possessive names the shield wearer. It does not name the
         // original buff caster or authorize merging a pet with its owner.
         x = text.match(/^(.+?) (?:is|are) (burned|pierced|tormented) by (.+)['’]s (flames|thorns|frost) for ([\d,]+) points? of non-melee damage[.!]$/i);
