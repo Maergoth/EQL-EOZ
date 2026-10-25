@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Prepare native eye branding for 1.0: replace the desktop, installer and launcher EQL badge with multi-size Windows ICO and Linux PNG assets, and use the eye in native application windows. Keep the current version and application identity unchanged.
+
 ## 0.9.15 - Verified discoveries, zones and map controls
 
 - Check the public live wiki before showing an automatic discovery, item gap or monster popup. Use the bundled snapshot to avoid checks for known facts. Keep pending, failed, broad, unsupported and inconclusive checks out of the discovery queue and popups; recheck current facts before publication.

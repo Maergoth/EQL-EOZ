@@ -590,3 +590,5 @@ item/monster/zone edits; it never trusts a UI summary as authorization. Unsuppor
 existing page layouts need manual resolution instead of destructive reformatting.
 `npm run test:workspace-099` exercises the real component with isolated synthetic
 records, including pointer timing, filters, focused tier changes and slot badges.
+
+Native desktop/installer artwork and 1.0 acceptance checks: [App icons](docs/APP_ICONS.md).

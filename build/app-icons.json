@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "source": "app/assets/eye-of-zomm.svg",
+  "sourceSha256": "224adac8d90319e6abf2896a22e0d6a88890fa5c12ff2e211563ae8b8ee23bf4",
+  "icoSizes": [
+    16,
+    20,
+    24,
+    32,
+    40,
+    48,
+    64,
+    128,
+    256
+  ],
+  "files": {
+    "build/icon.png": "4bf1980d6c2bc0a048f2e95ac85369d918fdda00834b6be4b55a939c21dbcec5",
+    "build/icon.ico": "0af3e5126c1375bd5f95befce4b17fb8ed74dbaefc1ca8eb86dc0c4f6e8dbb52",
+    "app/assets/eye-of-zomm.png": "4bf1980d6c2bc0a048f2e95ac85369d918fdda00834b6be4b55a939c21dbcec5"
+  }
+}

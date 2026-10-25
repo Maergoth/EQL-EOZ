@@ -188,6 +188,7 @@ export function packagedArchivePaths(platform = process.platform) {
 }
 
 export const PACKAGED_RUNTIME_IMAGES=Object.freeze([...new Set([
+    'app/assets/eye-of-zomm.png',
     ...['Itemtop','Itembot','Itemshot'].map(name=>`app/assets/wiki-item-card/${name}.gif`),
     ...['workspace','map','intel','timers'].map(name=>`app/assets/whats-new/${name}.png`),
     ...RELEASE_HISTORY.flatMap(release=>release.steps.map(step=>`app/assets/whats-new/${step.image}.png`))
