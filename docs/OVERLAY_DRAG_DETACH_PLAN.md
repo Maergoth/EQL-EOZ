@@ -105,3 +105,9 @@ retry, original HP147 retained separately from proposed HP108, manual HP109
 preserved across repeat OCR/reload, and the tier3 verification note in the draft.
 The edited-stat overwrite found during independent review is fixed: valid manual
 HP29 stays29; unsupported/invalid manual numbers stay untouched and block preview.
+
+PR #27 is open. The first CI source checks passed on all runners; both native
+jobs stopped at a new pixel-test assumption about opaque cyan tip length. The
+fixture now compares direction against the real CSS canvas center at forced
+1x/1.5x and rejects dots, wrong-axis and reversed arrows. Both local runs pass;
+the application marker geometry is unchanged. CI must pass on the amended head.
