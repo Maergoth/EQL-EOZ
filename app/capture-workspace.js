@@ -95,13 +95,38 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     let enabledGaps=CONTRIBUTION_FILTERS.map(value=>value.key);
     try{const saved=JSON.parse(storage?.getItem(filterKey)||'null');if(Array.isArray(saved))enabledGaps=saved.filter(key=>CONTRIBUTION_FILTERS.some(filter=>filter.key===key));}catch{/* Optional browsing preferences never block drafts. */}
     let discoveryUiReady=false,spawnPromptEpoch=0,masterEpoch=0,masterPending=null,reviewLease=null,reviewWasStale=false;
+    const queuePresentations=new Map(),queueRowViews=new Map();let presentationEpoch=0;
+    const discoveryListActive=()=>Boolean(root.closest('.view.is-active')&&root.querySelector('#contribution-discoveries-panel')?.hidden!==true);
     const discoveryChecksActive=()=>Boolean(characterRoot.closest('.view.is-active')||root.closest('.view.is-active')&&root.querySelector('#contribution-discoveries-panel')?.hidden!==true);
     const discoveryGate=createContributionDiscoveryGate({verify:typeof wiki?.verifyDiscovery==='function'?request=>wiki.verifyDiscovery(request):null,getPack,onChange(){
         if(disposed||!discoveryUiReady||publishing)return;
         const previous=selectedId,rows=queueRows();if(!rows.some(candidate=>candidate.id===selectedId)&&!leasedReviewCandidate()){selectedId=rows[0]?.id||'';matches=null;invalidatePlan();}
         renderQueue();renderReviewState();if(previous!==selectedId||!root.contains(document.activeElement))renderCandidate({onlyChanged:true});if(characterVisible())renderInventoryGaps();
     }});
-    const visibleQueueCandidates=()=>{const candidates=queue.snapshot().filter(candidate=>candidate.status!=='submitted'&&!entityIgnored({kind:candidate.kind,name:candidate.title||candidate.name})),decisions=queue.sourceDecisionKeys(),resolver=contributionResolver();return candidates.filter(candidate=>!decisions.length||manuallyEditedContributions.has(candidate.id)||!automaticSourceDraftComplete(candidate,decisions,{pack:getPack(),resolver})).map(candidate=>discoveryGate.project(candidate,{request:discoveryChecksActive()})).filter(Boolean);};
+    // A display receipt is not publish proof. Incremental log relations may need
+    // a new check without withdrawing the identity that was already on screen.
+    const hasDiscoveryGap=candidate=>(candidate.reasons||[]).some(reason=>['missing-page','missing-population','missing-source','tier0-verification','catalog-unknown'].includes(reason));
+    const presentationIdentity=candidate=>{const pack=getPack();return JSON.stringify([presentationEpoch,pack.meta?.manifestVersion||pack.meta?.version,pack.meta?.schemaVersion,pack.meta?.wikiEntitiesComplete,pack.meta?.sample,candidate.id,candidate.kind,candidate.title||candidate.name,candidate.zone,candidate.instance||'unknown']);};
+    function retainPresentation(raw,shown){
+        const sourceKey=value=>JSON.stringify([value.npc,value.zone,value.instance]),allowed=new Set(shown.sources.map(sourceKey));
+        return {...raw,title:shown.title,membership:shown.membership,intent:shown.intent,reasons:shown.reasons,relations:shown.relations,sources:raw.sources.filter(source=>allowed.has(sourceKey(source)))};
+    }
+    function queuedPresentation(raw){
+        const saved=queuePresentations.get(raw?.id);
+        if(!saved||!discoveryListActive()||!hasDiscoveryGap(raw)||saved.identity!==presentationIdentity(raw)||discoveryGate.state(raw)==='covered'){if(raw)queuePresentations.delete(raw.id);return null;}
+        return retainPresentation(raw,saved.candidate);
+    }
+    const visibleQueueCandidates=()=>{
+        if(!discoveryListActive())queuePresentations.clear();
+        const candidates=queue.snapshot().filter(candidate=>candidate.status!=='submitted'&&!entityIgnored({kind:candidate.kind,name:candidate.title||candidate.name})),decisions=queue.sourceDecisionKeys(),resolver=contributionResolver();
+        const eligible=candidates.filter(candidate=>!decisions.length||manuallyEditedContributions.has(candidate.id)||!automaticSourceDraftComplete(candidate,decisions,{pack:getPack(),resolver})),ids=new Set(eligible.map(candidate=>candidate.id));
+        for(const id of queuePresentations.keys())if(!ids.has(id))queuePresentations.delete(id);
+        return eligible.map(candidate=>{
+            const fresh=discoveryGate.project(candidate,{request:discoveryChecksActive()});
+            if(fresh&&discoveryListActive()&&candidate.manual!==true)queuePresentations.set(candidate.id,{identity:presentationIdentity(candidate),candidate:fresh});
+            return fresh||queuedPresentation(candidate);
+        }).filter(Boolean);
+    };
     const queueRows=()=>visibleContributionQueue(visibleQueueCandidates(),enabledGaps);
     selectedId=queueRows()[0]?.id||'';
     let inventoryTimer=null,inventoryPolling=false,inventoryWatchEpoch=0,inventoryMessage='',statsStarting=false,spawnArmedId='',iconPage=0;
@@ -159,20 +184,18 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function leasedReviewCandidate(){
         if(!reviewLease)return null;
         const raw=queue.snapshot().find(candidate=>candidate.id===selectedId),state=raw&&discoveryGate.state(raw);
-        if(!raw||raw.id!==reviewLease.id||raw.status==='submitted'||entityIgnored({kind:raw.kind,name:raw.title||raw.name})||
-            discoveryGate.signature(raw)!==reviewLease.signature||state==='covered'){
+        if(!raw||raw.id!==reviewLease.id||raw.status==='submitted'||!hasDiscoveryGap(raw)||entityIgnored({kind:raw.kind,name:raw.title||raw.name})||
+            presentationIdentity(raw)!==reviewLease.identity||state==='covered'){
             reviewLease=null;return null;
         }
-        const shown=reviewLease.candidate,sourceKey=value=>JSON.stringify([value.npc,value.zone,value.instance]);
-        const allowed=new Set(shown.sources.map(sourceKey));
-        return {...raw,title:shown.title,membership:shown.membership,intent:shown.intent,reasons:shown.reasons,relations:shown.relations,sources:raw.sources.filter(source=>allowed.has(sourceKey(source)))};
+        return retainPresentation(raw,reviewLease.candidate);
     }
     // Presentation and local editing may retain one previously confirmed draft.
     // selected() remains the fresh-proof path for preview/automatic actions.
     const reviewCandidate=()=>selected()||leasedReviewCandidate();
     function renderReviewState(){
         const candidate=selected(),host=$('[data-contribution-editor]');
-        if(candidate&&candidate.manual!==true&&root.closest('.view.is-active')&&contributionTab==='discoveries'&&host.querySelector('[data-candidate-form]')?.dataset.reviewCandidateId===candidate.id){const raw=queue.snapshot().find(value=>value.id===candidate.id);reviewLease={id:candidate.id,signature:discoveryGate.signature(raw),candidate};}
+        if(candidate&&candidate.manual!==true&&root.closest('.view.is-active')&&contributionTab==='discoveries'&&host.querySelector('[data-candidate-form]')?.dataset.reviewCandidateId===candidate.id){const raw=queue.snapshot().find(value=>value.id===candidate.id);reviewLease={id:candidate.id,identity:presentationIdentity(raw),candidate};}
         const retained=!candidate&&leasedReviewCandidate();
         let status=host.querySelector('[data-contribution-proof-status]');
         if(!status&&host.querySelector('[data-candidate-form]')){status=document.createElement('p');status.dataset.contributionProofStatus='';status.className='settings-helper';status.setAttribute('role','status');host.prepend(status);}
@@ -229,12 +252,47 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         if(contributionIconCrop?.candidateId===candidate.id&&!candidate.fields.iconId?.edited&&!candidate.fields.iconId?.confirmed)void contributionIcons.readDataUrl(contributionIconCrop.dataUrl);
     }
     function renderQueue(){
-        const all=visibleQueueCandidates(),candidates=queueRows(),counts=contributionQueueCounts(all),filters=$('[data-contribution-filters]');
+        const all=visibleQueueCandidates(),candidates=visibleContributionQueue(all,enabledGaps),counts=contributionQueueCounts(all),filters=$('[data-contribution-filters]'),list=$('[data-contribution-list]');
         const attention=root.querySelector('.contribution-latest-result[data-automatic-review-key]');
         if(attention&&!all.some(candidate=>automaticSourceDraftKeys(candidate,{resolver:contributionResolver()})?.includes(attention.dataset.automaticReviewKey))){attention.hidden=true;attention.innerHTML='';}
-        filters.innerHTML=CONTRIBUTION_FILTERS.map(filter=>`<label class="check-control"><input type="checkbox" data-gap-filter="${filter.key}" ${enabledGaps.includes(filter.key)?'checked':''}>${escape(filter.label)} <span class="contribution-filter-count">${counts[filter.key]}</span></label>`).join('');
-        $('[data-contribution-count]').textContent=`${candidates.length} of ${all.length} entries shown`;
-        $('[data-contribution-list]').innerHTML=candidates.map(c=>{const info=contributionQueueInfo(c);return `<article class="contribution-row ${c.id===selectedId?'is-active':''}">${contributionQueueControls(c,{canIgnore:typeof wiki?.ignoreContributionEntity==='function',disabled:publishing})}<button type="button" class="contribution-row-select" data-candidate-id="${escape(c.id)}"><strong>${escape(c.name)}</strong><small class="contribution-queue-type">${escape(info.kind)} <span aria-hidden="true">›</span> ${info.pageType}</small>${info.labels.length?`<span class="contribution-gap-tags">${info.labels.map(label=>`<span>${escape(label)}</span>`).join('')}</span>`:''}${['submitted','partial','needs-attention'].includes(c.status)?`<small>${escape(c.status==='submitted'?'Submitted':c.status==='partial'?'Partly submitted':'Needs attention')}</small>`:''}</button>${contributionDestinationHintsMarkup(c,{compact:true,pack:getPack()})}</article>`;}).join('')||`<p class="empty-state">${all.length?'No entries match these filters. Check a gap type above to show it.':'New discoveries from logs and screen reads appear here.'}</p>`;
+        if(!filters.children.length)filters.innerHTML=CONTRIBUTION_FILTERS.map(filter=>`<label class="check-control"><input type="checkbox" data-gap-filter="${filter.key}">${escape(filter.label)} <span class="contribution-filter-count"></span></label>`).join('');
+        for(const input of filters.querySelectorAll('[data-gap-filter]')){input.checked=enabledGaps.includes(input.dataset.gapFilter);const count=input.parentElement.querySelector('.contribution-filter-count'),text=String(counts[input.dataset.gapFilter]);if(count.textContent!==text)count.textContent=text;}
+        const count=$('[data-contribution-count]'),countText=`${candidates.length} of ${all.length} entries shown`;if(count.textContent!==countText)count.textContent=countText;
+        const focused=document.activeElement,restoreFocus=list.contains(focused),scrolls=[],ids=new Set(candidates.map(candidate=>candidate.id));
+        for(let node=list;node;node=node.parentElement)scrolls.push({node,top:node.scrollTop,left:node.scrollLeft});
+        for(const [id,view] of queueRowViews)if(!ids.has(id)){view.node.remove();queueRowViews.delete(id);}
+        if(candidates.length)list.querySelector(':scope > .empty-state')?.remove();
+        let previous=null;
+        for(const c of candidates){
+            const info=contributionQueueInfo(c),markup=`${contributionQueueControls(c,{canIgnore:typeof wiki?.ignoreContributionEntity==='function',disabled:publishing})}<button type="button" class="contribution-row-select" data-candidate-id="${escape(c.id)}"><strong>${escape(c.name)}</strong><small class="contribution-queue-type">${escape(info.kind)} <span aria-hidden="true">›</span> ${info.pageType}</small>${info.labels.length?`<span class="contribution-gap-tags">${info.labels.map(label=>`<span>${escape(label)}</span>`).join('')}</span>`:''}${['submitted','partial','needs-attention'].includes(c.status)?`<small>${escape(c.status==='submitted'?'Submitted':c.status==='partial'?'Partly submitted':'Needs attention')}</small>`:''}</button>${contributionDestinationHintsMarkup(c,{compact:true,pack:getPack()})}`;
+            let view=queueRowViews.get(c.id);
+            if(!view){const node=document.createElement('article');node.className='contribution-row';node.dataset.contributionRowId=c.id;node.innerHTML=markup;view={node,markup};queueRowViews.set(c.id,view);}
+            else if(view.markup!==markup){const next=document.createElement('article');next.innerHTML=markup;syncQueueChildren(view.node,next);view.markup=markup;}
+            if(view.node.classList.contains('is-active')!==(c.id===selectedId))view.node.classList.toggle('is-active',c.id===selectedId);
+            const before=previous?previous.nextSibling:list.firstChild;if(before!==view.node)list.insertBefore(view.node,before);previous=view.node;
+        }
+        if(!candidates.length){let empty=list.querySelector(':scope > .empty-state');if(!empty){empty=document.createElement('p');empty.className='empty-state';list.append(empty);}const text=all.length?'No entries match these filters. Check a gap type above to show it.':'New discoveries from logs and screen reads appear here.';if(empty.textContent!==text)empty.textContent=text;}
+        if(restoreFocus&&document.activeElement!==focused){const target=focused.isConnected?focused:[...list.querySelectorAll('[data-candidate-id]')].find(button=>button.dataset.candidateId===selectedId);target?.focus({preventScroll:true});}
+        for(const {node,top,left} of scrolls){if(node.scrollTop!==top)node.scrollTop=top;if(node.scrollLeft!==left)node.scrollLeft=left;}
+        updateQueueNavigation(candidates);
+    }
+    function updateQueueNavigation(ordered=queueRows()){
+        const label=$('[data-queue-position]');if(!label)return;
+        const position=ordered.findIndex(entry=>entry.id===selectedId),text=(position>=0?position+1:0)+' / '+ordered.length;if(label.textContent!==text)label.textContent=text;
+        for(const [selector,direction] of [['[data-candidate-previous]',-1],['[data-candidate-next]',1]])$(selector).onclick=()=>{const rows=queueRows(),index=rows.findIndex(entry=>entry.id===selectedId);selectContribution(rows[(index+direction+rows.length)%rows.length]?.id);};
+    }
+    function syncQueueChildren(current,next){
+        const children=[...next.childNodes];
+        for(const [index,child] of children.entries()){
+            const old=current.childNodes[index];
+            if(!old){current.append(child);continue;}
+            if(old.nodeType!==child.nodeType||old.nodeName!==child.nodeName){old.replaceWith(child);continue;}
+            if(old.nodeType!==1){if(old.nodeValue!==child.nodeValue)old.nodeValue=child.nodeValue;continue;}
+            for(const attribute of [...old.attributes])if(!child.hasAttribute(attribute.name))old.removeAttribute(attribute.name);
+            for(const attribute of [...child.attributes])if(old.getAttribute(attribute.name)!==attribute.value)old.setAttribute(attribute.name,attribute.value);
+            syncQueueChildren(old,child);
+        }
+        while(current.childNodes.length>children.length)current.lastChild.remove();
     }
     function dismissDiscovery(id){
         if(publishing)return;cancelAutomaticContribution();if(selectedId!==id)saveCandidate();queue.remove(id);manuallyEditedContributions.delete(id);
@@ -258,7 +316,9 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function editorSignature(candidate){const tierReviewState=candidate?.kind==='item'?queue.tierZeroReview?.(candidate.id):null;return JSON.stringify([candidate&&{...candidate,evidence:undefined,tierZeroEvidence:undefined,matches:undefined},plan?.id,publishing,contributionIconCrop,tierReviewState?.ok,tierReviewState?.reason]);}
     function renderCandidate({onlyChanged=false}={}){
         renderDiscoveryCapture();if(reviewLease&&reviewLease.id!==selectedId)reviewLease=null;
-        const liveCandidate=selected(),candidate=liveCandidate||leasedReviewCandidate(),host=$('[data-contribution-editor]');
+        const liveCandidate=selected(),raw=queue.snapshot().find(value=>value.id===selectedId),retained=raw&&queuedPresentation(raw);
+        if(!liveCandidate&&retained&&!leasedReviewCandidate())reviewLease={id:raw.id,identity:presentationIdentity(raw),candidate:retained};
+        const candidate=liveCandidate||leasedReviewCandidate(),host=$('[data-contribution-editor]');
         // Repeated gate receipts and equivalent OCR frames must not tear down
         // the open form, icon finder, focus, expanded sections or scroll state.
         const signature=editorSignature(candidate);
@@ -294,8 +354,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             queue.update(current.id,{...patch,planId:null,status:'needs-review'});invalidatePlan();renderedCandidateSignature=editorSignature(reviewCandidate());renderReviewState();
         }});
         const tierReview=queue.tierZeroReview?.(candidate.id);if(tierReview?.evidence){const button=document.createElement('button');button.type='button';button.className='secondary-button';button.textContent='Confirm this unmodified tier 0 reading';button.disabled=!tierReview.ok;button.title=tierReview.reason;button.onclick=()=>{saveCandidate();const result=queue.confirmTierZero(candidate.id,{evidenceId:queue.tierZeroReview(candidate.id)?.evidence?.id,modifiersExcluded:true,reviewed:true});if(result?.ok===false)return warning(result.error);invalidatePlan();renderCandidate();};$('[data-item-base-review]')?.prepend(button);}
-        const ordered=queueRows(),position=ordered.findIndex(entry=>entry.id===candidate.id);$('[data-queue-position]').textContent=(position>=0?position+1:0)+' / '+ordered.length;
-        $('[data-candidate-previous]').onclick=()=>selectContribution(ordered[(position-1+ordered.length)%ordered.length]?.id);$('[data-candidate-next]').onclick=()=>selectContribution(ordered[(position+1)%ordered.length]?.id);
+        updateQueueNavigation();
         $('[data-record-spawn]')?.addEventListener('click',()=>{saveCandidate();const result=queue.armSpawnLocation(candidate.id);if(!result.ok)return warning(result.error);renderCandidate();notify('Stand at '+candidate.name+'’s spawn and type /loc.',{duration:15000});});
         async function attach(source){const current=saveCandidate(),epoch=reviewEpoch;if(!wiki?.prepareAttachment)throw Error('Screenshot attachments require the updated desktop app.');const result=await wiki.prepareAttachment({candidateId:current.id,kind:current.kind,source});if(disposed||selectedId!==current.id||result.cancelled)return;const latest=selected();queue.update(current.id,{attachment:{...result,caption:latest?.attachment?.caption||'',license:'own-screenshot'},planId:null});invalidatePlan();renderCandidate();}
         $('[data-contribution-file]')?.addEventListener('click',()=>void act(()=>attach('file')));$('[data-contribution-paste]')?.addEventListener('click',()=>void act(()=>attach('clipboard')));
@@ -1074,7 +1133,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     if(wiki?.contributionIgnores)void wiki.contributionIgnores().then(applyIgnoreSnapshot).catch(()=>warning('Ignored entities could not be loaded. Automatic contributions will wait for the device ignore list.'));
     let discoveryLogSource='';
     function resetDiscoveryChecks(){
-        spawnPromptEpoch++;reviewLease=null;reviewWasStale=false;discoveryGate.clear();queue.cancelSpawnLocation?.();
+        spawnPromptEpoch++;presentationEpoch++;queuePresentations.clear();reviewLease=null;reviewWasStale=false;discoveryGate.clear();queue.cancelSpawnLocation?.();
         if(spawnArmedId)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+spawnArmedId}).catch(()=>{});
         spawnArmedId='';if(discoveryUiReady){renderQueue();renderCandidate();}
     }
