@@ -28,8 +28,20 @@ try {
             throw new Error('Development desktop updater must be exposed through trusted IPC without offering installation.');
         }
         if((await window.eyeOfZommUpdates.install()).status!=='unsupported')throw new Error('Development IPC cannot start a silent installer.');
+        // did-finish-load does not await the renderer's asynchronous updater
+        // status IPC. Wait for its actual unsupported presentation, rather than
+        // treating the initial HTML controls as the settled development UI.
+        const deadline = performance.now() + 8000;
+        while (true) {
+            const check = document.getElementById('check-app-update'), install = document.getElementById('install-app-update');
+            const startup = document.getElementById('app-update-startup-download'), message = document.getElementById('app-update-status')?.textContent || '';
+            if (check?.disabled && install?.hidden && startup?.disabled && message.includes('Windows and Linux x64 desktop apps')) break;
+            if (performance.now() >= deadline) throw new Error('Application update controls must reflect development-mode support. '+JSON.stringify({message,checkDisabled:check?.disabled,installHidden:install?.hidden,startupDisabled:startup?.disabled}));
+            await new Promise(resolve => setTimeout(resolve,25));
+        }
         document.querySelector('[data-view="settings"]').click();
-        if (!document.getElementById('check-app-update').disabled || !document.getElementById('install-app-update').hidden) {
+        if (!document.getElementById('check-app-update').disabled || !document.getElementById('install-app-update').hidden ||
+            !document.querySelector('[data-view-panel="settings"]').classList.contains('is-active')) {
             throw new Error('Application update controls must reflect development-mode support.');
         }
         let evalBlocked = false;
