@@ -24,7 +24,7 @@ const hostile = {...queue.get('notice-0'),prompt:{name:'<img onerror=boom>'},cho
 assert.doesNotMatch(discoveryNoticeMarkup(hostile),/<img|<script| onmouseover="boom/);
 assert.match(discoveryNoticeMarkup(hostile),/data-discovery-command="capture"/);
 assert.match(discoveryNoticeMarkup(hostile),/This monster isn't on the wiki!/);
-assert.match(discoveryNoticeMarkup({...hostile,prompt:{name:'Synthetic Ring',kind:'item'}}),/This item isn't on the wiki!/);
+assert.match(discoveryNoticeMarkup({...hostile,prompt:{name:'Synthetic Ring',kind:'item'}}),/New Item Found!/);
 
 // A small event-surface fixture exercises the shared factory without embedding
 // another application page or relying on an owner/parser test double.
