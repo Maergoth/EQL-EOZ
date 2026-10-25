@@ -24,8 +24,10 @@ acceptance are separate milestones. Preserve the pending feature PRs below.
 - [x] Item forms: screenshot first, adjacent icon screenshot input using the
   existing compact finder; no standalone Fraction Maximum or Exaltation capacity
   fields. Capacity remains a Character/User-page concern.
-- [x] Default the item form's base SV Void to zero without inventing observed
-  OCR values or modifying recorded Character totals.
+- [x] Keep missing item statistics, including base SV Void, blank and omit them
+  unless explicitly observed or entered; preserve an entered 0. The
+  [structured item form](ITEM_CONTRIBUTION_FORM.md) supersedes the earlier
+  editable-zero default. Recorded Character totals remain unchanged.
 - [x] Keep visible decimal punctuation in OCR weight, including separated dot
   or comma. Ambiguous missing punctuation remains local evidence for correction,
   never a silently accepted weight of 32. Explicit manual numbers remain valid.
