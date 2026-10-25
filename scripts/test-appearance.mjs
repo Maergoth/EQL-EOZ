@@ -74,10 +74,9 @@ try {
             if(!wasVisible)window.hide();
         };
         const mapSelectPalette=async()=>{
-            // This checks a real rendered control. A never-shown Linux owner
-            // can leave its WebGL iframe without a native drawable surface.
-            // Show nonactivatingly, then acknowledge native/document visibility
-            // before depending on the viewer's normal configured-folder boot.
+            // Exercise a real visible control without activating the window.
+            // Acknowledge native/document visibility before inspecting the
+            // viewer's normal configured-folder boot.
             nativeShowInactive.call(owner);
             await until(async()=>owner.isVisible()&&await execute(owner,()=>!document.hidden),'visible appearance owner');
             await execute(owner,()=>document.querySelector('[data-view="map"]').click());
@@ -223,7 +222,9 @@ try {
     };
     for(const phase of ['first','restart']){
         await writeFile(join(temporary,'main.cjs'),`const {app}=require('electron');app.setPath('userData',${JSON.stringify(profile)});(${run.toString()})(${JSON.stringify({root,log,screenshots,phase})});`);
-        const result=await new Promise((resolve,reject)=>{const child=spawn(electron,[temporary,'--disable-gpu','--mute-audio'],{windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);child.once('error',reject);child.once('exit',code=>resolve({code,output}));});
+        // The real Map selector mounts through Three.js. Use the same bounded
+        // software WebGL backend as the 3D fixture instead of disabling GL.
+        const result=await new Promise((resolve,reject)=>{const child=spawn(electron,[temporary,'--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--mute-audio'],{windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);child.once('error',reject);child.once('exit',code=>resolve({code,output}));});
         assert.equal(result.code,0,result.output);assert.match(result.output,/EOZ_APPEARANCE_SMOKE=.*"ok":true/);console.log(result.output.match(/EOZ_APPEARANCE_SMOKE=.*/)[0]);
     }
 }finally{
