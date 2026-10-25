@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './win32-hit-test-probe.mjs';
 import { EventEmitter } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
