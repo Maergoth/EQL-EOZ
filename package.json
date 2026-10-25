@@ -30,6 +30,7 @@
     "test:discovery-notices": "node scripts/test-discovery-notices.mjs",
     "test:discovery-existence": "node tests/wiki-item-existence.mjs && node tests/wiki-discovery-existence.mjs",
     "test:discovery-popup": "node scripts/test-discovery-popup.mjs",
+    "test:chat-item-boundaries": "node scripts/test-chat-item-boundaries.mjs",
     "test:discovery-capture-workspace": "node scripts/test-discovery-capture-workspace.mjs",
     "test:window-lifecycle": "node scripts/test-window-lifecycle.mjs",
     "test:map-layout": "node scripts/test-map-layout.mjs && node scripts/test-map-player-marker.mjs",

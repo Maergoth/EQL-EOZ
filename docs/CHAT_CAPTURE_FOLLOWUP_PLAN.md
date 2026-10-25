@@ -10,6 +10,12 @@ implementation and publication boundaries explicit across context changes.
 
 ## Observed problem
 
+The later [item-boundary correction](CHAT_ITEM_BOUNDARIES.md) supersedes the
+permissive standalone plaintext admission described by this historical release
+record. Unknown unmarked ranked prose stays quiet; genuine encoded links remain
+supported, while known typed catalog names or explicit item markers establish
+plaintext boundaries.
+
 An installed 0.9.10 game log retained a tier-decorated item chat message as
 plain text, without the encoded link delimiters expected by `parser.js`.
 The current private cached catalog lacked the item. Its local contribution

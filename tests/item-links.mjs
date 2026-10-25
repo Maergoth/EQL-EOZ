@@ -26,12 +26,14 @@ assert.equal(parser.parse(line(`Synthetic Speaker says, '${escaped('Historical I
 const looted=parser.parse(line(`You have looted ${escaped('Rat Whiskers')} from the corpse of a sewer rat!`));assert.equal(looted.type,'loot');assert.equal(looted.item,'Rat Whiskers');assert.equal(parser.snapshot().totalLoot,1,'Existing loot remains a single normal loot event');
 const nativeLoot=parser.parse(line(`You have looted ${native('Native Rat Whiskers')} from the corpse of a sewer rat!`));assert.equal(nativeLoot.type,'loot');assert.equal(nativeLoot.item,'Native Rat Whiskers');
 
-const plainParser=new EQLogParser();
+const plainNames=['Example Gauntlets','Cloak of Synthetic Flames','Synthetic Blade of the Watcher','Thornstinger','Earthshaker','Synthetic Relic','Known Sword'];
+const plainParser=new EQLogParser({getPack:()=>plainPack}),plainPack={items:plainNames.map(name=>({name}))};
 for(const payload of ['Example Gauntlets +5','Example Gauntlets +4 These seem solid...','Cloak of Synthetic Flames +10','Synthetic Blade of the Watcher +0','Thornstinger +5','Earthshaker +6','Synthetic Relic +5']){
     const event=plainParser.parse(line(`Syntheticplayer tells General:1, '${payload}'`));assert.equal(event?.type,'item-links',payload);assert.deepEqual(event.items,[payload.match(/^.*?\+\d+/)[0]]);assert.equal(event.itemLinkFormat,'plain-tiered-chat');assert.equal(event.evidence.interpretation,'possible-tiered-item-mention');
 }
 for(const wrapper of [payload=>`Syntheticplayer tells the guild, '${payload}'`,payload=>`Syntheticplayer tells you, '${payload}'`,payload=>`You tell General:1, '${payload}'`,payload=>`Syntheticplayer says, '${payload}'`])assert.deepEqual(plainParser.parse(line(wrapper('Example Gauntlets +5')))?.items,['Example Gauntlets +5']);
-for(const payload of ['Example Gauntlets','example gauntlets +5','I Need Gauntlets +5','These Gauntlets +5','Need Better Gauntlets +5','Damage Shield +5 please','AC +5','HP +5','Haste +5','Thornstinger +5 These seem solid...','Example Gauntlets +11','Example Gauntlets +5 Other Boots +4','I think Example Gauntlets +5 are solid','Synthetic Spell +5'])assert.equal(plainParser.parse(line(`Syntheticplayer tells General:1, '${payload}'`)),null,payload);
+for(const payload of ['Example Gauntlets','I Need Gauntlets +5','These Gauntlets +5','Need Better Gauntlets +5','Damage Shield +5 please','AC +5','HP +5','Haste +5','Example Gauntlets +11','Synthetic Spell +5'])assert.equal(plainParser.parse(line(`Syntheticplayer tells General:1, '${payload}'`)),null,payload);
+for(const payload of ['example gauntlets +5','I think Example Gauntlets +5 are solid','Example Gauntlets +5 Other Boots +4'])assert.deepEqual(plainParser.parse(line(`Syntheticplayer tells General:1, '${payload}'`))?.items,['Example Gauntlets +5'],'Known exact item boundaries do not depend on title case or surrounding prose');
 for(const text of ['Example Gauntlets +5',"System message: 'Example Gauntlets +5'",'Syntheticplayer begins casting Example Gauntlets +5.','You hit a synthetic target for 5 points of damage by Example Gauntlets +5.'])assert.notEqual(plainParser.parse(line(text))?.type,'item-links','A non-chat line never becomes a plaintext item mention');
 assert.equal(plainParser.parse(line("Syntheticplayer tells General:1, 'Example Gauntlets +5'"),{recordSession:false}),null,'Historical plain chat mentions do not trigger discovery');
 const authenticated=plainParser.parse(line(`Syntheticplayer tells General:1, '${escaped('Authentic Blade +5')} Example Gauntlets +4'`));assert.deepEqual(authenticated.items,['Authentic Blade +5']);assert.equal(authenticated.itemLinkFormat,undefined);assert.equal(authenticated.evidence.interpretation,undefined,'Authenticated encoded links retain precedence over plaintext guesses');
@@ -62,3 +64,30 @@ const partial={...pack,meta:{wikiEntitiesComplete:false}},partialQueue=createCon
 const spawn=queue.consumeLog({type:'kill',victim:'A missing spawn'},context());assert(spawn.prompt?.armed);const armed=queue.spawnStatus().candidateId;
 queue.consumeLog(chat([escaped('Another Missing Chat Item')]),context());assert.equal(queue.spawnStatus().candidateId,armed);
 console.log('Item links: bounded authentic escaped/modern links, no ordinary/player/quest false positives, preserved loot parsing, canonical missing-item notices, local chat evidence, no inferred sources/uploads, restart dedup and live catalog guards passed.');
+
+// The game's flattened log can lose item-link delimiters. The word “Then” is
+// prose here; no special-case English stop-word list should define the item.
+const actual='Signet Ring of Lord Everling',catalog={items:[{name:actual,wikiTitle:actual,aliases:['Everling Signet']}],wikiEntities:{items:[actual,'Everling Signet','Eon'],npcs:[],titles:[actual,'Everling Signet','Eon']},meta:{wikiEntitiesComplete:true,sample:false}};
+const anchored=new EQLogParser({getPack:()=>catalog});
+for(const prefix of ['Then ','Please consider the ','Earlier I linked: ','Compare this, ','→ ','']){
+    const event=anchored.parse(line(`Syntheticplayer tells General:1, '${prefix}${actual} +3'`));
+    assert.deepEqual(event?.items,[actual+' +3'],prefix);assert(!event.items[0].startsWith('Then '));
+}
+assert.deepEqual(anchored.parse(line("Syntheticplayer tells General:1, 'And then Everling Signet +3, that one.'"))?.items,[actual+' +3'],'Typed aliases resolve to the known item without preceding prose');
+assert.deepEqual(anchored.parse(line("Syntheticplayer tells General:1, 'Tiny item: Eon +3'"))?.items,['Eon +3'],'Short known names remain supported');
+for(const format of [escaped,native]){
+    const unknown='Genuinely Uncatalogued Relic +3',event=anchored.parse(line(`Syntheticplayer tells General:1, 'Then ${format(unknown)} as promised.'`));
+    assert.deepEqual(event?.items,[unknown],'Real encoded links retain exact unknown full-name boundaries');assert.equal(event.itemLinkFormat,undefined);
+}
+const noCatalog=new EQLogParser();
+for(const payload of ['Then Signet Ring of Lord Everling +3','Please Consider Synthetic Relic +3','Synthetic Relic +3','Thornstinger +5','Ring +3 These Are Stats','[HP +3]','[Strength +3]','[Synthetic Spell +3]','[Unknown Relic +30]','[Unknown Relic +3.5]','[<script> +3]'])assert.equal(noCatalog.parse(line(`Syntheticplayer tells General:1, '${payload}'`)),null,payload+' has no reliable new-item boundary');
+for(const payload of ['Look at [Uncatalogued Relic +3], please.','Look at "Uncatalogued Relic +3", please.','Then [Uncatalogued Relic] +3','Then "Uncatalogued Relic" +3']){
+    const event=noCatalog.parse(line(`Syntheticplayer tells General:1, '${payload}'`));assert.deepEqual(event?.items,['Uncatalogued Relic +3']);assert.equal(event.itemLinkFormat,'plain-tiered-chat');
+}
+for(const payload of [`${actual} +30`,`${actual} +3.5`,`${actual} +3foo`,`${actual} +3+4`,`${escaped('[Unknown Relic +3]',0)}`,`\\aPC 123 0:[Unknown Relic +3]\\/a`])assert.equal(anchored.parse(line(`Syntheticplayer tells General:1, '${payload}'`)),null,'Invalid rank/player/quest controls cannot fall through to a guessed identity: '+payload);
+const ambiguousCatalog={items:[{name:'Shared Relic',wikiTitle:'First Relic'},{name:'Shared Relic',wikiTitle:'Second Relic'}]};
+assert.equal(new EQLogParser({getPack:()=>ambiguousCatalog}).parse(line("Syntheticplayer tells General:1, 'Earlier Shared Relic +3'")),null,'Ambiguous typed catalog identities stay quiet');
+const reloaded=new EQLogParser();assert.equal(reloaded.parse(line(`Syntheticplayer tells General:1, 'Then ${actual} +3'`)),null);reloaded.setLogIdentityPack(catalog);assert.deepEqual(reloaded.parse(line(`Syntheticplayer tells General:1, 'Then ${actual} +3'`))?.items,[actual+' +3'],'Native automatic reader pack updates also anchor chat identities');
+const actualPrompts=[],knownDiscovery=createWikiDiscovery({storage:null,getPack:()=>catalog,now:()=>now,onMissing:prompt=>actualPrompts.push(prompt),verifyItem:()=>({status:'missing'})});
+knownDiscovery.consume(anchored.parse(line(`Syntheticplayer tells General:1, 'Then ${actual} +3'`)),context());assert.deepEqual(actualPrompts,[],'The reported known-item chat cannot manufacture a missing Then-prefixed item notice');
+console.log('Ranked chat boundaries: exact catalog names/aliases in prose, explicit unknown markers, authentic unknown links, ambiguous/unbounded/invalid negatives and native pack refresh passed.');
