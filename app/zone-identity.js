@@ -65,10 +65,19 @@ export function viewerZoneTarget(zones,value,shortName='') {
     const record=resolveZoneRecord(zones,value);
     if(!record)return shortName?'':viewerZoneName(value);
     const aliases=(record.aliases||[]).map(alias=>cleanZoneName(alias).toLowerCase());
-    const verified=id=>/^[a-z0-9][a-z0-9_]*$/.test(id)&&viewerArchiveIds(id).some(alias=>aliases.includes(alias)&&resolveZoneRecord(zones,alias)===record);
+    const owners=alias=>zones.filter(zone=>[zone.name,zone.viewerName,zone.wikiTitle,...(zone.aliases||[])].some(value=>cleanZoneName(value).toLowerCase()===alias));
+    const verified=id=>{const direct=owners(id);return /^[a-z0-9][a-z0-9_]*$/.test(id)&&(direct.length===0||direct.length===1&&direct[0]===record)&&viewerArchiveIds(id).some(alias=>aliases.includes(alias)&&owners(alias).length===1&&owners(alias)[0]===record);};
     if(shortName){const id=cleanZoneName(shortName).toLowerCase();return verified(id)?id:'';}
-    const observed=cleanZoneName(value).toLowerCase();if(verified(observed))return observed;
+    const observed=cleanZoneName(value).toLowerCase();if(owners(observed).length>1)return '';if(verified(observed))return observed;
     const preferred=String(record.viewerId||'').toLowerCase();if(verified(preferred))return preferred;
     const group=archiveGroups.find(group=>group.some(id=>aliases.includes(id)));if(group&&verified(group[0]))return group[0];
+    // Public categorized zones added by the producer have no invented viewer
+    // metadata. Their one unambiguous literal /who alias identifies the archive;
+    // the viewer still checks the actual local file and zone header before use.
+    if(!record.viewerName){
+        const ids=[...new Set(aliases.filter(verified))];
+        if(ids.length===1)return ids[0];
+        if(aliases.some(id=>/^[a-z0-9][a-z0-9_]*$/.test(id)))return '';
+    }
     return record.viewerName||record.name||viewerZoneName(value);
 }
