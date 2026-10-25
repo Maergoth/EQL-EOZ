@@ -784,9 +784,9 @@ test('overlay preload exposes no filesystem, updater, raw IPC, or Electron event
     } });
     assert.deepEqual(Object.keys(exposed), ['eyeOfZommOverlay']);
     const bridge = exposed.eyeOfZommOverlay;
-    assert.deepEqual(Object.keys(bridge), ['discoveryAction', 'getState', 'onState', 'action']);
-    bridge.getState(); bridge.action('hide'); bridge.discoveryAction('capture',{id:'synthetic-pending'});
-    assert.deepEqual(invoked, [['eye-of-zomm:overlay', 'get-state'], ['eye-of-zomm:overlay', 'hide', undefined], ['eye-of-zomm:discovery','capture',{id:'synthetic-pending'}]]);
+    assert.deepEqual(Object.keys(bridge), ['getState', 'onState', 'action']);
+    bridge.getState(); bridge.action('hide');
+    assert.deepEqual(invoked, [['eye-of-zomm:overlay', 'get-state'], ['eye-of-zomm:overlay', 'hide', undefined]]);
     let received;
     const unsubscribe = bridge.onState(value => { received = value; });
     listeners.get('eye-of-zomm:overlay-state')({ secret:'Electron event' }, { panel:'parse' });

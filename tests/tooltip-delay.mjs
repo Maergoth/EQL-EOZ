@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {createTooltipHover,TOOLTIP_HOVER_DELAY_MS} from '../app/tooltip-delay.js';
+assert.equal(TOOLTIP_HOVER_DELAY_MS,350);
+let now=0,next=0;const timers=new Map(),shown=[];
+const setTimeout=(callback,delay)=>{const id=++next;timers.set(id,{at:now+delay,callback});return id;},clearTimeout=id=>timers.delete(id);
+const advance=delay=>{now+=delay;for(const[id,timer]of [...timers])if(timer.at<=now){timers.delete(id);timer.callback();}};
+const hover=createTooltipHover({show:(target,point)=>shown.push({target,point}),valid:target=>target.isConnected,setTimeout,clearTimeout}),a={isConnected:true},b={isConnected:true};
+hover.queue(a,{clientX:10,clientY:20});advance(250);assert.equal(shown.length,0);
+hover.queue(a,{clientX:30,clientY:40});advance(99);assert.equal(shown.length,0);advance(1);assert.deepEqual(shown,[{target:a,point:{clientX:30,clientY:40}}],'Pointer movement updates positioning without restarting a held hover');
+hover.queue(a);advance(200);hover.queue(b);advance(150);assert.equal(shown.length,1);advance(200);assert.equal(shown[1].target,b,'A new control receives its own full delay');
+hover.queue(a);hover.cancel();advance(400);assert.equal(shown.length,2,'Leave, scroll and source/view cancellation prevent a delayed popup');
+hover.queue(a);a.isConnected=false;advance(400);assert.equal(shown.length,2,'A replaced source cannot resurrect an obsolete tooltip');
+hover.queue(b);hover.dispose();advance(400);hover.queue(b);advance(400);assert.equal(shown.length,2,'Disposal cancels and permanently closes the scheduler');
+console.log('Tooltip hover: shared 350ms delay, updated pointer, distinct target delay, cancellation, stale source and disposal passed.');

@@ -6,7 +6,7 @@ import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
 import { routeDistanceLabel } from './route-guidance.js';
 import { formatWorldLocationForPlayer, waypointCommandForWorldLocation, wikiLocationToWorld } from './coordinate-system.js';
-import { resolveZoneRecord } from './zone-identity.js';
+import { resolveZoneRecord, viewerZoneTarget } from './zone-identity.js';
 import { mountAppUpdates } from './app-update-ui.js';
 import { compactParseSnapshot, createOverlaySession } from './overlay-session.js';
 import { mountOverlayController } from './overlay-controller.js';
@@ -14,7 +14,6 @@ import { mountTimerSettings } from './timer-settings.js';
 import { createMapDataLoader } from './map-overlay-data.js';
 import { createTimerAlerts } from './timer-alerts.js';
 import { createWikiDiscovery } from './wiki-discovery.js';
-import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
 import { createDiscoveryContributionFlow } from './discovery-contribution-flow.js';
 import { mountWhatsNew } from './whats-new.js';
 import { FONT_PRESETS, DEFAULT_APPEARANCE, normalizeAppearance, applyAppearance, inheritViewerAppearance } from './appearance.js';
@@ -26,6 +25,7 @@ import { characterCatalogDetails } from './character-item-card.js';
 import { catalogItemboxMarkup } from './catalog-itembox.js';
 import { collectDropObservation } from './drop-observations.js';
 import { createWikiResolver } from './wiki-identity.js';
+import { createTooltipHover } from './tooltip-delay.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -76,14 +76,13 @@ let intelFocusSequence = 0;
 let overlayMapFocus = null;
 let overlayMapFocusSequence = 0;
 let nativeMapVisible = false;
-let discoveryInNative = false;
 const discoveryCaptureStates = new Map();
 let discoveryContributionFlow = null;
-const discoveryPrompts = () => wikiDiscovery.snapshot().pending.map(entry => ({...entry,...(discoveryCaptureStates.get(entry.id)||{})}));
 let mapDataRevision = 0;
 let activeTooltipItem = null;
 let activeTooltipTarget = null;
 let activeTooltipMode = '';
+const itemTooltipHover = createTooltipHover({show:showItemTooltip,valid:target=>target?.isConnected && Boolean(target.closest('.view.is-active'))});
 let lastTooltipPointer = null;
 let activeRoute = null;
 let mapLootSelection = null;
@@ -110,6 +109,7 @@ let settings = Object.assign({
     era: '',
     currentZoneOnly: true,
     itemTier: 0,
+    itemAnyClass: false,
     encounterGapSeconds: 15,
     intelMyClassOnly: true,
     intelNamedOnly: true,
@@ -129,6 +129,7 @@ settings.routingEnabled = legacyOverlayPrefs.routingEnabled ?? legacyOverlayPref
 for (const key of Object.keys(settings)) if (key.startsWith('minimal') || key === 'considerMyClassOnly') delete settings[key];
 if (!['first', 'top', 'map'].includes(settings.mapMode)) settings.mapMode = 'first';
 if (!['recommended', 'name'].includes(settings.itemSort)) settings.itemSort = 'recommended';
+settings.itemAnyClass = settings.itemAnyClass === true;
 if (!['overview', 'map', 'npcs', 'items', 'drops', 'combat', 'timers', 'contribute', 'character', 'settings'].includes(settings.lastView)) settings.lastView = 'overview';
 let itemZoneFilterExplicit = Boolean(settings.itemZoneFilterExplicit || settings.itemCurrentZoneOnly === false);
 settings.appearance = normalizeAppearance(settings.appearance);
@@ -349,6 +350,7 @@ function itemHoverIdentity(target) {
 }
 function replaceItemList(host,markup) {
     if (renderedItemLists.get(host) === markup) return false;
+    itemTooltipHover.cancel();
     const focused = document.activeElement?.closest?.('[data-item-title]');
     const focusKey = focused && host.contains(focused) ? itemHoverIdentity(focused) : '';
     host.innerHTML = markup; renderedItemLists.set(host,markup);
@@ -524,6 +526,7 @@ function mapSourceContextMatches(context) {
 }
 
 function clearSourceLocation() {
+    cancelDiscoveryChecks();
     void discoveryContributionFlow?.cancelWhere(() => true,{close:true});
     captureWorkspace.cancelSource();
     parser.resetSourceContext();
@@ -621,6 +624,7 @@ function consumeText(text, allowTransientUi = true) {
         const freshTimerEvent = Number.isFinite(originalAt) && Math.abs(Date.now() - originalAt) <= 10000;
         let listedTarget = false;
         if (allowTransientUi && freshTimerEvent && ['consider','kill'].includes(event?.type)) listedTarget = focusIntelForConsider(event.type === 'consider' ? event.target : {name:event.victim});
+        if(['profile','zone'].includes(event?.type))cancelDiscoveryChecks();
         if (!listedTarget && event?.type!=='kill') wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt,playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)});
         overlaySession.consume(event, { zone:parser.zone, character:parser.character, live:allowTransientUi && freshTimerEvent,
             text:line, at:parser.currentLineAt, logId:bridgeInfo?.logPath || 'current-log' });
@@ -725,10 +729,10 @@ function overlaySessionSnapshot() {
     const selected = focusedIntelTarget && zoneKey(focusedIntelTarget.zone) === zoneKey(s.zone) ? focusedIntelTarget : null;
     const navigation = activeRoute?.status === 'ready' && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? viewerApi()?.overlayNavigation?.() : null;
     return { character:s.character, zone:s.zone, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
-        parse:compactParseSnapshot(s), discovery:discoveryInNative ? discoveryPrompts() : [], intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
+        parse:compactParseSnapshot(s), intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
             packVersion:pack.meta?.manifestVersion || pack.meta?.version || '', profileKey:JSON.stringify([profile.classes.slice().sort(),settings.itemTier,settings.era]),
             focusedNpcId:selected?.id || '', focusSequence:intelFocusSequence },
-        map:{ zone:s.zone, viewerZone:zoneRecord(s.zone)?.viewerName || zoneRecord(s.zone)?.name || s.zone, dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
+        map:{ zone:s.zone, viewerZone:viewerZoneTarget(pack.zones,s.zone,parser.zoneShortName), dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
             focus:overlayMapFocus && overlayMapFocus.dataVersion === mapDataRevision && zoneKey(overlayMapFocus.zone) === zoneKey(s.zone) ? overlayMapFocus : null,
             npcs:sources.filter(source => source.loc?.length >= 2).map(source => ({id:intelIdentity(source),name:source.name,loc:source.loc,raidInstance:raidVariant(source)})),
             route:{ points:navigation?.points || [], message:activeRoute && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? activeRoute.message : '' } } };
@@ -1214,6 +1218,7 @@ function positionTooltip(event) {
 }
 
 function showItemTooltip(target, event) {
+    itemTooltipHover.cancel();
     const item = itemRecord(target?.dataset?.itemTitle);
     const tooltip = $('#item-tooltip');
     if (!item || !tooltip) { hideItemTooltip(); return; }
@@ -1245,6 +1250,7 @@ function refreshItemTooltip() {
 }
 
 function hideItemTooltip() {
+    itemTooltipHover.cancel();
     const tooltip = $('#item-tooltip');
     if (tooltip) tooltip.hidden = true;
     activeTooltipItem = null;
@@ -1312,7 +1318,7 @@ function renderItems(s, profile) {
     const currentZoneOnly = Boolean($('#item-current-zone')?.checked && s.zone);
     let items = pack.items.filter(item => eraAllowed(item.era));
     if (query) items = items.filter(i => `${i.name} ${(i.classes||[]).join(' ')} ${(i.slots||[]).join(' ')} ${(i.dropSources||[]).map(d => `${d.name} ${d.zone||''}`).join(' ')}`.toLowerCase().includes(query));
-    if (profile.classes.length) {
+    if (!settings.itemAnyClass && profile.classes.length) {
         items = items.filter(item => itemMatchesProfile(item, profile));
     }
     if (currentZoneOnly) items = items.filter(item => itemDropsInZone(item, s.zone));
@@ -1324,7 +1330,7 @@ function renderItems(s, profile) {
     );
     const total = items.length;
     const visible = items.slice(0, 250);
-    const classLabel = profile.classes.length ? profile.classes.join('/') : 'all classes';
+    const classLabel = settings.itemAnyClass ? 'any class' : profile.classes.length ? profile.classes.join('/') : 'all classes';
     const scopeLabel = currentZoneOnly ? `in <strong>${esc(s.zone)}</strong>` : 'across all zones';
     const slotLabel = selectedSlot ? ` · <strong>${esc(selectedSlot)}</strong>` : '';
     const rankingLabel = sortMode === 'recommended' ? ' · useful gear and named drops first' : ' · sorted by name';
@@ -1367,8 +1373,16 @@ function renderItems(s, profile) {
 
 function buildClassChips() {
     for (const host of [$('#class-chips'), $('#settings-class-chips')]) {
-        host.innerHTML = `<button class="chip" data-class-auto="1">Auto</button>${CLASSES.map(c => `<button class="chip" data-class="${c}">${c}</button>`).join('')}`;
+        const items = host.id === 'class-chips';
+        host.innerHTML = `${items ? '<button class="chip" data-class-any="1">Any</button>' : ''}<button class="chip" data-class-auto="1">Auto</button>${CLASSES.map(c => `<button class="chip" data-class="${c}">${c}</button>`).join('')}`;
+        host.querySelector('[data-class-any]')?.addEventListener('click', () => {
+            settings.itemAnyClass = true;
+            prefs.save(settings);
+            updateClassChipState();
+            renderAll();
+        });
         host.querySelector('[data-class-auto]').addEventListener('click', () => {
+            if (items) settings.itemAnyClass = false;
             settings.manualClasses = [];
             prefs.save(settings);
             updateClassChipState();
@@ -1377,6 +1391,7 @@ function buildClassChips() {
         host.querySelectorAll('.chip').forEach(btn => btn.addEventListener('click', () => {
             const c = btn.dataset.class;
             if (!c) return;
+            if (items && settings.itemAnyClass) {settings.itemAnyClass = false;settings.manualClasses = [];}
             settings.manualClasses = settings.manualClasses.includes(c)
                 ? settings.manualClasses.filter(x => x !== c)
                 : [...settings.manualClasses, c];
@@ -1391,16 +1406,25 @@ function buildClassChips() {
 function updateClassChipState() {
     const detected = new Set((state().classes || []).map(value => String(value).toUpperCase()));
     const automatic = !settings.manualClasses.length;
+    $$('[data-class-any]').forEach(button => {
+        button.classList.toggle('is-active', settings.itemAnyClass);
+        button.setAttribute('aria-pressed', String(settings.itemAnyClass));
+        button.title = 'Show items for any class';
+    });
     $$('[data-class-auto]').forEach(button => {
-        button.classList.toggle('is-active', automatic);
-        button.title = automatic
+        const any = settings.itemAnyClass && Boolean(button.closest('#class-chips'));
+        button.classList.toggle('is-active', automatic && !any);
+        button.setAttribute('aria-pressed', String(automatic && !any));
+        button.title = automatic && !any
             ? (detected.size ? `Using ${Array.from(detected).join('/')}` : 'Classes will be read from the active log')
             : 'Use the classes detected in the active log';
     });
     $$('[data-class]').forEach(button => {
-        const selected = automatic ? detected.has(button.dataset.class) : settings.manualClasses.includes(button.dataset.class);
+        const any = settings.itemAnyClass && Boolean(button.closest('#class-chips'));
+        const selected = !any && (automatic ? detected.has(button.dataset.class) : settings.manualClasses.includes(button.dataset.class));
         button.classList.toggle('is-active', selected);
         button.classList.toggle('is-auto', automatic && selected);
+        button.setAttribute('aria-pressed', String(selected));
     });
 }
 
@@ -1595,6 +1619,7 @@ function renderAll() {
 }
 
 function setView(view, options = {}) {
+    hideItemTooltip();
     if (!$(`[data-view-panel="${view}"]`)) view = 'overview';
     $$('.nav-button').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
     $$('[data-view-panel]').forEach(p => p.classList.toggle('is-active', p.dataset.viewPanel === view));
@@ -1792,14 +1817,14 @@ async function syncZoneToViewer(showFeedback = true) {
         if (!isCurrent()) return false;
         if (!folderReady) return fail('The current zone could not load because its local map files are unavailable.');
         $('#map-subtitle').textContent = request.message;
-        const record = zoneRecord(s.zone);
-        let result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
+        const target = viewerZoneTarget(pack.zones,s.zone,parser.zoneShortName);
+        let result = await apiObj.loadZone(target);
         if (!isCurrent()) return false;
         if (result?.reason === 'select-eq-folder-first') {
             const reconnected = await ensureViewerFolderConnected(false, true);
             if (!isCurrent()) return false;
             if (reconnected) {
-                result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
+                result = await apiObj.loadZone(target);
                 if (!isCurrent()) return false;
             }
         }
@@ -2268,17 +2293,26 @@ function wireUi() {
     $('#settings-start-minimized').addEventListener('change', event => { void saveWindowSetting('startMinimized', event.target.checked); });
     document.addEventListener('pointerover', event => {
         const target = event.target.closest?.('[data-item-title]');
-        if (target) showItemTooltip(target, event);
+        if (target && !target.contains(event.relatedTarget)) {
+            if(activeTooltipMode==='focus'&&document.activeElement?.closest?.('[data-item-title]')===target)return;
+            hideItemTooltip();itemTooltipHover.queue(target,event);
+        }
     });
     document.addEventListener('pointermove', event => {
         const target = event.target.closest?.('[data-item-title]');
-        if (target && (activeTooltipTarget !== target || !activeTooltipItem)) showItemTooltip(target,event);
+        if (target && (activeTooltipTarget !== target || !activeTooltipItem)) itemTooltipHover.queue(target,event);
         if (activeTooltipItem && activeTooltipMode === 'pointer') lastTooltipPointer = { clientX:event.clientX, clientY:event.clientY };
         positionTooltip(event);
     });
     document.addEventListener('pointerout', event => {
         const target = event.target.closest?.('[data-item-title]');
-        if (target && !target.contains(event.relatedTarget) && document.activeElement !== target) hideItemTooltip();
+        if (target && !target.contains(event.relatedTarget)) {
+            itemTooltipHover.cancel();
+            // Removing a hovered row can deliver pointerout after keyboard
+            // focus has already been restored to its replacement control.
+            if(activeTooltipMode==='focus'&&document.activeElement?.closest?.('[data-item-title]'))return;
+            if(document.activeElement!==target)hideItemTooltip();
+        }
     });
     document.addEventListener('focusin', event => {
         const target = event.target.closest?.('[data-item-title]');
@@ -2288,6 +2322,17 @@ function wireUi() {
         const target = event.target.closest?.('[data-item-title]');
         if (target && !target.contains(event.relatedTarget)) hideItemTooltip();
     });
+    document.addEventListener('scroll',()=>{
+        itemTooltipHover.cancel();
+        // Browser scroll anchoring can run after a focused row is restored.
+        // Keep keyboard help attached to that exact focused control while
+        // dismissing pointer previews and every pending hover on scroll.
+        const focused=document.activeElement?.closest?.('[data-item-title]');
+        if(activeTooltipMode==='focus'&&focused?.closest('.view.is-active'))showItemTooltip(focused);
+        else hideItemTooltip();
+    },true);
+    window.addEventListener('blur',hideItemTooltip);
+    window.addEventListener('pagehide',()=>itemTooltipHover.dispose());
     document.addEventListener('keydown', event => {
         const editing = /^(?:INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName || '');
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -2357,13 +2402,21 @@ const overlaySession = createOverlaySession({ api:window.eyeOfZommOverlays, getS
     onCommand:handleOverlayCommand, onCues:cues => timerAlerts.play(cues), notify:message => showNotice(message, { tone:'warning' }) });
 const timerAlerts = createTimerAlerts();
 const wikiDiscovery = createWikiDiscovery({getPack:()=>pack,
+    verifyItem:value=>window.eyeOfZommDiscovery?.action('check-item-exists',value) || Promise.resolve({status:'unknown'}),
     getSuppression:(kind,name,options)=>captureWorkspace.suppression?.(kind,name,options),
     onIgnore:(kind,name,options)=>captureWorkspace.suppress?.(kind,name,options),
     onMissing:entry=>window.eyeOfZommDiscovery?.show(entry) || Promise.reject(new Error('The desktop discovery prompt is unavailable.')),
     onWarning:message=>showNotice(message,{tone:'warning'})});
+function cancelDiscoveryChecks(){
+    wikiDiscovery.cancelChecks();
+    void window.eyeOfZommDiscovery?.action('cancel-item-checks').catch(()=>{});
+}
 window.eyeOfZommDiscovery?.onAction?.(event=>{
     const {action,id,candidateId,purpose,captureRequest,captureState,captureMessage}=event;
-    if(action==='contribute'&&['item-link','spawn-location'].includes(purpose)){
+    if(action==='set-notable'&&purpose==='spawn-location'){
+        let result;try{result=captureWorkspace.setDiscoveryNotable?.(event)||{ok:false,error:'Contribute is not ready. Try again.'};}catch(error){result={ok:false,error:error.message||'The notable choice could not be saved.'};}
+        void window.eyeOfZommDiscovery.action('notable-status',{id,candidateId,notableChoiceId:event.notableChoiceId,...result}).catch(()=>{});
+    }else if(action==='contribute'&&['item-link','spawn-location'].includes(purpose)){
         discoveryCaptureStates.set(id,{captureRequest,captureState:'waiting',captureMessage});
         void discoveryContributionFlow?.request(event);
     }else if(action==='capture-status'){
@@ -2380,8 +2433,6 @@ window.eyeOfZommDiscovery?.onAction?.(event=>{
 window.eyeOfZommOverlays?.onState?.(next => {
     if (next.appearance && !appearancePending && !appearanceDraft) acceptAppearance(next.appearance);
     nativeMapVisible = Boolean(next.panels?.map?.visible);
-    const useNative = Boolean(next.panels?.timers?.visible && !next.panels.timers.passThrough);
-    if (discoveryInNative !== useNative) { discoveryInNative=useNative; void overlaySession.publish(); }
 });
 const initialAppearanceGeneration = appearanceGeneration;
 Promise.resolve(window.eyeOfZommOverlays?.getState?.()).then(next => {
@@ -2389,8 +2440,6 @@ Promise.resolve(window.eyeOfZommOverlays?.getState?.()).then(next => {
 }).catch(() => {});
 const overlayController = mountOverlayController({ root:document.getElementById('overlay-controller'), api:window.eyeOfZommOverlays });
 const timerSettings = mountTimerSettings({ root:document.getElementById('timer-settings'), session:overlaySession });
-const discoveryNotices = mountWikiDiscoveryNotices({root:document.getElementById('wiki-discovery-notices'),action:(action,value)=>window.eyeOfZommDiscovery.action(action,value)});
-overlaySession.onTimers(()=>discoveryNotices.render(discoveryInNative ? [] : discoveryPrompts()));
 const appUpdatesUi = mountAppUpdates({
     openSettings:async () => {
         setView('settings');
@@ -2415,7 +2464,7 @@ const observationSettings=document.createElement('section');observationSettings.
 const renderObservationStatus=async()=>{try{const status=await window.eyeOfZommObservations?.status();if(!status){observationSettings.hidden=true;return;}observationPreference=status.enabled;observationSettings.querySelector('[data-observation-enabled]').checked=status.enabled;observationSettings.querySelector('[data-observation-status]').textContent=`${status.pending} pending · ${status.acknowledged} delivered${status.error?' · '+status.error:''}`;}catch{observationSettings.querySelector('[data-observation-status]').textContent='Observation storage unavailable.';}};
 observationSettings.querySelector('[data-observation-enabled]').onchange=async event=>{try{await window.eyeOfZommObservations.configure({enabled:event.target.checked});await renderObservationStatus();}catch(error){showNotice(error.message,{tone:'warning'});await renderObservationStatus();}};
 void renderObservationStatus();const observationStatusTimer=setInterval(()=>void renderObservationStatus(),60000);
-window.addEventListener('pagehide', () => { clearTimeout(observationRetry);clearInterval(observationStatusTimer);void discoveryContributionFlow.dispose();captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
+window.addEventListener('pagehide', () => { clearTimeout(observationRetry);clearInterval(observationStatusTimer);wikiDiscovery.dispose();void discoveryContributionFlow.dispose();captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

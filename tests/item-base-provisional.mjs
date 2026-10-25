@@ -6,7 +6,7 @@ const wrap=value=>({value,confirmed:false});
 const source={kind:'item',name:'Synthetic Provisional Mantle',fields:{tier:wrap(4),fraction:wrap(null),hp:wrap(42),mana:wrap(85),haste:wrap(16),weight:wrap(.7),resistCorruption:wrap(4),statLines:wrap(['HP: 42','Mana: 85','Haste: 16','An original contributor note.'])}};
 const options={tier:4,fraction:null,reviewMode:'provisional'},preview=itemBaseReviewPreview(source,options);
 assert.equal(preview.options.fraction,null);assert.equal(preview.provenance.modifiersExcluded,null);assert.equal(preview.provenance.fractionStates,16);
-assert.deepEqual(preview.fields.HP.ranges.map(range=>[range.min,range.max]),[[28,30]]);
+assert.deepEqual(preview.fields.HP.ranges.map(range=>[range.min,range.max]),[[29,30]]);
 assert.equal(preview.fields.HP.status,'range');assert.equal(preview.fields.HP.value,null);assert.equal(preview.fields.HASTE.status,'exact');assert.equal(preview.fields.HASTE.value,12);
 assert.equal(preview.fields.WT.status,'unknown');assert.equal(preview.fields.SV_CORRUPTION.status,'unsupported');
 for(let fraction=0;fraction<16;fraction++)for(let base=11;base<100;base++)if(scaleItemStat('HP',base,4,{fraction})===42)assert(preview.fields.HP.candidates.includes(base),'All legal fractional witnesses are represented without choosing progress zero');
@@ -25,11 +25,11 @@ assert.equal(validateItemBaseReview({...candidate,fields:{...candidate.fields,st
 const cap=itemBaseReviewPreview({...source,fields:{...source.fields,tier:wrap(10)}},{tier:10,fraction:null,reviewMode:'provisional'});assert.equal(cap.provenance.fractionStates,1,'Tier ten cannot invent additional progress');
 const gauntlets={kind:'item',name:'Synthetic Bloodsoaked Gauntlets',fields:{tier:wrap(1),ac:wrap(18),hp:wrap(143),mana:wrap(104),endurance:wrap(104),resistCorruption:wrap(1),weight:wrap(32),statLines:wrap(['AC: 18','HP: 143','Mana: 104','Endurance: 104','SV Void: 1','Weight: 32'])}};
 const gauntletPreview=itemBaseReviewPreview(gauntlets,{tier:1,fraction:null,reviewMode:'provisional'}),defaults=itemBaseReviewChoices(gauntletPreview);
-assert.deepEqual(defaults,{AC:16,HP:124,MP:90,END:90,SV_CORRUPTION:0},'lower editable defaults share one possible progress state');
+assert.deepEqual(defaults,{AC:16,HP:125,MP:91,END:91,SV_CORRUPTION:0},'lower editable defaults share one possible progress state');
 const auto=proposeItemBaseReview(gauntlets);assert(auto);assert.deepEqual(auto.baseRecovery.choices,defaults);assert.equal(gauntlets.fields.hp.value,143,'observed evidence stays unchanged');
 assert(validateItemBaseReview({...gauntlets,...auto}).ok,'fresh provisional proposals are immediately usable in the reviewed wiki preview');
 const blueprints={entries:{item:{text:'{{Itempage|statsblock=}}'}}},draft=buildContributionDraft(gauntlets,blueprints);
-assert.deepEqual(draft.blockers,[]);for(const line of ['AC: 16','HP: 124','Mana: 90','Endurance: 90','SV Void: 0'])assert(draft.text.includes(line),line+' survives preparing without Apply');
+assert.deepEqual(draft.blockers,[]);for(const line of ['AC: 16','HP: 125','Mana: 91','Endurance: 91','SV Void: 0'])assert(draft.text.includes(line),line+' survives preparing without Apply');
 assert.doesNotMatch(draft.text,/statsblock =\s*\?/);assert.doesNotMatch(draft.text,/HP: 143|Mana: 104|Weight: 32|SV Void: 1/);
 assert.match(draft.text,/These stats are reverse calculated from a tier 1 item\. Please confirm with a tier 0 item and remove this message/);
 assert.throws(()=>createItemBaseReview(gauntlets,{tier:1,fraction:null,reviewMode:'provisional',reviewed:true,choices:{...defaults,HP:130}}),/one possible item progress state/,'a different individually valid HP base cannot contradict mana/endurance progress');
@@ -47,5 +47,5 @@ for(const lines of [['HP: 31'],['HP: 29','HP: 30'],['HP 29 (manual)'],['Weight: 
     assert.deepEqual(edited.fields.statLines.value,lines);
 }
 const constrained={...gauntlets,fields:{...gauntlets.fields,mana:wrap(105),endurance:wrap(105),statLines:{value:['HP: 130'],confirmed:true,edited:true}}};
-const constrainedPatch=proposeItemBaseReview(constrained);assert.equal(constrainedPatch.baseRecovery.choices.HP,130);assert.equal(constrainedPatch.baseRecovery.choices.MP,95,'missing bases use the progress state compatible with explicit manual HP');
+const constrainedPatch=proposeItemBaseReview(constrained);assert.equal(constrainedPatch.baseRecovery.choices.HP,130);assert.equal(constrainedPatch.baseRecovery.choices.MP,96,'missing bases use the progress state compatible with explicit manual HP');
 console.log('Provisional recovery v2: bounded fractional union, common-state choices, explicit unknown modifier assumptions, unsupported omissions and exact tier-zero warning passed.');

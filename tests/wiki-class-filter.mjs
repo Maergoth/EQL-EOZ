@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import * as browse from '../app/item-browse.js';
+import { JSDOM } from 'jsdom';
 
 const playable = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const excluded = ['CLR','PAL','DRU','MNK','SHM'];
@@ -76,4 +77,38 @@ assert.equal(browse.itemHasClassStats({...chargedWand,slots:['FOOD'],displayLine
 assert.equal(browse.itemHasClassStats({...chargedWand,displayLines:['WT 0.1','Quest item']}),false,'Weight-only quest items are still excluded by My Class');
 assert.equal(browse.itemHasClassStats({stats:{HP:1}}),true,'Existing numeric-stat gear remains included');
 
-console.log('Wiki class filtering passed: exporter complements, legacy exclusions, mixed profiles, explicit includes, and unknown classes.');
+// Exercise the actual Items controls and renderer together: Any must bypass
+// inferred classes without changing the character/profile or another filter.
+const appSource=readFileSync(new URL('../app/app.js',import.meta.url),'utf8');
+const extract=(start,end)=>{const at=appSource.indexOf(start),until=appSource.indexOf(end,at+start.length);assert(at>=0&&until>at);return appSource.slice(at,until);};
+const dom=new JSDOM('<div id="class-chips"></div><div id="settings-class-chips"></div><input id="item-search"><select id="item-slot"><option value=""></option><option value="HEAD">Head</option></select><select id="item-sort"><option value="name">Name</option></select><input type="checkbox" id="item-current-zone"><div id="item-context"></div><div id="item-list"></div>',{runScripts:'outside-only'});
+const {window}=dom;
+let saved;
+Object.assign(window,{
+    CLASSES:playable,settings:{manualClasses:[],itemAnyClass:false,era:'Classic',itemTier:0},
+    pack:{items:[{name:'Synthetic Monk Hat',classes:['MNK'],slots:['HEAD']},{name:'Synthetic Cleric Hat',classes:['CLR'],slots:['HEAD']},{name:'Synthetic No-class Token',classes:['NONE'],slots:[]}]},
+    $:selector=>window.document.querySelector(selector),$$:selector=>[...window.document.querySelectorAll(selector)],
+    state:()=>({classes:['MNK'],level:50,zone:''}),prefs:{save(value){saved=JSON.parse(JSON.stringify(value));}},
+    eraAllowed:()=>true,itemMatchesProfile:(item,profile)=>matches(item,profile.classes),itemDropsInZone:()=>true,itemBrowsePriority:()=>0,
+    scaledItemStats:()=>({}),esc:String,formatNum:String,itemIconHtml:()=>'',itemHoverAttrs:()=>'',wikiUrl:()=> '#',isItemStatModified:()=>false,
+    bindPathButtons(){},refreshItemTooltip(){},replaceItemList(host,markup){host.innerHTML=markup;return true;}
+});
+window.renderAll=()=>window.renderItems(window.state(),window.effectiveProfile(window.state()));
+window.eval(extract('function effectiveProfile(','function conClass(')+extract('function renderItems(','function buildEraSelect('));
+window.buildClassChips();window.renderAll();
+const host=window.document.querySelector('#class-chips'),any=()=>host.querySelector('[data-class-any]'),auto=()=>host.querySelector('[data-class-auto]');
+const names=()=>[...window.document.querySelectorAll('#item-list h3')].map(node=>node.textContent);
+assert.equal(host.firstElementChild.textContent,'Any');assert.equal(host.children[1].textContent,'Auto','Any is directly left of Auto');
+assert.deepEqual(names(),['Synthetic Monk Hat'],'Auto uses the detected character class');
+any().click();assert.equal(names().length,3,'Any includes otherwise excluded classes and non-equippable items');
+assert.equal(any().getAttribute('aria-pressed'),'true');assert.equal(auto().getAttribute('aria-pressed'),'false');
+assert.deepEqual([...window.effectiveProfile(window.state()).classes],['MNK'],'Any never changes the character profile');
+assert.equal(saved.itemAnyClass,true,'Any mode persists');assert.match(window.document.querySelector('#item-context').textContent,/any class/);
+window.document.querySelector('#item-slot').value='HEAD';window.renderAll();assert.equal(names().length,2,'Any preserves the slot filter');
+window.document.querySelector('#item-search').value='Cleric';window.renderAll();assert.deepEqual(names(),['Synthetic Cleric Hat'],'Any preserves text search');
+window.document.querySelector('#item-search').value='';window.document.querySelector('#item-slot').value='';auto().click();assert.deepEqual(names(),['Synthetic Monk Hat'],'Auto restores detected-class filtering');
+any().click();host.querySelector('[data-class="CLR"]').click();assert.equal(window.settings.itemAnyClass,false);assert.deepEqual(names(),['Synthetic Cleric Hat'],'An explicit class leaves Any and filters normally');
+any().click();window.buildClassChips();window.renderAll();assert.equal(any().getAttribute('aria-pressed'),'true','Restored controls preserve Any selection');
+assert.equal(window.document.querySelector('#settings-class-chips [data-class-any]'),null,'Any is an Items browsing option');
+dom.window.close();
+console.log('Wiki class filtering passed: exporter complements, legacy exclusions, mixed profiles, Any/Auto class controls, persistence and independent search/slot filters.');

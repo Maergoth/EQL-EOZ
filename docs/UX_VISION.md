@@ -1,5 +1,12 @@
 # Eye of Zomm — Product and UX Vision
 
+0.9.14 adds **Contribute → History** for signed-in account receipts, clear
+partial/unconfirmed outcomes and saved-page links without retry controls.
+Explicit owner-labelled pets cannot become new monster contributions. Common
+versus Unique Loot uses distinct monsters across the cached wiki dataset, with
+six as the Common threshold and complete provenance required for smaller Unique
+counts. See [the release record](RELEASE_0914_PLAN.md).
+
 0.9.13 corrects the canonical category to Tier 0 Verification Needed. The
 category-only hotfix preserves the existing contribution and formula flows.
 

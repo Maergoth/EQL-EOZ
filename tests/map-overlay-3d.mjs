@@ -36,6 +36,11 @@ try{
     f.controller.render({...f.session,map:{...f.session.map,location:null}});await tick();assert.equal(f.clears.length,1,'A source clear removes the old player marker even in the same zone');
     await f.controller.setMode('map');assert.equal(f.frames[0].removed,true,'Returning to Map releases the decoder/camera iframe');
 }finally{f.controller.dispose();}
+const unverified=fixture();
+try{
+    unverified.session.map.viewerZone='';await unverified.controller.setMode('top');
+    assert.equal(unverified.frames.length,0,'An explicitly unverified short name cannot fall back to a different display-name archive');assert.match(unverified.statuses.at(-1),/no verified matching archive/);
+}finally{unverified.controller.dispose();}
 
 const oldLoad=deferred(),newLoad=deferred();let oldCalls=0,newCalls=0,newModes=[];
 const oldApi={useConfiguredFolder:async()=>({ok:true}),loadZone:()=>{oldCalls++;return oldLoad.promise;}};

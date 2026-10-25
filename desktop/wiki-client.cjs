@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {WikiAttachments}=require('./wiki-attachments.cjs');
+const {ContributionHistory}=require('./contribution-history.cjs');
 const PRODUCTION_ORIGIN = 'https://eqlwiki.com';
 const MAX_JSON = 2 * 1024 * 1024, MAX_PAGE = 512 * 1024, MAX_PNG = 12 * 1024 * 1024;
 const MAX_NPC_SOURCE_ITEMS=100,MAX_NPC_BACKLINK_PAGES=2,NPC_SOURCE_BATCH=10;
@@ -42,14 +43,15 @@ function validatePNG(input) {
 }
 
 class WikiClient {
-    constructor({ session, version='development', stateDir=null, origin=PRODUCTION_ORIGIN, allowLoopbackDevelopment=false, fetchImpl, now=Date.now, id=crypto.randomUUID } = {}) {
+    constructor({ session, version='development', stateDir=null, origin=PRODUCTION_ORIGIN, allowLoopbackDevelopment=false, fetchImpl, now=Date.now, id=crypto.randomUUID, getItemCatalog=null } = {}) {
         this.origin=wikiOrigin(origin,allowLoopbackDevelopment); this.api=`${this.origin}/api.php`;
         this.fetch=fetchImpl || (session && session.fetch.bind(session));
         if(typeof this.fetch!=='function') throw new WikiError('transport','The dedicated wiki session is unavailable.');
-        this.session=session;this.version=version;this.stateDir=stateDir;this.now=now;this.id=id;
+        this.session=session;this.version=version;this.stateDir=stateDir;this.now=now;this.id=id;this.getItemCatalog=getItemCatalog;
         this.plans=new Map();this.uploads=new Map();this.sheets=new Map();this.blueprintCache=null;this.busy=false;
         this.loaded=false;this.persistChain=Promise.resolve();
         this.attachments=new WikiAttachments({stateDir,validate:validatePNG,now,id});
+        this.history=new ContributionHistory({stateDir,now});
     }
     async load() {
         if(this.loaded)return;if(this.loading)return this.loading;
@@ -62,15 +64,22 @@ class WikiClient {
             for(const plan of (value.plans||[]).slice(-30)) if(typeof plan?.id==='string' && Array.isArray(plan.pages) && plan.pages.length<=12 && plan.wikiOrigin===this.origin) this.plans.set(plan.id,plan);
             for(const item of (value.uploads||[]).slice(-30)) if(typeof item?.snapshotId==='string'&&item.origin===this.origin)this.uploads.set(item.snapshotId,item);
             for(const item of (value.sheets||[]).slice(-20)) if(typeof item?.shareId==='string'&&/^[A-Za-z0-9_-]{8,100}$/.test(item.shareId)&&item.origin===this.origin&&namedUser(item.user))this.sheets.set(item.shareId,item);
-        }catch(error){if(error.code!=='ENOENT')this.loadWarning='Saved wiki plans could not be read. Existing drafts remain on disk.';}finally{this.loaded=true;}})();
+        }catch(error){if(error.code!=='ENOENT')this.loadWarning='Saved wiki plans could not be read. Existing drafts remain on disk.';}finally{await this.history.recordPlans([...this.plans.values()]);this.loaded=true;}})();
         return this.loading;
     }
     async persist() {
+        await this.history.recordPlans([...this.plans.values()]);
         if(!this.stateDir)return;
         const value=JSON.stringify({schemaVersion:1,plans:[...this.plans.values()].slice(-30),uploads:[...this.uploads.values()].slice(-30),sheets:[...this.sheets.values()].slice(-20)});
         if(Buffer.byteLength(value)>4*1024*1024)throw new WikiError('storage','The local contribution plan store is full.');
         const task=async()=>{await fs.mkdir(this.stateDir,{recursive:true});const file=path.join(this.stateDir,'wiki-contribution-plans.json'),temp=`${file}.tmp`;await fs.writeFile(temp,value,{mode:0o600});await fs.rename(temp,file);};
         this.persistChain=this.persistChain.then(task,task);await this.persistChain;
+    }
+    async contributionHistory(value={}) {
+        if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(key=>!['limit','before'].includes(key))||value.limit!==undefined&&(!Number.isInteger(value.limit)||value.limit<1||value.limit>100)||value.before!==undefined&&value.before!==null&&(typeof value.before!=='string'||value.before.length>512))throw new WikiError('history','Invalid contribution history range.');
+        await this.load();const status=await this.status();
+        const result=await this.history.list({user:status.authenticated?status.user:null,wikiOrigin:this.origin,...value});
+        if(!result.warning&&status.warning)result.warning=status.warning;return result;
     }
     async request(params, { post=false, form=null } = {}) {
         const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
@@ -128,7 +137,7 @@ class WikiClient {
         if(!page||page.invalid)throw new WikiError('title','The wiki rejected this page title.');
         const revision=page.revisions?.[0],content=revision?.slots?.main?.content||'';
         if(content.length>MAX_PAGE)throw new WikiError('size','The wiki page is too large for an automatic contribution.');
-        return {title:page.title,pageId:page.pageid??null,missing:page.missing===true,redirect:page.redirect===true,content,revision:revision?.revid??null,timestamp:revision?.timestamp??null,startTimestamp:data.curtimestamp||new Date(this.now()).toISOString()};
+        return {title:page.title,pageId:page.pageid??null,namespace:page.ns,missing:page.missing===true,redirect:page.redirect===true,content,revision:revision?.revid??null,timestamp:revision?.timestamp??null,startTimestamp:data.curtimestamp||new Date(this.now()).toISOString()};
     }
     async findMatches({ name, kind='item',requireComplete=false }={}) {
         const {contributionTitle,contributionNameKey,findPotentialMatches}=await models(),title=contributionTitle(name);
@@ -178,10 +187,11 @@ class WikiClient {
         await guard();const stored=this.plans.get(plan.id);stored.automaticItem={candidateId:candidate.id,title:plan.pages[0].title,evidenceId:candidate.captureObservationId,frameId:candidate.captureFrameId};stored.reviewDigest=this.digest(stored);await this.persist();return safePlan(stored);
     }
     async contributionPage(title,kind){
-        let state=await this.page(title,{resolveRedirects:true});if(!state.missing)return state;
+        const mainspace=state=>{if(state.namespace!==undefined&&state.namespace!==0||state.title?.includes(':')&&state.namespace!==0)throw new WikiError('namespace','Contributions require a verified mainspace article title.');return state;};
+        let state=mainspace(await this.page(title,{resolveRedirects:true}));if(!state.missing)return state;
         const found=await this.findMatches({name:title,kind}),exact=found.matches.filter(match=>match.exact&&match.pageId);
         if(exact.length>1)throw new WikiError('identity',title+': more than one existing page has this spelling. Choose its canonical page before publishing.');
-        if(exact.length===1)return this.page(exact[0].title,{resolveRedirects:true});
+        if(exact.length===1)return mainspace(await this.page(exact[0].title,{resolveRedirects:true}));
         // Exported socket labels are not separate articles unless that exact
         // article exists. Strip the suffix only after its own lookup failed.
         if(kind==='item'&&/\s*\(Exaltation\)$/i.test(title))return this.contributionPage(title.replace(/\s*\(Exaltation\)$/i,''),'item');
@@ -229,6 +239,11 @@ class WikiClient {
         if([...byTitle.keys()].some(title=>!expected.has(title)))throw new WikiError('loot-recovery','The wiki returned an unexpected source page.');
         return {pages,requested};
     }
+    async classifyGlobalLoot(item,proposedNpcs=[],catalog=null){
+        const {classifyCachedLoot}=await import('../app/loot-classification.js');
+        const pack=catalog||await this.getItemCatalog?.()||{},proof=classifyCachedLoot(pack,item.title,proposedNpcs);
+        return {...proof,itemTitle:item.title,catalogItemTitle:proof.itemTitle,itemPageId:item.pageId,itemRevision:item.revision,checkedAt:new Date(this.now()).toISOString(),npcs:proof.npcs.slice(0,6),npcDigest:hash(JSON.stringify(proof.npcs))};
+    }
     async blueprints({ force=false }={}) {
         if(!force&&this.blueprintCache&&this.now()-this.blueprintCache.checkedAt<300000)return copy(this.blueprintCache.value);
         const page=await this.page('Help:Contents');
@@ -239,16 +254,42 @@ class WikiClient {
         result.url=`${this.origin}/index.php?title=Help%3AContents&oldid=${page.revision}`;
         this.blueprintCache={checkedAt:this.now(),value:result};return copy(result);
     }
-    digest(plan) {return hash(JSON.stringify({id:plan.id,wikiOrigin:plan.wikiOrigin,expectedUser:plan.expectedUser,blueprintRevision:plan.blueprintRevision,pages:plan.pages.map(page=>({title:page.title,beforeHash:page.beforeHash,afterHash:page.afterHash,baseRevision:page.baseRevision})),...(plan.recoveredLoot?.length?{recoveredLoot:plan.recoveredLoot}:{}),...(plan.attachment?{attachment:{id:plan.attachment.id,filename:plan.attachment.filename,sha256:plan.attachment.sha256,caption:plan.attachment.caption,license:plan.attachment.license}}:{}),...(plan.automaticItem?{automaticItem:plan.automaticItem}:{}),...(plan.automaticSource?{automaticSource:plan.automaticSource}:{}),blockers:plan.blockers,matchesReviewed:plan.matchesReviewed}));}
+    digest(plan) {return hash(JSON.stringify({id:plan.id,wikiOrigin:plan.wikiOrigin,expectedUser:plan.expectedUser,blueprintRevision:plan.blueprintRevision,pages:plan.pages.map(page=>({title:page.title,beforeHash:page.beforeHash,afterHash:page.afterHash,baseRevision:page.baseRevision})),...(plan.recoveredLoot?.length?{recoveredLoot:plan.recoveredLoot}:{}),...(plan.lootClassifications?{lootClassifications:plan.lootClassifications}:{}),...(plan.itemBaseReview?{itemBaseReview:plan.itemBaseReview}:{}),...(plan.notableChoices?.length?{notableChoices:plan.notableChoices}:{}),...(plan.attachment?{attachment:{id:plan.attachment.id,filename:plan.attachment.filename,sha256:plan.attachment.sha256,caption:plan.attachment.caption,license:plan.attachment.license}}:{}),...(plan.automaticItem?{automaticItem:plan.automaticItem}:{}),...(plan.automaticSource?{automaticSource:plan.automaticSource}:{}),blockers:plan.blockers,matchesReviewed:plan.matchesReviewed}));}
+    // Native-only observed relation planner. No renderer IPC exposes this
+    // method. The source is authored once on its existing monster page;
+    // reciprocal item displays are the wiki renderer/exporter's responsibility.
+    async prepareObservedLootRelation({relation,itemPage,npcPage,zonePage,account,observationId,relationKey,evidence,catalog}={}){
+        await this.load();
+        const {createWikiResolver}=await import('../app/wiki-identity.js'),{contributionRelation,liveContributionCoverage,automaticZoneLootSummary}=await import('../app/contribution-coverage.js'),{classifyCachedLoot}=await import('../app/loot-classification.js'),{patchContributionRelationship}=await models();
+        const resolver=createWikiResolver(catalog||{}),fact=contributionRelation(relation,{resolver});
+        if(!fact||!namedUser(account)||!['explicit-corpse','recent-kill'].includes(evidence)||typeof observationId!=='string'||observationId.length>240||!/^[a-f0-9]{64}$/.test(relationKey||'')||npcPage?.missing||npcPage?.title!==fact.npc||itemPage?.missing||itemPage?.title!==fact.item)throw new WikiError('source-review','The observed source requires manual review.');
+        const coverage=liveContributionCoverage(catalog,fact,{resolver,itemPage,npcPage});
+        if(coverage.state!=='uncovered')throw new WikiError('source-review','This source is covered or its authored loot field needs review.');
+        const classification=classifyCachedLoot(catalog,fact.item,[fact.npc],{resolver});
+        if(!classification.kind)throw new WikiError('loot-review',classification.reason);
+        const blueprint=await this.blueprints({force:true});await this.expectedUser(account);
+        const afterText=normalizeWikiSubmissionText(patchContributionRelationship(npcPage.content,{role:'npc-loot',itemTitle:fact.item,npcTitle:fact.npc,instance:fact.instance,lootKind:classification.kind,preserveExisting:true},{pack:catalog,resolver}).text);
+        if(afterText===normalizeWikiSubmissionText(npcPage.content))throw new WikiError('source-review','No new source fact remains to publish.');
+        const plan={schemaVersion:1,id:this.id(),wikiOrigin:this.origin,expectedUser:copy(account),blueprintRevision:blueprint.revision,createdAt:new Date(this.now()).toISOString(),status:'prepared',pages:[{id:'page-0',title:fact.npc,role:'primary',operation:'replace-reviewed',beforeText:npcPage.content,afterText,beforeHash:hash(npcPage.content),afterHash:hash(afterText),baseRevision:npcPage.revision,startTimestamp:npcPage.startTimestamp,status:'pending'}],warnings:[],blockers:[],matches:[],matchesReviewed:true,lootClassifications:{[fact.item]:classification},automaticSource:{schemaVersion:2,authorRole:'npc-loot',relationKey,observationId,itemTitle:fact.item,npcTitle:fact.npc,zoneTitle:fact.zone,instance:fact.instance,evidence,account:copy(account)}};
+        const summary=automaticZoneLootSummary(catalog,fact,{resolver,itemPage,zonePage});
+        if(summary){const text=normalizeWikiSubmissionText(summary);plan.pages.push({id:'page-1',title:fact.zone,role:'zone-loot',operation:'replace-reviewed',beforeText:zonePage.content,afterText:text,beforeHash:hash(zonePage.content),afterHash:hash(text),baseRevision:zonePage.revision,startTimestamp:zonePage.startTimestamp,status:'pending'});}
+        plan.reviewDigest=this.digest(plan);this.plans.set(plan.id,plan);if(this.plans.size>30)this.plans.delete(this.plans.keys().next().value);await this.persist();return safePlan(plan);
+    }
     async preparePlan({ candidate, relatedPages=[], matchesReviewed=false, editedText=null,sourceItemHints=[] }={}) {
         await this.load();
-        const {buildContributionDraft,contributionTitle,contributionNameKey,patchContributionRelationship,patchContributionPrimary,contributionItemEffects,normalizeContributionCandidate,contributionTemplates}=await models();
+        const {buildContributionDraft,contributionTitle,contributionNameKey,patchContributionRelationship,patchContributionPrimary,contributionItemEffects,normalizeContributionCandidate,contributionTemplates,contributionNpcLootKind,contributionNpcLootEntries,contributionZoneLootEntries,contributionNpcLootSetCoverage,contributionZoneLootSetCoverage,contributionZoneUsesDynamicList,contributionItemHasStats,contributionZoneHasLootRow,contributionNpcReferences}=await models();
+        const {isOwnedPetName}=await import('../app/generated-pets.js');
+        const list=value=>Array.isArray(value)?value:[];
+        if(!Array.isArray(relatedPages))throw new WikiError('sources','Provide related page changes as a list.');
+        const petNpc=candidate?.kind==='npc'&&[candidate.name,candidate.title].some(isOwnedPetName),petSource=list(candidate?.sources).some(source=>source.confirmed&&isOwnedPetName(source.npc)),petPopulation=list(candidate?.fields?.knownNPCs?.value).some(isOwnedPetName),petRelation=list(candidate?.relations).some(relation=>relation.type==='drop-source'&&isOwnedPetName(relation.name)),petRelated=relatedPages.some(related=>isOwnedPetName(related.npcTitle)||related.role==='npc-loot'&&isOwnedPetName(related.title));
+        if(petNpc||petSource||petPopulation||petRelation||petRelated)throw new WikiError('pet','Player and monster pets cannot be contributed as monsters or drop sources.');
         let attachment=null;
         const attachmentId=candidate?.attachment?.id||candidate?.attachment?.attachmentId;
         if(attachmentId){const item=await this.attachments.get(String(attachmentId),candidate.id);attachment={id:item.record.id,filename:`EoZ Contribution ${item.record.id}.png`,sha256:item.record.sha256,caption:String(candidate.attachment.caption||'').slice(0,2000),license:String(candidate.attachment.license||'').slice(0,2000),status:'pending'};candidate={...candidate,attachmentFilename:attachment.filename};}
         let normalizedCandidate=normalizeContributionCandidate(candidate);
         const blueprint=await this.blueprints({force:true}),account=await this.status();
         const references=new Map(),reference=(title,kind)=>{const key=kind+'|'+title;if(!references.has(key))references.set(key,this.contributionPage(contributionTitle(title),kind));return references.get(key);};
+        if(normalizedCandidate.kind==='npc'&&normalizedCandidate.zone){const zone=await reference(normalizedCandidate.zone,'zone');if(!zone.missing){candidate={...candidate,zone:zone.title};normalizedCandidate=normalizeContributionCandidate(candidate);}}
         if(normalizedCandidate.kind==='item'&&normalizedCandidate.sources.some(source=>source.confirmed&&source.npc&&source.zone)){
             const sources=await Promise.all(normalizedCandidate.sources.map(async source=>{if(!source.confirmed||!source.npc||!source.zone)return source;const [npc,zone]=await Promise.all([reference(source.npc,'npc'),reference(source.zone,'zone')]);return {...source,npc:npc.missing?source.npc:npc.title,zone:zone.missing?source.zone:zone.title};}));
             candidate={...candidate,sources};normalizedCandidate=normalizeContributionCandidate(candidate);
@@ -293,12 +334,49 @@ class WikiClient {
                 candidate={...candidate,title:primary.title,fields:{...candidate.fields,knownLoot:{...previous,value:[...merged.values()].slice(0,100),confirmed:true}}};normalizedCandidate=normalizeContributionCandidate(candidate);
             }
         }
+        const lootClassifications={},pendingMobs=new Map(),classificationCatalog=await this.getItemCatalog?.()||{};
+        const itemState=async title=>normalizedCandidate.kind==='item'&&contributionNameKey(title)===contributionNameKey(primary.title)?primary:reference(title,'item');
+        const addPendingMob=async(itemTitle,npcTitle)=>{
+            if(!itemTitle||!npcTitle)return;const item=await itemState(itemTitle),npc=normalizedCandidate.kind==='npc'&&contributionNameKey(npcTitle)===contributionNameKey(primary.title)?primary:await reference(npcTitle,'npc');
+            if(isOwnedPetName(npc.title))throw new WikiError('pet','Pets cannot be recorded as drop sources.');
+            if(!pendingMobs.has(item.title))pendingMobs.set(item.title,[]);pendingMobs.get(item.title).push({title:npc.title,pageId:npc.pageId});
+        };
+        if(normalizedCandidate.kind==='item')for(const source of normalizedCandidate.sources.filter(source=>source.confirmed&&source.npc&&source.zone))await addPendingMob(primary.title,source.npc);
+        if(normalizedCandidate.kind==='npc')for(const title of Array.isArray(normalizedCandidate.field('knownLoot'))?normalizedCandidate.field('knownLoot'):[])await addPendingMob(title,primary.title);
+        if(normalizedCandidate.kind==='zone')for(const relation of candidate.relations||[])if(relation.type==='drop-source'&&relation.evidence==='explicit-corpse')await addPendingMob(relation.item,relation.name);
+        for(const related of relatedPages.slice(0,100))if(related.confirmed===true&&['npc-loot','item-source'].includes(related.role))await addPendingMob(related.itemTitle||(related.role==='item-source'?related.title:primary.title),related.npcTitle||(related.role==='npc-loot'?related.title:primary.title));
+        const lootProof=async title=>{const item=await itemState(title);return lootClassifications[item.title]??=await this.classifyGlobalLoot(item,pendingMobs.get(item.title)||[],classificationCatalog);};
+        if(['npc','zone'].includes(normalizedCandidate.kind)){
+            const kinds={};for(const title of Array.isArray(normalizedCandidate.field('knownLoot'))?normalizedCandidate.field('knownLoot'):[]){
+                const existing=!primary.missing?(normalizedCandidate.kind==='npc'?(contributionNpcLootKind(primary.content,title,normalizedCandidate.instance)||contributionNpcLootSetCoverage(primary.content,title,normalizedCandidate.instance,{pack:classificationCatalog})?.kind):contributionZoneLootSetCoverage(primary.content,title,normalizedCandidate.instance,{pack:classificationCatalog})?.kind):null;
+                const proof=existing?{kind:existing}:await lootProof(title);if(existing||proof.kind)kinds[title]=existing||proof.kind;
+            }
+            candidate={...candidate,fields:{...candidate.fields,lootKinds:{value:kinds,confirmed:true}}};normalizedCandidate=normalizeContributionCandidate(candidate);
+        }
         // MediaWiki normalizes the first title letter. Itempage decides whether
         // to render the article or only a tooltip by exact FULLPAGENAME equality.
-        if(primary.title!==draft.title||lootRecovery?.items.length)draft=buildContributionDraft({...candidate,title:primary.title},blueprint);
+        draft=buildContributionDraft({...candidate,title:primary.title},blueprint);
+        const itemStatsProof={},verifyItemStats=async title=>{
+            if(contributionItemHasStats(classificationCatalog,title))return true;
+            const state=await itemState(title),planned=normalizedCandidate.kind==='item'&&contributionNameKey(state.title)===contributionNameKey(primary.title)&&state.missing?draft.text:state.content;
+            return contributionItemHasStats(classificationCatalog,state.title,planned);
+        };
+        if(normalizedCandidate.kind==='zone')for(const title of normalizedCandidate.field('knownLoot')||[])if(normalizedCandidate.field('lootKinds')?.[title]==='unique')itemStatsProof[title]=await verifyItemStats(title);
         const updating=!primary.missing&&normalizedCandidate.intent==='update';
-        let patch=null;if(updating)try{patch=patchContributionPrimary(primary.content,{...candidate,title:primary.title});for(const item of lootRecovery?.items||[])patch.text=patchContributionRelationship(patch.text,{role:'npc-loot',itemTitle:item.title,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance,lootKind:normalizedCandidate.field('lootKinds')?.[item.title]}).text;}catch(error){patch={text:primary.content,warnings:[],blockers:[safeMessage(error.message)]};}
+        let patch=null;if(updating)try{patch=patchContributionPrimary(primary.content,{...candidate,title:primary.title},{pack:classificationCatalog,itemStats:itemStatsProof});for(const item of lootRecovery?.items||[]){const recovered=patchContributionRelationship(patch.text,{role:'npc-loot',itemTitle:item.title,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance,lootKind:normalizedCandidate.field('lootKinds')?.[item.title],preserveExisting:true},{pack:classificationCatalog});patch.text=recovered.text;patch.warnings.push(...recovered.warnings||[]);}}catch(error){patch={text:primary.content,warnings:[],blockers:[safeMessage(error.message)]};}
         const plan={schemaVersion:1,id:this.id(),wikiOrigin:this.origin,expectedUser:account.user,blueprintRevision:blueprint.revision,createdAt:new Date(this.now()).toISOString(),pages:[],warnings:[...(updating?patch.warnings:draft.warnings),...(lootRecovery?.warnings||[])],blockers:[...(updating?patch.blockers||[]:draft.blockers),...(lootRecovery?.blockers||[])],matches,matchesReviewed:matchesReviewed===true,recoveredLoot:lootRecovery?.items||[],...(lootRecovery?{lootRecovery:{complete:lootRecovery.complete,checkedSources:lootRecovery.checkedSources,npcTitle:primary.title,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance}}:{}),...(attachment?{attachment}:{})};
+        plan.notableChoices=normalizedCandidate.kind==='npc'&&typeof normalizedCandidate.field('notable')==='boolean'?[{npcTitle:primary.title,zoneTitle:normalizedCandidate.zone,value:normalizedCandidate.field('notable')}]:normalizedCandidate.kind==='zone'&&normalizedCandidate.field('notable')===true?(normalizedCandidate.field('knownNPCs')||[]).map(npcTitle=>({npcTitle,zoneTitle:primary.title,value:true})):[];
+        if(normalizedCandidate.kind==='item'&&candidate.baseRecovery){
+            const {ITEM_RECOVERY_FIELDS,validateItemBaseReview}=await import('../app/item-base-review.js'),validated=validateItemBaseReview(candidate),fields={};
+            // Keep only the bounded inputs required to recheck the reviewed
+            // inference after an app/rules update, never the capture request.
+            for(const key of [...Object.keys(ITEM_RECOVERY_FIELDS),'tier','fraction','modified','augmented','augmentNames','statLines']){
+                const field=candidate.fields?.[key];if(!field)continue;
+                const value=key==='statLines'?(Array.isArray(field.value)?field.value.filter(value=>typeof value==='string').slice(0,60).map(value=>value.slice(0,8192)):String(field.value||'').slice(0,8192)):key==='augmentNames'?(Array.isArray(field.value)?field.value.slice(0,20).map(value=>String(value).slice(0,230)):null):['modified','augmented'].includes(key)?typeof field.value==='boolean'?field.value:null:typeof field.value==='number'&&Number.isFinite(field.value)?field.value:null;
+                fields[key]={value:copy(value??null),confirmed:field.confirmed===true,edited:field.edited===true};
+            }
+            if(validated.ok)plan.itemBaseReview={schemaVersion:1,candidate:{kind:'item',name:String(candidate.name||'').slice(0,240),fields,baseRecovery:validated.review}};
+        }
         if(normalizedCandidate.era&&!plan.blockers.some(message=>message.includes('era template name'))){const era=await this.request({action:'query',prop:'info',titles:`Template:${normalizedCandidate.era}`,redirects:'1'});if(!era.query?.pages?.some(page=>!page.missing&&page.ns===10))plan.blockers.push('The selected era template does not exist on the wiki. Choose a current canonical era template.');}
         if(!account.authenticated)plan.blockers.push('Log in, then prepare this review again before publishing.');
         if(!matchesReviewed)plan.blockers.push('Review potential matches before preparing the final publish plan.');
@@ -339,8 +417,8 @@ class WikiClient {
             relationships.push({title:source.zone,role:'zone-loot',itemTitle:primary.title,zoneTitle:source.zone,instance,confirmed:true});
         }
         if(normalizedCandidate.kind==='npc'&&normalizedCandidate.zone&&['normal','raid'].includes(normalizedCandidate.instance)){
-            if(!updating||normalizedCandidate.reasons.includes('missing-population'))relationships.push({title:normalizedCandidate.zone,role:'zone-population',npcTitle:primary.title,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance,confirmed:true});
-            const loot=normalizedCandidate.field('knownLoot');if(Array.isArray(loot)&&(!updating||!normalizedCandidate.reasons.length||normalizedCandidate.reasons.includes('missing-source')||normalizedCandidate.fields.knownLoot?.edited))for(const itemTitle of new Set(loot.map(contributionTitle)))relationships.push({title:normalizedCandidate.zone,role:'zone-loot',itemTitle,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance,lootKind:normalizedCandidate.fields.lootKinds?.value?.[itemTitle]||'unique',confirmed:true});
+            if(!updating||normalizedCandidate.reasons.includes('missing-population')||normalizedCandidate.fields.notable?.edited)relationships.push({title:normalizedCandidate.zone,role:'zone-population',npcTitle:primary.title,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance,notable:normalizedCandidate.field('notable')===true,confirmed:true});
+            const loot=normalizedCandidate.field('knownLoot');if(Array.isArray(loot)&&(!updating||!normalizedCandidate.reasons.length||normalizedCandidate.reasons.includes('missing-source')||normalizedCandidate.fields.knownLoot?.edited))for(const itemTitle of new Set(loot.map(contributionTitle)))relationships.push({title:normalizedCandidate.zone,role:'zone-loot',itemTitle,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance,lootKind:normalizedCandidate.fields.lootKinds?.value?.[itemTitle],confirmed:true});
         }
         if(normalizedCandidate.kind==='zone')for(const relation of Array.isArray(candidate.relations)?candidate.relations:[]){
             if(relation.type!=='drop-source'||relation.evidence!=='explicit-corpse'||!relation.name||!relation.item)continue;
@@ -349,6 +427,7 @@ class WikiClient {
             relationships.push({title:relation.item,role:'item-source',npcTitle:relation.name,zoneTitle:primary.title,instance,confirmed:true,required:true});
             relationships.push({title:relation.name,role:'npc-loot',itemTitle:relation.item,npcTitle:relation.name,zoneTitle:primary.title,instance,lootKind:normalizedCandidate.fields.lootKinds?.value?.[relation.item],confirmed:true,required:true});
         }
+        if(normalizedCandidate.kind==='zone'&&['normal','raid'].includes(normalizedCandidate.instance)&&(!targetedUpdate||normalizedCandidate.reasons.includes('missing-population')||normalizedCandidate.fields.knownNPCs?.edited))for(const npcTitle of normalizedCandidate.field('knownNPCs')||[])relationships.push({title:primary.title,role:'zone-population',npcTitle,zoneTitle:primary.title,instance:normalizedCandidate.instance,confirmed:true});
         if(normalizedCandidate.kind==='npc'){
             const loot=normalizedCandidate.field('knownLoot');
             if(Array.isArray(loot)&&loot.length&&(!updating||!normalizedCandidate.reasons.length||normalizedCandidate.reasons.includes('missing-source')||normalizedCandidate.fields.knownLoot?.edited)){
@@ -367,23 +446,74 @@ class WikiClient {
             const relationshipConfirmed=related.confirmed===true || normalizedCandidate.sources.some(source=>source.confirmed&&source.npc===(related.npcTitle||title)&&source.zone===related.zoneTitle&&(['normal','raid'].includes(source.instance)?source.instance:normalizedCandidate.instance)===instance);
             if(!relationshipConfirmed){plan.warnings.push(`${title}: an unconfirmed reciprocal drop-source edit was excluded.`);continue;}
             if(!lookups.has(title))try{lookups.set(title,await reference(title,related.role==='npc-loot'?'npc':related.role==='item-source'?'item':'zone'));}catch(error){plan.blockers.push(safeMessage(error.message));continue;}
-            const state=lookups.get(title);if(state.missing){plan.warnings.push(`${title} does not exist; its reciprocal edit was excluded.`);continue;}
+            let state=lookups.get(title);if(state.missing){plan.warnings.push(`${title} does not exist; its reciprocal edit was excluded.`);continue;}
+            let dynamicNpcZone=false,dynamicZoneTitle='';
+            const reviewedNotable=related.role==='zone-population'&&plan.notableChoices.some(choice=>choice.value===true&&contributionNameKey(choice.npcTitle)===contributionNameKey(related.npcTitle||draft.title)&&contributionNameKey(choice.zoneTitle)===contributionNameKey(state.title));
+            if(related.role==='zone-population'&&!reviewedNotable){
+                if(!contributionZoneUsesDynamicList(state.content,state.title,instance)){
+                    plan.warnings.push(`${title}: no matching normal-zone DynamicZoneList was found; a normal monster was not inserted into Notable NPCs.`);continue;
+                }
+                const npcTitle=contributionTitle(related.npcTitle||draft.title),npc=await reference(npcTitle,'npc');
+                if(npc.missing&&!plan.pages.some(page=>page.title===npc.title)){plan.warnings.push(`${npcTitle}: create its monster page before adding its dynamic zone membership.`);continue;}
+                dynamicZoneTitle=state.title;state=npc;dynamicNpcZone=true;
+            }
             const key=state.pageId?`id:${state.pageId}`:`title:${state.title}`;
             let group=groups.get(key);
             if(!group){
                 const existingPage=plan.pages.find(page=>page.title===state.title||page.pageId&&page.pageId===state.pageId);
                 if(!existingPage&&(groups.size>=10||plan.pages.length+[...groups.values()].filter(value=>!value.existingPage).length>=12)){plan.warnings.push(`${state.title}: only ten related pages within the total review limit can be included. Prepare remaining sources separately.`);continue;}
-                group={state,text:existingPage?.afterText||state.content,role:related.role,existingPage};groups.set(key,group);
+                group={state,text:existingPage?.afterText||state.content,role:dynamicNpcZone?'npc-zone':related.role,existingPage};groups.set(key,group);
             }
             if(group.state.revision!==state.revision||group.state.content!==state.content||group.existingPage&&(group.existingPage.baseRevision!==state.revision||group.existingPage.beforeHash!==hash(state.content))){plan.blockers.push(`${state.title} changed while preparing this review. Prepare it again.`);continue;}
-            const patchInput={...related,instance,itemTitle:related.role==='item-source'?state.title:related.itemTitle||draft.title,...(related.role==='npc-loot'?{npcTitle:state.title}:{})};
-            try{const patch=patchContributionRelationship(group.text,patchInput);if(patch.changed)group.text=patch.text;}
-            catch(error){const message=`${title}: ${safeMessage(error.message)}`;if(related.required)plan.blockers.push(message+' The reciprocal source update must be resolved before publishing.');else plan.warnings.push(message);}
+            const patchInput={...related,instance,itemTitle:related.role==='item-source'?state.title:related.itemTitle||draft.title,...(related.role==='npc-loot'?{npcTitle:state.title}:{}),...(related.role==='zone-population'?{notable:reviewedNotable}:{}),...(dynamicNpcZone?{role:'npc-zone',zoneTitle:dynamicZoneTitle}:{})};
+            try{
+                if(['npc-loot','zone-loot'].includes(related.role)){
+                    const covered=(related.role==='npc-loot'?contributionNpcLootSetCoverage:contributionZoneLootSetCoverage)(group.text,patchInput.itemTitle,instance,{pack:classificationCatalog});
+                    if(covered){plan.warnings.push(state.title+': '+patchInput.itemTitle+' is already covered by the listed '+covered.setTitle+' set; its authored loot section is preserved. No individual loot entry was added.');continue;}
+                }
+                if(['npc-loot','zone-loot'].includes(related.role)){const proof=await lootProof(patchInput.itemTitle);patchInput.itemTitle=proof.itemTitle;patchInput.lootKind=proof.kind;patchInput.preserveExisting=true;}
+                if(related.role==='zone-loot'&&patchInput.lootKind==='unique')itemStatsProof[patchInput.itemTitle]=await verifyItemStats(patchInput.itemTitle);
+                const patch=patchContributionRelationship(group.text,patchInput,{pack:classificationCatalog,itemStats:itemStatsProof});if(patch.changed)group.text=patch.text;plan.warnings.push(...patch.warnings||[]);
+            }
+            catch(error){const message=`${title}: ${safeMessage(error.message)}`;if(related.required||/classification|global.*count/i.test(error.message))plan.blockers.push(message+' The reciprocal source update must be resolved before publishing.');else plan.warnings.push(message);}
         }
         for(const group of groups.values()){
             if(group.existingPage){group.existingPage.afterText=normalizeWikiSubmissionText(group.text);group.existingPage.afterHash=hash(group.existingPage.afterText);}
             else if(group.text!==group.state.content)addPage(group.state,group.text,group.role);
         }
+        // Manually edited primary wikicode and legacy renderer fields share the
+        // same native count boundary as automatic source plans. Existing authored
+        // entries keep their section; only new classifications are checked.
+        const {createWikiResolver,wikiPageTitleKey}=await import('../app/wiki-identity.js'),catalogResolver=createWikiResolver(classificationCatalog);
+        const lootEntryKey=entry=>entry.card+'|'+(entry.instance||'normal')+'|'+entry.kind+'|'+wikiPageTitleKey(catalogResolver.resolve('item',entry.itemTitle).canonicalTitle||entry.itemTitle);
+        const allLootEntries=source=>[...contributionNpcLootEntries(source),...contributionZoneLootEntries(source)];
+        for(const page of plan.pages){
+            const key=entry=>entry.card+'|'+contributionNameKey(entry.npcTitle),before=new Set(contributionNpcReferences(page.beforeText).filter(entry=>entry.kind==='zone-population').map(key));
+            for(const entry of contributionNpcReferences(page.afterText))if(entry.kind==='zone-population'&&!before.has(key(entry))&&!plan.notableChoices.some(choice=>choice.value===true&&contributionNameKey(choice.npcTitle)===contributionNameKey(entry.npcTitle)&&contributionNameKey(choice.zoneTitle)===contributionNameKey(page.title)))plan.blockers.push(page.title+': '+entry.npcTitle+' needs an explicit Notable choice before adding a Notable NPC summary entry.');
+        }
+        for(const page of plan.pages){
+            try{const before=new Set(contributionNpcLootEntries(page.beforeText).map(lootEntryKey));for(const entry of contributionNpcLootEntries(page.afterText))if(!before.has(lootEntryKey(entry)))await addPendingMob(entry.itemTitle,page.title);}
+            catch(error){plan.blockers.push(page.title+': '+safeMessage(error.message));}
+        }
+        for(const page of plan.pages){
+            try{
+                const beforeEntries=allLootEntries(page.beforeText),before=new Set(beforeEntries.map(lootEntryKey));
+                for(const entry of allLootEntries(page.afterText))if(!before.has(lootEntryKey(entry))){
+                    if(entry.sourceKind==='zone'&&entry.kind==='unique'){
+                        if(!contributionZoneHasLootRow(page.beforeText,'unique',{card:entry.card}))plan.blockers.push(page.title+': automatic Unique Items population requires a pre-existing summary row.');
+                        if(!await verifyItemStats(entry.itemTitle))plan.blockers.push(page.title+': '+entry.itemTitle+' needs verified item statistics before adding it to zone Unique Items.');
+                    }
+                    if(entry.instance==='unknown')throw Error('Choose the correct internal normal/raid loot section in the wiki source editor.');
+                    const covered=(entry.sourceKind==='zone'?contributionZoneLootSetCoverage:contributionNpcLootSetCoverage)(page.beforeText,entry.itemTitle,entry.instance||'normal',{pack:classificationCatalog,card:entry.card});
+                    if(covered){plan.blockers.push(page.title+': '+entry.itemTitle+' is already covered by the listed '+covered.setTitle+' set. Remove the redundant individual loot entry.');continue;}
+                    if(entry.sourceKind==='zone'&&beforeEntries.some(prior=>prior.card===entry.card&&lootEntryKey({...prior,kind:entry.kind})===lootEntryKey(entry)))plan.blockers.push(page.title+': preserve the existing authored loot classification for '+entry.itemTitle+'.');
+                    const state=await itemState(entry.itemTitle);delete lootClassifications[state.title];const proof=await lootProof(entry.itemTitle);
+                    if(proof.kind!==entry.kind)plan.blockers.push(page.title+': '+entry.itemTitle+' needs '+(proof.kind?(proof.kind==='common'?'Common Loot':'Unique Loot')+' under the cached global monster count.':proof.reason));
+                }
+            }catch(error){plan.blockers.push(page.title+': '+safeMessage(error.message));}
+        }
+        plan.lootClassifications=lootClassifications;
+        for(const proof of Object.values(lootClassifications))plan.warnings.push(proof.itemTitle+': '+(proof.kind?(proof.kind==='common'?'Common Loot':'Unique Loot')+' · '+(proof.complete?'':'at least ')+proof.count+' distinct monsters across the whole wiki.':proof.reason));
         plan.reviewDigest=this.digest(plan);this.plans.set(plan.id,plan);if(this.plans.size>30)this.plans.delete(this.plans.keys().next().value);await this.persist();return safePlan(plan);
     }
     async getPlan(id) {await this.load();const plan=this.plans.get(id);if(!plan)throw new WikiError('plan','This contribution review is unavailable. Prepare a new review.');return safePlan(plan);}
@@ -415,21 +545,116 @@ class WikiClient {
             for(const item of batch){const page=requested.get(item.title),reviewed=plan.pages.find(page=>page.title===item.title),content=page?.revisions?.[0]?.slots?.main?.content,reviewedResult=!item.alias&&reviewed&&typeof content==='string'&&hash(content)===hash(normalizeWikiSubmissionText(reviewed.afterText));if(page.missing||Boolean(page.redirect)!==Boolean(item.alias)||page.revisions?.[0]?.revid!==item.revision&&!reviewedResult)throw new WikiError('source-changed',item.title+': the published drop source or monster redirect changed after review. Prepare a new Preview before publishing.');}
         }
     }
-    async submitPlan({ planId, reviewDigest }={}, {beforeWrite=null}={}) {
+    async automaticContributionPolicy(plan,{pages=[],automaticAttempt=false}={}){
+        const states=new Map();if(!plan.automaticSource)return{states};
+        const {createWikiResolver,normalizeWikiIdentity}=await import('../app/wiki-identity.js'),{cachedContributionCoverage,liveContributionCoverage,validateAutomaticSourcePlan,automaticZoneLootSummary}=await import('../app/contribution-coverage.js');
+        const catalog=await this.getItemCatalog?.()||{},resolver=createWikiResolver(catalog),source=plan.automaticSource,known=new Map(),relation={item:source.itemTitle,npc:source.npcTitle,zone:source.zoneTitle,instance:source.instance};
+        // These optional objects come only from the native source worker's
+        // already-fetched targets. Renderer IPC never supplies this argument.
+        for(const page of Array.isArray(pages)?pages:[])if(page&&typeof page.title==='string'&&typeof page.content==='string')known.set(normalizeWikiIdentity(page.title),page);
+        for(const page of plan.pages){
+            if(page.status==='applied')continue;
+            const state=await this.page(page.title);states.set(page.id,state);known.set(normalizeWikiIdentity(state.title||page.title),state);
+            // Preserve confirmed/exact prior writes even when a later target
+            // deliberately stops the remaining automatic work.
+            if(page.status==='unknown'&&!state.missing&&hash(state.content)===hash(normalizeWikiSubmissionText(page.afterText))){page.status='applied';page.result={revision:state.revision,reconciled:true};}
+        }
+        if(plan.pages.every(page=>page.status==='applied'))return{states};
+        // An independently eligible zone summary may remain after our source
+        // write succeeded. Its own confirmed source is not an external duplicate.
+        const primary=plan.pages.find(page=>page.role==='primary'),ownSourceApplied=primary?.status==='applied'&&Boolean(primary.result?.revision);
+        const cached=cachedContributionCoverage(catalog,relation,{resolver});
+        if(cached.state==='covered'&&!ownSourceApplied)return{states,blocked:true,decision:'covered',reason:cached.reason};
+        try{validateAutomaticSourcePlan(plan,{pack:catalog,resolver});}catch(error){return{states,blocked:true,decision:'review',reason:safeMessage(error.message)};}
+        const pageFor=async title=>{const key=normalizeWikiIdentity(title);if(!known.has(key))known.set(key,await this.page(title));return known.get(key);};
+        const itemPage=await pageFor(source.itemTitle),npcPage=await pageFor(source.npcTitle),coverage=liveContributionCoverage(catalog,relation,{resolver,itemPage,npcPage});
+        if(coverage.state!=='uncovered'&&!(ownSourceApplied&&coverage.state==='covered'))return{states,blocked:true,decision:coverage.state==='covered'?'covered':'review',reason:coverage.reason};
+        const summary=plan.pages.find(page=>page.role==='zone-loot'&&page.status!=='applied');
+        if(summary){const expected=automaticZoneLootSummary(catalog,relation,{resolver,itemPage,zonePage:{title:summary.title,content:summary.beforeText,revision:summary.baseRevision,missing:false}});if(!expected||normalizeWikiSubmissionText(expected)!==summary.afterText)return{states,blocked:true,decision:'review',reason:'The optional zone summary no longer has verified item statistics or a supported existing Unique Items row.'};}
+        return{states};
+    }
+    async stopAutomaticContribution(plan,policy){
+        const applied=plan.pages.filter(page=>page.status==='applied').length;
+        plan.automaticOptOut={reason:policy.reason,decision:policy.decision||'review',title:policy.title||'',at:new Date(this.now()).toISOString()};
+        const attempted=Boolean(plan.historyAttempt)||plan.pages.some(page=>['unknown','failed'].includes(page.status));
+        plan.status=applied===plan.pages.length?'submitted':applied?'partial':attempted?'needs-attention':'opted-out';
+        if(applied||attempted)plan.historyAttempt={...plan.historyAttempt,at:plan.historyAttempt?.at||new Date(this.now()).toISOString(),status:'stopped',code:'automatic-opt-out'};else delete plan.historyAttempt;
+        await this.persist();return{...safePlan(plan),skipped:true};
+    }
+    async revalidatePendingContribution(plan,{automaticAttempt=false,initialStates=null}={}){
+        const {contributionNpcLootEntries,contributionZoneLootEntries,contributionNpcReferences,contributionTemplates,contributionNpcLootSetCoverage,contributionZoneLootSetCoverage,contributionZoneHasLootRow,contributionItemHasStats}=await models(),{createWikiResolver,wikiPageTitleKey}=await import('../app/wiki-identity.js'),{classifyCachedLoot}=await import('../app/loot-classification.js'),{isOwnedPetName}=await import('../app/generated-pets.js');
+        const {validateItemBaseReview}=await import('../app/item-base-review.js'),{tierZeroRecoveryNoteMatches}=await import('../app/contribution-tier-zero.js');
+        const itemStats=source=>contributionTemplates(source,'Itempage').flatMap(template=>template.fields.filter(field=>field.name.toLowerCase()==='statsblock').map(field=>field.value.replace(/\r\n?/g,'\n').trim()));
+        const catalog=await this.getItemCatalog?.()||{},resolver=createWikiResolver(catalog),states=new Map(),pending=new Map();
+        const identity=(kind,title)=>wikiPageTitleKey(resolver.resolve(kind,title).canonicalTitle||title),entryKey=entry=>entry.card+'|'+(entry.instance||'normal')+'|'+entry.kind+'|'+identity('item',entry.itemTitle),referenceKey=entry=>entry.kind+'|'+(entry.card||'')+'|'+identity('item',entry.itemTitle||'')+'|'+identity('npc',entry.npcTitle);
+        const allLootEntries=source=>[...contributionNpcLootEntries(source),...contributionZoneLootEntries(source)];
+        const itemStatsChecks=new Map(),verifyZoneItemStats=async title=>{
+            if(contributionItemHasStats(catalog,title))return true;const key=identity('item',title);if(itemStatsChecks.has(key))return itemStatsChecks.get(key);
+            const planned=plan.pages.find(page=>identity('item',page.title)===key&&contributionTemplates(page.afterText,'Itempage').length),source=planned?planned.afterText:(await this.page(title))?.content;
+            const result=contributionItemHasStats(catalog,title,source||'');itemStatsChecks.set(key,result);return result;
+        };
+        const addSource=(itemTitle,npcTitle)=>{if(!itemTitle||!npcTitle)return;const npc=resolver.resolve('npc',npcTitle).canonicalTitle||npcTitle;if(isOwnedPetName(npc))return;const key=identity('item',itemTitle);if(!pending.has(key))pending.set(key,[]);pending.get(key).push(npc);};
+        // Own confirmed edits remain positive evidence while the next GitHub
+        // dataset is pending, including already-applied pages of this retry.
+        for(const page of plan.pages){
+            const before=new Set(contributionNpcLootEntries(page.beforeText).map(entryKey));
+            for(const entry of contributionNpcLootEntries(page.afterText))if(!before.has(entryKey(entry)))addSource(entry.itemTitle,page.title);
+            const prior=new Set(contributionNpcReferences(page.beforeText).map(referenceKey));
+            for(const entry of contributionNpcReferences(page.afterText))if(entry.kind==='drop-source'&&!prior.has(referenceKey(entry)))addSource(entry.itemTitle||page.title,entry.npcTitle);
+        }
+        for(const page of plan.pages){
+            if(page.status==='applied')continue;
+            const state=initialStates?.get(page.id)||await this.page(page.title);states.set(page.id,state);
+            if(state.namespace!==undefined&&state.namespace!==0||page.title.includes(':')&&state.namespace!==0)throw new WikiError('namespace','This contribution destination is no longer a verified mainspace article. Prepare a fresh Preview.');
+            const afterText=normalizeWikiSubmissionText(page.afterText);
+            if(automaticAttempt&&!state.missing)throw new WikiError('duplicate-review','This item now exists. Review the saved result on the wiki.');
+            // A lost response can already have applied the exact reviewed edit.
+            // Reconcile it before applying today's rules to remaining writes.
+            if(!state.missing&&hash(state.content)===hash(afterText)){page.status='applied';page.result={revision:state.revision,reconciled:true};await this.persist();continue;}
+            if(JSON.stringify(itemStats(page.beforeText))!==JSON.stringify(itemStats(afterText))&&(plan.itemBaseReview||tierZeroRecoveryNoteMatches(afterText).length)){
+                const review=plan.itemBaseReview?.schemaVersion===1&&validateItemBaseReview(plan.itemBaseReview.candidate);
+                if(!review?.ok)throw new WikiError('needs-review','The saved ranked item base-stat recovery needs review under the current scaling rules. '+(review?.reason||'This legacy plan has no saved recovery proof.')+' Prepare a fresh Preview before publishing.');
+            }
+            if(contributionTemplates(afterText,'Namedmobpage').length&&isOwnedPetName(resolver.resolve('npc',page.title).canonicalTitle||page.title))throw new WikiError('pet-review','This saved plan targets a pet. Prepare a fresh Preview without pet contributions.');
+            const beforeReferences=new Set(contributionNpcReferences(page.beforeText).map(referenceKey));
+            for(const entry of contributionNpcReferences(afterText))if(entry.kind==='npc-card'||!beforeReferences.has(referenceKey(entry))){const npc=resolver.resolve('npc',entry.npcTitle).canonicalTitle||entry.npcTitle;if(isOwnedPetName(npc))throw new WikiError('pet-review','This saved plan includes a pet monster or drop source. Prepare a fresh Preview without pets.');}
+            for(const entry of contributionNpcReferences(afterText))if(entry.kind==='zone-population'&&!beforeReferences.has(referenceKey(entry))&&!(Array.isArray(plan.notableChoices)?plan.notableChoices:[]).slice(0,100).some(choice=>choice.value===true&&identity('npc',choice.npcTitle)===identity('npc',entry.npcTitle)&&identity('zone',choice.zoneTitle)===identity('zone',page.title)))throw new WikiError('notable-review',entry.npcTitle+' has no saved Notable choice for this zone summary. Prepare a fresh Preview and answer whether the monster is Notable.');
+            const beforeEntries=allLootEntries(page.beforeText),before=new Set(beforeEntries.map(entryKey));
+            for(const entry of allLootEntries(afterText))if(!before.has(entryKey(entry))){
+                if(entry.instance==='unknown')throw new WikiError('loot-review','The saved plan has ambiguous internal normal/raid loot headings. Prepare a fresh Preview in the wiki source editor.');
+                const covered=(entry.sourceKind==='zone'?contributionZoneLootSetCoverage:contributionNpcLootSetCoverage)(page.beforeText,entry.itemTitle,entry.instance||'normal',{pack:catalog,resolver,card:entry.card});
+                if(covered)throw new WikiError('loot-review',entry.itemTitle+' is already covered by the listed '+covered.setTitle+' set. Prepare a fresh Preview without the redundant individual loot entry.');
+                if(beforeEntries.some(prior=>prior.card===entry.card&&(prior.instance||'normal')===(entry.instance||'normal')&&identity('item',prior.itemTitle)===identity('item',entry.itemTitle)&&prior.kind!==entry.kind))throw new WikiError('loot-review','This saved plan changes an existing authored loot classification. Prepare a fresh Preview preserving its current section.');
+                const proof=classifyCachedLoot(catalog,entry.itemTitle,pending.get(identity('item',entry.itemTitle))||[]);
+                if(proof.kind!==entry.kind)throw new WikiError('loot-review',entry.itemTitle+': '+(proof.kind?'the cached global count now requires '+(proof.kind==='common'?'Common Loot':'Unique Loot')+'.':proof.reason)+' Prepare a fresh Preview before publishing this saved plan.');
+                if(entry.sourceKind==='zone'&&entry.kind==='unique'){
+                    if(!contributionZoneHasLootRow(page.beforeText,'unique',{card:entry.card}))throw new WikiError('loot-review','Automatic zone Unique Items population needs a pre-existing summary row. Prepare a fresh Preview without adding this section.');
+                    if(!await verifyZoneItemStats(entry.itemTitle))throw new WikiError('loot-review',entry.itemTitle+' has no verified item statistics for zone Unique Items. Prepare a fresh Preview without this zone entry.');
+                }
+            }
+        }
+        return states;
+    }
+    async submitPlan({ planId, reviewDigest }={}, {beforeWrite=null,automaticPolicyPages=[]}={}) {
         await this.load();if(this.busy)throw new WikiError('busy','A wiki submission is already in progress.');
         const plan=this.plans.get(planId);if(!plan||reviewDigest!==plan.reviewDigest||reviewDigest!==this.digest(plan))throw new WikiError('review','This contribution changed. Prepare and review it again.');
         if(plan.blockers.length)throw new WikiError('review',plan.blockers.join(' '));
         this.busy=true;
         try{
-            await this.expectedUser(plan.expectedUser);
+            if(plan.automaticSource||plan.automaticItem)await this.expectedUser(plan.expectedUser);
+            const policy=await this.automaticContributionPolicy(plan,{pages:automaticPolicyPages,automaticAttempt:Boolean(beforeWrite&&plan.automaticItem)});
+            if(policy.blocked)return await this.stopAutomaticContribution(plan,policy);
+            plan.historyAttempt={at:new Date(this.now()).toISOString(),status:'pending'};await this.persist();
+            if(!plan.automaticSource&&!plan.automaticItem)await this.expectedUser(plan.expectedUser);
             const blueprint=await this.blueprints({force:true});if(blueprint.revision!==plan.blueprintRevision)throw new WikiError('blueprint-changed','The wiki blueprints changed. Prepare a new review.');
             await this.verifyRecoveredLoot(plan);
             if(beforeWrite)await beforeWrite('start',plan);
+            const reviewedStates=await this.revalidatePendingContribution(plan,{automaticAttempt:Boolean(beforeWrite&&plan.automaticItem),initialStates:policy.states});
             if(!await this.submitPlanAttachment(plan,{beforeWrite})){plan.status=plan.pages.some(page=>page.status==='applied')?'partial':'needs-attention';await this.persist();return safePlan(plan);}
             for(const page of plan.pages){
                 if(page.status==='applied')continue;
                 await this.expectedUser(plan.expectedUser);
-                const state=await this.page(page.title);
+                const state=reviewedStates.get(page.id)||await this.page(page.title);
                 // A fresh automatic attempt must never claim an identical page
                 // created by somebody else as its own successful publication.
                 // Explicit manual retries retain uncertain-write reconciliation.
@@ -450,7 +675,8 @@ class WikiClient {
                 }catch(error){page.status=error.code==='unknown-write'?'unknown':'failed';page.result={code:error.code||'write',message:safeMessage(error.message)};await this.persist();break;}
             }
             plan.status=plan.pages.every(page=>page.status==='applied')?'submitted':plan.pages.some(page=>page.status==='applied')?'partial':'needs-attention';await this.persist();return safePlan(plan);
-        }finally{this.busy=false;}
+        }catch(error){plan.historyAttempt={...plan.historyAttempt,status:'failed',code:error.code};await this.persist().catch(()=>{});throw error;}
+        finally{this.busy=false;}
     }
     async uploadCharacter({ png, characterName='', caption='', confirmed=false, snapshotId=null }={}) {
         if(confirmed!==true)throw new WikiError('review','Preview the character PNG and confirm the upload first.');

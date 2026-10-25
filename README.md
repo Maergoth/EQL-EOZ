@@ -4,6 +4,34 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
+**0.9.14: contribution history and safer loot discovery.** Open
+**Contribute → Contribution History** to see this device's automatic and reviewed submissions
+for your signed-in wiki account, including partly saved and unconfirmed results.
+Saved pages offer revision and diff links. Discoveries and History share the
+Contribute section and account controls; a compact reader toolbar and latest
+result keep the discovery queue close at hand. History preserves drafts and
+pauses its owned reader while open. It never retries a submission.
+Explicit owner-labelled pets stay out of monster discoveries and contribution
+plans. Common/Unique loot placement uses distinct monsters across the cached
+wiki dataset: six or more means Common; fewer means Unique only when the count
+is complete. No live counter requests are made. Shared item rules revision 2
+also corrects positive primary-stat flooring: base HP 50 shows 75 at rank 5
+with 4/32 progress. AC, HP, Mana, Endurance and regeneration also count toward
+the two-stat requirement for rank-based Void. Saved base-recovery reviews from
+older formulas require review after updating. Missing-wiki notices now appear
+in their own lower-right desktop popup, including when Timers is closed.
+Item notices check cached page membership first, then a bounded public existence
+lookup when necessary; unverified failures show no missing-page claim. See
+[the history guide](docs/CONTRIBUTION_HISTORY.md),
+[cached loot classification](docs/CONTRIBUTION_LOOT_CLASSIFICATION.md),
+[item discovery checks](docs/ITEM_DISCOVERY_EXISTENCE.md), and
+[the release record](docs/RELEASE_0914_PLAN.md).
+
+Items adds **Any** before **Auto** to browse every class without changing the
+character profile. Contributions preserve documented item sets instead of
+repeating their covered members. Rich item previews share a 350 ms mouseover
+delay, and Intel keeps its scrolling list intact during unrelated updates.
+
 **0.9.13: correct tier-zero verification category.** Ranked and recovered item
 pages now use the exact
 [Tier 0 Verification Needed](https://eqlwiki.com/Category:Tier_0_Verification_Needed)
@@ -247,6 +275,10 @@ A fresh unknown-monster kill arms one next **/loc** and shows a noninterrupting
 prompt. Stand at that monster's spawn before typing the command. A newer eligible
 kill replaces the active target; older drafts remain available for explicit
 rearming. Locations remain proposals for review, and EoZ never types commands.
+The popup also asks `Is <monster> notable?` Choose **Yes** or **No** to save
+that classification for review without opening the main window. Leaving it
+unanswered preserves the location draft. The same choice is editable in
+Contribute; a monster's page template does not make it notable automatically.
 
 Encoded item links in live chat also identify missing wiki items and offer
 **Contribute**; open the linked item's complete examine window. That action
@@ -392,7 +424,7 @@ injects code, patches game files, sends game commands or synthesizes gameplay
 input. Wiki edits/uploads require the review actions described above. See
 [SAFETY.md](SAFETY.md).
 
-When a complete wiki catalog confirms that an encountered NPC or looted item is missing, an inline Triggers notice offers **Screenshot** or **Ignore**. Screenshot opens an explicit window/display choice and copies the selected image to your local clipboard. You decide where to paste it; nothing uploads automatically. Notices pause their dismissal timer while hovered or keyboard-focused.
+Wiki discovery notices appear in a separate bottom-right popup for 15 seconds of visible time. Local catalog checks run first; possible missing items require a live exact-title check before a notice appears. **Contribute** opens item capture; **Screenshot** copies a chosen window or display to your clipboard. Active capture keeps its notice available, then shows its confirmation for 15 seconds. Unanswered notices pause while hovered or keyboard-focused.
 
 Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards open their exact wiki pages. Ordinary search and filtering use cached data and do not crawl wiki pages.
 
@@ -534,6 +566,15 @@ before changing either side of that contract.
 The main source areas are `app/` (UI, parsing, maps and local knowledge), `desktop/` (Electron, overlays and file bridge), `server/` (wiki export), `scripts/` (build/validation), `tests/` and `wiki/` (optional launcher integration).
 
 Eye of Zomm is [MIT licensed](LICENSE). Zone Viewer, Recast/Detour and PNUT notices remain under `THIRD_PARTY/`.
+
+NPC `zone = Various` is retained in the dataset as a scoped all-zones marker.
+Normal population uses the zone’s existing DynamicZoneList, which selects NPC
+pages in both the zone category and `NPCs`; missing membership adds the NPC
+category source. Only a player’s confirmed Notable choice adds a manual Notable
+NPCs summary entry. Automatic zone Unique Items additions retain the global
+fewer-than-six-monsters rule, require actual gear statistics beyond weight, and
+use only a pre-existing Unique Items row in the selected normal/raid scope.
+Zones such as Plane of Sky without that row are skipped.
 
 The 0.9.9 presentation layer is in `app/contribution-presentation.js` (queue
 categories, filters and order), `app/contribution-update.js` (specific gap fields

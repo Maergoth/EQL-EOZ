@@ -15,6 +15,7 @@ const { AppUpdater, isReleaseNotesUrl, launchSilentNsisInstaller } = require('./
 const { OverlayHost } = require('./overlay-host.cjs');
 const { safeMapFile } = require('./overlay-map-policy.cjs');
 const { DiscoveryHost } = require('./discovery-host.cjs');
+const { WikiItemExistence } = require('./wiki-item-existence.cjs');
 const { CaptureHost } = require('./capture-host.cjs');
 const { AutomaticLogReader } = require('./automatic-log-reader.cjs');
 const { AutomaticLootSources } = require('./automatic-loot-sources.cjs');
@@ -918,7 +919,7 @@ async function bootstrap() {
         onIconRequest:(action,value)=>iconFinderHost.handle(action,value)});
     const sourceReceipt=result=>{if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:automatic-source-result',{
         ...result,itemTitle:result.item||'',npcTitle:result.npc||'',zoneTitle:result.zone||''});};
-    automaticLootSources=new AutomaticLootSources({client:wikiHost.client,onResult:sourceReceipt,onDeferred:sourceReceipt});
+    automaticLootSources=new AutomaticLootSources({client:wikiHost.client,onResult:sourceReceipt,onDeferred:sourceReceipt,onDecision:sourceReceipt});
     automaticLogReader=new AutomaticLogReader({getPack:automaticWikiCatalog,onReset:()=>automaticLootSources.cancel(),
         onObservation:record=>automaticLootSources.observe(record)});
     iconFinderHost = new IconFinderHost({session:wikiHost.session,stateDir:path.join(userDataDir(),'wiki-icons'),nativeImage:electron.nativeImage});
@@ -931,7 +932,7 @@ async function bootstrap() {
     rendererDrain = new RendererDrain({ipcMain,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     shareHost = new ShareHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
-        isTimerPanel:event=>overlayHost.overlaySender(event)==='timers',captureScreenshot:value=>captureHost.captureScreenshot(value)});
+        itemExistence:new WikiItemExistence({getPack:automaticWikiCatalog,fetchImpl:(url,options)=>electron.net.fetch(url,{...options,credentials:'omit',useSessionCookies:false})})});
     createWindow(config,await readJson(windowPlacementPath(),{}));
     // Metadata checks are quiet. Application downloads require an explicit
     // request or the saved opt-in; a staged installer never runs on startup.

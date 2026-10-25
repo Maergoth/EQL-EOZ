@@ -51,7 +51,7 @@ acceptance are separate milestones. Preserve the pending feature PRs below.
   Keep the triggering line as private evidence without inferring a drop source.
 - [x] Pin an accepted item-link prompt until a fresh matching live item-examine
   read from its contribution source/session/generation has been saved. Flash
-  green for 900ms and close. Keep safe inline source selection and retry paths;
+  green for 15 seconds of visible time and close. Keep safe inline source selection and retry paths;
   preserve Character ownership and prior user-started capture sessions.
 - [x] Pin an accepted monster prompt until its freshly re-armed next `/loc` is
   saved. Explicit waits persist until completion/cancellation; the initial

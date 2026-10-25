@@ -1,5 +1,17 @@
 # Browsable release history
 
+0.9.14 archives three actual isolated Electron Chromium captures: the unified
+Contribute section with embedded Discoveries/Contribution History tabs and
+compact item reader; account-scoped history with an expanded partial result;
+and the separate native wiki-suggestion popup. The contribution fixture uses
+synthetic sources, readings, screenshot pixels and wiki/storage APIs. The native
+popup fixture verifies bottom-right work-area placement, stacked notices,
+unchanged foreground focus, closed Timers, explicit actions and completion
+expiry. The images are visually reviewed and their SHA-256 values appear in the
+version-owned release steps. No game/player pixels, installed profiles, live
+wiki requests or production wiki submissions appear. Earlier captures, captions
+and hashes remain immutable.
+
 0.9.13 archives one visually reviewed actual Electron Chromium capture of the
 current contribution saved-plan review. The real contribution model generates
 a synthetic ranked item with Category:Tier 0 Verification Needed. Its After

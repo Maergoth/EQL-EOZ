@@ -5,5 +5,6 @@ const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('eyeOfZommSpawnPrompt',{
     getState:()=>ipcRenderer.invoke('eye-of-zomm:spawn-prompt','get-state'),
     action:(action,id)=>ipcRenderer.invoke('eye-of-zomm:spawn-prompt',action,{id}),
+    setNotable:({id,candidateId,notable})=>ipcRenderer.invoke('eye-of-zomm:spawn-prompt','set-notable',{id,candidateId,notable}),
     onState:callback=>{if(typeof callback!=='function')return()=>{};const listener=(_event,state)=>callback(state);ipcRenderer.on('eye-of-zomm:spawn-state',listener);return()=>ipcRenderer.removeListener('eye-of-zomm:spawn-state',listener);}
 });

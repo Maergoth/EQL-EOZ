@@ -11,7 +11,7 @@ class WikiHost {
         this.onItemCatalog=onItemCatalog;this.capturedItemPlans=new Map();this.preparingCapturedItem=false;
         this.statusRevision=0;
         this.session=electron.session.fromPartition(devWikiOrigin?'eye-of-zomm-wiki-development':'persist:eye-of-zomm-wiki');
-        this.client=client||new WikiClient({session:this.session,version,stateDir,origin:devWikiOrigin||PRODUCTION_ORIGIN,allowLoopbackDevelopment});
+        this.client=client||new WikiClient({session:this.session,version,stateDir,origin:devWikiOrigin||PRODUCTION_ORIGIN,allowLoopbackDevelopment,getItemCatalog:onItemCatalog});
         this.session.setPermissionRequestHandler?.((_contents,_permission,callback)=>callback(false));
         this.session.setPermissionCheckHandler?.(()=>false);
         this.session.setDevicePermissionHandler?.(()=>false);
@@ -25,6 +25,7 @@ class WikiHost {
         try{
             switch(action){
             case 'status':{await this.client.load();return await this.freshStatus();}
+            case 'contribution-history':return await this.client.contributionHistory(value);
             case 'observation-status':return await this.client.observationStatus();
             case 'submit-observations':return await this.client.submitObservations(value?.batch,{expectedUser:value?.expectedUser});
             case 'prepare-attachment':return await this.prepareAttachment(value);
@@ -115,6 +116,7 @@ class WikiHost {
             const guard=async()=>{const current=()=>{if(this.disposed||this.capturedItemPlans.get(planId)!==binding)throw new WikiError('automatic-cancelled','Automatic item creation was cancelled.');};current();await this.onCaptureEvidence(binding.proof);current();};
             const beforeWrite=async(_stage,plan)=>{await guard();if(plan.pages.length!==1||plan.pages[0].role!=='primary'||plan.pages[0].operation!=='create'||!plan.automaticItem)throw new WikiError('automatic-review','Only one new item page may be created automatically.');await this.client.assertNewCapturedItem(binding.title);await guard();};
             await guard();const plan=await this.client.submitPlan({planId,reviewDigest},{beforeWrite});
+            if(plan.automaticOptOut)return{ok:false,skipped:true,plan};
             return {ok:plan.status==='submitted',deferred:plan.status!=='submitted',plan,pageUrl:plan.status==='submitted'?`${this.client.origin}/${encodeURIComponent(plan.pages[0].title.replace(/ /g,'_'))}`:null,...(plan.status!=='submitted'?{reason:'The saved item result needs manual review before retry.'}:{})};
         }catch(error){return {ok:false,deferred:true,reason:String(error.message||'Automatic item creation stopped.'),plan:await this.client.getPlan(planId).catch(()=>null)};}
         finally{if(this.capturedItemPlans.get(planId)===binding)this.capturedItemPlans.delete(planId);}

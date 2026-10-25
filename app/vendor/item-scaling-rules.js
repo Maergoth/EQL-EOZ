@@ -2,7 +2,7 @@
 export default {
   "schemaVersion": 1,
   "engineVersion": 1,
-  "revision": 1,
+  "revision": 2,
   "maxTier": 10,
   "primary": {
     "smallThreshold": 10,

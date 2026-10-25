@@ -3,16 +3,19 @@
 import { validateItemBaseReview, proposeItemBaseReview, applyItemBaseReview } from './item-base-review.js';
 import { validateTierZeroVerification, requiresTierZeroVerification, tierZeroRecoveryNoteMatches, TIER_ZERO_VERIFICATION_CATEGORY, TIER_ZERO_CATEGORY_MARKER } from './contribution-tier-zero.js';
 import { normalizeContributionChoices } from './contribution-choice-picker.js';
+import { isOwnedPetName } from './generated-pets.js';
+import { lootSetCoverage } from './loot-set-coverage.js';
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 const TYPES = new Set(['item', 'npc', 'zone', 'spell']);
 const CLASS_NAMES = { BER:'Berserker', BRD:'Bard', BST:'Beastlord', CLR:'Cleric', DRU:'Druid', ENC:'Enchanter', MAG:'Magician', MNK:'Monk', NEC:'Necromancer', PAL:'Paladin', RNG:'Ranger', ROG:'Rogue', SHM:'Shaman', SHD:'Shadow Knight', WAR:'Warrior', WIZ:'Wizard' };
 const SLOT_CATEGORIES = { PRIMARY:'Primary', SECONDARY:'Secondary', RANGE:'Range', AMMO:'Ammo', ARMS:'Arms', BACK:'Back', CHEST:'Chest', EAR:'Ear', FACE:'Face', FEET:'Feet', FINGER:'Fingers', FINGERS:'Fingers', HANDS:'Hands', HEAD:'Head', LEGS:'Legs', NECK:'Neck', SHOULDERS:'Shoulders', WAIST:'Waist', WRIST:'Wrist' };
 const clean = (value, max = 4000) => String(value ?? '').replace(CONTROL, ' ').trim().slice(0, max);
 export const contributionNameKey = value => clean(value, 240).normalize('NFKC').replace(/_/g, ' ').replace(/[\u2018\u2019`]/g, "'").replace(/\s+/g, ' ').toLowerCase();
+const CONTRIBUTION_NAMESPACE=/^(?:media|special|talk|user(?: talk)?|project(?: talk)?|eql ?wiki(?: talk)?|file(?: talk)?|image(?: talk)?|mediawiki(?: talk)?|template(?: talk)?|help(?: talk)?|category(?: talk)?|module(?: talk)?|widget(?: talk)?|portal(?: talk)?|property(?: talk)?|concept(?: talk)?|form(?: talk)?|timedtext(?: talk)?|gadget(?: definition)?(?: talk)?|topic|thread|summary|https?|ftp|javascript|data)\s*:/i;
 export function contributionTitle(value) {
     if (/[\r\n\t]/.test(String(value ?? ''))) throw new Error('Enter a single-line article title.');
     const title = clean(value, 240).replace(/_/g, ' ').replace(/\s+/g, ' ');
-    if (!title || /[\[\]{}<>|#~\r\n:]/.test(title) || title.startsWith('.') || title.length > 230) throw new Error('Enter an article title without wiki markup or a namespace.');
+    if (!title || /[\[\]{}<>|#~\r\n]/.test(title) || title.startsWith('.') || title.startsWith(':') || CONTRIBUTION_NAMESPACE.test(title) || title.length > 230) throw new Error('Enter an article title without wiki markup or a namespace.');
     return title;
 }
 export const literalWikiText = value => clean(value, 16000).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\|/g, '&#124;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;').replace(/\[/g, '&#91;').replace(/\]/g, '&#93;').replace(/~/g, '&#126;').replace(/_/g, '&#95;');
@@ -54,7 +57,11 @@ function itemChoiceStatLine(candidate,key){
 const itemChoiceLine=(key,value)=>new RegExp('^\\s*'+(key==='classes'?'Class(?:es)?':'Slots?')+'\\s*:','i').test(value);
 function lootSectionRows(candidate,titles){
     const kinds=candidate.fields.lootKinds?.confirmed&&candidate.fields.lootKinds.value&&typeof candidate.fields.lootKinds.value==='object'?candidate.fields.lootKinds.value:{};
-    return ['unique','common'].flatMap(kind=>{const items=titles.filter(title=>(kinds[title]||kinds[contributionNameKey(title)]||'unique')===kind);return items.length?[`! ${kind==='common'?'Common Loot':'Unique Items'}\n| ${items.map(itemTransclusion).join('<br>\n')}`]:[];});
+    return ['unique','common'].flatMap(kind=>{const items=titles.filter(title=>(kinds[title]||kinds[contributionNameKey(title)])===kind);return items.length?[`! ${kind==='common'?'Common Loot':'Unique Items'}\n| ${items.map(itemTransclusion).join('<br>\n')}`]:[];});
+}
+export function contributionLootKind(candidate,title){
+    const field=candidate.fields?.lootKinds,value=field?.confirmed===true?field.value?.[title]||field.value?.[contributionNameKey(title)]:null;
+    return ['common','unique'].includes(value)?value:null;
 }
 function fillContributionBlueprint(source,values){
     const templates=contributionTemplates(source,'Spellpage');
@@ -92,6 +99,7 @@ export function normalizeContributionCandidate(input = {}) {
         if (!/^[A-Za-z][A-Za-z0-9_]{0,50}$/.test(key)) continue;
         const wrapped = raw && typeof raw === 'object' && !Array.isArray(raw) && Object.hasOwn(raw, 'value');
         fields[key] = { value:wrapped ? raw.value : raw, confirmed:wrapped ? raw.confirmed === true : (input.confirmedFields || []).includes(key), edited:wrapped && raw.edited === true };
+        if(key==='notable')fields[key]={value:typeof fields[key].value==='boolean'?fields[key].value:null,confirmed:fields[key].confirmed&&typeof fields[key].value==='boolean',edited:fields[key].edited,source:'player'};
     }
     const field = key => fields[key]?.confirmed ? fields[key].value : undefined;
     const rawRecovery=input.baseRecovery,baseRecovery=rawRecovery&&typeof rawRecovery==='object'?{schemaVersion:rawRecovery.schemaVersion,sourceFingerprint:clean(rawRecovery.sourceFingerprint,16000),tier:rawRecovery.tier,fraction:rawRecovery.fraction,modifiersExcluded:rawRecovery.modifiersExcluded===null?null:rawRecovery.modifiersExcluded===true,reviewed:rawRecovery.reviewed===true,reviewMode:rawRecovery.reviewMode,choices:Object.fromEntries(Object.entries(rawRecovery.choices||{}).slice(0,40))}:null;
@@ -137,6 +145,8 @@ export function buildContributionDraft(input, blueprints) {
     const type = candidate.kind === 'npc' && candidate.instance === 'raid' ? 'raid' : candidate.kind;
     const blueprint = blueprints?.entries?.[type];
     const warnings = [], blockers = proposalError?[proposalError]:[];
+    if(candidate.kind==='npc'&&(isOwnedPetName(candidate.name)||isOwnedPetName(candidate.title))||candidate.sources.some(source=>source.confirmed&&isOwnedPetName(source.npc))||
+        (Array.isArray(field('knownNPCs'))?field('knownNPCs'):[]).some(isOwnedPetName))blockers.push('Player and monster pets cannot be contributed as monsters or drop sources.');
     if (!blueprint) blockers.push(`The current ${type} blueprint is unavailable.`);
     const expected = candidate.kind === 'item' ? /\{\{\s*Itempage\b/i : candidate.kind === 'npc' ? /\{\{\s*Namedmobpage\b/i : candidate.kind === 'spell' ? /\{\{\s*Spell(?:page|pagesmart)\b/i : /zoneTopTable/;
     if (blueprint && !expected.test(blueprint.text)) blockers.push('The live blueprint structure changed. Review it in the wiki before submitting.');
@@ -191,7 +201,8 @@ export function buildContributionDraft(input, blueprints) {
         const entries = [`imagefilename = ${candidate.attachmentFilename?literalWikiText(candidate.attachmentFilename):'?'}`, `name = ${candidate.title}`, `zone = ${candidate.zone ? link(candidate.zone) : '?'}`, `description = ${candidate.playerText||'?'}`];
         const npcFields = { race:'race', class:'class', level:'level', location:'location', respawn_time:'respawnTime', AC:'AC', HP:'HP', special:'special' };
         for (const [parameter, key] of Object.entries(npcFields)) entries.push(`${parameter} = ${literalWikiText(field(key)??'?')||'?'}`);
-        const loot = reviewedTitles(candidate, 'knownLoot', 'NPC loot', warnings, blockers),kinds=candidate.fields.lootKinds?.confirmed?candidate.fields.lootKinds.value||{}:{},lootList=kind=>loot.filter(title=>(kinds[title]||'unique')===kind).map(item=>`<li>${itemTransclusion(item)}</li>`),unique=lootList('unique'),common=lootList('common');
+        const loot = reviewedTitles(candidate, 'knownLoot', 'NPC loot', warnings, blockers),lootList=kind=>loot.filter(title=>contributionLootKind(candidate,title)===kind).map(item=>`<li>${itemTransclusion(item)}</li>`),unique=lootList('unique'),common=lootList('common');
+        if(loot.some(title=>!contributionLootKind(candidate,title)))blockers.push('Loot classification needs a complete cached wiki source count. Preview again before publishing.');
         entries.push(`known_loot = ${unique.length ? `<ul>\n${unique.join('\n')}\n</ul>` : '?'}`,`common_loot = ${common.length?`<ul>\n${common.join('\n')}\n</ul>`:'?'}`, 'factions = ?', 'opposing_factions = ?', 'related_quests = ?');
         if (candidate.instance === 'raid') categories.add('Raid Encounters');
         text = `${era}{{Namedmobpage\n\n| ${entries.join('\n\n| ')}\n\n}}\n`;
@@ -206,13 +217,15 @@ export function buildContributionDraft(input, blueprints) {
         if(!whoName)warnings.push('No verified /who zone name; that field remains Unknown.');
         const npcs = reviewedTitles(candidate, 'knownNPCs', 'zone population', warnings, blockers);
         const loot = reviewedTitles(candidate, 'knownLoot', 'zone loot', warnings, blockers);
+        if(npcs.length&&field('notable')!==true)warnings.push('Ordinary zone population is not a Notable NPC list; review each monster’s Notable choice separately.');
+        if(loot.some(title=>contributionLootKind(candidate,title)!=='common'))warnings.push('A new zone has no pre-existing Unique Items row; automatic Unique Items population was skipped.');
         if (!candidate.playerText) {
             if (npcs.length || loot.length) warnings.push('The zone introduction is empty; add player-written details when known.');
             else warnings.push('Unknown zone details are left as ?.');
         }
         const rows = [
-            ...(npcs.length ? [`! Notable NPCs\n| ${npcs.map(link).join('<br>\n')}`] : []),
-            ...lootSectionRows(candidate,loot),
+            ...(npcs.length&&field('notable')===true ? [`! Notable NPCs\n| ${npcs.map(link).join('<br>\n')}`] : []),
+            ...lootSectionRows(candidate,loot.filter(title=>contributionLootKind(candidate,title)==='common')),
             `! Name in /who\n| ${literalWikiText(whoName || 'Unknown')}`
         ];
         text = `${era}${candidate.playerText}\n\n{| class="zoneTopTable"\n${rows.join('\n|-\n')}\n|}\n`;
@@ -328,28 +341,148 @@ function moveNpcLootFromOpposite(source,itemTitle,instance,lootKind){
     const value=field.value.slice(0,start)+field.value.slice(end);
     return source.slice(0,field.valueStart)+value+source.slice(field.end);
 }
-export function patchContributionRelationship(source, { role, itemTitle, npcTitle, zoneTitle, instance, lootKind }) {
-    if(['zone-population','zone-loot'].includes(role))return patchContributionZone(source,{role,itemTitle,npcTitle,instance,lootKind});
+export function contributionNpcLootKind(source,itemTitle,instance='normal'){
+    const {template,scope}=contributionScopedTemplateInfo(source,'Namedmobpage',instance),title=contributionNameKey(contributionTitle(itemTitle)),occupied=[];
+    for(const [parameter,kind]of [['known_loot','unique'],['common_loot','common']]){
+        const fields=template.fields.filter(field=>field.name.toLowerCase()===parameter);if(fields.length>1)throw Error('The existing page has duplicate loot fields; use the wiki source editor.');
+        if(fields.some(field=>contributionLootReferences(contributionLootScopeText(field.value,instance,scope||'normal')).some(name=>contributionNameKey(name)===title)))occupied.push(kind);
+    }
+    if(occupied.length>1)throw Error('The item is already in both NPC loot sections. Resolve its classification on the wiki.');
+    return occupied[0]||null;
+}
+export function contributionNpcLootEntries(source){
+    const entries=[];
+    for(const [card,{template,scope}]of contributionTemplateScopes(source,'Namedmobpage').entries())for(const field of template.fields){
+        const kind=field.name.toLowerCase()==='known_loot'?'unique':field.name.toLowerCase()==='common_loot'?'common':null;if(!kind)continue;
+        // Existing unrelated loot may contain legitimate colon punctuation.
+        // New references still pass contributionTitle at native preparation.
+        for(const instance of ['normal','raid'])for(const title of contributionLootReferences(contributionLootScopeText(field.value,instance,scope||'normal'))){const itemTitle=clean(title,230).replace(/_/g,' ');if(itemTitle)entries.push({itemTitle,kind,card,instance});}
+    }
+    return entries;
+}
+export function contributionLootScopeText(value,instance,outer='normal'){
+    const text=String(value).replace(/<!--[\s\S]*?(?:-->|$)|<(nowiki|pre|source|syntaxhighlight|ref|code)\b[^>]*\/>|<(nowiki|pre|source|syntaxhighlight|ref|code)\b[^>]*>[\s\S]*?(?:<\/\2\s*>|$)/gi,' '),headings=[...text.matchAll(/^(={1,6})\s*([^\n]+?)\s*\1\s*$/gm)];
+    let selected=outer,position=0,output='';const stack=[];
+    for(const heading of headings){
+        if(selected===instance)output+=text.slice(position,heading.index);
+        while(stack.length&&stack.at(-1).level>=heading[1].length)stack.pop();
+        stack.push({level:heading[1].length,label:heading[2].replace(/_/g,' ')});selected=outer;
+        for(const section of stack){if(/\braid\s+(?:instance|zone)\b/i.test(section.label))selected='raid';else if(/\bnormal\s+(?:instance|zone)\b/i.test(section.label))selected='normal';}
+        position=heading.index+heading[0].length;
+    }
+    if(selected===instance)output+=text.slice(position);return output;
+}
+// Source-only literal loot rows, shared by live coverage and manual/retry guards.
+export function contributionLootReferences(value){
+    let text=String(value).replace(/<!--[\s\S]*?(?:-->|$)|<(nowiki|pre|source|syntaxhighlight|ref|code)\b[^>]*\/>|<(nowiki|pre|source|syntaxhighlight|ref|code)\b[^>]*>[\s\S]*?(?:<\/\2\s*>|$)/gi,' '),depth=0,start=0;const masks=[];
+    for(let index=0;index<text.length-1;index++){
+        const pair=text.slice(index,index+2);
+        if(pair==='{{'){if(depth===0)start=index;depth++;index++;}
+        else if(pair==='}}'&&depth){depth--;index++;if(!depth&&!/^\{\{\s*:\s*[^{}|\r\n]+\s*\}\}$/.test(text.slice(start,index+1)))masks.push([start,index+1]);}
+    }
+    if(depth)masks.push([start,text.length]);
+    for(const [a,b]of masks.reverse())text=text.slice(0,a)+text.slice(a,b).replace(/[^\r\n]/g,' ')+text.slice(b);
+    const names=[],lines=text.replace(/<li\b[^>]*>/gi,'\n* ').replace(/<\/(?:li|ul|ol)\s*>|<(?:ul|ol)\b[^>]*>|<br\s*\/?>/gi,'\n').replace(/<[^>]*>/g,'').split(/\r?\n/);
+    for(let line of lines){
+        line=line.replace(/^[\s*#']+/,'').replace(/^(?:always\s+)?drops?\s+(?:(?:one|two|three|four|five|six|[0-9]+)\s+)?(?:pieces?\s+of\s+)?(?=\[\[|\{\{)/i,'');
+        let match;
+        while((match=line.match(/^(?:\{\{\s*:\s*([^{}|\r\n]+)\s*\}\}|\[\[\s*([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\])/))){
+            const title=(match[1]||match[2]).trim().replace(/^:\s*/,'').split('#')[0].trim();if(title&&!names.includes(title))names.push(title);
+            if(names.length>=2000)return names;
+            line=line.slice(match[0].length).replace(/^[\s']+/,'').replace(/^(?:[,;/&]|and\b|or\b)\s*/i,'').trimStart();
+        }
+    }
+    return names;
+}
+function authoredLootSetTitles(value){return contributionLootReferences(value);}
+export function contributionNpcLootSetCoverage(source,itemTitle,instance='normal',options={}){
+    if(!options.pack)return null;
+    const selected=options.card===undefined?contributionScopedTemplateInfo(source,'Namedmobpage',instance):contributionTemplateScopes(source,'Namedmobpage')[options.card],template=selected?.template;
+    if(!template)return null;
+    for(const [parameter,kind]of [['known_loot','unique'],['common_loot','common']]){
+        const fields=template.fields.filter(field=>field.name.toLowerCase()===parameter);
+        if(fields.length>1)throw Error('The existing page has duplicate loot fields; use the wiki source editor.');
+        const text=contributionLootScopeText(fields[0]?.value||'',instance,selected.scope||'normal');
+        const covered=lootSetCoverage(options.pack,itemTitle,authoredLootSetTitles(text),options);
+        if(covered)return{...covered,kind};
+    }
+    return null;
+}
+export function contributionZoneLootSetCoverage(source,itemTitle,instance='normal',options={}){
+    if(!options.pack||typeof source!=='string'||source.length>512*1024)return null;
+    let scope=source;
+    if(options.card===undefined){const range=zoneContributionRange(source,instance);scope=source.slice(range.start,range.end);}
+    const tables=zoneContributionTables(scope),selected=options.card===undefined?(tables.length===1?tables[0]:null):tables[Number(String(options.card).replace(/^zone:/,''))];
+    if(!selected)return null;
+    const text=activeContributionText(scope.slice(selected.start,selected.end)),rows=[...text.matchAll(/^![ \t]*([^\r\n]+)\r?\n\|[ \t]*/gm)];
+    for(const [index,row]of rows.entries()){
+        const label=zoneRowLabel(row[1]),kind=label==='unique items'?'unique':label==='common loot'?'common':null;if(!kind)continue;
+        const body=text.slice(row.index+row[0].length,rows[index+1]?.index??text.length),separator=body.search(/^[ \t]*\|(?:-|\})/m),cell=separator<0?body:body.slice(0,separator);
+        const coverage=lootSetCoverage(options.pack,itemTitle,authoredLootSetTitles(cell),options);if(coverage)return{...coverage,kind};
+    }
+    return null;
+}
+export function contributionZoneLootEntries(source){
+    if(typeof source!=='string'||source.length>512*1024)throw Error('The zone page is unavailable or too large.');
+    const entries=[],active=activeContributionText(source);
+    for(const [card,table]of zoneContributionTables(source).entries()){
+        const text=active.slice(table.start,table.end),rows=[...text.matchAll(/^![ \t]*([^\r\n]+)\r?\n\|[ \t]*/gm)];
+        for(const [index,row]of rows.entries()){
+            const label=zoneRowLabel(row[1]),kind=label==='unique items'?'unique':label==='common loot'?'common':null;if(!kind)continue;
+            const start=row.index+row[0].length,body=text.slice(start,rows[index+1]?.index??text.length),separator=body.search(/^[ \t]*\|(?:-|\})/m),cell=separator<0?body:body.slice(0,separator);
+            for(const reference of [...cell.matchAll(/\{\{\s*:\s*([^{}|\r\n]+)(?:\|[^{}]*)?\}\}/g),...cell.matchAll(/\[\[\s*([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/g)]){
+                const itemTitle=clean(reference[1],230).replace(/_/g,' ');if(itemTitle)entries.push({itemTitle,kind,card:'zone:'+card,sourceKind:'zone'});
+            }
+        }
+    }
+    return entries;
+}
+export function contributionNpcReferences(source){
+    const result=[],active=activeContributionText(source);
+    const rowLinks=value=>{
+        let text=activeContributionText(value).replace(/<(ref|code)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi,' ');
+        const rows=[...text.matchAll(/^[ \t]*[*#]+[ \t]*\[\[([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/gm)];
+        for(const row of text.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li\s*>/gi)){const reference=row[1].match(/^\s*\[\[([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/);if(reference)rows.push(reference);}
+        return rows.map(row=>clean(row[1],230).replace(/_/g,' '));
+    };
+    for(const template of contributionTemplates(source,'Namedmobpage'))for(const field of template.fields)if(field.name.toLowerCase()==='name')result.push({kind:'npc-card',npcTitle:clean(field.value,230)});
+    for(const template of contributionTemplates(source,'Itempage')){
+        const itemTitle=clean(template.fields.find(field=>field.name.toLowerCase()==='itemname')?.value,230);
+        for(const field of template.fields)if(field.name.toLowerCase()==='dropsfrom'){
+            for(const npcTitle of rowLinks(field.value))result.push({kind:'drop-source',itemTitle,npcTitle});
+            for(const row of contributionTemplates(field.value,'ItemWhereRow'))for(const value of row.fields)if(/^(?:npc|mob|monster)$/i.test(value.name))result.push({kind:'drop-source',itemTitle,npcTitle:clean(value.value,230).replace(/^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/,'$1')});
+        }
+    }
+    for(const [card,table]of zoneContributionTables(source).entries()){
+        const text=active.slice(table.start,table.end),rows=[...text.matchAll(/^![ \t]*([^\r\n]+)\r?\n\|[ \t]*/gm)];
+        for(const [index,row]of rows.entries())if(zoneRowLabel(row[1])==='notable npcs'){
+            const body=text.slice(row.index+row[0].length,rows[index+1]?.index??text.length),separator=body.search(/^[ \t]*\|(?:-|\})/m),cell=separator<0?body:body.slice(0,separator);
+            for(const reference of cell.matchAll(/\[\[\s*([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/g))result.push({kind:'zone-population',npcTitle:clean(reference[1],230).replace(/_/g,' '),card:'zone:'+card});
+        }
+    }
+    return result;
+}
+export function patchContributionRelationship(source, { role, itemTitle, npcTitle, zoneTitle, instance, lootKind, notable, preserveExisting=false }, options={}) {
+    if(['zone-population','zone-loot'].includes(role))return patchContributionZone(source,{role,itemTitle,npcTitle,zoneTitle,instance,lootKind,notable},options);
+    if(role==='npc-zone')return patchContributionNpcZone(source,{zoneTitle,instance});
     if (typeof source !== 'string' || source.length > 512*1024) throw new Error('The existing page is too large or unavailable.');
     const originalSource=source;
     const name = role === 'npc-loot' ? 'Namedmobpage' : role === 'item-source' ? 'Itempage' : null;
     if (!name) throw new Error('Unsupported related-page change.');
     let preservedNpcLoot=false;
     if(role==='npc-loot'){
-        if(lootKind===undefined){
+        const covered=contributionNpcLootSetCoverage(source,itemTitle,instance,options);
+        if(covered)return{text:source,changed:false,warnings:[itemTitle+' is already covered by the listed '+covered.setTitle+' set; its authored loot section is preserved. No individual NPC loot entry was added.'],coveredBySet:covered.setTitle};
+        if(lootKind===undefined||preserveExisting){
             // Adding the reciprocal source is not a request to reclassify an
             // established drop. Preserve either existing section byte-for-byte;
-            // a newly observed association with no classification uses Unique.
-            const template=contributionScopedTemplate(source,'Namedmobpage',instance),title=contributionTitle(itemTitle),escaped=title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/ /g,'[ _]'),reference=new RegExp(`(?:\\{\\{\\s*:\\s*${escaped}\\s*(?=[}|])|\\[\\[\\s*${escaped}\\s*(?=[\\]|]))`,'i');
-            const occupied=[];
-            for(const [parameter,kind]of [['known_loot','unique'],['common_loot','common']]){
-                const fields=template.fields.filter(field=>field.name.toLowerCase()===parameter);if(fields.length>1)throw Error('The existing page has duplicate loot fields; use the wiki source editor.');
-                if(fields.some(field=>reference.test(activeContributionText(field.value))))occupied.push(kind);
-            }
-            preservedNpcLoot=occupied.length>0;lootKind=occupied.includes('common')&&!occupied.includes('unique')?'common':'unique';
-        }else{
-            if(!['common','unique'].includes(lootKind))throw Error('Choose Common or Unique loot.');
-            source=moveNpcLootFromOpposite(source,itemTitle,instance,lootKind);
+            // new associations require the trusted cached global-source count.
+            const existing=contributionNpcLootKind(source,itemTitle,instance);
+            preservedNpcLoot=Boolean(existing);if(existing)lootKind=existing;
+        }
+        if(!preservedNpcLoot){
+            if(!['common','unique'].includes(lootKind))throw Error('Loot classification needs a complete cached wiki source count.');
+            if(!preserveExisting)source=moveNpcLootFromOpposite(source,itemTitle,instance,lootKind);
         }
     }
     const template=contributionScopedTemplate(source,name,instance), parameter=role==='npc-loot'?lootKind==='common'?'common_loot':'known_loot':'dropsfrom';
@@ -358,7 +491,7 @@ export function patchContributionRelationship(source, { role, itemTitle, npcTitl
     const targetTitle=contributionTitle(role==='npc-loot'?itemTitle:npcTitle),fullCurrent=fields[0]?.value || '';let current=fullCurrent,instanceBlock=null;
     if(role==='item-source'){
         let active=current;for(const [start,end]of protectedRanges(current).reverse())active=active.slice(0,start)+active.slice(start,end).replace(/[^\r\n]/g,' ')+active.slice(end);
-        const headings=[...active.matchAll(/^(={1,6})[ \t]*(.*?)[ \t]*\1[ \t]*\r?$/gm)],raid=headings.filter(heading=>/\bRaid\s+Instance\b/i.test(heading[2]));
+        const headings=[...active.matchAll(/^(={1,6})[ \t]*(.*?)[ \t]*\1[ \t]*\r?$/gm)],raid=headings.filter(heading=>/\bRaid[ _]+(?:Instance|Zone)\b/i.test(heading[2]));
         if(raid.length){
             if(!['normal','raid'].includes(instance))throw Error('Choose the correct existing normal/raid source section in the wiki source editor.');
             if(instance==='raid'){
@@ -366,7 +499,7 @@ export function patchContributionRelationship(source, { role, itemTitle, npcTitl
                 const heading=raid[0],end=headings.find(next=>next.index>heading.index&&next[1].length<=heading[1].length)?.index??current.length;
                 instanceBlock={start:heading.index+heading[0].length,end};
             }else{
-                const normals=headings.filter(heading=>/\bNormal\s+(?:Instance|Zone)\b/i.test(heading[2]));
+                const normals=headings.filter(heading=>/\bNormal[ _]+(?:Instance|Zone)\b/i.test(heading[2]));
                 if(normals.length>1)throw Error('Choose the correct existing normal source section in the wiki source editor.');
                 const heading=normals[0];instanceBlock=heading?{start:heading.index+heading[0].length,end:headings.find(next=>next.index>heading.index&&next[1].length<=heading[1].length)?.index??current.length}:{start:0,end:raid[0].index};
             }
@@ -409,19 +542,22 @@ export function patchContributionRelationship(source, { role, itemTitle, npcTitl
 function contributionScopedTemplate(source,name,instance){
     return contributionScopedTemplateInfo(source,name,instance).template;
 }
-function contributionScopedTemplateInfo(source,name,instance){
+function contributionTemplateScopes(source,name){
     const all=contributionTemplates(source,name);let outline=source;
     // Headings inside protected source or a previous template argument do not
     // select an enclosing article section for another template.
     const ranges=[...protectedRanges(source),...all.map(template=>[template.start,template.end])];
     for(const [start,end]of ranges.sort((a,b)=>b[0]-a[0]))outline=outline.slice(0,start)+outline.slice(start,end).replace(/[^\r\n]/g,' ')+outline.slice(end);
-    const scopes=all.map(template=>{
+    return all.map(template=>{
         const stack=[];for(const heading of outline.slice(0,template.start).matchAll(/^(={1,6})[ \t]*(.*?)[ \t]*\1[ \t]*\r?$/gm)){while(stack.length&&stack.at(-1)[1].length>=heading[1].length)stack.pop();stack.push(heading);}
-        const labels=new Set(stack.flatMap(heading=>/\bRaid\s+Instance\b/i.test(heading[2])?['raid']:/\bNormal\s+(?:Instance|Zone)\b/i.test(heading[2])?['normal']:[]));
+        const labels=new Set(stack.flatMap(heading=>/\bRaid[ _]+(?:Instance|Zone)\b/i.test(heading[2])?['raid']:/\bNormal[ _]+(?:Instance|Zone)\b/i.test(heading[2])?['normal']:[]));
         if(labels.size>1)throw Error('Choose the correct existing normal/raid template in the wiki source editor.');
         return {template,scope:[...labels][0]||null};
     });
-    if(all.length===1&&!scopes[0].scope)return scopes[0];
+}
+export function contributionScopedTemplateInfo(source,name,instance){
+    const scopes=contributionTemplateScopes(source,name);
+    if(scopes.length===1&&!scopes[0].scope)return scopes[0];
     if(!['normal','raid'].includes(instance))throw Error('Choose the correct existing normal/raid template in the wiki source editor.');
     const scoped=scopes.filter(({scope})=>instance==='raid'?scope==='raid':scope!=='raid');
     if(scoped.length!==1)throw Error('Choose the correct existing normal/raid template in the wiki source editor.');return scoped[0];
@@ -448,7 +584,7 @@ export function contributionItemSourceMatches(source,{npcTitle,zoneTitle,instanc
         if(depth)return false;
         for(const [a,b]of nested.reverse())current=current.slice(0,a)+current.slice(a,b).replace(/[^\r\n]/g,' ')+current.slice(b);
         current=current.replace(/<(ref|code)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi,value=>value.replace(/[^\r\n]/g,' '));
-        const hasRaid=/^(={1,6})[ \t]*[^\r\n]*\bRaid\s+Instance\b[^\r\n]*\1[ \t]*\r?$/im.test(current);
+        const hasRaid=/^(={1,6})[ \t]*[^\r\n]*\bRaid[ _]+(?:Instance|Zone)\b[^\r\n]*\1[ \t]*\r?$/im.test(current);
         if(hasRaid){const range=zoneContributionRange(current,instance);current=current.slice(range.start,range.end);}
         else if(instance==='raid'){if(scope!=='raid')return false;}
         else {const range=zoneContributionRange(current,'normal');current=current.slice(range.start,range.end);}
@@ -492,7 +628,7 @@ function patchItemStatLine(source,matches,text){
     return body+(body?'<br>'+eol:'')+text+eol;
 }
 function zoneContributionRange(source,instance){
-    const active=activeContributionText(source),headings=[...active.matchAll(/^(={1,6})[ \t]*(.*?)[ \t]*\1[ \t]*\r?$/gm)],raids=headings.filter(heading=>/\bRaid\s+Instance\b/i.test(heading[2])),normals=headings.filter(heading=>/\bNormal\s+(?:Zone|Instance)\b/i.test(heading[2]));
+    const active=activeContributionText(source),headings=[...active.matchAll(/^(={1,6})[ \t]*(.*?)[ \t]*\1[ \t]*\r?$/gm)],raids=headings.filter(heading=>/\bRaid[ _]+(?:Instance|Zone)\b/i.test(heading[2])),normals=headings.filter(heading=>/\bNormal[ _]+(?:Zone|Instance)\b/i.test(heading[2]));
     if(raids.length>1||normals.length>1)throw Error('Choose the correct existing normal/raid zone section in the wiki source editor.');
     if(instance==='raid'){
         if(!raids.length)throw Error('The zone has no Raid Instance section. Add its reviewed raid section in the wiki source editor first.');
@@ -502,40 +638,91 @@ function zoneContributionRange(source,instance){
     const heading=normals[0];return heading?{start:heading.index+heading[0].length,end:headings.find(next=>next.index>heading.index&&next[1].length<=heading[1].length)?.index??source.length}:{start:0,end:raids[0]?.index??source.length};
 }
 function zoneContributionTables(source){
-    const active=activeContributionText(source),markers=[...active.matchAll(/^[ \t]*(\{\|[^\r\n]*|\|\})[^\r\n]*\r?$/gm)],tables=[];let depth=0,start=null;
-    for(const marker of markers){if(marker[1].startsWith('{|')){if(depth===0)start=marker;depth++;}else if(depth>0){depth--;if(depth===0&&/\bzoneTopTable\b/.test(start[0]))tables.push({start:start.index,end:marker.index+marker[0].length,close:marker.index});}}
-    if(depth)throw Error('The zone table is unbalanced. Use the wiki source editor.');
-    return tables;
+    const active=activeContributionText(source),markers=[...active.matchAll(/^[ \t]*(\{\|[^\r\n]*|\|\})[^\r\n]*\r?$/gm)],tables=[],stack=[];
+    for(const marker of markers){if(marker[1].startsWith('{|'))stack.push(marker);else if(stack.length){const start=stack.pop();if(/\bzoneTopTable\b/.test(start[0]))tables.push({start:start.index,end:marker.index+marker[0].length,close:marker.index});}}
+    if(stack.length)throw Error('The zone table is unbalanced. Use the wiki source editor.');
+    return tables.sort((a,b)=>a.start-b.start);
+}
+const zoneRowLabel=value=>contributionNameKey(String(value).replace(/'{2,}/g,'').replace(/:[ \t]*$/,'').trim());
+export function contributionZoneHasLootRow(source,kind='unique',options={}){
+    let scope=source;if(options.card===undefined){const range=zoneContributionRange(source,options.instance||'normal');scope=source.slice(range.start,range.end);}
+    const tables=zoneContributionTables(scope),table=options.card===undefined?(tables.length===1?tables[0]:null):tables[Number(String(options.card).replace(/^zone:/,''))];
+    if(!table)return false;const label=kind==='common'?'common loot':'unique items';
+    return [...activeContributionText(scope.slice(table.start,table.end)).matchAll(/^![ \t]*([^\r\n]+)\r?\n\|[ \t]*/gm)].filter(row=>zoneRowLabel(row[1])===label).length===1;
+}
+export function contributionZoneLootScopeInfo(source,kind='unique',{instance='normal'}={}){
+    const range=zoneContributionRange(source,instance),scope=source.slice(range.start,range.end),tables=zoneContributionTables(scope);
+    if(tables.length!==1)return null;
+    const table=tables[0],text=scope.slice(table.start,table.end),label=kind==='common'?'common loot':'unique items',rows=[...activeContributionText(text).matchAll(/^![ \t]*([^\r\n]+)\r?\n\|[ \t]*/gm)].filter(row=>zoneRowLabel(row[1])===label);
+    if(rows.length!==1)return null;
+    const start=rows[0].index+rows[0][0].length,offset=activeContributionText(text.slice(start)).search(/^[ \t]*\|(?:-|\})[^\r\n]*\r?$/m);
+    return offset<0?null:{instance,kind,value:text.slice(start,start+offset)};
+}
+export function contributionZoneUsesDynamicList(source,zoneTitle,instance='normal',options={}){
+    if(instance!=='normal')return false;const range=zoneContributionRange(source,instance),scope=activeContributionText(source.slice(range.start,range.end));
+    const identity=title=>{const resolved=options.resolver?.resolve('zone',title);return contributionNameKey(resolved?.canonicalTitle||title);};
+    return [...scope.matchAll(/\{\{[ \t]*Special[ \t]*:[ \t]*DynamicZoneList\/([^{}|\r\n]+)[ \t]*\}\}/gi)].some(match=>identity(match[1])===identity(zoneTitle));
+}
+const ITEM_STAT_KEYS=new Set(['AC','HP','MANA','MP','END','ENDURANCE','STR','STA','AGI','DEX','INT','WIS','CHA','SV_MAGIC','SV_FIRE','SV_COLD','SV_DISEASE','SV_POISON','SV_CORRUPTION','HASTE','ATK','ATTACK','DMG','DAMAGE','BACKSTAB','BACKSTAB_DMG','HP_REGEN','MANA_REGEN','END_REGEN']);
+export function contributionItemHasStats(pack,title,source=''){
+    const key=contributionNameKey(title),records=(Array.isArray(pack?.items)?pack.items:[]).filter(item=>[item.wikiTitle,item.title,item.name,...(Array.isArray(item.aliases)?item.aliases:[])].some(name=>contributionNameKey(name)===key));
+    if(records.some(record=>Object.entries(record.stats||{}).some(([name,value])=>ITEM_STAT_KEYS.has(name.toUpperCase())&&typeof value==='number'&&Number.isFinite(value)&&value!==0)))return true;
+    if(typeof source!=='string'||source.length>512*1024)return false;
+    const stats=contributionTemplates(source,'Itempage').flatMap(template=>template.fields.filter(field=>field.name.toLowerCase()==='statsblock').map(field=>activeContributionText(field.value))).join('\n');
+    // Weight, size, class restrictions, delay and range alone are not gear stats.
+    return /(?:^|<br\s*\/?>|\r?\n|\s)(?:AC|HP|Mana|MP|End(?:urance)?|STR|STA|AGI|DEX|INT|WIS|CHA|SV\s*(?:Magic|Fire|Cold|Disease|Poison|Corruption|Void)|Haste|ATK|Attack|(?:Base\s*)?DMG|Damage|Backstab(?:\s*DMG)?|(?:HP|Mana|End)\s*Regen)\s*:\s*[+-]?(?:[1-9]\d*(?:\.\d+)?|0\.\d*[1-9])/i.test(stats);
+}
+export function patchContributionNpcZone(source,{zoneTitle,instance='normal'}={}){
+    const zone=contributionTitle(zoneTitle),template=contributionScopedTemplate(source,'Namedmobpage',instance),fields=template.fields.filter(field=>field.name.toLowerCase()==='zone');
+    if(fields.length>1)throw Error('The monster has duplicate zone fields. Use the wiki source editor.');
+    const categorized=[...activeContributionText(source).matchAll(/\[\[Category:([^\]|]+)(?:\|[^\]]*)?\]\]/gi)].some(match=>contributionNameKey(match[1])===contributionNameKey(zone));
+    if(instance==='normal'&&categorized)return{text:source,changed:false,warnings:[]};
+    const field=fields[0],current=field?.value||'',active=activeContributionText(current),known=/^\s*Various\s*$/i.test(active)||contributionReferencePresent(current,zone,'npc')||contributionNameKey(active)===contributionNameKey(zone);let text=source;
+    if(!known){const eol=text.includes('\r\n')?'\r\n':'\n',empty=/^\s*(?:\?|None|Unknown)?\s*$/i.test(active);let preserved=current;if(empty)for(const match of [...active.matchAll(/\?|\b(?:None|Unknown)\b/gi)].reverse())preserved=preserved.slice(0,match.index)+preserved.slice(match.index+match[0].length);const value=empty?preserved.trimEnd()+' '+link(zone)+eol:current.trimEnd()+'<br>'+eol+link(zone)+eol;text=field?text.slice(0,field.valueStart)+value+text.slice(field.end):text.slice(0,template.end-2)+'| zone = '+value+text.slice(template.end-2);}
+    const present=[...activeContributionText(text).matchAll(/\[\[Category:([^\]|]+)(?:\|[^\]]*)?\]\]/gi)].some(match=>contributionNameKey(match[1])===contributionNameKey(zone));if(!present)text+='\n'+category(zone)+'\n';
+    return{text,changed:text!==source,warnings:[]};
 }
 function contributionReferencePresent(source,title,kind){
     const key=contributionNameKey(title),expression=kind==='npc'?/\[\[\s*([^\]|]+)(?:\|[^\]]*)?\]\]/g:/\{\{\s*:\s*([^}|]+)(?:\|[^}]*)?\}\}/g;
     return [...activeContributionText(source).matchAll(expression)].some(match=>contributionNameKey(match[1])===key);
 }
-export function patchContributionZone(source,{role,itemTitle,npcTitle,instance='normal',lootKind='unique'}={}){
+export function patchContributionZone(source,{role,itemTitle,npcTitle,zoneTitle,instance='normal',lootKind,notable}={},options={}){
     if(typeof source!=='string'||source.length>512*1024)throw Error('The existing zone page is unavailable or too large.');
     if(!['zone-population','zone-loot'].includes(role))throw Error('Choose zone population or zone loot.');
-    if(!['common','unique'].includes(lootKind))throw Error('Choose Common or Unique loot.');
     const title=contributionTitle(role==='zone-population'?npcTitle:itemTitle),range=zoneContributionRange(source,instance),scope=source.slice(range.start,range.end),kind=role==='zone-population'?'npc':'item';
-    if(contributionReferencePresent(scope,title,kind))return {text:source,changed:false};
+    if(role==='zone-loot'){
+        const covered=contributionZoneLootSetCoverage(source,title,instance,options);
+        if(covered)return{text:source,changed:false,warnings:[title+' is already covered by the listed '+covered.setTitle+' set in this zone instance; its authored loot row is preserved.'],coveredBySet:covered.setTitle};
+    }
+    if(role==='zone-loot'&&contributionZoneLootEntries(scope).some(entry=>contributionNameKey(entry.itemTitle)===contributionNameKey(title)))return {text:source,changed:false};
+    if(role==='zone-population'&&notable!==true)return {text:source,changed:false,warnings:['Normal monsters use the NPC page’s zone category for DynamicZoneList. Only a reviewed Notable choice adds this summary entry.']};
+    if(role==='zone-loot'&&!['common','unique'].includes(lootKind))throw Error('Loot classification needs a complete cached wiki source count.');
+    if(role==='zone-loot'&&lootKind==='unique'&&!contributionZoneHasLootRow(source,'unique',{instance}))return {text:source,changed:false,warnings:['This zone instance has no unambiguous Unique Items row; automatic population was skipped.']};
     const label=kind==='npc'?'Notable NPCs':lootKind==='common'?'Common Loot':'Unique Items',token=kind==='npc'?link(title):itemTransclusion(title),tables=zoneContributionTables(scope),eol=source.includes('\r\n')?'\r\n':'\n';
     if(tables.length!==1)throw Error('Select the zone’s existing '+(instance==='raid'?'raid':'normal')+' summary table in the wiki source editor; no new layout was appended.');
-    const table=tables[0],tableText=scope.slice(table.start,table.end),outline=activeContributionText(tableText),rows=[...outline.matchAll(/^![ \t]*([^\r\n]+)\r?\n\|[ \t]*/gm)],matching=rows.filter(row=>contributionNameKey(row[1])===contributionNameKey(label));
+    const table=tables[0],tableText=scope.slice(table.start,table.end),outline=activeContributionText(tableText),rows=[...outline.matchAll(/^![ \t]*([^\r\n]+)\r?\n\|[ \t]*/gm)],matching=rows.filter(row=>zoneRowLabel(row[1])===zoneRowLabel(label));
     if(matching.length>1)throw Error('The zone has duplicate '+label+' rows. Use the wiki source editor.');
+    if(role==='zone-loot'&&lootKind==='unique'){
+        if(!matching.length)return {text:source,changed:false,warnings:['This zone instance has no Unique Items row; automatic population was skipped.']};
+        if(options.itemStats?.[title]!==true&&!contributionItemHasStats(options.pack,title))return {text:source,changed:false,warnings:[title+' has no verified item statistics; its zone Unique Items entry was skipped.']};
+    }
     let changed;
     if(matching.length){
         const row=matching[0],start=table.start+row.index+row[0].length,after=scope.slice(start,table.end),end=start+(activeContributionText(after).search(/^[ \t]*\|(?:-|\})[^\r\n]*\r?$/m));
         if(end<start)throw Error('The zone summary row is not a standalone table cell. Use the wiki source editor.');
-        const current=scope.slice(start,end),active=activeContributionText(current),placeholder=/^\s*(?:\?|None|Unknown)?\s*$/i.test(active),trailing=current.match(/[ \t\r\n]*$/)[0],position=end-trailing.length;
-        if(placeholder){let cleaned=current;for(const match of [...active.matchAll(/\?|\b(?:None|Unknown)\b/gi)].reverse())cleaned=cleaned.slice(0,match.index)+cleaned.slice(match.index+match[0].length);changed=scope.slice(0,start)+cleaned.trimEnd()+token+eol+scope.slice(end);}
+        if(contributionReferencePresent(scope.slice(start,end),title,kind))return {text:source,changed:false};
+        const current=scope.slice(start,end),active=activeContributionText(current),placeholder=/^\s*(?:\?|None|Unknown|n\/?a)?\s*$/i.test(active),trailing=current.match(/[ \t\r\n]*$/)[0],position=end-trailing.length;
+        if(placeholder){let cleaned=current;for(const match of [...active.matchAll(/\?|\b(?:None|Unknown|n\/?a)\b/gi)].reverse())cleaned=cleaned.slice(0,match.index)+cleaned.slice(match.index+match[0].length);changed=scope.slice(0,start)+cleaned.trimEnd()+token+eol+scope.slice(end);}
         else if(/<\/ul\s*>\s*$/i.test(active)&&!protectedRanges(current).some(([a,b])=>a<=active.toLowerCase().lastIndexOf('</ul')&&b>active.toLowerCase().lastIndexOf('</ul'))){const match=[...active.matchAll(/<\/ul\s*>/gi)].at(-1),at=start+match.index;changed=scope.slice(0,at)+'<li>'+token+'</li>'+scope.slice(at);}
         else {const separator=/^\s*[*#]/m.test(active)?eol+'* ':'<br>'+eol;changed=scope.slice(0,position)+separator+token+(trailing||eol)+scope.slice(end);}
     }else{changed=scope.slice(0,table.close)+(scope.slice(0,table.close).endsWith(eol)?'':eol)+'|-'+eol+'! '+label+eol+'| '+token+eol+scope.slice(table.close);}
     const text=source.slice(0,range.start)+changed+source.slice(range.end);return {text,changed:text!==source};
 }
 
-export function patchContributionPrimary(source,input){
+export function patchContributionPrimary(source,input,options={}){
     if(typeof source!=='string'||source.length>512*1024)throw Error('The existing page is unavailable or too large.');
     const candidate=normalizeContributionCandidate(input),warnings=[],targeted=candidate.reasons.some(reason=>['missing-source','missing-population','tier0-verification'].includes(reason));let text=source;
+    if(candidate.kind==='npc'&&(isOwnedPetName(candidate.name)||isOwnedPetName(candidate.title))||candidate.sources.some(source=>source.confirmed&&isOwnedPetName(source.npc))||(Array.isArray(candidate.field('knownNPCs'))?candidate.field('knownNPCs'):[]).some(isOwnedPetName))throw Error('Player and monster pets cannot be contributed as monsters or drop sources.');
     if(candidate.kind==='item'){
         for(const entry of candidate.sources.filter(source=>source.confirmed&&source.npc&&source.zone&&(!targeted||candidate.reasons.includes('missing-source')||source.edited)))text=patchContributionRelationship(text,{role:'item-source',itemTitle:candidate.title,npcTitle:entry.npc,zoneTitle:entry.zone,instance:entry.instance==='unknown'?candidate.instance:entry.instance}).text;
         const updates={},accepted=validateTierZeroVerification(candidate),verification=candidate.reasons.includes('tier0-verification')||accepted.ok;
@@ -561,16 +748,11 @@ export function patchContributionPrimary(source,input){
         for(const [key,parameter]of Object.entries(mapping))if(candidate.fields[key]?.edited&&candidate.field(key)!==undefined)updates[parameter]=literalWikiText(candidate.field(key))||'?';
         if(candidate.attachmentFilename)updates.imagefilename=safeContributionFilename(candidate.attachmentFilename);
         if(Object.keys(updates).length)text=patchTemplateFields(text,'Namedmobpage',updates,candidate.instance);
-        if(candidate.reasons.includes('missing-population')&&candidate.zone){
-            const template=contributionScopedTemplate(text,'Namedmobpage',candidate.instance),fields=template.fields.filter(field=>field.name.toLowerCase()==='zone');if(fields.length>1)throw Error('The monster has duplicate zone fields. Use the wiki source editor.');
-            const field=fields[0],current=field?.value||'',active=activeContributionText(current),known=contributionReferencePresent(current,candidate.zone,'npc')||contributionNameKey(active)===contributionNameKey(candidate.zone);
-            if(!known){const eol=text.includes('\r\n')?'\r\n':'\n',empty=/^\s*(?:\?|None|Unknown)?\s*$/i.test(active);let preserved=current;if(empty)for(const match of [...active.matchAll(/\?|\b(?:None|Unknown)\b/gi)].reverse())preserved=preserved.slice(0,match.index)+preserved.slice(match.index+match[0].length);const value=empty?preserved.trimEnd()+' '+link(candidate.zone)+eol:current.trimEnd()+'<br>'+eol+link(candidate.zone)+eol;text=field?text.slice(0,field.valueStart)+value+text.slice(field.end):text.slice(0,template.end-2)+'| zone = '+value+text.slice(template.end-2);}
-            const zoneKey=contributionNameKey(candidate.zone),present=[...activeContributionText(text).matchAll(/\[\[Category:([^\]|]+)(?:\|[^\]]*)?\]\]/gi)].some(match=>contributionNameKey(match[1])===zoneKey);if(!present)text+='\n'+category(candidate.zone)+'\n';
-        }
-        if(!targeted||candidate.reasons.includes('missing-source')||candidate.fields.knownLoot?.edited)for(const title of Array.isArray(candidate.field('knownLoot'))?candidate.field('knownLoot'):[])text=patchContributionRelationship(text,{role:'npc-loot',itemTitle:title,npcTitle:candidate.title,zoneTitle:candidate.zone,instance:candidate.instance,lootKind:candidate.fields.lootKinds?.value?.[title]}).text;
+        if(candidate.reasons.includes('missing-population')&&candidate.zone)text=patchContributionNpcZone(text,{zoneTitle:candidate.zone,instance:candidate.instance}).text;
+        if(!targeted||candidate.reasons.includes('missing-source')||candidate.fields.knownLoot?.edited)for(const title of Array.isArray(candidate.field('knownLoot'))?candidate.field('knownLoot'):[]){const patch=patchContributionRelationship(text,{role:'npc-loot',itemTitle:title,npcTitle:candidate.title,zoneTitle:candidate.zone,instance:candidate.instance,lootKind:contributionLootKind(candidate,title),preserveExisting:true},options);text=patch.text;warnings.push(...patch.warnings||[]);}
     }else if(candidate.kind==='zone'){
         if(!targeted||candidate.reasons.includes('missing-population')||candidate.fields.knownNPCs?.edited)for(const title of Array.isArray(candidate.field('knownNPCs'))?candidate.field('knownNPCs'):[])text=patchContributionZone(text,{role:'zone-population',npcTitle:title,instance:candidate.instance}).text;
-        if(!targeted||candidate.reasons.includes('missing-source')||candidate.fields.knownLoot?.edited)for(const title of Array.isArray(candidate.field('knownLoot'))?candidate.field('knownLoot'):[])text=patchContributionZone(text,{role:'zone-loot',itemTitle:title,instance:candidate.instance,lootKind:candidate.fields.lootKinds?.value?.[title]||'unique'}).text;
+        if(!targeted||candidate.reasons.includes('missing-source')||candidate.fields.knownLoot?.edited)for(const title of Array.isArray(candidate.field('knownLoot'))?candidate.field('knownLoot'):[]){const patch=patchContributionZone(text,{role:'zone-loot',itemTitle:title,instance:candidate.instance,lootKind:contributionLootKind(candidate,title)},options);text=patch.text;warnings.push(...patch.warnings||[]);}
     }else throw Error('Existing spell pages must be edited in the wiki source editor.');
     if(candidate.attachmentFilename&&candidate.kind!=='npc'){
         const filename=safeContributionFilename(candidate.attachmentFilename);if(!text.includes(`[[File:${filename}`))text+=`\n[[File:${filename}|thumb|${literalWikiText(input.attachment?.caption||candidate.title)}]]\n`;

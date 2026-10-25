@@ -20,6 +20,10 @@ for(const name of ['NearbyPlayer','SyntheticHero','You']){
     const death=feed(`${name} has been slain by a synthetic watcher!`);assert.equal(death.event.type,'kill');assert.equal(death.event.victimIsPlayer,true);assert.equal(death.result.candidate,null,'A known player death never creates a monster');
 }
 assert.equal(feed('Gtik has been slain by SyntheticHero!').result.candidate,null,'The exact generated-pet filter still applies');
+for(const name of ['A loathling lich pet',"a synthetic lich's pet"]){
+    const killedPet=feed(`${name} has been slain by SyntheticHero!`);assert.equal(killedPet.event.isPet,true);assert.equal(killedPet.result.candidate,null);assert.equal(killedPet.result.prompt,null,'NPC-owned pets never request spawn locations');
+    assert.equal(parser.snapshot().observed.some(npc=>npc.name===name),false,'NPC-owned pets never enter found NPCs');
+}
 const killed=feed('a synthetic watcher has been slain by NearbyPlayer!');assert.equal(killed.result.candidate.kind,'npc');assert(killed.result.prompt);assert.equal(killed.result.candidate.evidence.at(-1).logLine,killed.context.logLine);assert.equal(killed.result.candidate.evidence.at(-1).event,'kill');
 assert(queue.snapshot().some(candidate=>candidate.kind==='zone'&&candidate.fields.knownNPCs?.value.includes('a synthetic watcher')),'A real nearby monster death can supply a population proposal');
 const loot=feed("You looted a Synthetic <Gem> from a synthetic watcher's corpse and sold it for free.");assert.equal(loot.event.type,'loot');assert.equal(loot.result.candidate.name,'Synthetic <Gem>');assert.equal(loot.result.candidate.evidence.at(-1).logLine,loot.context.logLine);assert(!JSON.stringify(loot.result.candidate).includes('C:/Synthetic'));

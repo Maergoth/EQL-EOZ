@@ -2,7 +2,9 @@
 import { contributionSourceIncluded } from './contribution-update.js';
 import { contributionTitle, contributionItemEffects } from './contribution-model.js';
 import { normalizeWikiIdentity, createWikiResolver } from './wiki-identity.js';
-import { contributionSameIdentity as same, contributionInstanceMatches as instanceMatches } from './contribution-reasons.js';
+import { contributionSameIdentity as same, contributionInstanceMatches as instanceMatches, contributionNpcIncludesZone } from './contribution-reasons.js';
+import {cachedLootKindLabel} from './loot-classification.js';
+import {cachedContributionCoverage} from './contribution-coverage.js';
 const kinds={item:'Item',npc:'Monster',zone:'Zone',spell:'Spell'};
 export const CONTRIBUTION_FILTERS=Object.freeze([
     {key:'new-npc',label:'New monsters'},
@@ -37,14 +39,21 @@ export function contributionQueueCounts(candidates=[]){
 // existing content and review limits can still omit or block a related edit.
 export function contributionRelationshipStatus(candidate={},change={}, {pack,resolver=pack?createWikiResolver(pack):null}={}){
     if(!resolver)return 'unknown';
+    if(change.notable===true)return 'unknown';
     const zone=change.zone||candidate.zone||candidate.title||candidate.name,observed={instance:change.instance||candidate.instance};
     if(change.role==='zone-population'||change.role==='mob-zone'){
         const npc=resolver.resolve('npc',change.npc||change.subject||candidate.title||candidate.name);
         if(npc.membership==='ambiguous')return 'unknown';
-        if(npc.records.some(record=>record.zone&&same(resolver,'zone',record.zone,zone)&&instanceMatches(observed,record)))return 'recorded';
+        if(npc.records.some(record=>contributionNpcIncludesZone(resolver,record,zone,observed)))return 'recorded';
         return npc.membership==='missing'||npc.records.length?'missing':'unknown';
     }
     if(!['zone-loot','npc-loot','item-source'].includes(change.role))return 'unknown';
+    if(change.npc){
+        const coverage=cachedContributionCoverage(pack||{},{item:change.item||change.subject,npc:change.npc,zone,instance:observed.instance},{resolver});
+        if(coverage.state==='covered')return 'recorded';
+        const found=resolver.resolve('item',change.item||change.subject);
+        return found.membership==='ambiguous'?'unknown':found.membership==='missing'||found.records.some(record=>Array.isArray(record.dropSources))?'missing':'unknown';
+    }
     const item=resolver.resolve('item',change.item||change.subject),records=item.records.filter(record=>Array.isArray(record.dropSources));
     if(item.membership==='ambiguous')return 'unknown';
     if(records.some(record=>record.dropSources.some(source=>same(resolver,'zone',source.zone,zone)&&(!change.npc||same(resolver,'npc',source.name,change.npc))&&instanceMatches(observed,source))))return 'recorded';
@@ -54,9 +63,11 @@ export function contributionLootEntryInfo(candidate={},item,{pack,resolver=pack?
     const relation=(candidate.relations||[]).find(relation=>relation.type==='drop-source'&&relation.evidence==='explicit-corpse'&&normalizeWikiIdentity(relation.item)===normalizeWikiIdentity(item));
     const change={role:candidate.kind==='npc'?'npc-loot':'zone-loot',subject:item,item,npc:candidate.kind==='npc'?candidate.title||candidate.name:relation?.name,zone:candidate.kind==='zone'?candidate.title||candidate.name:candidate.zone,instance:relation?.instance||candidate.instance};
     const status=contributionRelationshipStatus(candidate,change,{resolver});
-    if(status==='recorded')return {status,description:'Already recorded in cached wiki'};
+    if(status==='recorded')return {status,description:'Already recorded in cached wiki',classificationLabel:'Existing classification preserved'};
     if(candidate.kind==='zone'&&!relation&&candidate.fields?.knownLoot?.edited!==true)return {status:'needs-source',description:'Captured loot · monster source not recorded'};
-    return {status,description:'Add '+(candidate.fields?.lootKinds?.value?.[item]==='common'?'Common Loot':'Unique Loot')};
+    const proposed=candidate.kind==='npc'?[candidate.title||candidate.name]:(candidate.relations||[]).filter(row=>row.type==='drop-source'&&normalizeWikiIdentity(row.item)===normalizeWikiIdentity(item)).map(row=>row.name);
+    const classification=pack?cachedLootKindLabel(pack,item,proposed):{label:'Classification needs complete cached wiki data'};
+    return {status,description:classification.label,classificationLabel:classification.label};
 }
 export function contributionDestinations(candidate={}, {pack}={}){
     const destinations=new Map(),title=candidate.title||candidate.name;
@@ -64,9 +75,9 @@ export function contributionDestinations(candidate={}, {pack}={}){
     const updating=candidate.intent==='update'||candidate.intent!=='create'&&candidate.membership==='present';
     const reasons=candidate.reasons||[],targeted=updating&&reasons.some(reason=>['missing-source','missing-population','tier0-verification'].includes(reason));
     const section=key=>!targeted||reasons.includes(key),field=key=>candidate.fields?.[key],titles=key=>Array.isArray(field(key)?.value)?field(key).value:[];
-    const add=(rawTitle,role,subject,description,{primary=false,operation='Update if page exists',instance,item,npc,zone}={})=>{
+    const add=(rawTitle,role,subject,description,{primary=false,operation='Update if page exists',instance,item,npc,zone,notable}={})=>{
         let pageTitle;try{pageTitle=contributionTitle(rawTitle);}catch{return;}
-        const key=pageTitle,change={role,subject,description,...(instance?{instance}:{}),...(item?{item}:{}),...(npc?{npc}:{}),...(zone?{zone}:{})};
+        const key=pageTitle,change={role,subject,description,...(instance?{instance}:{}),...(item?{item}:{}),...(npc?{npc}:{}),...(zone?{zone}:{}),...(notable===true?{notable:true}:{})};
         if(contributionRelationshipStatus(candidate,change,{resolver})==='recorded')return;
         if(!destinations.has(key))destinations.set(key,{title:pageTitle,operation:primary?(updating?'Update Page':'New Page'):operation,primary,changes:[]});
         const destination=destinations.get(key);
@@ -77,15 +88,19 @@ export function contributionDestinations(candidate={}, {pack}={}){
     add(title,'primary',title,updating?'Review page changes':'Create '+(kinds[candidate.kind]||'page').toLowerCase()+' page',{primary:true});
     const zoneName=instance=>instance==='raid'?'Raid Zone':instance==='normal'?'Normal Zone':'instance to choose';
     const instanceOf=source=>['normal','raid'].includes(source?.instance)?source.instance:candidate.instance;
-    const lootKind=item=>field('lootKinds')?.value?.[item]==='common'?'Common Loot':'Unique Loot';
+    const population=(npc,zone,instance)=>{
+        if(candidate.kind==='npc'&&field('notable')?.confirmed===true&&field('notable').value===true)add(zone,'zone-population',npc,'Add Notable NPC: '+npc+' · '+zoneName(instance),{instance,npc,zone,notable:true});
+        else if(instance==='normal')add(npc,'mob-zone',zone,'Check dynamic zone-list category: '+zone,{primary:candidate.kind==='npc',instance,npc,zone});
+    };
+    const lootKind=item=>pack?cachedLootKindLabel(pack,item,candidate.kind==='npc'?[title]:[]).label:'classification checked from cached wiki data at preview';
     const lootAllowed=section('missing-source')||field('knownLoot')?.edited===true;
     if(candidate.kind==='item'){
         for(const source of (candidate.sources||[]).filter(source=>source.npc&&source.zone&&contributionSourceIncluded(source)&&(section('missing-source')||source.edited===true))){
             const instance=instanceOf(source),scope=zoneName(instance);
             add(title,'item-source',source.npc,'Add drop source: '+source.npc+' · '+source.zone+' · '+scope,{primary:true,instance,item:title,npc:source.npc,zone:source.zone});
             if(!['normal','raid'].includes(instance))continue;
-            add(source.npc,'npc-loot',title,'Add '+title+' to monster loot · '+scope,{instance,item:title,npc:source.npc,zone:source.zone});
-            add(source.zone,'zone-population',source.npc,'Add monster: '+source.npc+' · '+scope,{instance,npc:source.npc,zone:source.zone});
+            add(source.npc,'npc-loot',title,'Check '+title+' against monster loot and documented item sets at Preview · '+scope,{instance,item:title,npc:source.npc,zone:source.zone});
+            population(source.npc,source.zone,instance);
             add(source.zone,'zone-loot',title,'Add loot: '+title+' · '+scope,{instance,item:title,zone:source.zone});
         }
         if(section('tier0-verification')&&reasons.includes('tier0-verification'))add(title,'tier0-verification',title,'Verify tier 0 base statistics',{primary:true});
@@ -103,12 +118,12 @@ export function contributionDestinations(candidate={}, {pack}={}){
         }
         if(zone&&(!updating||reasons.includes('missing-population'))){
             if(updating)add(title,'mob-zone',zone,'Add zone: '+zone,{primary:true,instance,npc:title,zone});
-            if(['normal','raid'].includes(instance))add(zone,'zone-population',title,'Add monster: '+title+' · '+scope,{instance,npc:title,zone});
+            if(['normal','raid'].includes(instance))population(title,zone,instance);
         }
     }
     if(candidate.kind==='zone'){
         const instance=candidate.instance,scope=zoneName(instance);
-        if(section('missing-population')||field('knownNPCs')?.edited===true)for(const npc of titles('knownNPCs'))add(title,'zone-population',npc,'Add monster: '+npc+' · '+scope,{primary:true,instance,npc,zone:title});
+        if(section('missing-population')||field('knownNPCs')?.edited===true)for(const npc of titles('knownNPCs'))population(npc,title,instance);
         if(lootAllowed)for(const item of titles('knownLoot')){
             const info=contributionLootEntryInfo(candidate,item,{resolver});
             if(info.status==='needs-source')continue;

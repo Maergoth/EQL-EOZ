@@ -11,10 +11,13 @@ for (const first of ['g','j','k','l','v','x','z']) for (const second of ['', 'ab
 export function isGeneratedPetName(name) { return generated.has(normalizeWikiIdentity(name)); }
 export function isOwnedPetName(name){
     const label=normalizeWikiIdentity(name).replace(/[.!?,;:]+$/,'').replace(/^(?:the )?corpse of /,'').replace(/(?:'s corpse| \(corpse\))$/,'').trim();
-    return /^[\p{L}\p{N}][\p{L}\p{N}' .-]{0,180}'s pet$/u.test(label);
+    // NPC-controlled pets can be labelled "a loathling lich pet" without a
+    // possessive owner. Only the final whole token identifies this explicit
+    // label; petal, carpet, Pet Rock and pet-prefixed monster names stay intact.
+    return /^[\p{L}\p{N}][\p{L}\p{N}' .-]{0,183} pet$/u.test(label);
 }
 export function classifyNpcEvidence(name, resolution = {}) {
-    // An explicit owner label identifies a pet even if a stale local catalog
+    // An explicit pet label identifies a pet even if a stale local catalog
     // contains the same display name. The classification contains no owner identity.
     if(isOwnedPetName(name))return {eligible:false,reason:'owned-pet',heuristic:false};
     if (resolution.membership === 'present') return {eligible:true,reason:'known-npc',heuristic:false};

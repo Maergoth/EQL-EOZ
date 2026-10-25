@@ -16,6 +16,15 @@ const source = await readFile(mainPath, 'utf8');
 const rendererSource = await readFile(path.join(root, 'app/app.js'), 'utf8');
 const nativeRequire = createRequire(mainPath);
 const pack = version => ({ meta:{ schemaVersion:3, version, manifestVersion:version, generatedAt:'2026-10-21T00:00:00Z' }, zones:[{ name:'Synthetic Zone' }], npcs:[], items:[] });
+const classificationPack=(version,count=6)=>{
+    const npcNames=Array.from({length:count},(_,i)=>'Synthetic Global Guardian '+i),counts={lootSourceCount:count,lootSourceCountComplete:true,lootSourceNpcs:npcNames};
+    return {...pack(version),meta:{...pack(version).meta,sample:false,wikiEntitiesComplete:true,lootSourceCountsVersion:2,wikiRelationshipCoverageVersion:1},
+        wikiEntities:{items:['Synthetic Gear','Statless Shared Material','Synthetic Staff: Water'],npcs:npcNames,titles:['Synthetic Gear','Statless Shared Material','Synthetic Staff: Water',...npcNames]},
+        npcs:npcNames.map((name,index)=>({name,wikiTitle:name,zone:index%2?'Second Zone':'Synthetic Zone',aliases:index===0?['Guardian Redirect']:[]})),
+        items:[{name:'Synthetic Gear',wikiTitle:'Synthetic Gear',contributionCard:{schemaVersion:1,complete:true,questContext:true},...counts}],
+        wikiRelationshipCoverage:{'Statless Shared Material':{schemaVersion:1,kind:'item',wikiTitle:'Statless Shared Material',revisionId:73,state:'broad',complete:false,edges:[{npc:npcNames[0],zone:'',instance:'normal',field:'dropsfrom',precision:'npc',verifiedNpc:true,source:{wikiTitle:'Statless Shared Material',revisionId:73,field:'dropsfrom',section:'',instance:'normal'}}],scopes:[{zone:'',instance:'normal',field:'dropsfrom',state:'broad',reason:'generic-source-group'}],collectionRefs:[]}},
+        lootSourceCounts:{'Synthetic Gear':counts,'Statless Shared Material':counts,'Synthetic Staff: Water':{lootSourceCount:2,lootSourceCountComplete:false,lootSourceNpcs:npcNames.slice(0,2)}}};
+};
 const compressedPack = version => gzipSync(JSON.stringify(pack(version)));
 const manifestFor = (version, compressed = compressedPack(version)) => ({ version, pack:'synthetic.json.gz', sha256:createHash('sha256').update(compressed).digest('hex') });
 const jsonResponse = value => new Response(JSON.stringify(value), { headers:{ 'content-type':'application/json' } });
@@ -51,7 +60,8 @@ async function runtime(fetchImpl, options = {}) {
         fetch:async (url, request) => { calls.push(url); return fetchImpl(url, request); }
     });
     vm.runInContext(source, context, { filename:mainPath });
-    const api = vm.runInContext('({ updateStaticDataPack, startDataPackRefresh, stopDataPackRefresh, dataPackRefreshState, readPackState, readResponseBytes, productionPackPath, packStatePath, sendBuffer })', context);
+    if(options.bundledPack){context.syntheticBootstrapPath=path.join(userData,'synthetic-bootstrap.json');await writeFile(context.syntheticBootstrapPath,JSON.stringify(options.bundledPack));vm.runInContext('bundledBootstrapPath=()=>syntheticBootstrapPath;',context);}
+    const api = vm.runInContext('({ updateStaticDataPack, startDataPackRefresh, stopDataPackRefresh, dataPackRefreshState, readPackState, readResponseBytes, productionPackPath, packStatePath, sendBuffer, automaticWikiCatalog })', context);
     await mkdir(path.dirname(api.productionPackPath()), { recursive:true });
     return {
         ...api, calls,
@@ -205,6 +215,35 @@ test('overlapping checks cannot download or atomically replace the pack twice', 
         assert.equal(JSON.parse(await readFile(api.productionPackPath(), 'utf8')).meta.manifestVersion, 'new');
         assert.equal(api.calls.length, 2);
     }, { clock });
+});
+
+test('global loot counts and NPC aliases survive verified installation and native catalog replacement',async()=>{
+    const value=classificationPack('global-counts-v1'),compressed=gzipSync(JSON.stringify(value));
+    await withRuntime(url=>url.endsWith('manifest.json')?jsonResponse(manifestFor('global-counts-v1',compressed)):new Response(compressed),async api=>{
+        assert.equal((await api.updateStaticDataPack(true)).status,'updated');
+        const installed=JSON.parse(await readFile(api.productionPackPath(),'utf8'));
+        assert.equal(installed.meta.lootSourceCountsVersion,2);
+        assert.deepEqual(installed.lootSourceCounts,value.lootSourceCounts,'Statless/missing-item count index is retained outside the browse-item array');
+        assert.deepEqual(installed.wikiRelationshipCoverage,value.wikiRelationshipCoverage,'Statless scoped positive facts and broad capabilities survive verified installation');
+        assert.deepEqual(installed.items[0].contributionCard,value.items[0].contributionCard,'Verified installation retains full-card absence proof without reinterpreting quest context');
+        assert.deepEqual(installed.items[0].lootSourceNpcs,value.items[0].lootSourceNpcs);
+        assert.equal(installed.items[0].lootSourceCountComplete,true);
+        assert.deepEqual(installed.npcs[0].aliases,['Guardian Redirect']);
+        const first=await api.automaticWikiCatalog();assert.deepEqual(JSON.parse(JSON.stringify(first.lootSourceCounts)),value.lootSourceCounts,'Native contribution provider sees the full installed pack');
+        assert.deepEqual(JSON.parse(JSON.stringify(first.wikiRelationshipCoverage)),value.wikiRelationshipCoverage);
+        assert.deepEqual(JSON.parse(JSON.stringify(first.items[0].contributionCard)),value.items[0].contributionCard);
+        const replacement=classificationPack('global-counts-v2',7);await api.cache(replacement,'global-counts-v2');
+        const next=await api.automaticWikiCatalog();assert.equal(next.lootSourceCounts['Statless Shared Material'].lootSourceCount,7,'Provider reloads new file generation instead of retaining stale counts');assert.notEqual(first,next);
+    });
+});
+
+test('native offline catalog fallback preserves bundled global count provenance',async()=>{
+    const value=classificationPack('bundled-counts');
+    await withRuntime(()=>{throw Error('The offline catalog must not contact the wiki or dataset host');},async api=>{
+        const bundled=await api.automaticWikiCatalog();assert.deepEqual(JSON.parse(JSON.stringify(bundled.lootSourceCounts)),value.lootSourceCounts);assert.equal(bundled.meta.lootSourceCountsVersion,2);assert.deepEqual(Array.from(bundled.npcs[0].aliases),['Guardian Redirect']);assert.equal(api.calls.length,0);
+        assert.deepEqual(JSON.parse(JSON.stringify(bundled.wikiRelationshipCoverage)),value.wikiRelationshipCoverage);
+        assert.deepEqual(JSON.parse(JSON.stringify(bundled.items[0].contributionCard)),value.items[0].contributionCard);
+    },{bundledPack:value});
 });
 
 test('Wiki data Settings distinguish successful checks, generation, downloads and offline errors', () => {
@@ -399,6 +438,23 @@ test('bootstrap builds accept a verified pack and record its manifest version', 
     const result = await runBootstrap(manifestFor('new', compressed), compressed);
     assert.equal(result.code, 0, result.output);
     assert.equal(JSON.parse(result.bundled).meta.manifestVersion, 'new');
+});
+
+test('bootstrap packaging preserves complete and incomplete global count records and aliases',async()=>{
+    const value=classificationPack('global-bootstrap'),compressed=gzipSync(JSON.stringify(value)),result=await runBootstrap(manifestFor('global-bootstrap',compressed),compressed);
+    assert.equal(result.code,0,result.output);const bundled=JSON.parse(result.bundled);
+    assert.equal(bundled.meta.lootSourceCountsVersion,2);assert.deepEqual(bundled.lootSourceCounts,value.lootSourceCounts);assert.deepEqual(bundled.items[0].lootSourceNpcs,value.items[0].lootSourceNpcs);assert.deepEqual(bundled.npcs[0].aliases,['Guardian Redirect']);assert.equal(bundled.meta.bundledAtBuild,true);
+    assert.equal(bundled.meta.wikiRelationshipCoverageVersion,1);assert.deepEqual(bundled.wikiRelationshipCoverage,value.wikiRelationshipCoverage);
+    assert.deepEqual(bundled.items[0].contributionCard,value.items[0].contributionCard);
+});
+
+test('renderer fallback retains the whole producer count index for contribution previews',async()=>{
+    const start=rendererSource.indexOf('async function loadPack()'),end=rendererSource.indexOf('async function connectBridge()',start),value=classificationPack('renderer-counts'),calls=[];
+    const context=vm.createContext({pack:{meta:{},zones:[],npcs:[],items:[]},parser:{},settings:{},fetch:async url=>{calls.push(url);if(!url.includes('bootstrap'))throw Error('No local cache');return jsonResponse(value);},rebuildPackIndexes(){},buildEraSelect(){},buildItemSlotSelect(){},renderAll(){},$:()=>({textContent:''})});
+    vm.runInContext(rendererSource.slice(start,end),context);await vm.runInContext('loadPack()',context);
+    assert.deepEqual(context.pack.lootSourceCounts,value.lootSourceCounts);assert.equal(context.pack.meta.lootSourceCountsVersion,2);assert.deepEqual(context.pack.npcs[0].aliases,['Guardian Redirect']);assert.equal(calls.length,2);
+    assert.deepEqual(context.pack.wikiRelationshipCoverage,value.wikiRelationshipCoverage);
+    assert.deepEqual(context.pack.items[0].contributionCard,value.items[0].contributionCard);
 });
 
 test('the renderer skips primary caches with missing or nonnumeric schema versions', async () => {

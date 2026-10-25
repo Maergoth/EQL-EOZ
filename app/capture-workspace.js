@@ -23,6 +23,8 @@ import { mountWikiIconFinder } from './icon-finder.js';
 import { contributionReaderMatches } from './contribution-reader.js';
 import { createAutomaticItemContribution } from './automatic-item-contribution.js';
 import { automaticSourceReceiptKey,automaticSourceDraftKeys,automaticSourceDraftComplete } from './automatic-source-results.js';
+import { mountContributionHistory } from './contribution-history.js';
+import { TOOLTIP_HOVER_DELAY_MS } from './tooltip-delay.js';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let eras=['Classic Era','Kunark Era','Velious Era'];
@@ -102,18 +104,18 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     const filterKey='eql-eye-of-zomm-contribution-filters-v1';
     let enabledGaps=CONTRIBUTION_FILTERS.map(value=>value.key);
     try{const saved=JSON.parse(storage?.getItem(filterKey)||'null');if(Array.isArray(saved))enabledGaps=saved.filter(key=>CONTRIBUTION_FILTERS.some(filter=>filter.key===key));}catch{/* Optional browsing preferences never block drafts. */}
-    const visibleQueueCandidates=()=>{const candidates=queue.snapshot(),receipts=queue.sourceReceiptKeys();if(!receipts.length)return candidates;const resolver=contributionResolver();return candidates.filter(candidate=>manuallyEditedContributions.has(candidate.id)||!automaticSourceDraftComplete(candidate,receipts,{resolver}));};
+    const visibleQueueCandidates=()=>{const candidates=queue.snapshot().filter(candidate=>candidate.status!=='submitted'),decisions=queue.sourceDecisionKeys();if(!decisions.length)return candidates;const resolver=contributionResolver();return candidates.filter(candidate=>manuallyEditedContributions.has(candidate.id)||!automaticSourceDraftComplete(candidate,decisions,{pack:getPack(),resolver}));};
     const queueRows=()=>visibleContributionQueue(visibleQueueCandidates(),enabledGaps);
     selectedId=queueRows()[0]?.id||'';
     let inventoryTimer=null,inventoryPolling=false,inventoryWatchEpoch=0,inventoryMessage='',statsStarting=false,spawnArmedId='',iconPage=0;
     const discoveryRequests=new Map();let discoveryCapture=null,discoveryStarting=null,discoverySourceId='',discoveryMessage='',captureStatusRevision=0;
-    let contributionVisible=false,contributionReaderSuppressed=false,contributionEnteredAt=0,contributionEvidencePending=false,contributionIconCrop=null,contributionEvidenceEpoch=0;
+    let contributionVisible=false,contributionReaderSuppressed=false,contributionEnteredAt=0,contributionEvidencePending=false,contributionIconCrop=null,contributionEvidenceEpoch=0,contributionTab='discoveries';
     const dismissedCaptureImages=new Set();
     let automaticContributions=null;
     function cancelAutomaticContribution(){contributionEvidenceEpoch++;automaticContributions?.cancel();}
     function markContributionEdited(){if(selectedId)manuallyEditedContributions.add(selectedId);cancelAutomaticContribution();}
     try{const raw=storage?.getItem(OCR_AREA_STORAGE_KEY);if(raw&&raw.length<=24000){const parsed=JSON.parse(raw);if(Array.isArray(parsed))areaProfiles=parsed.slice(-MAX_OCR_AREAS).filter(value=>typeof value?.key==='string'&&value.key.length<=1000&&validAreaProfile(value)).map(value=>({key:value.key,region:normalizeOcrArea(value.region),referenceSize:frameSize(value.referenceSize)}));}}catch{/* A damaged optional calibration must not block ordinary capture. */}
-    root.innerHTML=`<div class="capture-toolbar panel"><div><h2>Contribute to Wiki</h2><p>New item readings and loot sources can publish automatically. Review entries that need a match or correction.</p></div><div class="capture-actions"><button class="secondary-button" data-wiki-login>Log in to wiki</button><button class="text-button" data-wiki-refresh>Refresh account</button><span data-account-status role="status">Not connected</span></div></div>
+    root.innerHTML=`<header class="capture-toolbar contribution-heading"><div><h2>Contribute</h2><p>Review discoveries or view your saved wiki submissions.</p></div><div class="capture-actions contribution-account"><span data-account-status role="status">Not connected</span><button class="secondary-button" data-wiki-login>Log in to wiki</button><button class="text-button" data-wiki-refresh>Refresh account</button></div></header>
         <div class="contribution-layout"><aside class="panel contribution-sidebar"><h3>Discovery queue</h3><fieldset class="contribution-filters"><legend>Show gaps</legend><div data-contribution-filters></div></fieldset><p class="settings-helper" data-contribution-count role="status"></p><details class="contribution-manual"><summary>Add a page manually</summary><form data-add-contribution><label>Type<select name="kind"><option value="item">Item</option><option value="npc">Monster</option><option value="zone">Zone</option></select></label><label>Name<input name="name" required maxlength="230" placeholder="ex. Thornstinger"></label><button class="secondary-button">Add for review</button></form></details><div data-contribution-list></div></aside><article class="panel contribution-editor" data-contribution-editor></article></div><div class="panel wiki-review" data-wiki-review hidden></div>`;
     settingsRoot.innerHTML=`<h2>Screen reading</h2><label class="check-control"><input type="checkbox" data-capture-opt-in> Enable optional screen reading</label><p class="settings-helper">Screen reading currently requires the Default Modern (default_modern) game UI skin. Other skins are not yet calibrated. Logs supply kills, loot and zones. Screen reading supplies item tooltips, examine windows and visible character stats. It runs locally, without audio or video recording. Contribute reads about once per second when a configured or unique EverQuest window is available; otherwise choose its source there. Use Pause automatic reading to pause it.</p><div class="capture-settings-controls" hidden><label>Source<select data-capture-source aria-label="Capture source"><option value="">Choose a window or display</option></select></label><div class="capture-actions"><button class="secondary-button" data-capture-sources>Choose source</button><button class="primary-button" data-capture-start>Start contribution capture</button><button class="secondary-button" data-capture-pause>Pause</button><button class="secondary-button" data-capture-stop>Stop all capture</button><button class="secondary-button" data-capture-calibrate disabled>Calibrate OCR area</button><button class="text-button" data-capture-import>Read a screenshot</button></div></div><p data-capture-status class="settings-helper" role="status">Screen reading disabled.</p>`;
     characterRoot.innerHTML=`<div class="capture-toolbar panel"><div><label class="character-profile-select">Character Select<select data-character-select aria-label="Character Select"></select></label><p>Import your equipped items, read your displayed stats and share your character. Keep all your gear equipped.</p></div></div>
@@ -129,11 +131,33 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     listen(augmentDialog,'close',()=>{if(!augmentDialog.open){pickerEpoch++;augmentDialog.onpaste=null;}});
     const characterCatalog=mountCharacterCatalog({host:$('[data-character-catalog]',characterRoot),getPack,onAdd(input){if(publishing)return{ok:false,error:'Wait until the reviewed wiki action completes.'};const result=character.intake(input);if(result.ok){if(walkthrough.snapshot().active){walkthrough.rememberItem?.(result.candidate);character.autoAssign(result.candidate.id);}selectedCard=result.candidate.id;shareImage=null;renderCharacter();}return result;}});
     function listen(element,event,callback,options){element?.addEventListener(event,callback,options);unsubscribers.push(()=>element?.removeEventListener(event,callback,options));}
+    const discoveryPanel=document.createElement('section');
+    discoveryPanel.id='contribution-discoveries-panel';discoveryPanel.dataset.contributionDiscoveries='';discoveryPanel.setAttribute('role','tabpanel');discoveryPanel.setAttribute('aria-labelledby','contribution-discoveries-tab');
+    const discoveryLayout=$('.contribution-layout'),reviewPanel=$('[data-wiki-review]');
+    discoveryLayout.before(discoveryPanel);discoveryPanel.append(discoveryLayout,reviewPanel);
+    const contributionTabs=document.createElement('div');contributionTabs.className='contribution-tabs';contributionTabs.setAttribute('role','tablist');contributionTabs.setAttribute('aria-label','Contribute to Wiki');
+    contributionTabs.innerHTML='<button type="button" id="contribution-discoveries-tab" role="tab" aria-selected="true" aria-controls="contribution-discoveries-panel" data-contribution-tab="discoveries">Discoveries</button><button type="button" id="contribution-history-tab" role="tab" aria-selected="false" aria-controls="contribution-history-panel" tabindex="-1" data-contribution-tab="history">Contribution History</button>';
+    discoveryPanel.before(contributionTabs);
+    const historyPanel=document.createElement('section');historyPanel.id='contribution-history-panel';historyPanel.className='contribution-history';historyPanel.hidden=true;historyPanel.setAttribute('role','tabpanel');historyPanel.setAttribute('aria-labelledby','contribution-history-tab');
+    const contributionSection=document.createElement('section');contributionSection.className='panel contribution-section';contributionSection.dataset.contributionSection='';
+    const heading=$('.contribution-heading');root.prepend(contributionSection);contributionSection.append(heading,contributionTabs,discoveryPanel,historyPanel);
+    const contributionHistory=mountContributionHistory({host:historyPanel,wiki});
+    unsubscribers.push(()=>contributionHistory.dispose());
+    function setContributionTab(next,{focus=false}={}){
+        if(publishing||!['discoveries','history'].includes(next))return;
+        if(next!==contributionTab){saveCandidate();cancelAutomaticContribution();}
+        contributionTab=next;discoveryPanel.hidden=next!=='discoveries';historyPanel.hidden=next!=='history';
+        for(const button of contributionTabs.querySelectorAll('[role="tab"]')){const selected=button.dataset.contributionTab===next;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;if(selected&&focus)button.focus();}
+        contributionHistory.setActive(next==='history'&&Boolean(root.closest('.view.is-active')));refreshContributionReader();
+    }
+    listen(contributionTabs,'click',event=>{const button=event.target.closest('[data-contribution-tab]');if(button)setContributionTab(button.dataset.contributionTab);});
+    listen(discoveryPanel,'click',event=>{if(event.target.closest('[data-open-contribution-history]'))setContributionTab('history',{focus:true});});
+    listen(contributionTabs,'keydown',event=>{if(!event.target.closest('[role="tab"]')||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setContributionTab(event.key==='Home'?'discoveries':event.key==='End'?'history':contributionTab==='history'?'discoveries':'history',{focus:true});});
     function shareStatus(message,error=false){const host=dialog.querySelector('[data-share-status]');host.textContent=message;host.classList.toggle('capture-warning',error);}
     async function act(callback){if(disposed||busy)return;busy=true;contributionEvidenceEpoch++;renderCharacterSelect();try{return await callback();}catch(error){const message=error.message||'This action could not complete.';if(dialog.open)shareStatus(message,true);else warning(message);}finally{busy=false;if(!disposed)renderCharacterSelect();}}
     function invalidatePlan(){reviewEpoch++;plan=null;$('[data-wiki-review]').hidden=true;}
     function reviewIsCurrent(candidate,epoch){return !disposed&&epoch===reviewEpoch&&selectedId===candidate?.id&&JSON.stringify(selected())===JSON.stringify(candidate);}
-    function setPublishing(value){publishing=value;root.inert=value;characterRoot.inert=value;dialog.inert=value;root.setAttribute('aria-busy',String(value));characterRoot.setAttribute('aria-busy',String(value));updatePublishAvailability();}
+    function setPublishing(value){publishing=value;root.inert=value;characterRoot.inert=value;dialog.inert=value;root.setAttribute('aria-busy',String(value));characterRoot.setAttribute('aria-busy',String(value));updatePublishAvailability();if(!value)contributionHistory.markChanged();}
     function selected(){return queue.snapshot().find(c=>c.id===selectedId);}
     function saveCandidate({reviewFields=false}={}){
         const candidate=selected(),form=$('[data-candidate-form]');if(!candidate||!form||publishing)return candidate;
@@ -141,13 +165,13 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         for(const row of form.querySelectorAll('[data-field-key]')){
             const key=row.dataset.fieldKey,input=row.querySelector('[data-field-value]');if(!input)continue;const picker=row.querySelector('[data-choice-picker]');let value=picker?readContributionChoicePicker(picker):input.value;
             if(!picker&&input.dataset.array==='true')value=value.split(['statLines','knownLoot','knownNPCs'].includes(key)?/\n/:/[,\n]/).map(s=>s.trim()).filter(Boolean);
-            else if(input.dataset.type==='boolean')value=value==='true';
+            else if(input.dataset.type==='boolean')value=value===''?'':value==='true';
             else if(input.dataset.type==='number'&&value.trim()!==''&&Number.isFinite(Number(value)))value=Number(value);
             if(!picker&&value==='?')value='';
             const original=row.dataset.originalField?JSON.parse(row.dataset.originalField):null,unchanged=original&&JSON.stringify(value)===JSON.stringify(original.value);
             if(unchanged&&(!reviewFields||row.closest('[data-additional-contribution]')?.open===false))continue;
             const previous=candidate.fields[key],nonblank=Array.isArray(value)?value.length>0:value!==''&&value!==null;
-            fields[key]={value,confirmed:reviewFields?nonblank:previous?.confirmed===true,edited:previous?.edited===true||!unchanged};
+            fields[key]={value,confirmed:key==='notable'?typeof value==='boolean':reviewFields?nonblank:previous?.confirmed===true,edited:previous?.edited===true||!unchanged,...(key==='notable'&&typeof value==='boolean'?{source:'player'}:{})};
         }
         const sources=candidate.sources.map((source,index)=>{const button=form.querySelector(`[data-source-toggle="${index}"]`);return {...source,confirmed:button?button.getAttribute('aria-pressed')==='true':source.confirmed,...(button&&button.getAttribute('aria-pressed')!==String(contributionSourceIncluded(source))?{edited:true}:{})};});
         const patch={...Object.fromEntries(['name','title','zone','era','playerText'].map(key=>[key,data.get(key)===String(originalCandidate[key]??'')?candidate[key]:data.get(key)])),intent:data.get('intent')||candidate.intent||'create',instance:form.elements.raid.checked?'raid':'normal',matchesReviewed:reviewFields||candidate.matchesReviewed===true,fields,sources};
@@ -157,7 +181,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         if(changed){if(!reviewFields)patch.matchesReviewed=false;patch.planId=null;patch.status='needs-review';invalidatePlan();}
         return queue.update(candidate.id,patch);
     }
-    function selectContribution(id){if(!id||publishing)return;cancelAutomaticContribution();saveCandidate();selectedId=id;iconPage=0;invalidatePlan();renderQueue();renderCandidate();}
+    function selectContribution(id){if(!id||publishing)return;setContributionTab('discoveries');cancelAutomaticContribution();saveCandidate();selectedId=id;iconPage=0;invalidatePlan();renderQueue();renderCandidate();}
     function contributionContextMarkup(candidate,{showSpawn=true}={}){
         let text=contributionRelationsMarkup(candidate);
         if(candidate.kind==='npc'&&showSpawn){
@@ -181,7 +205,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         itemBaseUi?.dispose();itemBaseUi=null;contributionIcons?.dispose();contributionIcons=null;contributionChoices?.dispose();contributionChoices=null;const candidate=selected(),host=$('[data-contribution-editor]');
         if(!candidate){host.innerHTML='<p class="empty-state">Choose a discovery or add a page to review.</p>';return;}
         const fields=candidate.kind==='item'?withDefaultItemStatLines(candidate.fields):{...candidate.fields};
-        const keys=candidate.kind==='npc'?['level','race','class','location','respawnTime','AC','HP','special','knownLoot']:candidate.kind==='zone'?['whoName','knownNPCs','knownLoot']:candidate.kind==='spell'?['castTime','duration','effect','mana']:['classes','slots','races','iconId','effectName','effectType','effectCastTime','effectLevel'];
+        const keys=candidate.kind==='npc'?['notable','level','race','class','location','respawnTime','AC','HP','special','knownLoot']:candidate.kind==='zone'?['whoName','knownNPCs','knownLoot']:candidate.kind==='spell'?['castTime','duration','effect','mana']:['classes','slots','races','iconId','effectName','effectType','effectCastTime','effectLevel'];
         const effects=contributionItemEffects({fields:Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{...value,confirmed:true}]))}),effect=effects[0];
         for(const key of keys)if(!fields[key])fields[key]={value:key==='effectName'?effect?.name||'':key==='effectType'?effect?.type||'':key==='effectCastTime'?effect?.castTime||'':key==='effectLevel'?effect?.level||'':['knownLoot','knownNPCs','classes','slots','races'].includes(key)?[]:'',confirmed:false};
         const displayCandidate={...candidate,fields},localMatches=matches?.candidateId===candidate.id?matches.matches:queue.matches(candidate),summary=contributionUpdateSummary(candidate);
@@ -223,7 +247,6 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         const drop=$('[data-contribution-dropzone]');drop?.addEventListener('dragover',event=>{event.preventDefault();drop.classList.add('is-dragging');});drop?.addEventListener('dragleave',()=>drop.classList.remove('is-dragging'));drop?.addEventListener('drop',event=>{event.preventDefault();drop.classList.remove('is-dragging');warning('Use Select screenshot or paste the image with Ctrl+V.');});
         $('[data-remove-attachment]')?.addEventListener('click',()=>void act(async()=>{const current=saveCandidate();dismissedCaptureImages.add(current.id);if(current.attachment?.attachmentId)await wiki.discardAttachment?.({attachmentId:current.attachment.attachmentId});queue.update(current.id,{attachment:null,planId:null});invalidatePlan();renderCandidate();}));
         form.querySelectorAll('[data-source-toggle]').forEach(button=>button.onclick=()=>{const include=button.getAttribute('aria-pressed')!=='true';button.setAttribute('aria-pressed',String(include));button.textContent=include?'Included':'Include source';saveCandidate();renderCandidate();});
-        form.querySelectorAll('[data-loot-kind]').forEach(button=>button.onclick=()=>{const current=saveCandidate(),titles=current.fields.knownLoot?.value||[],title=titles[Number(button.dataset.lootIndex)];if(!title)return;queue.update(current.id,{fields:{...current.fields,lootKinds:{value:{...current.fields.lootKinds?.value,[title]:button.dataset.lootKind},confirmed:true,edited:true}},planId:null});invalidatePlan();renderCandidate();});
         $('[data-add-loot]')?.addEventListener('click',()=>{const current=saveCandidate(),name=$('[data-add-loot-name]').value.trim();if(!name)return;queue.update(current.id,{fields:{...current.fields,knownLoot:{value:[...new Set([...(current.fields.knownLoot?.value||[]),name])],confirmed:true,edited:true}},planId:null});invalidatePlan();renderCandidate();});
         $('[data-add-source]')?.addEventListener('click',()=>{
             const current=saveCandidate(),npc=form.querySelector('[data-add-source-npc]').value.trim(),zone=String(current.zone||'').trim(),instance=form.elements.raid.checked?'raid':'normal';
@@ -236,7 +259,8 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         $('[data-resume-plan]')?.addEventListener('click',()=>void act(async()=>{const current=saveCandidate(),epoch=reviewEpoch,restored=await wiki.getPlan({planId:current.planId});if(!reviewIsCurrent(current,epoch))return;plan=restored;renderPlan();}));
         $('[data-ignore-candidate]').onclick=()=>{cancelAutomaticContribution();queue.remove(candidate.id);selectedId=queueRows()[0]?.id||'';invalidatePlan();renderQueue();renderCandidate();};
     }
-    async function refreshAccount(){if(!wiki)return;account=await wiki.status();$('[data-account-status]').textContent=account.authenticated?`Logged in as ${account.user.name}${account.canEdit?'':' · editing unavailable'}`:'Not logged in';$('[data-wiki-login]').textContent=account.authenticated?'Log out of wiki':'Log in to wiki';}
+    function applyAccountStatus(next){account=next;contributionHistory.setAccount(next);$('[data-account-status]').textContent=account?.authenticated?`Logged in as ${account.user.name}${account.canEdit?'':' · editing unavailable'}`:'Not logged in';$('[data-wiki-login]').textContent=account?.authenticated?'Log out of wiki':'Log in to wiki';}
+    async function refreshAccount(){if(!wiki)return;applyAccountStatus(await wiki.status());}
     async function preparePlan(){if(!wiki)throw Error('Wiki submission requires the desktop app.');const candidate=saveCandidate({reviewFields:true}),epoch=reviewEpoch,relatedPages=[];if(candidate.kind==='item')for(const source of candidate.sources.filter(s=>s.confirmed&&(!contributionUpdateSummary(candidate).updating||candidate.reasons?.includes('missing-source')||!candidate.reasons?.length||s.edited===true)))relatedPages.push({title:source.npc,role:'npc-loot',itemTitle:candidate.title,npcTitle:source.npc,zoneTitle:source.zone,instance:source.instance||'normal'});const prepared=await wiki.preparePlan({candidate,relatedPages,sourceItemHints:queue.sourceItemHints?.(candidate)||[],matchesReviewed:candidate.matchesReviewed===true});if(!reviewIsCurrent(candidate,epoch))throw Error('This draft changed while its review was loading. Prepare the updated review again.');plan=prepared;queue.update(candidate.id,{planId:plan.id});renderPlan();renderCandidate();}
     function updatePublishAvailability(){const host=$('[data-wiki-review]'),button=host.querySelector('[data-publish-plan]');if(!button)return;button.disabled=publishing||!plan||!plan.reviewDigest||!plan.pages?.length||plan.status==='submitted'||(plan.blockers||[]).length>0||!host.querySelector('[data-reviewed-plan]')?.checked;}
     function renderPlan(){
@@ -285,18 +309,18 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function refreshSources(){void chooseSources().catch(error=>warning(error.message));}
     async function start(mode,{sourceId=selectedSource(),sessionId}={}){if(!capture)throw Error('Screen reading requires the desktop app.');if(mode!=='character'&&!optIn)throw Error('Enable Screen reading in Settings, then choose a source.');if(!sourceId)throw Error('Choose the game window first.');if(mode==='character')optIn=true;closeArea();const epoch=walkthroughEpoch,source=sources.find(source=>source.id===sourceId),profile=areaProfiles.find(profile=>profile.key===areaKey(source,mode)),next=await capture.start({mode,sourceId,...(sessionId?{sessionId}:{}),...(profile?{region:profile.region,referenceSize:profile.referenceSize}:{})});if(disposed||mode==='character'&&epoch!==walkthroughEpoch)return next;captureState=next;renderCapture();return next;}
     async function stopCapture(mode){if(!capture)throw Error('Screen reading requires the desktop app.');if(!publishing)invalidatePlan();captureState=await capture.stop(mode?{mode}:undefined);renderCapture();}
-    const discoveryPicker=document.createElement('section');discoveryPicker.className='panel contribution-discovery-capture';discoveryPicker.dataset.discoveryCapture='';discoveryPicker.hidden=true;
-    discoveryPicker.innerHTML='<h3>Item screen reader</h3><p data-discovery-capture-message role="status"></p><p data-contribution-examine-prompt></p><label data-discovery-source-label>Game window or display<select data-discovery-capture-source aria-label="Discovery capture source"><option value="">Choose a source</option></select></label><div class="capture-actions"><button type="button" class="primary-button" data-discovery-capture-start>Start item reading</button><button type="button" class="secondary-button" data-contribution-reader-pause>Pause automatic reading</button></div>';
+    const discoveryPicker=document.createElement('section');discoveryPicker.className='contribution-discovery-capture';discoveryPicker.dataset.discoveryCapture='';discoveryPicker.hidden=true;
+    discoveryPicker.innerHTML='<div class="contribution-reader-heading"><h3>Item reader</h3><p data-discovery-capture-message role="status"></p></div><div class="contribution-reader-controls"><label data-discovery-source-label>Game window or display<select data-discovery-capture-source aria-label="Discovery capture source"><option value="">Choose a source</option></select></label><div class="capture-actions"><button type="button" class="primary-button" data-discovery-capture-start>Start item reading</button><button type="button" class="secondary-button" data-contribution-reader-pause>Pause reading</button></div></div><p data-contribution-examine-prompt class="settings-helper"></p>';
     root.querySelector('.contribution-layout').before(discoveryPicker);
     const itemDiscoveryRequests=()=>[...discoveryRequests.values()].filter(request=>request.purpose==='item-link');
-    const wantsContributionReader=()=>!disposed&&(itemDiscoveryRequests().length>0||contributionVisible&&!contributionReaderSuppressed);
+    const wantsContributionReader=()=>!disposed&&!contributionReaderSuppressed&&contributionTab==='discoveries'&&(itemDiscoveryRequests().length>0||contributionVisible);
     const gameSource=source=>source?.type==='window'&&/everquest|eqgame(?:\.exe)?/i.test(source.name||source.label||'');
     function renderDiscoveryCapture(){
         const pending=itemDiscoveryRequests(),select=discoveryPicker.querySelector('[data-discovery-capture-source]');
         const running=captureState.owner==='contribution'&&captureState.phase==='running',candidate=selected();
-        discoveryPicker.hidden=!pending.length&&!contributionVisible;
+        discoveryPicker.hidden=contributionTab==='history'||!pending.length&&!contributionVisible;
         discoveryPicker.querySelector('[data-discovery-capture-message]').textContent=discoveryMessage||(captureState.owner==='character'?'Character reading is active. Finish or stop it before reading contribution items.':contributionReaderSuppressed?'Automatic reading is paused. Choose Start item reading when ready.':running?'Reading your selected game window about once per second. New values are proposals for review.':'Choose the game window below. The reader uses the Default Modern game UI.');
-        discoveryPicker.querySelector('[data-contribution-examine-prompt]').textContent=candidate?.kind==='item'?`Open ${candidate.name}’s complete examine window in EverQuest and leave it visible. Matching text will fill this entry; screenshot and icon suggestions appear when available.`:'Open an item’s complete examine window when reviewing its item entry. Keep all of its text visible.';
+        discoveryPicker.querySelector('[data-contribution-examine-prompt]').textContent=candidate?.kind==='item'?`Open ${candidate.name}’s full examine window. Text, screenshot and icon suggestions fill this entry.`:'Open an item’s full examine window to propose its text, screenshot and icon.';
         discoveryPicker.querySelector('[data-discovery-source-label]').hidden=running;
         discoveryPicker.querySelector('[data-discovery-capture-start]').hidden=running&&!contributionReaderSuppressed;
         discoveryPicker.querySelector('[data-contribution-reader-pause]').hidden=contributionReaderSuppressed||!contributionVisible;
@@ -340,7 +364,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             captureState=await capture.status();if(!wantsContributionReader())return{cancelled:true};
             if(captureState.owner==='character')throw Error('Finish or stop Character capture, then choose Contribute again.');
             if(captureState.owner==='contribution'&&['running','selecting'].includes(captureState.phase)){renderCapture();return{};}
-            optIn=true;const requestedSessionId=globalThis.crypto.randomUUID(),next=await start('contribution',{sourceId:choice.id,sessionId:requestedSessionId});if(next)captureState=next;
+            discoverySourceId=choice.id;optIn=true;const requestedSessionId=globalThis.crypto.randomUUID(),next=await start('contribution',{sourceId:choice.id,sessionId:requestedSessionId});if(next)captureState=next;
             if(captureState.owner!=='contribution'){
                 // Character may win while native start IPC is in flight. Only
                 // our requested contribution resume slot may be cancelled.
@@ -372,9 +396,15 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         if(request.candidateId&&!candidate)return{ok:false,error:'This linked item contribution no longer matches.'};
         if(!candidate)candidate=queue.add({kind:'item',name:itemExaltationBaseIdentity(name)},true);
         if(!candidate)return{ok:false,error:'This linked item could not be opened for review.'};
+        contributionReaderSuppressed=false;discoveryMessage='';
         record.candidateId=candidate.id;discoveryRequests.set(record.id,record);selectContribution(candidate.id);navigate('contribute');loadWiki();
-        try{const prepared=await prepareDiscoveryCapture();if(disposed||discoveryRequests.get(record.id)!==record)return discoveryResult(record,{cancelled:true});const result=discoveryResult(record,prepared);if(!prepared.needsSource&&!prepared.cancelled)discoveryCaptureReady(record,result);return result;}
+        try{const prepared=await prepareDiscoveryCapture('',{explicit:true});if(disposed||discoveryRequests.get(record.id)!==record)return discoveryResult(record,{cancelled:true});const result=discoveryResult(record,prepared);if(!prepared.needsSource&&!prepared.cancelled)discoveryCaptureReady(record,result);return result;}
         catch(error){discoveryMessage=error.message||'Item reading could not start.';renderDiscoveryCapture();return discoveryResult(record,{ok:false,error:discoveryMessage});}
+    }
+    function setDiscoveryNotable(request={}){
+        if(disposed||publishing)return{ok:false,error:disposed?'Contribute has closed.':'Finish the current wiki submission first.'};
+        const result=queue.setNpcNotable(request);if(!result.ok)return result;
+        if(selectedId===request.candidateId){invalidatePlan();renderCandidate();}renderQueue();return{ok:true,notable:result.notable};
     }
     async function cancelDiscoveryContribution(request={}){
         const record=discoveryRequests.get(request.id);
@@ -396,7 +426,8 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         void stopOwnedDiscoveryCapture().catch(error=>warning(error.message));renderDiscoveryCapture();
     });
     function refreshContributionReader(){
-        const active=Boolean(root.closest('.view.is-active'));
+        const active=contributionTab==='discoveries'&&Boolean(root.closest('.view.is-active'));
+        contributionHistory.setActive(contributionTab==='history'&&Boolean(root.closest('.view.is-active')));
         if(active===contributionVisible)return;
         cancelAutomaticContribution();
         contributionVisible=active;contributionEnteredAt=Date.now();contributionIconCrop=null;discoveryMessage='';renderDiscoveryCapture();
@@ -576,7 +607,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         if(publishing||dragId)return;cancelPendingItemTooltip();clearTimeout(tooltipTimer);
         if(!itemTooltip.hidden&&tooltipCardId===button.dataset.editCard){clearTimeout(tooltipTimer);return;}
         itemTooltip.hidden=true;pendingTooltipButton=button;
-        tooltipShowTimer=setTimeout(()=>{const target=pendingTooltipButton;cancelPendingItemTooltip();if(!disposed&&!publishing&&target?.isConnected&&target.matches(':hover')&&!dragId)showItemTooltip(target);},350);
+        tooltipShowTimer=setTimeout(()=>{const target=pendingTooltipButton;cancelPendingItemTooltip();if(!disposed&&!publishing&&target?.isConnected&&target.matches(':hover')&&!dragId)showItemTooltip(target);},TOOLTIP_HOVER_DELAY_MS);
     }
     function deferHideItemTooltip(){cancelPendingItemTooltip();clearTimeout(tooltipTimer);tooltipTimer=setTimeout(()=>{if(!itemTooltip.matches(':hover')&&!itemTooltip.contains(document.activeElement))hideItemTooltip();},220);}
     function showItemTooltip(button){
@@ -870,10 +901,15 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     });
     listen(dialog.querySelector('[data-share-close]'),'click',()=>{if(!publishing)dialog.close();});listen(dialog,'cancel',event=>{if(publishing)event.preventDefault();});listen(dialog.querySelector('[data-share-copy]'),'click',()=>void act(async()=>{if(!shareImage)throw Error('Preview a character image first.');const flow=walkthrough.snapshot(),epoch=walkthroughEpoch;await share.copyPng(shareImage.dataUrl);await finishWalkthrough(flow,epoch);shareStatus('Character PNG copied to your clipboard.');}));listen(dialog.querySelector('[data-share-save]'),'click',()=>void act(async()=>{if(!shareImage)throw Error('Preview a character image first.');const flow=walkthrough.snapshot(),epoch=walkthroughEpoch,result=await share.savePng(shareImage.dataUrl);if(result.ok)await finishWalkthrough(flow,epoch);shareStatus(result.ok?'Character PNG saved.':'Save canceled. Capture remains active.');}));listen(dialog.querySelector('[data-share-upload]'),'click',()=>void act(uploadSnapshot));
     if(wiki?.onAutomaticSourceResult){
-        const receipt=document.createElement('section');receipt.className='panel contribution-automatic-results';receipt.hidden=true;receipt.setAttribute('aria-live','polite');root.querySelector('.capture-toolbar').after(receipt);
-        let recent=[];
+        const receipt=document.createElement('div');receipt.className='contribution-latest-result';receipt.hidden=true;receipt.setAttribute('aria-live','polite');discoveryPicker.after(receipt);
         unsubscribers.push(wiki.onAutomaticSourceResult(result=>{
+            if(!disposed&&result?.status==='quiet'){
+                if(queue.recordAutomaticSourceDecision(result)){renderQueue();if(!busy&&!publishing&&selectedId&&!queueRows().some(candidate=>candidate.id===selectedId)){selectedId=queueRows()[0]?.id||'';renderCandidate();}}
+                return;
+            }
             if(disposed||!['submitted','deferred','needs-attention'].includes(result?.status))return;
+            const hasAttempt=result.status==='submitted'||result.plan?.pages?.some(page=>['applied','unknown','failed'].includes(page.status));
+            if(hasAttempt)contributionHistory.markChanged();
             const source={...result,itemTitle:result.itemTitle||result.item,npcTitle:result.npcTitle||result.npc,zoneTitle:result.zoneTitle||result.zone};
             if([source.itemTitle,source.npcTitle,source.zoneTitle].some(value=>typeof value!=='string'||!value.trim()||value.length>240))return;
             const key=automaticSourceReceiptKey(source,{resolver:contributionResolver()});
@@ -887,10 +923,9 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             }
             const link=title=>`<a href="https://eqlwiki.com/${encodeURIComponent(title)}" target="_blank" rel="noopener noreferrer">${escape(title)}</a>`;
             const label=result.status==='submitted'?'Drop source recorded':'Drop source needs review';
-            const summary=`<p><strong>${label}</strong> · ${link(source.itemTitle)} → ${link(source.npcTitle)} · ${link(source.zoneTitle)}</p>`;
-            const plan=result.plan&&Array.isArray(result.plan.pages)?{...result.plan,pages:result.plan.pages.slice(0,6)}:null;
-            recent=[summary+(plan?`<p>${contributionPublishReceiptMarkup(plan)}</p>`:'')+(result.reason?`<p class="settings-helper">${escape(String(result.reason).slice(0,600))}</p>`:''),...recent].slice(0,3);
-            receipt.hidden=false;receipt.innerHTML=recent.join('');renderQueue();
+            const summary=`<strong>${label}</strong> · ${link(source.itemTitle)} → ${link(source.npcTitle)}`;
+            receipt.hidden=result.status==='submitted';receipt.classList.toggle('capture-warning',result.status!=='submitted');
+            receipt.innerHTML=`<div><p>${summary}</p>${result.reason?`<p class="settings-helper">${escape(String(result.reason).slice(0,600))}</p>`:''}</div>${hasAttempt?'<button type="button" class="text-button" data-open-contribution-history>View history</button>':'<span class="settings-helper">Review this item in Discoveries.</span>'}`;renderQueue();
             if(!busy&&!publishing&&selectedId&&!queueRows().some(candidate=>candidate.id===selectedId)){selectedId=queueRows()[0]?.id||'';renderCandidate();}
             notify(`${label}: ${source.itemTitle} → ${source.npcTitle} (${source.zoneTitle}).`,{tone:result.status==='submitted'?'success':'warning'});
         })||(()=>{}));
@@ -900,8 +935,9 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         onBusy(value){busy=value;renderCharacterSelect();if(value){discoveryMessage='Checking the live wiki before publishing this new item…';renderDiscoveryCapture();}},
         onPlan(candidate,prepared){plan=prepared;queue.update(candidate.id,{planId:prepared.id});discoveryMessage='Publishing the new item after its live duplicate check…';renderDiscoveryCapture();},
         onResult(candidate,result){
+            contributionHistory.markChanged();
             if(!result)return;queue.update(candidate.id,{planId:result.id,status:result.status||'needs-attention'});renderQueue();
-            if(selectedId===candidate.id){plan=result;renderPlan();renderCandidate();}
+            if(selectedId===candidate.id){if(result.status==='submitted'){selectedId=queueRows()[0]?.id||'';plan=null;}else plan=result;renderPlan();renderCandidate();}
             if(result.status==='submitted'){discoveryMessage='Contribution published. Thank you!';notify('Contribution published. Thank you!',{tone:'success'});}
             else{discoveryMessage='The wiki has not confirmed this item. Review the saved result before retrying.';warning(discoveryMessage);}renderDiscoveryCapture();
         },
@@ -910,7 +946,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             if(prepared?.id){queue.update(candidate.id,{planId:prepared.id});if(selectedId===candidate.id){plan=prepared;renderPlan();}}
             renderDiscoveryCapture();
         },
-        onError(_candidate,error){discoveryMessage=error.message||'Automatic item publishing could not complete. Review this entry manually.';renderDiscoveryCapture();}
+        onError(_candidate,error){contributionHistory.markChanged();discoveryMessage=error.message||'Automatic item publishing could not complete. Review this entry manually.';renderDiscoveryCapture();}
     });
     if(capture){
         unsubscribers.push(capture.onStatus(next=>{
@@ -940,13 +976,13 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         }),capture.onObservation(intake));
         const revision=captureStatusRevision;void capture.status().then(async next=>{if(disposed)return;if(revision===captureStatusRevision){captureState=next;renderCapture();}await replay();}).catch(error=>{if(!disposed)warning(error.message);});
     }
-    function loadWiki(){if(wikiLoaded||!wiki)return;wikiLoaded=true;void wiki.blueprints().then(blueprints=>{if(Array.isArray(blueprints.eras)&&blueprints.eras.length){eras=blueprints.eras;const select=$('[name=era]');if(select){const value=select.value;select.innerHTML='<option value="">Confirm era</option>'+eras.map(era=>`<option>${escape(era)}</option>`).join('');select.value=value;}}}).catch(()=>{});unsubscribers.push(wiki.onStatus?.(next=>{account=next;void refreshAccount().catch(()=>{});})||(()=>{}));void refreshAccount().catch(()=>{$('[data-account-status]').textContent='Wiki unavailable; local review remains saved.';});}
+    function loadWiki(){if(wikiLoaded||!wiki)return;wikiLoaded=true;void wiki.blueprints().then(blueprints=>{if(Array.isArray(blueprints.eras)&&blueprints.eras.length){eras=blueprints.eras;const select=$('[name=era]');if(select){const value=select.value;select.innerHTML='<option value="">Confirm era</option>'+eras.map(era=>`<option>${escape(era)}</option>`).join('');select.value=value;}}}).catch(()=>{});unsubscribers.push(wiki.onStatus?.(applyAccountStatus)||(()=>{}));void refreshAccount().catch(()=>{$('[data-account-status]').textContent='Wiki unavailable; local review remains saved.';contributionHistory.setAccount(null);});}
     renderQueue();renderCandidate();renderCharacter();renderCapture();
-    return{beginDiscoveryContribution,cancelDiscoveryContribution,consumeLog(event,context){
+    return{beginDiscoveryContribution,cancelDiscoveryContribution,setDiscoveryNotable,consumeLog(event,context){
         if(disposed||!event||context?.live!==true)return;
         if(['zone','profile'].includes(event.type)){if(spawnArmedId)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+spawnArmedId}).catch(()=>{});spawnArmedId='';}
         const result=queue.consumeLog(event,context);if(result.candidate){if(!selectedId)selectedId=result.candidate.id;renderQueue();if(!root.contains(document.activeElement))renderCandidate();}
-        if(result.prompt){const prompt=result.prompt;spawnArmedId=prompt.candidateId;void globalThis.eyeOfZommDiscovery?.show({id:'spawn-'+prompt.candidateId,kind:'monster',name:prompt.name,zone:prompt.zone,purpose:'spawn-location',hint:'Stand at its spawn point and type /loc now. The next location will be saved automatically.'}).catch(()=>{});notify('Stand at '+prompt.name+'’s spawn and type /loc. Recording is armed.',{duration:15000,actionLabel:'Contribute',onAction:()=>void Promise.resolve().then(()=>{if(!globalThis.eyeOfZommDiscovery?.action)throw Error('Discovery contribution controls are unavailable. Restart Eye of Zomm and try again.');return globalThis.eyeOfZommDiscovery.action('contribute',{id:'spawn-'+prompt.candidateId});}).catch(error=>warning(error.message||'The discovery request could not be opened.'))});}
+        if(result.prompt){const prompt=result.prompt;spawnArmedId=prompt.candidateId;void globalThis.eyeOfZommDiscovery?.show({id:'spawn-'+prompt.candidateId,candidateId:prompt.candidateId,kind:'monster',name:prompt.name,zone:prompt.zone,purpose:'spawn-location',spawnEvidenceId:prompt.spawnEvidenceId,...(typeof prompt.notable==='boolean'?{notable:prompt.notable}:{}),hint:'Stand at its spawn point and type /loc now. The next location will be saved automatically.'}).catch(()=>{});notify('Stand at '+prompt.name+'’s spawn and type /loc. Recording is armed.',{duration:15000,actionLabel:'Contribute',onAction:()=>void Promise.resolve().then(()=>{if(!globalThis.eyeOfZommDiscovery?.action)throw Error('Discovery contribution controls are unavailable. Restart Eye of Zomm and try again.');return globalThis.eyeOfZommDiscovery.action('contribute',{id:'spawn-'+prompt.candidateId});}).catch(error=>warning(error.message||'The discovery request could not be opened.'))});}
         if(result.locationCaptured){let handled=false;try{handled=onDiscoveryLocation(result.locationCaptured,{...context,at:event.at||context?.at})===true;}catch(error){warning(error.message||'The discovery location could not be updated.');}if(!handled)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+result.locationCaptured.candidateId}).catch(()=>{});spawnArmedId='';if(selectedId===result.locationCaptured.candidateId)renderCandidate();notify('Spawn location saved for '+result.locationCaptured.name+'. Review it in Contribute.',{tone:'success'});}
         if(capture&&['loot','kill','zone','profile'].includes(event.type))void capture.observeLog({event,context}).catch(()=>{});
         return result;

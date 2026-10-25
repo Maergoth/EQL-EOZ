@@ -17,7 +17,7 @@ async function run({root,temporary,screenshots}){
     app.setPath('userData',path.join(temporary,'profile'));await app.whenReady();
     const server=http.createServer(async(req,res)=>{try{const name=new URL(req.url,'http://fixture').pathname;
         if(name==='/'){res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><head><link rel="stylesheet" href="/app/styles.css"><link rel="stylesheet" href="/app/capture-workspace.css"></head><body><main style="padding:20px"><h1>Screen reading · synthetic calibration fixture</h1><section id="capture-settings"></section><section id="contribution-workspace" hidden></section><section id="character-workspace" hidden></section></main></body></html>');return;}
-        if(!/^\/app\/[a-z.-]+\.(js|css|json)$/.test(name)){res.writeHead(404).end();return;}
+        if(!/^\/app\/[a-z.-]+\.(js|css|json)$/.test(name)&&!['/app/vendor/item-scaling-core.js','/app/vendor/item-scaling-rules.js'].includes(name)){res.writeHead(404).end();return;}
         res.setHeader('Content-Type',name.endsWith('.css')?'text/css':'text/javascript');res.end(await fs.readFile(path.join(root,name)));
     }catch{res.writeHead(404).end();}});
     await new Promise(done=>server.listen(0,'127.0.0.1',done));const origin=`http://127.0.0.1:${server.address().port}`;

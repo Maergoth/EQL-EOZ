@@ -52,7 +52,7 @@ const base={fields:{},sources:[],relations:[],evidence:[],status:'needs-review'}
     {...base,id:'case-false-positive',kind:'npc',name:'A Known Guardian',title:'A Known Guardian',zone:'Forest Glade'},
     {...base,id:'edited-socket',kind:'item',name:'Known Rune (Exaltation)',title:'Known Rune (Exaltation)',fields:{notes:{value:'Keep authored work',edited:true}}},
     {...base,id:'partial-socket',kind:'item',name:'Known Rune (Exaltation)',title:'Known Rune (Exaltation)',status:'partial',planId:'saved-review'},
-    {...base,id:'real-source',kind:'item',name:'Known Blade',title:'Known Blade',zone:'Forest Glade',relations:[{type:'drop-source',name:'A new guardian',zone:'Forest Glade',instance:'normal',evidence:'explicit-corpse'}]}
+    {...base,id:'real-source',manual:true,kind:'item',name:'Known Blade',title:'Known Blade',zone:'Forest Glade',relations:[{type:'drop-source',name:'A new guardian',zone:'Forest Glade',instance:'normal',evidence:'explicit-corpse'}]}
 ];
 const queueMemory=new Map([[CONTRIBUTION_QUEUE_KEY,JSON.stringify({schemaVersion:1,candidates:legacy})]]),queueStorage={getItem:key=>queueMemory.get(key)||null,setItem:(key,value)=>queueMemory.set(key,value)};
 const queue=createContributionQueue({storage:queueStorage,getPack:()=>pack,now:()=>Date.UTC(2026,9,24,16)});

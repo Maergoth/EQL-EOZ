@@ -15,3 +15,20 @@ assert(queue.recordAutomaticSourceReceipt(source));assert.equal(queue.snapshot()
 queue=createContributionQueue({storage,getPack:()=>pack});assert(automaticSourceDraftComplete(queue.snapshot()[0],queue.sourceReceiptKeys(),{pack}),'Canonical source receipts survive reload');
 add('Other Mob');assert.equal(automaticSourceDraftComplete(queue.snapshot()[0],queue.sourceReceiptKeys(),{pack}),false,'New facts restore the source-only draft after reload');assert.notEqual(queue.suppression('item','Known Blade').reason,'submitted','A receipt does not globally mark the item submitted');
 console.log('Automatic source receipts: granular persistence, future sources and protected drafts passed.');
+{
+    const saved=new Map(),storage={getItem:key=>saved.get(key)||null,setItem:(key,value)=>saved.set(key,value)};
+    let queue=createContributionQueue({storage,getPack:()=>pack});const draft=queue.add({kind:'item',name:'Known Blade',zone:'Known Zone',instance:'normal',relations:[{type:'drop-source',name:'Known Mob',zone:'Known Zone',instance:'normal',evidence:'explicit-corpse',item:'Known Blade'}]});
+    assert(draft);const decision={...source,schemaVersion:1,status:'quiet',decision:'covered',reason:'live-authored-loot',datasetVersion:pack.meta.version};
+    assert.equal(queue.recordAutomaticSourceDecision({...decision,decision:'arbitrary'}),false);assert.equal(queue.recordAutomaticSourceDecision({...decision,instance:'unknown'}),false);
+    assert(queue.recordAutomaticSourceDecision(decision));assert.deepEqual(queue.sourceReceiptKeys(),[],'Covered decisions never become Published receipts');assert(automaticSourceDraftComplete(queue.snapshot()[0],queue.sourceDecisionKeys(),{pack}));
+    queue=createContributionQueue({storage,getPack:()=>pack});assert(automaticSourceDraftComplete(queue.snapshot()[0],queue.sourceDecisionKeys(),{pack}),'Quiet decisions persist independently from Published history');
+    pack.meta.version='refreshed-synthetic';assert.equal(queue.sourceDecisionKeys().length,0,'A refreshed dataset invalidates old quiet policy/coverage decisions');pack.meta.version='synthetic';
+    const original=queue.snapshot()[0];for(const patch of [{manual:true},{planId:'partial-plan',status:'partial'},{fields:{knownLoot:{value:['Known Blade'],edited:true}}},{matchesReviewed:true},{spawnRequest:{status:'captured'}},{reasons:['missing-source','missing-population']}])assert.equal(automaticSourceDraftComplete({...original,...patch},queue.sourceDecisionKeys(),{pack}),false,'A quiet verdict preserves protected or independently useful work');
+    const npc={...candidate,kind:'npc',name:'Known Mob',title:'Known Mob',zone:'Known Zone',instance:'normal',fields:{knownLoot:{value:['Known Blade'],confirmed:false}},sources:[]};
+    const zone={...candidate,kind:'zone',name:'Known Zone',title:'Known Zone',zone:'Known Zone',instance:'normal',fields:{knownLoot:{value:['Known Blade'],confirmed:false}},sources:[],relations:[{type:'drop-source',name:'Known Mob',item:'Known Blade',zone:'Known Zone',instance:'normal',evidence:'explicit-corpse'}]};
+    for(const legacy of [npc,zone])assert(automaticSourceDraftComplete(legacy,queue.sourceDecisionKeys(),{pack}),'Untouched legacy source-only projections reconcile the exact same fact');
+    assert(!automaticSourceDraftComplete({...zone,reasons:['missing-source','missing-population']},queue.sourceDecisionKeys(),{pack}));
+    assert(!automaticSourceDraftComplete({...original,sources:[{...original.sources[0],instance:'raid'}]},queue.sourceDecisionKeys(),{pack}),'Quiet decisions cannot suppress a different instance');
+    queue.add({kind:'item',name:'Known Blade',zone:'Known Zone',instance:'normal',relations:[{type:'drop-source',name:'Other Mob',zone:'Known Zone',instance:'normal',evidence:'explicit-corpse',item:'Known Blade'}]});assert(!automaticSourceDraftComplete(queue.snapshot()[0],queue.sourceDecisionKeys(),{pack}),'A genuinely different source remains reviewable');
+}
+console.log('Quiet source decisions: bounded relation-only ledger, no publication receipt, reload, legacy projections and preserved manual/partial/population work passed.');

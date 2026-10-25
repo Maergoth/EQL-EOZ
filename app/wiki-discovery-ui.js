@@ -1,4 +1,4 @@
-// Shared by the main trigger editor and its native Timers surface. This is a
+// Shared by the dedicated discovery popup and spawn prompt. This is a
 // presentation queue only; catalog checks and clipboard capture stay in owner IPC.
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const requestNumber = value => typeof value === 'string' && /^capture-[1-9]\d{0,14}$/.test(value) ? Number(value.slice(8)) : 0;
@@ -34,7 +34,7 @@ export function createDiscoveryNoticeQueue({now = Date.now, durationMs = 15000, 
         entry.error = state === 'retry';
         if (state === 'captured') {
             entry.holds.delete('contribution');
-            if (changed) {entry.remainingMs = 900; entry.startedAt = entry.visible ? now() : null;}
+            if (changed) {entry.remainingMs = durationMs; entry.startedAt = entry.visible ? now() : null;}
         } else entry.holds.add('contribution');
     }
     return {

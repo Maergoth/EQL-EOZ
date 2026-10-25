@@ -15,9 +15,9 @@ assert(!JSON.stringify([kill,loot]).includes('Private'));assert(!JSON.stringify(
 for(const changes of [{live:false},{at:now-11000},{at:now+3000},{cursor:undefined}])assert.equal(collectDropObservation({type:'kill',victim:'Known Guardian'},{...context(),...changes},{now}),null);
 for(const name of ['Private Player','YOU','Jtik'])assert.equal(collectDropObservation({type:'kill',victim:name},context(),{now}),null);
 assert(collectDropObservation({type:'kill',victim:'Gtik'},context(),{now}),'A positive wiki NPC beats generated-name suppression');
-for(const name of ["Private Player's pet",'A Private Player’s PET!',"Private Player's pet's corpse"]){
+for(const name of ["Private Player's pet",'A Private Player’s PET!',"Private Player's pet's corpse",'A loathling lich pet',"a synthetic lich's pet",'A loathling lich pet’s corpse']){
     const knownPetContext={...context(),pack:{...pack,npcs:[...pack.npcs,{name}],wikiEntities:{...pack.wikiEntities,npcs:[...pack.wikiEntities.npcs,name]}}};
-    assert.equal(collectDropObservation({type:'kill',victim:name},knownPetContext,{now}),null,'Explicit owned pet kills stay excluded even with cached membership');
+    assert.equal(collectDropObservation({type:'kill',victim:name},knownPetContext,{now}),null,'Explicit pet kills stay excluded even with cached membership');
     const petLoot=collectDropObservation({type:'loot',item:'Known Ring',source:name,sourceEvidence:{kind:'explicit-corpse'}},knownPetContext,{now});
     assert.equal(petLoot.npc,'');assert.equal(petLoot.sourceKind,'unknown');assert(!JSON.stringify(petLoot).includes('Private'),'Pet owners are never uploaded as NPC source names');
 }

@@ -25,6 +25,10 @@ for(const name of ['Mistmoore Castle','Plane of Fear','hateplaneb','Plane of Hat
 const files=[{path:'Maps/Brewall/mistmoore.txt',size:12},{path:'Maps/mistmoore_1.txt',size:12},{path:'Maps/mistmoore.txt',size:12},{path:'Maps/mistmoore_2.txt',size:12},{path:'Maps/mistmooreb.txt',size:12}];
 assert.deepEqual(selectMapFamily(files,zone).layers.map(file=>file.path),['Maps/mistmoore.txt','Maps/mistmoore_1.txt','Maps/mistmoore_2.txt']);
 assert.equal(selectMapFamily(files,{name:'Unknown'}),null);
+const roFiles=[{path:'Maps/nro.txt',size:12},{path:'Maps/Brewall/northro.txt',size:12}],roZone={name:'North Ro',viewerId:'nro',aliases:['nro','northro']};
+assert.equal(selectMapFamily(roFiles,roZone,'northro').layers[0].path,'Maps/Brewall/northro.txt','A verified logged archive wins before the default map folder');
+assert.equal(selectMapFamily(roFiles,roZone).layers[0].path,'Maps/nro.txt','Display-only ambiguous zones use their reviewed primary map identity');
+assert.equal(selectMapFamily(roFiles,roZone,'unknownro'),null,'A missing requested archive never silently loads a different historical map');
 const geometry='L -20, -10, 0, -40, -30, 4, 0, 0, 0\nP -20, -10, 0, 255, 0, 0, 2, Synthetic_Keeper\nL bad, 2,3,4,5,6,0,0,0\n';
 const parsed=parseClientMap(geometry,2);
 assert.deepEqual(parsed.lines,[[-20,-10,0,-40,-30,4,0,0,0,2]]);

@@ -7,7 +7,9 @@ No player/client requests are involved in this process, and the exporter itself 
 ## Files
 
 EQLWiki's deployed producer lives in its application repository at
-`maintenance/BuildEyeOfZommPack.php` and `maintenance/zone-catalog.json`.
+`maintenance/BuildEyeOfZommPack.php`, `maintenance/ItemLootSourceCounts.php`,
+`maintenance/zone-catalog.json` and
+`extensions/DynamicZoneList/NpcLootWikitext.php`.
 The files here mirror that contract. Review matching producer changes in both
 repositories; merging an EoZ PR alone does not install a wiki exporter or
 publish a new dataset. EQLWiki contribution PRs target `staging`, and promotion
@@ -16,7 +18,14 @@ of those reviewed commits to production is a separate owner action.
 Copy to MediaWiki `maintenance/`:
 
 - `BuildEyeOfZommPack.php`
+- `ItemLootSourceCounts.php`
 - `zone-catalog.json`
+
+Copy the matching `NpcLootWikitext.php` to
+`extensions/DynamicZoneList/NpcLootWikitext.php`. These PHP files are exact
+source mirrors; keep their dependency paths and versions together. The exporter
+check loads the mirrored parser and collector with synthetic data, without a
+MediaWiki installation or database.
 
 Copy to `$HOME/bin/` and make executable:
 
@@ -136,6 +145,13 @@ client also understands exclusions in legacy packs while that rebuild is pending
 Recognized explicit NPC template zones take precedence and retain every listed
 zone. Categories and article-title suffixes are fallbacks; newly recognized
 categories must not override a field or remove a second spawn zone.
+The optional `zones[].viewerId` records a reviewed primary archive for the four
+catalog display labels shared by multiple supported client archives. A verified
+logged short name wins, including an alternate supported ID. Unknown/conflicting
+short names and missing requested archives must not fall back to another map.
+The exact client filename aliases `oceanoftears` and `newsebexp` join their
+existing canonical zones; they do not create new zone records. See the
+[map identity contract and full-alias regression](../docs/MAP_ZONE_ALIASES.md).
 
 Drop-source names use wiki-link destinations rather than display labels or
 revamp notes. The producer unwraps `VeliousGray` presentation, removes `Era`
@@ -169,6 +185,41 @@ comments, namespace links and prose do not establish additional drops.
 unresolved candidate titles, enriched items and added unique source variants.
 These additions require producer deployment and a new published dataset.
 
+`meta.lootSourceCountsVersion: 1` marks the additive global loot-count contract.
+The top-level `lootSourceCounts` map is keyed by canonical item title, including
+statless materials and item redlinks documented by public NPC loot. Each entry
+contains `lootSourceCount`, `lootSourceCountComplete` and `lootSourceNpcs`;
+rich item records mirror those fields. Counts union direct item `dropsfrom`
+with authored NPC `known_loot`/`common_loot` across every zone and instance.
+Public redirects and page IDs deduplicate monsters; NPC records also carry
+their public redirect aliases. Explicit pet labels and the exact normalized
+`Ground Spawn`/`Ground Spawns` source labels are excluded from monster counts.
+
+Only anonymous-readable current public source contributes. Bounded parsing,
+redirect resolution or scans that fail or overflow mark counts incomplete and
+retain the proven lower bound. Six known monsters prove Common even then;
+fewer than six prove Unique only with complete metadata. Clients classify from
+the cached GitHub pack, without live count requests. Old packs remain readable
+and lack proof of a complete count. Deploy the matching wiki source and rebuild
+the dataset to provide this metadata; no host-wrapper installation is needed.
+
+`meta.lootSetsVersion: 1` marks the additive `lootSets` map. A canonical public
+set title maps to `{items, complete}` from literal positional members of public
+top-level `Gear Set` cards, with canonical nested membership flattened and
+bounded. An NPC's authored set reference supplies each member's source count
+once, alongside direct item references; the set title does not become an item.
+Clients may treat a complete listed set as sufficient coverage of its members.
+Incomplete membership, cycles, hidden pages and expansion limits cannot prove
+that an absent member is covered. Membership never comes from naming patterns.
+
+Global count parsing uses the final repeated exact static NPC parameter, and
+recognizes reviewed metadata-only badges without inventing item references.
+Unknown wrappers remain incomplete. Zero-argument legacy item templates require
+public current-source proof of a literal unconditional item hover; template
+proof keys preserve case after the first letter. Ordinary wiki renderer/helper
+calls retain strict duplicate handling. These changes require matching producer,
+collector and parser sources, followed by a newly published filtered dataset.
+
 The October 21, 2026 owner-approved rollout completed staging and production
 deployment via EQLWiki PRs #35/#36 and the explicit-zone precedence follow-up
 #37/#38, then rebuilt and published final manifest
@@ -197,3 +248,19 @@ failure. The gzip is downloaded only when the manifest version changes or a
 matching local copy is invalid. A verified pack replaces the cache atomically.
 Settings distinguishes check/success/download times from the dataset's own
 generation time. Offline or invalid downloads retain the last valid pack.
+
+An exact literal NPC `zone = Various` exports `zoneScope: various` on its scoped
+record. Concrete category-derived zone rows remain available for map and
+DynamicZoneList membership; the marker does not invent coordinates or cross
+separate normal/raid templates.
+NPC `categoryZones` independently retains concrete zone-category membership for
+normal DynamicZoneList presence checks. It does not replace an explicit spawn
+field or provide raid-instance membership or coordinates.
+The additive version-1 `wikiContributionPolicies` map stores public page opt-outs
+before rich stats are parsed; rich NPC/item/zone records mirror them as
+`automaticContributions`. Markers contain only the schema version, blocked flag,
+`various` reason and public revision ID. Various is a case-insensitive whole word
+in unexpanded authored source after underscore normalization and HTML comment
+removal. Literal nowiki/pre words count. Cached markers stop automatic work;
+existing facts remain usable and absence of a marker does not replace the native
+last check of already-fetched current source before an automatic write.

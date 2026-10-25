@@ -38,7 +38,7 @@ const authenticated=plainParser.parse(line(`Syntheticplayer tells General:1, '${
 
 let pack={meta:{wikiEntitiesComplete:true},wikiEntities:{items:['Known Sword'],npcs:[],titles:['Known Sword','Plain Existing Page']},items:[{name:'Known Sword',wikiTitle:'Known Sword',aliases:['Known Alias']}],npcs:[],zones:[]};
 const data=new Map(),storage={getItem:key=>data.get(key)??null,setItem:(key,value)=>data.set(key,value)};
-const options={storage,getPack:()=>pack,now:()=>now},queue=createContributionQueue(options),prompts=[];
+const options={storage,getPack:()=>pack,now:()=>now,verifyItem:()=>({status:'missing'})},queue=createContributionQueue(options),prompts=[];
 const discovery=createWikiDiscovery({...options,getSuppression:(...args)=>queue.suppression(...args),onMissing:prompt=>prompts.push(prompt)});
 const context=()=>({live:true,at:now,cursor:++cursor,zone:'Current Raid Zone',instance:'raid',logId:'C:/Private/eqlog_Player.txt'});
 const linkedContext=context();

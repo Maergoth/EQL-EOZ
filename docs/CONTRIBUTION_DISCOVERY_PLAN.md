@@ -1,4 +1,16 @@
-# Contribution discovery: current 0.9.10 contract
+# Contribution discovery
+
+## Current item notification contract
+
+Item suggestions use the [local-first existence gate](ITEM_DISCOVERY_EXISTENCE.md)
+and a dedicated native popup at the screen's bottom right, independent of
+Cooldowns/Timers. Cached item, alias or generic public-title presence needs no
+live request. Only a cache miss permits one bounded anonymous exact-title query
+with redirect resolution before a missing-item notice. Errors remain unverified.
+This exception does not add live loot-count classification or background wiki
+polling. The historical release records below describe their earlier behavior.
+
+## 0.9.10 contract
 
 The [chat/capture follow-up](CHAT_CAPTURE_FOLLOWUP_PLAN.md) supersedes the
 encoded-only chat boundary below: tier-decorated plain chat can produce a
@@ -12,7 +24,7 @@ Automatic monster discovery requires a fresh kill/death event or an explicit nam
 
 A captured trigger line is bounded and escaped for local review. It never enters generated article text or hourly observation telemetry. Old captures cannot recover a discarded line and explicitly report unavailable evidence. Exact canonical matches say **Matched existing page**; ambiguous/fuzzy choices remain distinct. Proposed additions show their destination page and compare already-recorded cached associations before offering a gap patch. The final live revision-guarded diff owns exact edits.
 
-A missing encoded live-chat item link may offer Contribute without inventing loot/source evidence. After explicit Contribute, the notice stays pinned until fresh matching live item-examine OCR from the request's current source/session/generation is saved. Monster Contribute re-arms a persistent next-/loc boundary; automatic kill arming retains the normal timeout. Completion flashes green then closes; manual dismissal cancels pending work. Source/zone changes, stale tokens and unrelated/manual/replayed observations cannot complete it. Character capture is preserved and reader cleanup uses native expected-session/source guards.
+A missing encoded live-chat item link may offer Contribute without inventing loot/source evidence. After explicit Contribute, the notice stays pinned until fresh matching live item-examine OCR from the request's current source/session/generation is saved. Monster Contribute re-arms a persistent next-/loc boundary; automatic kill arming retains the normal timeout. Completion stays green for 15 seconds of visible time then closes; manual dismissal cancels pending work. Source/zone changes, stale tokens and unrelated/manual/replayed observations cannot complete it. Character capture is preserved and reader cleanup uses native expected-session/source guards.
 
 Current modules: parser.js, contribution-evidence.js, contribution-queue.js, wiki-discovery.js, discovery-contribution-flow.js, capture-workspace.js and native capture/discovery hosts. Source and isolated Chromium/native receipts are in the release plan; they are not installed-build, physical-game or production-wiki acceptance.
 

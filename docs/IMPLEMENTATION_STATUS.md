@@ -1,5 +1,28 @@
 # Eye of Zomm implementation status
 
+0.9.14 adds native contribution History receipts with account filtering and
+bounded private storage inside a unified Contribute section. Shared account
+controls, embedded tabs, a compact reader and one latest-result summary preserve
+discovery edits and keep complete receipts in History. It also adds explicit
+owner-labelled pet exclusion and global
+Common/Unique placement from the trusted cached wiki dataset without live count
+queries. Shared item rules revision 2 floors large positive primary stats and
+expands Void qualifiers to AC, pools and regeneration, and uses that same engine
+for reverse recovery; older recovery reviews invalidate.
+Negative-penalty rounding remains unchanged. Missing-wiki cards use a dedicated
+lower-right native window with no Timers dependency or automatic capture;
+cache-first/public existence checks protect item admission. See
+[the release record](RELEASE_0914_PLAN.md) for integration and
+publication gates; synthetic fixtures do not certify installed profiles or
+production wiki edits.
+
+Items has a persisted Any override before Auto without changing profile classes.
+Complete documented sets cover their authored loot members within the selected
+instance. Rich item previews share a 350 ms pointer delay; keyboard access stays
+immediate. Intel avoids row geometry and replacement for unrelated heartbeats
+and distance-only updates. See the release record for the synthetic/native
+evidence and the remaining physical acceptance limits.
+
 0.9.13 corrects the canonical category to Tier 0 Verification Needed. The
 category-only hotfix preserves the existing contribution and formula flows.
 

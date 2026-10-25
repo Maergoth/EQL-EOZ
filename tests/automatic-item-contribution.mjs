@@ -13,3 +13,7 @@ for(const cancel of [false,true]){const gate=deferred();f=fixture({gate});const 
 f=fixture({defer:true});assert.equal(await f.attempt(),false);assert.equal(f.calls.submit.length,0);assert.equal(f.calls.deferred.length,1);assert.equal(await f.attempt(),false,'Duplicate/incomplete checks do not run every frame');
 f=fixture({fail:true});assert.equal(await f.attempt(),false);assert.equal(f.calls.submit.length,0);assert.equal(f.calls.errors.length,1);assert.deepEqual(f.calls.busy,[true,false]);
 console.log('Automatic item controller: native two-phase handoff, cancellation, deferral and no repeat passed.');
+{
+    let notices=0;const flow=createAutomaticItemContribution({prepare:async()=>({ok:true,plan:{id:'opted-out',reviewDigest:'native-proof'}}),submit:async()=>({ok:false,skipped:true,plan:{id:'opted-out',status:'opted-out',automaticOptOut:{reason:'authored-various'}}}),onDeferred:()=>notices++,onError:()=>notices++});
+    assert.equal(await flow.attempt({candidate:{id:'opted-out-item'},observation,isCurrent:()=>true}),false);assert.equal(notices,0,'An intentional automatic opt-out creates no attention notification');
+}

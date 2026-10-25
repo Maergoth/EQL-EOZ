@@ -13,12 +13,19 @@ const gameZoneAliases = new Map(Object.entries({
     'the plane of sky':'Plane of Sky',
     'plane of sky':'Plane of Sky',
     'new sebilis expedition':'New Sebilis Expedition',
-    "nagafen's lair":"Nagafen's Lair (Sol B)"
+    "nagafen's lair":"Nagafen's Lair (Sol B)",
+    'kerraridge':'Kerra Island',
+    'oceanoftears':'Ocean of Tears',
+    'newsebexp':'New Sebilis Expedition'
 }));
 
 function cleanZoneName(value) {
     return String(value || '').replace(/\s+\d+\s+\([^)]*\)\s*$/, '').replace(/\s+/g, ' ').trim();
 }
+// Exact archive equivalences already present in the pinned viewer's client
+// file alias table. Prefer the requested ID whenever its archive is present.
+const archiveGroups=[['kerra','kerraridge'],['sky','airplane'],['oot','oceanoftears'],['newsebilis','newsebexp'],['westkarana','qey2hh1'],['northro','nro'],['southro','sro']];
+export function viewerArchiveIds(value){const id=cleanZoneName(value).toLowerCase(),group=archiveGroups.find(group=>group.includes(id));return id?[id,...(group||[]).filter(other=>other!==id)]:[];}
 
 export function viewerZoneName(value) {
     const cleaned = cleanZoneName(value);
@@ -39,4 +46,20 @@ export function resolveZoneRecord(zones, value) {
         return name && (name.includes(original) || original.includes(name));
     });
     return partial.length === 1 ? partial[0] : null;
+}
+
+// A /who short name identifies the actual client archive. Retain it instead
+// of replacing it with a display label shared by multiple historical maps.
+// The small optional viewerId is an explicit catalog preference for display-
+// only zone lines; it never overrides a verified alternate short name.
+export function viewerZoneTarget(zones,value,shortName='') {
+    const record=resolveZoneRecord(zones,value);
+    if(!record)return shortName?'':viewerZoneName(value);
+    const aliases=(record.aliases||[]).map(alias=>cleanZoneName(alias).toLowerCase());
+    const verified=id=>/^[a-z0-9][a-z0-9_]*$/.test(id)&&viewerArchiveIds(id).some(alias=>aliases.includes(alias)&&resolveZoneRecord(zones,alias)===record);
+    if(shortName){const id=cleanZoneName(shortName).toLowerCase();return verified(id)?id:'';}
+    const observed=cleanZoneName(value).toLowerCase();if(verified(observed))return observed;
+    const preferred=String(record.viewerId||'').toLowerCase();if(verified(preferred))return preferred;
+    const group=archiveGroups.find(group=>group.some(id=>aliases.includes(id)));if(group&&verified(group[0]))return group[0];
+    return record.viewerName||record.name||viewerZoneName(value);
 }

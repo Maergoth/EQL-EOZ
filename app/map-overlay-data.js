@@ -1,13 +1,16 @@
 // Ordinary client map text only. The main renderer owns file access; native
 // overlays receive geometry through the authenticated lazy data broker.
+import {viewerArchiveIds} from './zone-identity.js';
 const key = value => String(value || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
 export function selectMapFamily(files, zone, shortName = '') {
-    const aliases = [...new Set([shortName, ...(zone?.aliases || []), zone?.viewerName, zone?.name].map(key).filter(Boolean))];
+    const requested=viewerArchiveIds(shortName||zone?.viewerId).map(key),aliases=[...new Set([...requested,...(zone?.aliases||[]),zone?.viewerName,zone?.name].map(key).filter(Boolean))];
+    if(shortName&&zone?.aliases?.length&&!requested.some(id=>zone.aliases.some(alias=>key(alias)===id)))return null;
     const families = new Map();
     for (const file of files || []) {
         const path = String(file.path || '').replace(/\\/g, '/');
         const match = path.match(/^(.*\/)([^/]+?)(?:_([123]))?\.txt$/i);
         if (!match || !/(?:^|\/)maps(?:\/|$)/i.test(match[1])) continue;
+        if(requested.length&&!requested.includes(key(match[2])))continue;
         const priority = aliases.indexOf(key(match[2]));
         if (priority < 0) continue;
         const directory = match[1].replace(/\/$/, '');
@@ -16,7 +19,7 @@ export function selectMapFamily(files, zone, shortName = '') {
         const family = families.get(id);
         family.layers.push({ ...file, layer:Number(match[3] || 0), path }); family.bytes += Number(file.size) || 0;
     }
-    const ordered = [...families.values()].sort((a,b) => Number(/^maps$/i.test(b.directory)) - Number(/^maps$/i.test(a.directory)) ||
+    const ordered = [...families.values()].sort((a,b) => (requested.length?a.priority-b.priority:0)||Number(/^maps$/i.test(b.directory)) - Number(/^maps$/i.test(a.directory)) ||
         Number(b.layers.some(file => file.layer === 0)) - Number(a.layers.some(file => file.layer === 0)) || a.priority-b.priority || a.directory.localeCompare(b.directory));
     if (!ordered.length) return null;
     const family = ordered[0]; family.layers.sort((a,b) => a.layer-b.layer);

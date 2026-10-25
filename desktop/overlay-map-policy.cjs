@@ -23,6 +23,7 @@ function allowMapRequest(details,origin){
         if(target.pathname==='/api/eq-files')return method==='GET'&&!target.search;
         if(target.pathname==='/api/eq-file')return method==='GET'&&[...target.searchParams.keys()].length===2&&target.searchParams.has('path')&&target.searchParams.get('surface')==='overlay-map'&&safeMapFile(target.searchParams.get('path'));
         if(target.pathname.startsWith('/api/')||target.pathname.startsWith('/data/'))return false;
+        if(['/vendor/item-scaling-core.js','/vendor/item-scaling-rules.js'].includes(target.pathname))return details.resourceType==='script';
         return /^\/[a-z0-9_.-]+\.(?:js|css)$/i.test(target.pathname)||/^\/zoneviewer\/[a-z0-9_./-]+\.(?:js|css|wasm|json|png|gif|jpg|jpeg|webp|svg|woff2?)$/i.test(target.pathname);
     }catch{return false;}
 }

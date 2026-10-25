@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { EQLogParser } from '../app/parser.js';
 import { formatWorldLocationForGameMap, formatWorldLocationForPlayer } from '../app/coordinate-system.js';
-import { resolveZoneRecord, viewerZoneName } from '../app/zone-identity.js';
+import { resolveZoneRecord, viewerZoneName,viewerZoneTarget } from '../app/zone-identity.js';
 
 const source = readFileSync(new URL('../app/app.js', import.meta.url), 'utf8');
 const wrapper = readFileSync(new URL('../app/zoneviewer/viewer.html', import.meta.url), 'utf8');
@@ -53,12 +53,12 @@ function harness() {
     };
     const operations = [];
     const context = vm.createContext({
-        parser, pack:{ zones }, normalizedZoneKeys:new Map(), resolveZoneRecord, formatWorldLocationForPlayer,
+        parser, pack:{ zones }, normalizedZoneKeys:new Map(), resolveZoneRecord,viewerZoneTarget, formatWorldLocationForPlayer,
         settings:{ mapMode:'top' }, bridgeInfo:{ eqRootExists:true, logExists:true,eqRootPath:'synthetic-root-a',logPath:'eqlog_Synthetic_example.txt' },mapDataRevision:0,
         viewerFolderStatus:'ready', viewerZoneState:{ zone:'', status:'idle', message:'' },
         partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,latestLocationSync:null,
         overlaySession:{ inputs:[], consume(event, context) { this.inputs.push({ event, context }); }, flush() {} },
-        wikiDiscovery:{consume() {}},
+        wikiDiscovery:{consume() {}},cancelDiscoveryChecks(){},
         discoveryContributionFlow:{cancelled:0,cancelWhere(){this.cancelled++;return Promise.resolve();}},
         observationPreference:false,sessionDraining:false,
         observedLogCursor:0,captureWorkspace:{cancelled:0,consumeLog() {},cancelSource(){this.cancelled++;}},

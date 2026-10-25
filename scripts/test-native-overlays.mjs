@@ -165,7 +165,7 @@ try {
             await cycleHeader('unlocked');
             await until(() => Object.keys(panels()).length === 4, 'four native overlays');
             assert.deepEqual(Object.keys(panels()).sort(),['intel','map','parse','timers']);
-            for (const window of Object.values(panels())) await until(async () => execute(window, () => Boolean(document.querySelector('#panel-content')?.children.length)), 'overlay renderer');
+            for (const [id,window] of Object.entries(panels())) await until(async () => execute(window, () => Boolean(document.querySelector('#panel-content')?.children.length)), id+' overlay renderer');
             const cycleFocusBefore=[...nativeCalls.values()].flat().filter(call=>call[0]==='focus').length;
             await cycleHeader('locked');await cycleHeader('hidden');await cycleHeader('unlocked');
             for(const window of Object.values(panels()))assert.equal(window.isResizable(),false,'transparent windows use guarded custom edges instead of unsupported native borders');
@@ -400,10 +400,10 @@ try {
             intelWindow.setBounds(intelOriginalBounds);await action('intel','font-scale',1);
             const tooltipHover=await execute(intelWindow,async()=>{
                 const list=document.querySelector('#intel-body');list.scrollTop=0;document.activeElement?.blur();
-                const tooltip=document.querySelector('#intel-item-tooltip'),picture=list.querySelector('.item-icon-button'),name=picture.closest('.item-heading').querySelector('.item-name');
-                const hover=target=>{const rect=target.getBoundingClientRect();target.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse',clientX:rect.left+2,clientY:rect.top+2}));const bounds=tooltip.getBoundingClientRect();return{visible:!tooltip.hidden,text:tooltip.textContent,fits:bounds.left>=0&&bounds.right<=innerWidth&&bounds.top>=0&&bounds.bottom<=innerHeight};};
-                const icon=hover(picture);picture.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:name}));const text=hover(name);
-                name.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:list}));tooltip.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,relatedTarget:list}));
+                const tooltip=document.querySelector('#intel-item-tooltip');
+                const hover=async selector=>{for(let attempt=0;attempt<4;attempt++){const target=list.querySelector(selector),rect=target.getBoundingClientRect();target.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse',clientX:rect.left+2,clientY:rect.top+2}));const delayed=tooltip.hidden;await new Promise(resolve=>setTimeout(resolve,380));if(!target.isConnected)continue;const bounds=tooltip.getBoundingClientRect();return{delayed,visible:!tooltip.hidden,text:tooltip.textContent,fits:bounds.left>=0&&bounds.right<=innerWidth&&bounds.top>=0&&bounds.bottom<=innerHeight};}throw Error('Intel source kept changing while holding a tooltip fixture');};
+                const icon=await hover('.item-icon-button');list.querySelector('.item-icon-button').dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:list.querySelector('.item-name')}));const text=await hover('.item-name');
+                list.querySelector('.item-name').dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:list}));tooltip.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,relatedTarget:list}));
                 await new Promise(resolve=>setTimeout(resolve,220));const crossedGap=!tooltip.hidden;
                 const overflow=getComputedStyle(tooltip).overflowY,scrollable=tooltip.scrollHeight>tooltip.clientHeight;
                 tooltip.scrollTop=tooltip.scrollHeight;const scrolled=tooltip.scrollTop>0,note=tooltip.querySelector('[data-item-detail="Notes"]').getBoundingClientRect(),box=tooltip.getBoundingClientRect(),endVisible=note.bottom<=box.bottom+1;
@@ -414,11 +414,12 @@ try {
                 keyboardName.focus();const keyboard=!tooltip.hidden&&document.activeElement===keyboardName;tooltip.scrollTop=0;keyboardName.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,key:'PageDown',cancelable:true}));const keyboardScrolled=tooltip.scrollTop>0;
                 keyboardName.blur();await new Promise(resolve=>setTimeout(resolve,220));return{icon,text,crossedGap,overflow,scrollable,scrolled,endVisible,leftHidden,keyboard,keyboardScrolled,blurHidden:tooltip.hidden};
             });
-            assert(tooltipHover.icon.visible&&tooltipHover.text.visible&&tooltipHover.icon.fits&&tooltipHover.text.fits&&tooltipHover.keyboard&&tooltipHover.leftHidden&&tooltipHover.blurHidden,`Both item pictures/names reveal bounded stat blocks and dismiss on exit: ${JSON.stringify(tooltipHover)}`);
+            assert(tooltipHover.icon.delayed&&tooltipHover.text.delayed&&tooltipHover.icon.visible&&tooltipHover.text.visible&&tooltipHover.icon.fits&&tooltipHover.text.fits&&tooltipHover.keyboard&&tooltipHover.leftHidden&&tooltipHover.blurHidden,`Both item pictures/names wait for held hover, reveal bounded stat blocks and dismiss on exit: ${JSON.stringify(tooltipHover)}`);
             assert(tooltipHover.crossedGap&&tooltipHover.overflow==='auto'&&tooltipHover.scrollable&&tooltipHover.scrolled&&tooltipHover.endVisible&&tooltipHover.keyboardScrolled,`Tall real stat-block markup remains fully readable by mouse and keyboard inside the native viewport: ${JSON.stringify(tooltipHover)}`);
             assert.match(tooltipHover.text.text,/\+7[\s\S]*HP/,'Tier-adjusted wiki Itemboxes show the selected tier');
             assert.equal(await execute(intelWindow,()=>Boolean(document.querySelector('#intel-item-tooltip .wiki-itembox-value.is-scaled'))),true,'Tier-adjusted wiki values keep their green highlight');
             await execute(intelWindow,()=>document.querySelector('.item-name').dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse',clientX:70,clientY:150})));
+            await until(()=>execute(intelWindow,()=>!document.querySelector('#intel-item-tooltip').hidden),'Held hover opens before changing the item tier');
             await action('intel','session:item-tier',{tier:0});
             await until(async()=>execute(intelWindow,()=>{const tooltip=document.querySelector('#intel-item-tooltip');return !tooltip.hidden&&Boolean(tooltip.querySelector('.wiki-itembox-title strong'))&&!/\s\+\d+$/.test(tooltip.querySelector('.wiki-itembox-title strong').textContent)&&!tooltip.querySelector('.wiki-itembox-value.is-scaled');}),'An already hovered item stat block updates to the latest tier without a new hover');
             await screenshot(intelWindow,'intel-item-stats');
@@ -714,7 +715,8 @@ try {
             await until(async()=>(await state()).snapshot.session.parse.totalRuneCapacity===501,'Main item hover survives a real log-driven redraw');
             assert.equal(await execute(owner,()=>window.__retainedMainItem.isConnected&&!document.querySelector('#item-tooltip').hidden),true,'Live combat updates keep unchanged item name/icon tooltips attached');
             await execute(owner,()=>{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));const target=document.querySelector('#item-list h3[data-item-title]'),rect=target.getBoundingClientRect();target.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:rect.left+2,clientY:rect.top+2}));});
-            assert.equal(await execute(owner,()=>document.querySelector('#item-tooltip').hidden),false,'Pointer movement restores the current item after an explicit dismissal without requiring a new enter');
+            assert.equal(await execute(owner,()=>document.querySelector('#item-tooltip').hidden),true,'Pointer movement after dismissal receives the standard hover delay');
+            await until(()=>execute(owner,()=>{const target=document.querySelector('#item-list h3[data-item-title]'),rect=target.getBoundingClientRect();target.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:rect.left+2,clientY:rect.top+2}));return !document.querySelector('#item-tooltip').hidden;}),'Held pointer restores the current item after the standard delay without requiring a new enter');
             await execute(owner,()=>{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));document.querySelector('[data-view="npcs"]').click();const search=document.querySelector('#npc-search');search.value='Synthetic Keeper';search.dispatchEvent(new Event('input'));});
             const mainNpcName=await mainHover('#npc-list .known-drops .known-drop-name');
             const mainNpcIcon=await mainHover('#npc-list .known-drops img.known-drop-icon');
@@ -730,13 +732,16 @@ try {
             await execute(owner,()=>{window.__oldDuplicate=document.querySelector('#npc-list [data-item-tooltip-source*="unknown elevation watcher"] [data-item-title="Synthetic Charm 1"]');});
             await append(['Unknown Elevation Watcher scowls at you (Lvl: 35)']);
             await until(async()=>execute(owner,()=>!window.__oldDuplicate.isConnected&&document.querySelector('#npc-list [data-item-tooltip-source*="unknown elevation watcher"] .pill-row').textContent.includes('Level 35')),'A real NPC consider changes its visible level and replaces the old loot markup');
-            assert.equal(await execute(owner,point=>{const target=document.elementFromPoint(point.x,point.y)?.closest('[data-item-title]');return target?.dataset.itemTitle==='Synthetic Charm 1'&&!document.querySelector('#item-tooltip').hidden;},duplicateHover),true,'A changed NPC redraw keeps the tooltip tied to the actual duplicate under the pointer');
+            assert.equal(await execute(owner,point=>document.elementFromPoint(point.x,point.y)?.closest('[data-item-title]')?.dataset.itemTitle==='Synthetic Charm 1',duplicateHover),true,'A changed NPC redraw keeps the actual duplicate under the pointer');
+            await execute(owner,point=>document.elementFromPoint(point.x,point.y)?.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:point.x,clientY:point.y})),duplicateHover);
+            await until(()=>execute(owner,()=>!document.querySelector('#item-tooltip').hidden&&document.querySelector('#item-tooltip .wiki-itembox-title strong')?.textContent.replace(/\s\+\d+$/,'')==='Synthetic Charm 1'),'The current duplicate source can reopen after its held hover delay');
             await execute(owner,()=>{const search=document.querySelector('#npc-search');search.value='Synthetic Keeper';search.dispatchEvent(new Event('input'));});
             assert.equal(await execute(owner,()=>document.querySelector('#item-tooltip').hidden),true,'Removing the hovered NPC hides its tooltip even though another NPC still drops the same item');
             await execute(owner,()=>{const search=document.querySelector('#npc-search');search.value='';search.dispatchEvent(new Event('input'));const target=document.querySelector('#npc-list [data-item-tooltip-source*="unknown elevation watcher"] [data-item-title="Synthetic Charm 1"]');target.focus();window.__oldFocusedDrop=target;});
             await append(['Unknown Elevation Watcher scowls at you (Lvl: 36)']);
             await until(async()=>execute(owner,()=>!window.__oldFocusedDrop.isConnected&&document.querySelector('#npc-list [data-item-tooltip-source*="unknown elevation watcher"] .pill-row').textContent.includes('Level 36')),'A second real consider changes the NPC level and replaces the focused loot link');
-            assert.equal(await execute(owner,()=>{const target=document.activeElement;return target?.dataset.itemTitle==='Synthetic Charm 1'&&target.closest('[data-item-tooltip-source]')?.dataset.itemTooltipSource.includes('unknown elevation watcher')&&!document.querySelector('#item-tooltip').hidden;}),true,'Keyboard focus restores the exact NPC occurrence instead of jumping to another copy of its drop');
+            const keyboardRestored=await execute(owner,()=>{const target=document.activeElement;return{name:target?.dataset.itemTitle||'',source:target?.closest('[data-item-tooltip-source]')?.dataset.itemTooltipSource||'',hidden:document.querySelector('#item-tooltip').hidden,hasFocus:document.hasFocus()};});
+            assert(keyboardRestored.name==='Synthetic Charm 1'&&keyboardRestored.source.includes('unknown elevation watcher')&&!keyboardRestored.hidden,'Keyboard focus restores the exact NPC occurrence instead of jumping to another copy of its drop: '+JSON.stringify(keyboardRestored));
             await screenshot(owner,'main-item-hover');
             await execute(owner,()=>{document.activeElement?.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));document.querySelector('[data-view="items"]').click();const search=document.querySelector('#item-search');search.value='';search.dispatchEvent(new Event('input'));});
             owner.hide();
