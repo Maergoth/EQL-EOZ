@@ -6,6 +6,7 @@ import { normalizeContributionChoices } from './contribution-choice-picker.js';
 import { isOwnedPetName } from './generated-pets.js';
 import { lootSetCoverage } from './loot-set-coverage.js';
 import { fillZoneCreationBlueprint, ZONE_OVERVIEW_TOKEN_FIELDS } from './zone-blueprint.js';
+import { itemContributionWikiStatLines } from './item-contribution-stats.js';
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 const TYPES = new Set(['item', 'npc', 'zone', 'spell']);
 const CLASS_NAMES = { BER:'Berserker', BRD:'Bard', BST:'Beastlord', CLR:'Cleric', DRU:'Druid', ENC:'Enchanter', MAG:'Magician', MNK:'Monk', NEC:'Necromancer', PAL:'Paladin', RNG:'Ranger', ROG:'Rogue', SHM:'Shaman', SHD:'Shadow Knight', WAR:'Warrior', WIZ:'Wizard' };
@@ -201,7 +202,8 @@ export function buildContributionDraft(input, blueprints) {
         for(const effect of effects)if(!lines.some(line=>itemEffectLine(line)&&itemLineHasEffect(line,effect)))lines.push(itemEffectLineWikicode(effect));
         for(const key of ['classes','slots']){const value=itemChoiceStatLine(candidate,key);if(value===null)continue;const index=lines.findIndex(line=>itemChoiceLine(key,line));if(index>=0){if(value)lines[index]=value;else lines.splice(index,1);}else if(value)lines.push(value);}
         const tier=recovery.ok?recovery.review?.tier:Number(candidate.fields.tier?.value),recoveryNote=Number.isInteger(tier)&&tier>0&&tier<=10?`These stats are reverse calculated from a tier ${tier} item. Please confirm with a tier 0 item and remove this message`:'';
-        text = `${era}<onlyinclude>{{Itempage\n|itemname = ${candidate.title}\n|lucy_img_ID = ${icon === undefined ? '' : Number(icon)}\n|statsblock =\n${lines.join('<br>\n')}\n|focus_effect = ${literalWikiText(itemOptionalText(field('focusEffect')))}\n|notes = ${[itemOptionalText(candidate.playerText),recoveryNote].filter(Boolean).join('\n\n')}\n|dropsfrom =\n${drops}\n}}</onlyinclude>\n`;
+        lines=itemContributionWikiStatLines(lines);
+        text = `${era}<onlyinclude>{{Itempage\n|itemname = ${candidate.title}\n|lucy_img_ID = ${icon === undefined ? '' : Number(icon)}\n|statsblock =\n${lines.join('<br>\n')}${lines.length?'<br>':''}\n|focus_effect = ${literalWikiText(itemOptionalText(field('focusEffect')))}\n|notes = ${[itemOptionalText(candidate.playerText),recoveryNote].filter(Boolean).join('\n\n')}\n|dropsfrom =\n${drops}\n}}</onlyinclude>\n`;
     } else if (candidate.kind === 'npc') {
         if (!field('location') || !/^\s*\(?\s*[-+]?\d+(?:\.\d+)?\s*[, ]+\s*[-+]?\d+(?:\.\d+)?\s*[, ]+\s*[-+]?\d+(?:\.\d+)?\s*\)?\s*$/.test(String(field('location')))) blockers.push('Enter the monster spawn location as Y, X, Z.');
         if (!candidate.playerText) warnings.push('The NPC description is empty; add player-written details when known.');
@@ -789,7 +791,8 @@ export function patchContributionPrimary(source,input,options={}){
         if(verification){
             if(!accepted.ok)throw Error(accepted.reason);
             const stats=candidate.field('statLines');if(!Array.isArray(stats)||!stats.length)throw Error('Provide the tier 0 item statistics to confirm this page.');
-            updates.statsblock=stats.slice(0,60).map(literalWikiText).join('<br>\n');
+            const lines=itemContributionWikiStatLines(stats.slice(0,60).map(literalWikiText));
+            updates.statsblock=lines.join('<br>\n')+(lines.length?'<br>':'');
             const templates=contributionTemplates(text,'Itempage');if(templates.length!==1)throw Error('Select the existing item template on the wiki.');
             const notes=templates[0].fields.filter(field=>field.name.toLowerCase()==='notes');if(notes.length>1)throw Error('The item has duplicate notes fields.');
             if(notes.length)updates.notes=removeTierZeroRecoveryNotes(notes[0].value).trim();
