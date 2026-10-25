@@ -1,11 +1,11 @@
 // OCR proposals only: never scale an item, infer drop sources or publish a fact.
-export const SCREEN_READ_PARSER_VERSION = 8;
+export const SCREEN_READ_PARSER_VERSION = 9;
 const clean = value => String(value ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim();
 const number = value => Number(String(value).replace(/,/g,''));
 const statNames = {
     AC:'ac', HP:'hp', Mana:'mana', Endurance:'endurance', End:'endurance', Strength:'str', STR:'str',
     Stamina:'sta', STA:'sta', Agility:'agi', AGI:'agi', Dexterity:'dex', DEX:'dex', Wisdom:'wis', WIS:'wis',
-    Intelligence:'int', INT:'int', Charisma:'cha', CHA:'cha', Weight:'weight', Damage:'damage', DMG:'damage', Delay:'delay',
+    Intelligence:'int', INT:'int', Charisma:'cha', CHA:'cha', Weight:'weight', WT:'weight', Damage:'damage', DMG:'damage', Delay:'delay',
     'SV Poison':'resistPoison', 'SV Magic':'resistMagic', 'SV Disease':'resistDisease', 'SV Fire':'resistFire',
     'SV Cold':'resistCold', 'SV Corruption':'resistCorruption', 'SV Void':'resistCorruption',
     'HP Regen':'hpRegen', 'Mana Regen':'manaRegen', 'End Regen':'enduranceRegen', 'Endurance Regen':'enduranceRegen', 'Attack Speed':'attackSpeed', Haste:'haste', Range:'range',
@@ -156,6 +156,9 @@ function modernCharacterComponents(text,confidence){
 }
 function stats(text, confidence, { character = false, modern = false } = {}) {
     text=text.replace(/\bSV\.(?=[a-z])/gi,'SV. ').replace(/\b(Base|Backstab)Dmg\b/gi,'$1 Dmg');
+    // OCR can separate a visible decimal mark into its own word, or read it
+    // as a comma. Weight is a decimal quantity, never a thousands grouping.
+    text=text.replace(/\b(Weight|WT)([ \t]*[:=;]?[ \t]*)(\d+)[ \t]*[.,][ \t]*(\d+)/gi,'$1$2$3.$4');
     const fields = character&&modern?modernCharacterComponents(text,confidence):[];
     // Long labels first avoid parsing an item's HP Regen as HP.
     for (const [label,key] of Object.entries(statNames).sort((a,b)=>b[0].length-a[0].length)) {
@@ -395,7 +398,10 @@ export function parseScreenRead(input = {}) {
         const tier = itemText.match(/\bTier[ \t]*[:=]?[ \t]*(\d+)(?:[ \t]+(\d+)[ \t]*\/[ \t]*(\d+)|[ \t]*\/[ \t]*(\d+))?/i) || name.match(/\+(\d+)\s*$/);
         if (tier && Number(tier[1])<=100) fields.push(field('tier',tier[0],Number(tier[1]),confidence));
         if(tier?.[2]!==undefined&&Number(tier[3])===2**Number(tier[1])&&Number(tier[2])>=0&&Number(tier[2])<Number(tier[3]))fields.push(field('fraction',tier[0],Number(tier[2]),confidence),field('fractionMaximum',tier[0],Number(tier[3]),confidence));
-        if(region?.hover){const weight=fields.findIndex(entry=>entry.key==='weight');if(weight>=0&&Number.isInteger(fields[weight].value)){conflicts.add('weight');fields.splice(weight,1);}}
+        // Every item OCR surface can lose a decimal, including full examine
+        // windows. Keep an unpunctuated weight in the evidence for correction;
+        // never promote an ambiguous "32" to the submitted item stat block.
+        if(metadata.kind==='ocr'){const weight=fields.findIndex(entry=>entry.key==='weight');if(weight>=0&&!/[.,][ \t]*\d/.test(fields[weight].raw)){conflicts.add('weight');fields.splice(weight,1);}}
         for (const [label,key] of [['Class','classes'],['Race','races'],['Slot','slots'],['Size','size']]) {
             const found = (key==='size'?[itemText,...statPasses.map(pass=>pass.text)].join('\n'):itemText).match(new RegExp(`^${label}[ \\t]*${key==='size'?'[:=]?[ \\t]+':':[ \\t]*'}(.+)$`,'im'));
             if (found) fields.push(field(key,found[0],key==='size' ? found[1].trim().split(/\s+/)[0] : key==='slots'?slotNames(found[1]):found[1].split(/\s*[,/]\s*|\s+/).filter(Boolean),confidence));

@@ -31,6 +31,17 @@ assert.equal(crossRow.fields.some(field=>field.key==='ac'||field.key==='hp'),fal
 assert.equal(crossRow.fields.find(field=>field.key==='weight').value,0.2);
 const ambiguous=parseScreenRead({text:'Item: Synthetic Decimal Loss\nWeight 02\nAC 014'})[0];
 assert.equal(ambiguous.fields.some(field=>field.key==='weight'||field.key==='ac'),false,'a leading zero may indicate a lost decimal: omit rather than invent punctuation');
+for(const weight of ['3.2','3 . 2','3,2','3 , 2','0.0']){
+    const read=parseScreenRead({text:`Item: Synthetic Decimal Weight\nWeight ${weight}\nHP 15`})[0];
+    assert.equal(read.fields.find(field=>field.key==='weight')?.value,weight==='0.0'?0:3.2,`Observed decimal punctuation is preserved: ${weight}`);
+    assert(read.evidence.text.includes(`Weight ${weight}`),'Original written OCR remains available');
+}
+const lostDecimal=parseScreenRead({text:'Item: Synthetic Full Examine\nWeight 32\nHP 15'})[0];
+assert(!lostDecimal.fields.some(field=>field.key==='weight'),'A full examine cannot silently turn a missing decimal into32');
+assert.match(lostDecimal.evidence.text,/Weight 32/);
+assert.match(lostDecimal.evidence.text,/left unknown: weight/);
+assert.equal(parseItemStatBlock('Weight 32').fields.find(field=>field.key==='weight').value,32,'An explicit manual correction may use a whole-number weight');
+assert.equal(parseItemStatBlock('WT: 3 . 2').fields.find(field=>field.key==='weight').value,3.2,'Wiki-style weight labels preserve separated punctuation');
 const word=(text,x,y,width=40,height=20,confidence=85)=>({text,bbox:{x0:x,y0:y,x1:x+width,y1:y+height},confidence});
 const geometricWords=[word('Desaiption',200,100,100,20,23),word('Lore',500,103),
     word('Synthetic',185,145,80,25),word('Winding',275,145,75,25),word('Trail',360,145,40,25),word('+4',410,150,20,12),
