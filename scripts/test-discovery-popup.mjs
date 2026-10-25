@@ -18,13 +18,15 @@ async function run({root,profile,output}){
  const {DiscoveryHost}=require(path.join(root,'desktop/discovery-host.cjs'));
  const host=new DiscoveryHost({verifyDiscovery:async()=>({state:'missing',reasons:['missing-page'],confirmedRelations:[],checkedAt:new Date().toISOString()}),electron:{BrowserWindow,ipcMain,screen,desktopCapturer:{getSources(){captures++;throw Error('No desktop capture allowed in this informational fixture.');}}},origin,getMainWindow:()=>main,itemExistence:{async check(){lookups++;return{status:'missing',source:'live'};},clear(){},dispose(){}}});
  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
- const until=async(predicate,label,timeout=5000)=>{const end=Date.now()+timeout;while(Date.now()<end){try{const value=await predicate();if(value)return value;}catch{}await wait(50);}throw Error('Timed out: '+label);};
+ const until=async(predicate,label,timeout=5000,diagnostic)=>{const end=Date.now()+timeout;while(Date.now()<end){try{const value=await predicate();if(value)return value;}catch{}await wait(50);}let detail='';if(diagnostic){try{detail=' '+JSON.stringify(diagnostic());}catch(error){detail=' diagnostic failed: '+error.message;}}throw Error('Timed out: '+label+detail);};
  const execute=(window,fn,...args)=>window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
  try{
   await main.loadURL(origin+'/');const focused=BrowserWindow.getFocusedWindow();
   await execute(main,async()=>{await window.eyeOfZommDiscovery.show({id:'synthetic-linked',kind:'item',purpose:'item-link',name:'Synthetic Missing Blade'});await window.eyeOfZommDiscovery.show({id:'synthetic-second',kind:'item',purpose:'item-link',name:'Another Synthetic Relic'});});
   const popup=host.notices.window;assert(popup);await until(()=>execute(popup,()=>document.querySelectorAll('.wiki-discovery-card').length===2),'two standalone cards');
   await until(async()=>Math.abs(popup.getBounds().height-await execute(popup,()=>Math.ceil(document.querySelector('main').scrollHeight+4)))<=2,'measured stack height');
+  // DOM readiness and resize delivery do not acknowledge the X11 window manager's topmost state.
+  await until(()=>!popup.isDestroyed()&&popup.isVisible()&&popup.isAlwaysOnTop(),'visible always-on-top notice',5000,()=>{const destroyed=popup.isDestroyed();return{platform:process.platform,destroyed,...(!destroyed?{visible:popup.isVisible(),alwaysOnTop:popup.isAlwaysOnTop(),loading:popup.webContents.isLoading(),focused:popup.isFocused(),bounds:popup.getBounds()}:{}),focusedWindowId:BrowserWindow.getFocusedWindow()?.id??null};});
   assert.equal(mainFocus,0,'A notice never focuses main');assert.equal(BrowserWindow.getFocusedWindow(),focused,'Showing notices preserves foreground app focus');assert.equal(captures,0);assert.equal(lookups,2);
   assert.equal(BrowserWindow.getAllWindows().length,2,'Timers is disabled and no Timers window was opened');
   assert(BrowserWindow.getAllWindows().every(window=>!window.webContents.getURL().includes('panel=timers')));
