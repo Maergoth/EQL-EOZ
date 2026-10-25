@@ -75,5 +75,5 @@ export function createContributionDiscoveryGate({verify=null,getPack=()=>({}),no
         return {...candidate,title:clean(result.canonicalTitle)||candidate.title,membership:missingPage?'missing':'present',intent:missingPage?'create':'update',reasons,relations,sources,fields};
     }
     function clear(){generation++;receipts.clear();pending.clear();clearTimeout(timer);timer=null;}
-    return {project,check,signature(candidate){current();return generation+':'+key(projection(candidate));},clear,dispose(){disposed=true;clear();}};
+    return {project,check,state(candidate){const {id,found}=receipt(candidate);return found?.result.state||(pending.has(id)?'checking':'unverified');},signature(candidate){current();return generation+':'+key(projection(candidate));},clear,dispose(){disposed=true;clear();}};
 }

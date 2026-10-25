@@ -3,12 +3,22 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {wikiLocationToWorld} from '../app/coordinate-system.js';
 import {EQLogParser} from '../app/parser.js';
-import {scaledItemStats} from '../app/item-scaling.js';
+import {catalogBaseStats,scaledItemStats} from '../app/item-scaling.js';
 import {characterCatalogDetails} from '../app/character-item-card.js';
+import {createCrawlMode} from '../app/crawl-mode.js';
 
 // Execute the actual main owner's action handler. These fixtures prove camera
 // preview cannot become a logged player position or choose a different source.
 const source=readFileSync(new URL('../app/app.js',import.meta.url),'utf8');
+const crawlFrom=source.indexOf('function crawlContext('),crawlTo=source.indexOf('function crawlCandidate(',crawlFrom);
+let crawlPlayer={zone:'Synthetic Zone',character:'Fixture',level:50,classes:['WAR'],sessionNumber:1};
+const crawlContextVm=vm.createContext({state:()=>crawlPlayer,parser:{logContextSnapshot:()=>({visit:1})},bridgeInfo:{logPath:'fixture-log'},effectiveProfile:s=>({level:s.level,classes:s.classes})});
+vm.runInContext(source.slice(crawlFrom,crawlTo)+';this.context=crawlContext;',crawlContextVm);
+const visitCrawl=createCrawlMode(),visitMob={name:'Synthetic Keeper',zone:'Synthetic Zone',raidInstance:false,loc:[1,2]};
+visitCrawl.setEnabled(true);visitCrawl.consume({type:'kill',victim:visitMob.name},{...crawlContextVm.context(),live:true,at:Date.now()},[visitMob]);
+assert(visitCrawl.isDefeated(visitMob));
+crawlPlayer={...crawlPlayer,level:51,classes:['WIZ']};visitCrawl.context(crawlContextVm.context());
+assert(visitCrawl.isDefeated(visitMob),'Level gains and class browsing cannot revive Crawl mobs within the same zone visit');
 const from=source.indexOf('async function handleOverlayCommand('),to=source.indexOf('function currentEraIndex()',from);
 assert(from>=0&&to>from);
 const normal={name:'Synthetic Keeper',zone:'Synthetic Zone',loc:[10,20],raidInstance:false};
@@ -23,7 +33,8 @@ const context=vm.createContext({
     settings:{itemTier:0},prefs:{save:settings=>calls.push(['saved',settings.itemTier])},
     renderAll:()=>calls.push(['render']),refreshItemTooltip:()=>calls.push(['tooltip']),
     mapDataRevision:3,overlayMapFocus:null,overlayMapFocusSequence:0,focusedIntelTarget:null,intelFocusSequence:0,
-    window:{eyeOfZommOverlays:{control:async(...args)=>calls.push(args)}}
+    window:{eyeOfZommOverlays:{control:async(...args)=>calls.push(args)}},
+    crawlMode:createCrawlMode(),crawlContext:()=>({zone:current.zone})
 });
 vm.runInContext(`${source.slice(from,to)};this.handle=handleOverlayCommand;`,context);
 const originalLocation=current.location;
@@ -43,6 +54,11 @@ assert.equal(context.settings.itemTier,10);assert(calls.some(call=>call[0]==='sa
 assert(calls.some(call=>call[0]==='render'));assert(calls.some(call=>call[0]==='tooltip'));
 for(const tier of [-1,11,1.5,'5',NaN])await assert.rejects(context.handle({action:'session:item-tier',payload:{tier}}),/Base to 10/);
 assert.equal(context.settings.itemTier,10,'Invalid overlay values cannot corrupt the shared item level');
+await context.handle({action:'session:crawl-mode',payload:{enabled:true}});
+assert.equal(context.crawlMode.snapshot().enabled,true);
+
+await assert.rejects(context.handle({action:'session:crawl-mode',payload:{enabled:'true'}}),/whether Crawl/);
+assert.equal(context.crawlMode.snapshot().enabled,true);
 
 // Execute the same owner reset and line-consumption functions used by the main
 // button and native Session tab. Splitting never rewinds/reopens the log, drops
@@ -63,7 +79,7 @@ const splitContext=vm.createContext({parser,partialLine:'[Wed Oct 21 12:00:02 20
     // Collection/outbox behavior has its own fixtures; splitting a session must
     // retain these owner-action assertions regardless of telemetry preference.
     observationPreference:false,
-    bridgeInfo:{logPath:'synthetic-log'},state:()=>parser.snapshot()});
+    bridgeInfo:{logPath:'synthetic-log'},state:()=>parser.snapshot(),crawlMode:createCrawlMode(),crawlContext:()=>({zone:parser.zone})});
 splitContext.observedLogCursor=0;
 splitContext.captureWorkspace={consumeLog:(...args)=>contributionCalls.push(args)};
 vm.runInContext(`${source.slice(resetFrom,resetTo)};${source.slice(consumeFrom,consumeTo)};${source.slice(from,to)};this.handle=handleOverlayCommand;this.consume=consumeText;`,splitContext);
@@ -90,7 +106,7 @@ assert.equal(contributionCalls.at(-1)[1].cursor,2,'each consumed line has a dist
 // comparisons at the shared tier, without granting another file/network API.
 const itemFrom=source.indexOf('function overlayItemSummary('),itemTo=source.indexOf('const mapDataLoader',itemFrom);
 assert(itemFrom>=0&&itemTo>itemFrom);
-const itemContext=vm.createContext({settings:{itemTier:7},scaledItemStats,characterCatalogDetails,itemIconSource:()=>'',});
+const itemContext=vm.createContext({settings:{itemTier:7},catalogBaseStats,scaledItemStats,characterCatalogDetails,itemIconSource:()=>'',});
 vm.runInContext(`${source.slice(itemFrom,itemTo)};this.summarize=overlayItemSummary;`,itemContext);
 const summary=itemContext.summarize({name:'Synthetic Sword',slots:['PRIMARY'],classes:['WAR'],displayLines:['MAGIC ITEM','Class: WAR'],
     stats:{HP:20,DMG:10,WT:1,INVALID:Infinity},notes:'Synthetic note',privatePath:'C:\\Private\\fixture'}, {remaining:1000});

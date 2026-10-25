@@ -1,6 +1,6 @@
 import { EQLogParser } from './parser.js';
 import { conForLevel } from './con-colors.js';
-import { scaledItemStats } from './item-scaling.js';
+import { catalogBaseStats, scaledItemStats } from './item-scaling.js';
 import { itemHasClassStats, itemHasZoneSource, itemMatchesClasses, scoreItemForBrowse } from './item-browse.js';
 import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
@@ -27,6 +27,7 @@ import { collectDropObservation } from './drop-observations.js';
 import { createWikiResolver } from './wiki-identity.js';
 import { createTooltipHover } from './tooltip-delay.js';
 import { applyLiveWikiOverlay } from './live-wiki-overlay.js';
+import { createCrawlMode } from './crawl-mode.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
@@ -34,6 +35,7 @@ const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of
 const parser = new EQLogParser({getPack:()=>pack});
 let pack = { meta:{}, zones:[], npcs:[], items:[] };
 let basePack=pack,liveEntrySnapshot={schemaVersion:1,entries:[]},liveEntriesTimer=null;
+const crawlMode=createCrawlMode({getPack:()=>pack});
 let observationPack=null,observationResolver=null;
 const observationSession=globalThis.crypto.randomUUID();
 let observationPreference=true;
@@ -63,6 +65,7 @@ let partialLine = '';
 let observedLogCursor = 0;
 let viewerReady = false;
 let pollTimer = null;
+let pollInFlight = false, pollPending = false, logCatchupBurst = 0;
 let packRefreshTimer = null;
 let selectedEncounterId = '';
 let fightExpiryTimer = null;
@@ -541,19 +544,28 @@ function mapSourceContextMatches(context) {
     return context.logPath === String(bridgeInfo?.logPath || '') && context.root === String(bridgeInfo?.eqRootPath || '') && context.revision === mapDataRevision;
 }
 
+function retireViewerLocation() {
+    pendingViewerLocation = null;
+    mapDataRevision++;
+    try { viewerApi()?.clearPlayerLocation?.(); } catch { /* The viewer may be reloading. */ }
+}
+
 function clearSourceLocation() {
+    crawlMode.reset();
     cancelDiscoveryChecks();
     void discoveryContributionFlow?.cancelWhere(() => true,{close:true});
     captureWorkspace.cancelSource();
     parser.resetSourceContext();
     clearActiveRoute({clearViewer:false});
-    pendingViewerLocation = null;
     partialLine = '';
-    mapDataRevision++;
-    try { viewerApi()?.clearPlayerLocation?.(); } catch { /* The viewer may be reloading. */ }
+    retireViewerLocation();
+    logCatchupBurst = 0;
+    overlaySession.requestPublish();
 }
 
 async function pollLog() {
+    if (pollInFlight) { pollPending = true; return; }
+    pollInFlight = true;
     const requestSource = mapSourceContext();
     try {
         const data = await api(`/api/log?offset=${encodeURIComponent(logOffset)}`);
@@ -561,6 +573,7 @@ async function pollLog() {
         if(data.stale){schedulePoll(0);return;}
         if (!mapSourceContextMatches(requestSource)) { schedulePoll(0); return; }
         let changed = false;
+        let sourceReplaced = false;
         let requiresFullRender = false;
         const previousLogReady = Boolean(bridgeInfo?.logExists);
         if (data.logPath && (!bridgeInfo || data.logPath !== bridgeInfo.logPath)) {
@@ -568,6 +581,7 @@ async function pollLog() {
             bridgeInfo = bridgeInfo || {};
             bridgeInfo.logPath = data.logPath;
             clearSourceLocation();
+            sourceReplaced = true;
             parser.setCharacterFromFilename(data.logPath);
             $('#settings-log-path').textContent = data.logPath;
             changed = true;
@@ -580,7 +594,13 @@ async function pollLog() {
             requiresFullRender = true;
         }
         if (data.reset) {
+            crawlMode.reset();
+            // Truncation/rotation at the same path retires awaited coordinates
+            // too. An already-cleared/empty source needs no repeated reset.
+            if (!sourceReplaced && (logOffset > 0 || parser.zone || parser.location)) clearSourceLocation();
             parser.resetSourceContext();
+            logCatchupBurst = 0;
+            overlaySession.requestPublish();
             if(data.logPath)parser.setCharacterFromFilename(data.logPath);
             if(data.logContext)parser.seedLogContext(data.logContext);
             logOffset = Number(data.startOffset) || 0;
@@ -607,19 +627,25 @@ async function pollLog() {
             if (requiresFullRender) renderAll();
             else renderLiveLocation();
         }
+        const backlog = Number.isFinite(data.length) && Number.isFinite(data.newOffset) && data.newOffset < data.length && data.newOffset > Number(data.startOffset);
         schedulePoll(locationPollDelay({
             mapVisible:nativeMapVisible || document.body.classList.contains('map-active'),
-            routeActive:Boolean(activeRoute)
+            routeActive:Boolean(activeRoute), backlog, catchupBurst:logCatchupBurst
         }));
+        logCatchupBurst = backlog ? (logCatchupBurst + 1) % 4 : 0;
     } catch (error) {
         if (!mapSourceContextMatches(requestSource)) { schedulePoll(0); return; }
         $('#bridge-status').textContent = 'Reconnecting';
         $('#bridge-status').className = 'status-pill status-warn';
         schedulePoll(1800);
+    } finally {
+        pollInFlight = false;
+        if (pollPending) { pollPending = false; if (!sessionDraining) schedulePoll(0); }
     }
 }
 
 function consumeText(text, allowTransientUi = true) {
+    const previousLocation = parser.location;
     const combined = partialLine + text;
     const lines = combined.split(/\n/);
     partialLine = lines.pop() || '';
@@ -634,6 +660,7 @@ function consumeText(text, allowTransientUi = true) {
             const canonicalZone = loggedZoneName(pack.zones,event.zone,event.zoneShortName);
             event.zone = canonicalZone;
             parser.zone = canonicalZone;
+            if (event.source !== 'who' || !parser.location) retireViewerLocation();
             if (zoneKey(previousZone) !== zoneKey(canonicalZone)) parser.location = null;
             if (activeRoute && zoneKey(activeRoute.zone) !== zoneKey(event.zone)) clearActiveRoute({ clearViewer:false });
             zoneChanged = true;
@@ -642,8 +669,13 @@ function consumeText(text, allowTransientUi = true) {
         if (event?.type === 'location') latestLocation = { ...event.location };
         const originalAt = Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] || '');
         const freshTimerEvent = Number.isFinite(originalAt) && Math.abs(Date.now() - originalAt) <= 10000;
+        const crawlKill=crawlMode.snapshot().enabled&&['kill','zone','profile'].includes(event?.type)?crawlMode.consume(event,{
+            ...crawlContext(),live:allowTransientUi&&freshTimerEvent,at:parser.currentLineAt,
+            playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)},
+            event.type==='kill'?rareMobsForZone(state(),effectiveProfile(state()),{includeGeneric:true}).map(crawlCandidate):[]):null;
         let listedTarget = false;
-        if (allowTransientUi && freshTimerEvent && ['consider','kill'].includes(event?.type)) listedTarget = focusIntelForConsider(event.type === 'consider' ? event.target : {name:event.victim});
+        if(crawlKill)listedTarget=true;
+        else if (allowTransientUi && freshTimerEvent && ['consider','kill'].includes(event?.type)) listedTarget = focusIntelForConsider(event.type === 'consider' ? event.target : {name:event.victim});
         if(['profile','zone'].includes(event?.type))cancelDiscoveryChecks();
         if (!listedTarget && event?.type!=='kill') wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt,playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)});
         overlaySession.consume(event, { zone:parser.zone, character:parser.character, live:allowTransientUi && freshTimerEvent,
@@ -662,6 +694,7 @@ function consumeText(text, allowTransientUi = true) {
         if(captureLogResult?.prompt)void discoveryContributionFlow?.cancelWhere(request=>request.purpose==='spawn-location'&&request.candidateId!==captureLogResult.prompt.candidateId,{close:true});
     }
     overlaySession.flush();
+    if (zoneChanged || latestLocation && (!previousLocation || ['x','y','z'].some(key => previousLocation[key] !== latestLocation[key]))) overlaySession.requestPublish();
     if (zoneChanged) {
         pendingViewerLocation = null;
         const sourceContext = mapSourceContext(), requestedZone = zoneKey(parser.zone);
@@ -686,10 +719,21 @@ function state() {
     return parser.snapshot();
 }
 
+function crawlContext(s=state()) {
+    const context=parser.logContextSnapshot();
+    return {zone:s.zone,character:s.character,source:bridgeInfo?.logPath||'current-log',session:s.sessionNumber,
+        visit:context.visit,instanceId:context.instanceId,instance:context.instance};
+}
+function crawlCandidate(source) {
+    return {name:source.name,zone:source.zone,raidInstance:raidVariant(source),wikiTitle:source.npc?.wikiTitle||source.wikiTitle||source.name,
+        aliases:source.npc?.aliases||source.aliases||[],loc:source.loc,dropCount:source.allItems?.length??source.dropCount??0};
+}
+
 function startNewSession() {
     // Split at the current consumed cursor. Keep logOffset and partialLine so
     // the next poll completes unread lines without replaying the previous tail.
     parser.startNewSession();
+    crawlMode.reset();
     selectedEncounterId = '';
     clearTimeout(fightExpiryTimer);
     renderAll();
@@ -705,6 +749,7 @@ function focusIntelForConsider(target) {
     const matches = rareMobsForZone(s, effectiveProfile(s)).filter(source => npcNameKey(source.name) === npcNameKey(target.name));
     const source = matches.find(source => intelIdentity(source) === focusedIntelTarget?.id) || matches.find(source => !raidVariant(source)) || matches[0];
     if (!source) return;
+    if(crawlMode.isDefeated(crawlCandidate(source)))return true;
     focusedIntelTarget = { id:intelIdentity(source), name:source.name, zone:s.zone, raidInstance:raidVariant(source) };
     intelFocusSequence++;
     timerAlerts.blip();
@@ -716,15 +761,17 @@ function overlayItemSummary(item, budget) {
     let icon = itemIconSource(item);
     if (icon.length > 12000 || icon.length > budget.remaining) icon = '';
     budget.remaining -= icon.length;
-    const boundedStats = stats => Object.fromEntries(Object.entries(stats || {}).slice(0,24)
-        .filter(([,value]) => typeof value === 'number' && Number.isFinite(value) || typeof value === 'string')
+    const weaponKeys=['DMG','BACKSTAB_DMG','DELAY','DMG_BONUS','WT','ACCURACY','SV_CORRUPTION'];
+    const boundedStats = stats => Object.fromEntries(Object.entries(stats || {})
+        .filter(([,value]) => value === null || typeof value === 'number' && Number.isFinite(value) || typeof value === 'string')
+        .sort(([a],[b])=>Number(weaponKeys.includes(b))-Number(weaponKeys.includes(a))).slice(0,24)
         .map(([key,value]) => [key.slice(0,40), typeof value === 'string' ? value.slice(0,80) : value]));
     return { name:String(item.name || '').slice(0,240), icon,
         slots:(item.slots || []).slice(0,8).map(slot => String(slot).slice(0,60)),
         classes:(Array.isArray(item.classes) ? item.classes : []).slice(0,20).map(value => String(value).slice(0,40)),
         displayLines:(Array.isArray(item.displayLines) ? item.displayLines : []).slice(0,32).map(value => String(value).slice(0,400)),
         details:characterCatalogDetails(item),
-        notes:String(item.notes || '').slice(0,1200), baseStats:boundedStats(item.stats),
+        notes:String(item.notes || '').slice(0,1200), baseStats:boundedStats(catalogBaseStats(item)),
         stats:boundedStats(scaledItemStats(item,settings.itemTier)), tier:Number(settings.itemTier) || 0 };
 }
 const mapDataLoader = createMapDataLoader({ getManifest:() => api('/api/eq-files'),
@@ -733,12 +780,14 @@ const mapDataLoader = createMapDataLoader({ getManifest:() => api('/api/eq-files
 
 function overlaySessionSnapshot() {
     const s = state();
+    crawlMode.context(crawlContext(s));
+    const crawl=crawlMode.snapshot();
     const profile = effectiveProfile(s);
     const budget = { remaining:240 * 1024 };
     const canRoute = Boolean(settings.routingEnabled && s.zone && s.location);
     const sources = rareMobsForZone(s, profile, { includeGeneric:!settings.intelNamedOnly });
     const npcs = sources.map(source => ({
-        id:intelIdentity(source), name:source.name, raidInstance:raidVariant(source), level:source.npc?.avgLevel || 0,
+        id:intelIdentity(source), name:source.name, raidInstance:raidVariant(source), defeated:crawlMode.isDefeated(crawlCandidate(source)), level:source.npc?.avgLevel || 0,
         levelMin:source.npc?.levelMin || 0, levelMax:source.npc?.levelMax || 0,
         con:conForLevel(source.npc?.avgLevel, profile.level), named:isNamedSource(source.name), rare:true,
         distance:Number.isFinite(source.distance) ? source.distance : null,
@@ -748,18 +797,21 @@ function overlaySessionSnapshot() {
     }));
     const selected = focusedIntelTarget && zoneKey(focusedIntelTarget.zone) === zoneKey(s.zone) ? focusedIntelTarget : null;
     const navigation = activeRoute?.status === 'ready' && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? viewerApi()?.overlayNavigation?.() : null;
-    return { character:s.character, zone:s.zone, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
-        parse:compactParseSnapshot(s), intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
+    return { character:s.character, zone:s.zone, crawl, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
+        parse:compactParseSnapshot(s), intel:{ npcs, zone:s.zone, crawlEnabled:crawl.enabled, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
             packVersion:pack.meta?.manifestVersion || pack.meta?.version || '', profileKey:JSON.stringify([profile.classes.slice().sort(),settings.itemTier,settings.era]),
             focusedNpcId:selected?.id || '', focusSequence:intelFocusSequence },
         map:{ zone:s.zone, viewerZone:viewerZoneTarget(pack.zones,s.zone,parser.zoneShortName), dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
             focus:overlayMapFocus && overlayMapFocus.dataVersion === mapDataRevision && zoneKey(overlayMapFocus.zone) === zoneKey(s.zone) ? overlayMapFocus : null,
-            npcs:sources.filter(source => source.loc?.length >= 2).map(source => ({id:intelIdentity(source),name:source.name,loc:source.loc,raidInstance:raidVariant(source)})),
+            npcs:sources.filter(source => source.loc?.length >= 2).map(source => ({id:intelIdentity(source),name:source.name,loc:source.loc,raidInstance:raidVariant(source),defeated:crawlMode.isDefeated(crawlCandidate(source))})),
             route:{ points:navigation?.points || [], message:activeRoute && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? activeRoute.message : '' } } };
 }
 
 async function handleOverlayCommand({ action, payload = {} }) {
     if (action === 'session:new-session') { startNewSession(); return; }
+    if(action==='session:crawl-mode'){
+        crawlMode.context(crawlContext());crawlMode.setEnabled(payload.enabled);renderAll();return crawlMode.snapshot();
+    }
     const requestedZone = state().zone;
     const resolveNpc = () => {
         const currentZone = state().zone;
@@ -789,6 +841,7 @@ async function handleOverlayCommand({ action, payload = {} }) {
     }
     if (action === 'session:intel-drops') {
         const npc = resolveNpc(), profile = effectiveProfile(state());
+        if(crawlMode.isDefeated({...npc,zone:requestedZone}))throw new Error('This mob is defeated in Crawl mode until you enter the zone again.');
         const items = knownDropsForNpc(npc).filter(item => eraAllowed(item.era) && (!settings.intelMyClassOnly || (itemMatchesProfile(item,profile) && itemHasClassStats(item))));
         const budget = {remaining:1024*1024};
         return {items:items.map(item => overlayItemSummary(item,budget)),total:items.length};
@@ -911,10 +964,10 @@ function renderMapLootPane(s,profile) {
         <div class="map-loot-controls"><label>Item tier <input type="range" min="0" max="10" step="1" value="${mapLootTier}" data-map-loot-tier><output>${mapLootTier?`Tier ${mapLootTier}`:'Base'}</output></label>
         <div class="card-actions"><button type="button" class="mini-button" data-map-loot-route>Route</button>${location?`<button type="button" class="mini-button" data-map-loot-waypoint>Copy /waypoint</button>`:''}<a class="mini-button" href="${wikiUrl(npc.wikiTitle||npc.name)}" target="_blank" rel="noopener">Monster wiki</a></div></div>
         <div class="map-loot-items">${drops.map(item => {
-            const stats = scaledItemStats(item,mapLootTier);
+            const stats = scaledItemStats(item,mapLootTier),baseStats=catalogBaseStats(item);
             return `<article class="data-card map-loot-item" data-item-tooltip-source="map-loot:${esc(item.wikiTitle||item.name)}"><div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ')||'Unknown slot')}</div></div></div>
                 <div class="pill-row">${(item.classes||[]).map(c=>`<span class="pill">${esc(c)}</span>`).join('')}${item.era?`<span class="pill">${esc(item.era)}</span>`:''}</div>
-                <div class="stats">${Object.entries(stats).map(([key,value])=>`<div class="stat ${isItemStatModified(item.stats?.[key],value,mapLootTier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(value)}</strong></div>`).join('')||'<span class="sub">Stats have not been recorded on the wiki.</span>'}</div>
+                <div class="stats">${Object.entries(stats).map(([key,value])=>`<div class="stat ${isItemStatModified(baseStats[key],value,mapLootTier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(value)}</strong></div>`).join('')||'<span class="sub">Stats have not been recorded on the wiki.</span>'}</div>
                 ${item.notes?`<p class="sub">${esc(item.notes)}</p>`:''}<a class="mini-button" href="${wikiUrl(item.wikiTitle||item.name)}" target="_blank" rel="noopener">Item wiki</a></article>`;
         }).join('')||'<div class="empty-state">No drops recorded in the current wiki dataset.</div>'}</div>`;
     host.hidden = false;
@@ -1053,13 +1106,14 @@ function syncRareMobsToViewer(force = false) {
         loc:source.loc,
         level:Number(source.npc?.avgLevel) || 0,
         dropCount:source.allItems.length,
-        classDropCount:source.items.length
+        classDropCount:source.items.length,
+        defeated:crawlMode.isDefeated(crawlCandidate(source))
     }));
     const key = JSON.stringify([
         zoneKey(s.zone),
         pack.meta?.manifestVersion || pack.meta?.version || '',
         profile.classes.slice().sort(),
-        payload.map(entry => [entry.id, entry.name, entry.loc, entry.dropCount, entry.classDropCount])
+        payload.map(entry => [entry.id, entry.name, entry.loc, entry.dropCount, entry.classDropCount,entry.defeated])
     ]);
     if (!force && key === renderedRareViewerKey) return true;
     renderedRareViewerKey = key;
@@ -1221,7 +1275,7 @@ function renderDropLog(s) {
 
 function tooltipHtml(item,target) {
     const tier = target?.closest('#map-loot-pane') ? mapLootTier : Number(settings.itemTier) || 0;
-    return catalogItemboxMarkup(item,{stats:scaledItemStats(item,tier),baseStats:item.stats,tier,icon:itemIconSource(item),showSources:true});
+    return catalogItemboxMarkup(item,{stats:scaledItemStats(item,tier),baseStats:catalogBaseStats(item),tier,icon:itemIconSource(item),showSources:true});
 }
 
 function positionTooltip(event) {
@@ -1356,8 +1410,8 @@ function renderItems(s, profile) {
     const rankingLabel = sortMode === 'recommended' ? ' · useful gear and named drops first' : ' · sorted by name';
     $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel} through <strong>${esc(settings.era)}</strong>${slotLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}${rankingLabel}.`;
     let markup = visible.map(item => {
-        const stats = scaledItemStats(item, tier);
-        const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat ${isItemStatModified(item?.stats?.[key],val,tier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
+        const stats = scaledItemStats(item, tier),baseStats=catalogBaseStats(item);
+        const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat ${isItemStatModified(baseStats[key],val,tier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
         return `<article class="data-card" data-item-tooltip-source="${esc(`item:${item.wikiTitle || item.name}`)}">
             <div class="card-top">
                 <div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}${tier ? ` · Tier ${tier}` : ''}</div></div></div>
@@ -2451,12 +2505,15 @@ window.eyeOfZommDiscovery?.onAction?.(event=>{
     }
     void overlaySession.publish();
 });
+let initialOverlayStateCurrent = true;
 window.eyeOfZommOverlays?.onState?.(next => {
+    initialOverlayStateCurrent = false;
     if (next.appearance && !appearancePending && !appearanceDraft) acceptAppearance(next.appearance);
     nativeMapVisible = Boolean(next.panels?.map?.visible);
 });
 const initialAppearanceGeneration = appearanceGeneration;
 Promise.resolve(window.eyeOfZommOverlays?.getState?.()).then(next => {
+    if (next && initialOverlayStateCurrent) nativeMapVisible = Boolean(next.panels?.map?.visible);
     if (next?.appearance && appearanceGeneration === initialAppearanceGeneration) acceptAppearance(next.appearance);
 }).catch(() => {});
 const overlayController = mountOverlayController({ root:document.getElementById('overlay-controller'), api:window.eyeOfZommOverlays });
@@ -2478,7 +2535,7 @@ discoveryContributionFlow=createDiscoveryContributionFlow({
 const characterStorage=await createCharacterStorage({onWarning:message=>showNotice(message,{tone:'warning'})});
 captureWorkspace = mountCaptureWorkspace({characterStorage,contributionStorage:characterStorage,getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
     getAppearance:()=>settings.appearance,notify:showNotice,navigate:view=>setView(view),
-    onDiscoveryItem:observation=>discoveryContributionFlow.recordItem(observation),
+    onDiscoveryItem:(observation,match)=>discoveryContributionFlow.recordItem(observation,match),
     onDiscoveryLocation:location=>discoveryContributionFlow.recordLocation(location),
     onDiscoveryCapture:(request,result)=>discoveryContributionFlow.ready(request,result)});
 const stopLiveWikiEntries=window.eyeOfZommWiki?.onLiveEntriesChanged?.(acceptLiveWikiEntries);

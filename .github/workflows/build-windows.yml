@@ -52,9 +52,15 @@ jobs:
         run: npm test
       - name: Test actual desktop CSP and browser worker
         run: npm run test:desktop-worker
+      - name: Test screen-reading permission and chat item boundaries
+        run: |
+          npm run test:screen-reading-master
+          npm run test:chat-item-boundaries
       - name: Test native overlay windows
         if: inputs.extended_ui_checks
         run: npm run test:native-overlays
+      - name: Test logged combatant overview and AA gains
+        run: npm run test:combatant-overview
       - name: Test all-panel native resize and touching overlay docks
         if: inputs.extended_ui_checks
         run: npm run test:overlay-resize
@@ -63,6 +69,8 @@ jobs:
         run: npm run test:intel-stability
       - name: Test main window placement and startup
         run: npm run test:window-lifecycle
+      - name: Test logged location latency through the actual native map
+        run: npm run test:map-location-latency
       - name: Test map sizing and zoom
         if: inputs.extended_ui_checks
         run: npm run test:map-layout

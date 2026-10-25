@@ -93,3 +93,19 @@ const recorded={...captured.observedStats},totalsBefore=structuredClone(restored
 assert.equal(characterItemStats({...rogueCard,tier:8}).stats.HP,180,'Character previews use the fixed bundled formula at another tier');
 assert.deepEqual(characterItemStats({...captured,tier:8}).stats,recorded,'Observed examine values remain immutable when selecting another tier');
 assert.deepEqual(restored.totals().computed,totalsBefore,'Item formula previews never alter recorded character-sheet totals');
+
+const explicitWeapon={name:'Synthetic Explicit Dagger',wikiTitle:'Synthetic Explicit Dagger',classes:['ROG'],slots:['PRIMARY','SECONDARY'],stats:{DMG:10,WT:2.5,STR:10,STA:5,DEX:10},displayLines:['Skill: 1H Piercing Atk Delay: 22','BACKSTAB: 15','Dmg Bon: 10']};
+const explicitCard=characterCatalogCard(explicitWeapon,{tier:8}),explicitRead=characterItemStats(explicitCard);
+assert.equal(explicitCard.baseStats.BACKSTAB_DMG,15);assert.equal(explicitCard.baseStats.DELAY,22);assert.equal(explicitCard.baseStats.DMG_BONUS,10);
+assert.equal(explicitRead.stats.BACKSTAB_DMG,21);assert.equal(explicitRead.stats.DELAY,22);assert.equal(explicitRead.stats.DMG_BONUS,10);assert.equal(characterCatalogPreview(explicitWeapon,{tier:10}).rows.find(row=>row.key==='BACKSTAB_DMG').value,22);
+const explicitModel=createCharacterModel({storage:null}),resolved=explicitModel.intake({item:{name:explicitWeapon.name,tier:8,augmentStatus:'none'}},{wikiItem:explicitWeapon}).candidate;
+assert.equal(resolved.baseStats.BACKSTAB_DMG,15,'Inventory/catalog identity adaptation keeps the explicit baseline before displayLines are discarded');assert.equal(characterItemStats(resolved).stats.BACKSTAB_DMG,21);
+const later=explicitModel.resolveCatalog(resolved.id,{...explicitWeapon,stats:{...explicitWeapon.stats,BACKSTAB_DMG:null,DELAY:0,DMG_BONUS:0}}).candidate;
+assert.equal(later.baseStats.BACKSTAB_DMG,null);assert.equal(later.baseStats.DELAY,0);assert.equal(later.baseStats.DMG_BONUS,0);
+const measured={...explicitCard,observedStats:{BACKSTAB_DMG:47,DMG:91,DELAY:19},observedStatsComplete:true,augmentStatus:'included'};
+assert.deepEqual(characterItemStats(measured).stats,measured.observedStats,'Catalog hydration never rewrites actual examine values');
+const legacyModel=createCharacterModel({storage:null}),legacy=legacyModel.intake({item:{...explicitCard,baseStats:{...explicitWeapon.stats},observedStats:{DMG:91,BACKSTAB_DMG:47},observedStatsComplete:true,augmentStatus:'included'}}).candidate;
+legacyModel.setStatSnapshot('current',{stats:{HP_MAXIMUM:5432},confirmed:true});const legacyObserved=structuredClone(legacyModel.totals().computed);
+assert(legacyModel.reconcileCatalog(()=>({status:'exact',item:explicitWeapon})).ok);const rehydrated=legacyModel.snapshot().candidates.find(card=>card.id===legacy.id);
+assert.equal(rehydrated.baseStats.BACKSTAB_DMG,15,'An existing card recovers missing catalog facts when its exact catalog identity is reconciled');assert.equal(rehydrated.baseStats.DELAY,22);assert.equal(rehydrated.baseStats.DMG_BONUS,10);
+assert.deepEqual(characterItemStats(rehydrated).stats,legacy.observedStats);assert.deepEqual(legacyModel.totals().computed,legacyObserved,'Reconciliation leaves observed item and Character totals unchanged');

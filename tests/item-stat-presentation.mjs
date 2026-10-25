@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { isItemStatModified } from '../app/item-stat-presentation.js';
 import { renderItem,renderItemTooltip } from '../app/overlay.js';
-import { scaledItemStats } from '../app/item-scaling.js';
+import { catalogBaseStats, scaledItemStats } from '../app/item-scaling.js';
+import { characterCatalogDetails } from '../app/character-item-card.js';
 for(const [base,value,tier,expected] of [[100,170,7,true],[-8,-1,7,true],[1,.4,7,true],[10,10,7,false],[0,0,7,false],[10,17,0,false],[undefined,10,7,true],[undefined,0,7,false],[undefined,null,7,false],[null,10,7,false],['',0,7,false],[NaN,10,7,false],['10',10,7,false]])assert.equal(isItemStatModified(base,value,tier),expected);
 const base={HP:100,DMG:10,WT:1,HASTE:0,DELAY:20},item={name:'Synthetic Blade',tier:7,baseStats:base,stats:scaledItemStats({stats:base},7)};
 const tooltip=renderItemTooltip(item),card=renderItem(item);
@@ -10,6 +12,28 @@ assert.match(tooltip,/data-item-stat="HP">HP: <span class="wiki-itembox-value is
 assert.match(tooltip,/data-item-stat="DELAY">Atk Delay: <span class="wiki-itembox-value">20<\/span>/,'Unchanged delay keeps the ordinary wiki value style');
 assert.match(card,/<span class="is-scaled">HP 170<\/span>/);
 assert.doesNotMatch(renderItemTooltip({...item,tier:0,stats:base}),/\bis-scaled\b/,'A base-tier Itembox has no adjusted-value marker');
+
+const signature={name:'Synthetic Signature',classes:['ROG'],slots:['PRIMARY','SECONDARY'],stats:{STR:10,STA:5,DEX:10,SV_FIRE:5,SV_COLD:5,WT:2.5,DMG:10},displayLines:['Skill: 1H Piercing Atk Delay: 22','Dmg Bon: 10','BACKSTAB: 15']};
+const renderer=readFileSync(new URL('../app/app.js',import.meta.url),'utf8'),start=renderer.indexOf('function overlayItemSummary('),end=renderer.indexOf('const mapDataLoader',start);
+assert(start>=0&&end>start);
+const context=vm.createContext({catalogBaseStats,scaledItemStats,characterCatalogDetails,itemIconSource:()=>'',settings:{itemTier:8}});
+vm.runInContext(renderer.slice(start,end)+';globalThis.summarize=overlayItemSummary;',context);
+const native=context.summarize(signature,{remaining:99999});
+assert.equal(native.baseStats.BACKSTAB_DMG,15);assert.equal(native.stats.BACKSTAB_DMG,21);assert.equal(native.stats.DELAY,22);assert.equal(native.stats.DMG_BONUS,10);
+const nativeCard=renderItem(native),nativeTooltip=renderItemTooltip(native);
+assert.match(nativeCard,/>BACKSTAB 21<\/span>/);assert.match(nativeCard,/>Accuracy \+20%<\/span>/);assert.match(nativeCard,/>SV VOID 8<\/span>/);
+assert.doesNotMatch(nativeCard,/BACKSTAB_DMG|SV_CORRUPTION|SV_FIRE|DMG_BONUS/,'Compact Intel uses the same readable labels as the wiki item frame');
+assert.match(nativeTooltip,/data-item-stat="BACKSTAB_DMG">BACKSTAB: <span class="wiki-itembox-value is-scaled">21<\/span>/);
+assert.match(nativeTooltip,/Ratio: <span class="wiki-itembox-value is-scaled">\(0\.82\)<\/span>/,'Native ratio uses scaled damage18 and explicit unchanged delay22');
+assert.match(nativeTooltip,/data-item-stat="DMG_BONUS">DMG Bonus: <span class="wiki-itembox-value">10<\/span>/);assert.doesNotMatch(nativeTooltip,/@ lvl 50/,'Explicit damage bonus replaces the presentation fallback');
+assert.match(nativeTooltip,/data-item-stat="DELAY">Atk Delay: <span class="wiki-itembox-value">22<\/span>/,'Recovered constant fields are not marked modified');
+const legacyAccuracy=renderItem({stats:{ACCURACY:3},baseStats:{ACCURACY:3},tier:8});assert.match(legacyAccuracy,/>Accuracy 3<\/span>/);assert.doesNotMatch(legacyAccuracy,/3%/,'Explicit legacy unitless Accuracy does not acquire a percent sign');
+const dense=context.summarize({...signature,stats:{...Object.fromEntries(Array.from({length:32},(_,i)=>['CUSTOM_'+i,i])),...signature.stats}},{remaining:99999});
+for(const key of ['DMG','BACKSTAB_DMG','DELAY','DMG_BONUS','WT','ACCURACY','SV_CORRUPTION'])assert(Object.hasOwn(dense.stats,key),`${key}: dense native payload preserves core weapon fields`);
+assert.match(renderItem(dense),/>BACKSTAB 21<\/span>/,'Compact eighteen-value display keeps recovered weapon fields on dense items');
+const unknown=context.summarize({...signature,stats:{...signature.stats,BACKSTAB_DMG:null,DELAY:null,DMG_BONUS:null}},{remaining:99999});
+for(const key of ['BACKSTAB_DMG','DELAY','DMG_BONUS']){assert.equal(unknown.baseStats[key],null);assert.equal(unknown.stats[key],null);}
+assert.match(renderItemTooltip(unknown),/data-item-stat="BACKSTAB_DMG">BACKSTAB: <span class="wiki-itembox-value">\?<\/span>/,'Unknown structured values survive native serialization and rendering');
 for(const file of ['styles.css','overlay.css'])assert.match(readFileSync(new URL(`../app/${file}`,import.meta.url),'utf8'),/is-scaled[^{}]*\{[^}]*color:#86dc8c/);
 assert.match(readFileSync(new URL('../app/wiki-itembox.css',import.meta.url),'utf8'),/\.wiki-itembox \.is-scaled[^{}]*\{[^}]*color:#55ff55/,'All wiki-style hover values share the wiki green');
 console.log('Changed item stats: green main/overlay values, unchanged base values, negative penalties and weight passed.');

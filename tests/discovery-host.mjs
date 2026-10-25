@@ -17,13 +17,25 @@ function fixture(options={}) {
         desktopCapturer:{ async getSources(options) { captures.push(options); return sourceAction ? sourceAction() : sources; } },
         clipboard:{ writeImage(image) { if (clipboardFailure) throw clipboardFailure; images.push(image); } }
     };
-    const host = new DiscoveryHost({ electron, origin, getMainWindow:() => main,verifyDiscovery:async()=>({state:'missing',reasons:['missing-page'],confirmedRelations:[],checkedAt:new Date((options.now||Date.now)()).toISOString()}),itemExistence:{check:async()=>({status:'missing'}),clear(){},dispose(){}},...options });
+    const host = new DiscoveryHost({ isScreenReadingEnabled:()=>true,electron, origin, getMainWindow:() => main,verifyDiscovery:async()=>({state:'missing',reasons:['missing-page'],confirmedRelations:[],checkedAt:new Date((options.now||Date.now)()).toISOString()}),itemExistence:{check:async()=>({status:'missing'}),clear(){},dispose(){}},...options });
     const frame = window => ({ sender:window.webContents, senderFrame:window.webContents.mainFrame });
     return { host, main, timer, other, mainEvent:frame(main), timerEvent:frame(timer),get noticeEvent(){return frame(host.notices.window);}, otherEvent:frame(other), captures, images, handlers, windowsCreated:() => windowsCreated,
         setSources(value) { sources = value; }, setSourceAction(value) { sourceAction = value; }, setClipboardFailure(value) { clipboardFailure = value; } };
 }
 const prompt = (id = 'one') => ({ id, kind:'monster', name:'a synthetic rat', zone:'Synthetic Zone' });
 const image = (empty = false) => ({ isEmpty:() => empty });
+{
+    let enabled=false;const blocked=fixture({isScreenReadingEnabled:()=>enabled});
+    try{
+        await blocked.host.handle(blocked.mainEvent,'show',prompt());
+        await assert.rejects(blocked.host.capture({id:'one'}),/Screen reading is disabled/);assert.equal(blocked.captures.length,0);
+        enabled=true;const sources=deferred();blocked.setSourceAction(()=>sources.promise);
+        const pending=blocked.host.capture({id:'one'});enabled=false;blocked.host.cancelScreenshot();enabled=true;
+        sources.resolve([{id:'window:game',name:'EverQuest Legends',thumbnail:image()}]);
+        await assert.rejects(pending,/cancelled/);assert.equal(blocked.images.length,0,'A brief disable revokes prior screenshots even after permission is enabled again');
+        assert.equal(blocked.host.state().length,1,'Disabling screen capture preserves independent log discoveries');
+    }finally{blocked.host.dispose();}
+}
 const f = fixture();
 try {
     for (const event of [{ sender:{}, senderFrame:f.main.webContents.mainFrame }, { sender:f.main.webContents, senderFrame:{ url:`${origin}/` } }, f.timerEvent, f.otherEvent]) await assert.rejects(f.host.handle(event, 'show', prompt()), /unavailable/);

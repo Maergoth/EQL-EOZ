@@ -14,7 +14,7 @@ const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 const MAX_COMMAND_BYTES = 16 * 1024;
 const MAX_REPLY_BYTES = 8 * 1024 * 1024;
 const SESSION_ACTIONS = new Set([
-    'session:open', 'session:new-session', 'session:route', 'session:copy-waypoint', 'session:class-filter', 'session:item-tier', 'session:wiki',
+    'session:open', 'session:new-session', 'session:route', 'session:copy-waypoint', 'session:class-filter', 'session:item-tier', 'session:crawl-mode', 'session:wiki',
     'session:map-data', 'session:map-focus', 'session:intel-drops', 'session:select-npc', 'session:cancel-route',
     'timer:fire-definition', 'timer:save-definition', 'timer:remove-definition', 'timer:start', 'timer:pause', 'timer:resume',
     'timer:reset', 'timer:cancel', 'timer:delete', 'timer:create-spawn', 'timer:reset-swing',
@@ -132,6 +132,7 @@ function sessionCommand(action, payload) {
     if (action === 'session:map-data' && (typeof value.zone !== 'string' || value.zone.length > 160)) throw new Error('Invalid map zone.');
     if (action === 'session:class-filter' && (value.panel !== 'intel' || typeof value.enabled !== 'boolean')) throw new Error('Invalid class filter.');
     if(action==='session:item-tier'&&(!Number.isInteger(value.tier)||value.tier<0||value.tier>10))throw new Error('Invalid item tier.');
+    if(action==='session:crawl-mode'&&(typeof value.enabled!=='boolean'||Object.keys(value).some(key=>key!=='enabled')))throw new Error('Invalid Crawl mode.');
     return value;
 }
 
@@ -282,6 +283,7 @@ class OverlayHost {
             return this.getState(id);
         }
         const value = sessionCommand(action, payload);
+        if(action==='session:crawl-mode'&&!['map','intel'].includes(id))throw new Error('Crawl mode is available in Map and Zone & loot.');
         const main = this.getMainWindow();
         if (!this.sessionAvailable || !main || main.isDestroyed()) throw new Error('The application session is unavailable. Open Eye of Zomm to reconnect.');
         if (['session:map-data', 'session:intel-drops'].includes(action)) {

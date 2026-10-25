@@ -9,8 +9,8 @@ const itemIdentity = value => String(value || '').normalize('NFKC').replace(/_/g
 // Suggestions use a dedicated non-activating window, independent of Timers.
 // Registration never captures pixels or sends game input.
 class DiscoveryHost {
-    constructor({ electron, origin, getMainWindow, showMain = null, itemExistence = null, verifyDiscovery=null, isContributionIgnored=null, now=Date.now }) {
-        this.electron = electron; this.origin = origin; this.getMainWindow = getMainWindow; this.itemExistence=itemExistence;this.verifyDiscovery=verifyDiscovery;this.isContributionIgnored=isContributionIgnored;this.now=now;this.noticeGeneration=0;
+    constructor({ electron, origin, getMainWindow, showMain = null, itemExistence = null, verifyDiscovery=null, isContributionIgnored=null, isScreenReadingEnabled=()=>false, now=Date.now }) {
+        this.electron = electron; this.origin = origin; this.getMainWindow = getMainWindow; this.itemExistence=itemExistence;this.verifyDiscovery=verifyDiscovery;this.isContributionIgnored=isContributionIgnored;this.isScreenReadingEnabled=isScreenReadingEnabled;this.now=now;this.noticeGeneration=0;
         this.showMain = showMain; this.spawnWindow = null; this.spawnReady = null; this.spawnGeneration = 0;
         this.queue = []; this.disposed = false; this.capturing = false; this.captureId = null; this.captureGeneration = 0; this.contributionSequence = 0;
         this.pendingNotices=new Map();this.retiredNotices=new Set();this.notableSequence=0;
@@ -216,6 +216,7 @@ class DiscoveryHost {
         throw new Error('Unknown wiki discovery action.');
     }
     async capture(value) {
+        if(!this.isScreenReadingEnabled())throw Error('Screen reading is disabled. Enable it in Settings → Screen reading first.');
         if (this.disposed || !this.queue.some(item => item.id === value?.id)) throw new Error('This suggestion has already been dismissed.');
         if (this.capturing) throw new Error('A screenshot is already in progress.');
         this.capturing = true; this.captureId = value.id;
@@ -227,7 +228,7 @@ class DiscoveryHost {
             // Reached only through an explicit Screenshot action from the exact
             // main frame or exact dedicated notice frame.
             const sources = await this.electron.desktopCapturer.getSources({ types:['window', 'screen'], thumbnailSize:{ width, height }, fetchWindowIcons:false });
-            if (this.disposed || generation !== this.captureGeneration) throw new Error('The screenshot was cancelled.');
+            if (!this.isScreenReadingEnabled() || this.disposed || generation !== this.captureGeneration) throw new Error('The screenshot was cancelled.');
             const choices = sources.filter(source => !/^Eye of Zomm|^EQLWiki - Eye of Zomm/i.test(source.name));
             const games = choices.filter(source => /everquest/i.test(source.name));
             if (value.sourceId !== undefined && (typeof value.sourceId !== 'string' || !choices.some(source => source.id === value.sourceId))) throw new Error('Choose a currently available window or display.');
@@ -250,6 +251,7 @@ class DiscoveryHost {
     dispose() {
         this.disposed = true; this.clear(); this.notices.dispose();this.itemExistence?.dispose();this.electron.ipcMain.removeHandler(CHANNEL); this.electron.ipcMain.removeHandler(SPAWN_CHANNEL);
     }
+    cancelScreenshot(){this.captureGeneration++;this.capturing=false;this.captureId=null;}
     clear() { this.captureGeneration++; this.noticeGeneration++;this.spawnGeneration++; this.queue = [];this.pendingNotices.clear();this.retiredNotices.clear(); this.capturing = false; this.captureId = null;this.notices.clear();this.itemExistence?.clear();const window=this.spawnWindow;this.spawnWindow=null;this.spawnReady=null;if(window&&!window.isDestroyed())window.destroy(); }
 }
 module.exports = { DiscoveryHost, SPAWN_CHANNEL };

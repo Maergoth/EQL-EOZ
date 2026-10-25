@@ -26,7 +26,7 @@ assert.match(contributionMatchMarkup({fields:{},membership:'present',intent:'cre
 
 const identityCards=contributionMatchMarkup({kind:'npc',fields:{},intent:'update'},[{title:'A Loathing Lich'},{title:'A_Loathing_Lich'},{title:'A loathing lich'}]);
 assert.equal((identityCards.match(/data-use-existing=/g)||[]).length,1,'Case and underscore variants do not show duplicate cards');
-assert.match(identityCards,/data-use-existing="A Loathing Lich"/);assert.match(identityCards,/data-check-matches/);assert.match(identityCards,/name="intent"/);
+assert.match(identityCards,/data-use-existing="A Loathing Lich"/);assert.doesNotMatch(identityCards,/data-check-matches|Check live wiki/);assert.match(identityCards,/data-live-matches-status/);assert.match(identityCards,/name="intent"/);
 for(const intent of ['create','update']){
     const destination=contributionMatchMarkup({kind:'item',fields:{},intent,matchesReviewed:true},[{title:'Synthetic Destination'}]);
     assert.doesNotMatch(destination,/type="checkbox"|data-matches-reviewed|This is the correct existing page|I checked that this page does not already exist|page identity and contribution type/,'Destination review is performed by the explicit preview action, without a second approval checkbox.');

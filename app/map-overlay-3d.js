@@ -53,8 +53,8 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
                 loaded=key;
             }
             if(appliedMode!==mode){api.setView(mode);appliedMode=mode;if(follow)lastLocation=null;}
-            const map=session.map||{},markers=JSON.stringify(map.npcs||[]),route=JSON.stringify(map.route?.points||[]);
-            if(markers!==lastMarkers){api.setRareMobs(map.npcs||[]);lastMarkers=markers;}
+            const map=session.map||{},records=(map.npcs||[]).map(npc=>({...npc,defeated:session.crawl?.enabled===true&&npc.defeated===true})),markers=JSON.stringify(records),route=JSON.stringify(map.route?.points||[]);
+            if(markers!==lastMarkers){api.setRareMobs(records);lastMarkers=markers;}
             api.setOverlaySelection?.(map.selectedNpcId||'');
             if(route!==lastRoute){api.setOverlayRoute?.(map.route?.points||[]);lastRoute=route;}
             if(slice&&JSON.stringify(slice)!==lastSlice){api.setOverlaySlice?.(slice);lastSlice=JSON.stringify(slice);}

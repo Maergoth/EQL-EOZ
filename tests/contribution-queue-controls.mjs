@@ -13,6 +13,7 @@ const notices=[],mount=()=>mountCaptureWorkspace({document,storage,characterStor
 try{
  view=mount();view.refresh();await tick();
  assert.equal(document.querySelectorAll('[data-dismiss-discovery]').length,3);assert.equal(document.querySelectorAll('[data-ignore-forever]').length,2,'Only NPCs/items offer permanent entity ignore');
+ for(const row of document.querySelectorAll('.contribution-row-controls'))assert(row.firstElementChild.matches('[data-dismiss-discovery]'),'Regular × is left of permanent ∞× in visual and keyboard order');
  view.openContribution(first.id);document.querySelector(`[data-dismiss-discovery="${second.id}"]`).click();
  assert.equal(document.querySelector('[data-candidate-form] [name="name"]').value,first.name,'Dismissing another row does not select it');assert(!document.querySelector(`[data-candidate-id="${second.id}"]`));
  document.querySelector(`[data-ignore-forever="${first.id}"]`).click();await tick();await tick();

@@ -27,7 +27,7 @@ class Point {
 }
 
 function node() {
-    return { dataset:{}, style:{}, classList:{ toggle() {} }, append() {}, replaceChildren() {}, addEventListener() {} };
+    return { dataset:{}, style:{}, attributes:{},setAttribute(key,value){this.attributes[key]=String(value);},classList:{ toggle() {} }, append() {}, replaceChildren() {}, addEventListener() {} };
 }
 
 function harness({ realModeTransitions = false } = {}) {

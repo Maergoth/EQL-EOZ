@@ -70,3 +70,17 @@ assert.equal(discoveryItemIdentity('Thornstinger +5 (Exaltation)'),'thornstinger
     assert.deepEqual(statuses.map(value=>value.status),['captured','retry']);assert.equal(cancelled,1,'host failure still releases owned capture');
 }
 console.log('Discovery contribution flow: fresh reader proof, source selection, retries, spawn completion and cancellation passed.');
+
+{
+    const linked={id:'linked-worn',purpose:'item-link',name:'Worn Great Blade',candidateId:'draft-worn',captureRequest:'capture-20'};
+    const build=()=>fixture(async request=>({ok:true,capture,candidateId:request.candidateId}));
+    const raw=f=>f.observation({subject:{kind:'item',name:'wom great blade'}}),match={candidateId:'draft-worn',name:'Worn Great Blade',observedName:'wom great blade'};
+    const f=build();await f.flow.request(linked);const observation=raw(f),original=JSON.stringify(observation);
+    assert.equal(f.flow.recordItem(observation),false,'A fuzzy reading alone cannot claim canonical identity');
+    assert.equal(f.flow.recordItem(observation,match),true);await tick();assert.equal(f.statuses[0].matchedName,'Worn Great Blade');assert.equal(JSON.stringify(observation),original,'Raw OCR name and native evidence are never renamed');
+    for(const patch of [{candidateId:'other'},{name:'Other Blade'},{observedName:'Worn Great Blade'}]){const f=build();await f.flow.request(linked);assert.equal(f.flow.recordItem(raw(f),{...match,...patch}),false);assert.equal(f.statuses.length,0);}
+    for(const patch of [{sessionId:'old'},{input:{captureGeneration:6,sourceId:capture.source.id}},{input:{captureGeneration:7,sourceId:'window:other'}},{capturedAt:new Date(9999).toISOString()},{subject:{kind:'item',name:'Unrelated Blade'}}]){const f=build();await f.flow.request(linked);assert.equal(f.flow.recordItem({...raw(f),...patch},match),false);assert.equal(f.statuses.length,0);}
+    const ambiguous=build();await ambiguous.flow.request(linked);await ambiguous.flow.request({...linked,id:'linked-other',name:'Wom Great Blades',candidateId:'draft-other',captureRequest:'capture-21'});assert.equal(ambiguous.flow.recordItem(raw(ambiguous),match),false,'Another plausible pending linked item prevents correction');assert.equal(ambiguous.statuses.length,0);
+    const pending=deferred(),buffered=fixture(()=>pending.promise),work=buffered.flow.request(linked);buffered.flow.recordItem(raw(buffered),match);assert.equal(buffered.statuses.length,0);pending.resolve({ok:true,capture,candidateId:'draft-worn'});await work;await tick();assert.equal(buffered.statuses[0].matchedName,'Worn Great Blade','An early raw frame waits for the bound draft/source response');
+    console.log('Linked OCR correction: separate bound identity, raw evidence retained, independent uniqueness and stale/source/candidate guards passed.');
+}

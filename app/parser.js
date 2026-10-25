@@ -1,6 +1,8 @@
 import { loggedLocationToWorld } from './coordinate-system.js';
 import { isOwnedPetName } from './generated-pets.js';
 import {LogContext} from './log-context.js';
+import { createCombatants, accumulateCombatants, combatantSnapshot } from './combatants.js';
+import { rankedChatItemMentions } from './chat-item-mentions.js';
 
 const LINE_RE = /^\[([^\]]+)\]\s*(.*)$/;
 const AUTO_ATTACK_VERBS = new Set(['hit', 'slash', 'crush', 'pierce', 'punch', 'claw', 'bite', 'maul']);
@@ -8,6 +10,17 @@ const AUTO_ATTACK_VERBS = new Set(['hit', 'slash', 'crush', 'pierce', 'punch', '
 // names. Exact own-target validation follows; combat verbs such as cleaves,
 // slices, stings and smashes need no outgoing swing-eligibility whitelist.
 const INCOMING_MELEE_RE = /^(.+) ([a-z]{3,24}) (?:on )?(\S+) for ([\d,]+) points? of damage\.?(?:\s*\([^)]+\))?$/i;
+// Explicit verbs fix the boundary between two potentially multiword names.
+const NEARBY_MELEE_RE = /^(.+?) (hits?|slashes?|crush(?:es)?|pierces?|punch(?:es)?|claws?|bites?|mauls?|kicks?|bashes?|backstabs?|strikes?|smashes?|cleaves?|slices?|stings?|shoots?|frenz(?:y|ies)) (?:on )?(.+?) for ([\d,]+) points? of damage\.?(?:\s*\([^)]+\))?$/i;
+const NEARBY_MELEE_LAST_RE = new RegExp(NEARBY_MELEE_RE.source.replace('^(.+?)','^(.+)'),'i');
+const NEARBY_SPELL_RE = /^(.+?) hits? (.+?) for ([\d,]+) points? of ([\w-]+) damage by (.+?)\.(?:\s*\([^)]+\))?$/i;
+const NEARBY_SPELL_LAST_RE = new RegExp(NEARBY_SPELL_RE.source.replace('^(.+?)','^(.+)'),'i');
+const NEARBY_HEAL_RE = /^(.+?) healed (.+?) for ([\d,]+)(?: \([\d,]+\))? hit points? by (.+?)\.$/i;
+const NEARBY_HEAL_LAST_RE = new RegExp(NEARBY_HEAL_RE.source.replace('^(.+?)','^(.+)'),'i');
+const combatName = value => {
+    const name = normalizeName(value);
+    return name.length <= 180 && /^[\p{L}\p{N}][\p{L}\p{N}\s'’`_.-]*$/u.test(name) ? name : '';
+};
 
 function parseNumber(text) {
     return Number(String(text || '').replace(/,/g, ''));
@@ -38,24 +51,6 @@ export function extractItemLinks(text){
     for(const match of input.matchAll(/\\aITEM\s+(-?\d{1,10})(?:\s+-?\d{1,10}){1,8}:([^\\\r\n]{1,240})\\\/a/gi))if(Number(match[1])!==0)add(safeItemLinkName(match[2]),match.index);
     for(const match of input.matchAll(/\x12([0-9a-f]{56})([^\x12\r\n]{1,240})\x12/gi))add(nativeItemLinkName(match[1],match[2]),match.index);
     return found.sort((a,b)=>a.index-b.index).filter(link=>{const key=link.name.toLowerCase();if(seen.has(key))return false;seen.add(key);return true;}).slice(0,8).map(link=>link.name);
-}
-
-const CHAT_ITEM_WORDS=new Set(('amulet armor armour axe band belt blade boots bow bracelet bracer bracers breastplate buckler cap cape charm chestplate circlet cloak club coif crown dagger earrings earring eye eyepatch gauntlets gem girdle gloves greaves hammer helm helmet hood jerkin leggings mace mask necklace orb pants pauldrons pendant plate rapier ring robe sandals sash scepter scimitar shield shoes shroud sleeves spear staff stone sword talisman tome tunic vambraces veil vest wand wraps').split(' '));
-function tieredChatItemMention(text){
-    // EQ can write chat links as plain display text. Admit only a named,
-    // tier-decorated name inside an actual quoted chat payload. A whole
-    // payload can be a one-word name; trailing prose needs an equipment-shaped
-    // prefix. These are possible mentions, not proof of an encoded link.
-    const chat=String(text||'').slice(0,16384).match(/^(?:You|[\p{L}][\p{L}'’-]{0,63}) (?:tells? (?:you|the (?:guild|group|raid)|[\p{L}][\p{L}\d_-]{0,40}:\d{1,3})|says?(?: out of character)?|shouts?|auctions?),[ \t]*'([^\r\n]{1,2048})'$/u);
-    if(!chat)return [];
-    const match=chat[1].match(/^(.{1,230}?)[ \t]+\+(10|[0-9])(?:[ \t]+(.*))?$/u);
-    if(!match||/\+\d/.test(match[3]||''))return [];
-    const name=safeItemLinkName(match[1]),words=name?.split(' ')||[],connectors=new Set(['of','the','and','a','an','to','for','in','with','from','at','on']);
-    if(!name||name.length<4||/^(?:Damage Shield|Spell Shield|Armor Class|Attack Speed|Damage Bonus|Haste|Attack|Mana|Endurance|Accuracy|Avoidance)$/i.test(name)||/\b(?:Spell|Buff|Stats?|Level)$/i.test(name))return [];
-    if(!words.length||words.length>10||/^(?:I|You|We|They|This|These|Those|That|My|Your|Our|Need|Want|Looking|Selling|Buying)$/i.test(words[0]))return [];
-    if(!words.every(word=>connectors.has(word)||/^[\p{Lu}][\p{L}\d]*(?:['’-][\p{L}\d]+)*$/u.test(word)))return [];
-    if((match[3]||'').trim()&&(words.length<2||!words.some(word=>CHAT_ITEM_WORDS.has(word.toLowerCase()))))return [];
-    return [`${name} +${match[2]}`];
 }
 
 function trimSentence(text) {
@@ -104,17 +99,25 @@ export class EQLogParser {
         this.lastTakenAt = null;
         this.totalLoot = 0;
         this.totalOwnKills = 0;
+        this.totalAaGained = 0;
+        this.combatants = createCombatants();
         this.sessionStartedAt = null;
         this.sessionNumber = 1;
         this.lastCombatAt = null;
         this.currentFight = null;
         this.encounterGapSeconds = 15;
         this.combatEvents = [];
+        this.combatEventsDropped = false;
+        this.encounterHistoryLimited = false;
         this.encounters = [];
+        this.activeEncounters = new Set();
         this.nextEncounterId = 1;
         this.sourceEncounters = new WeakSet();
         this.currentSourceEvents = new WeakSet();
         this.eventZones = new WeakMap();
+        this.eventSources = new WeakMap();
+        this.eventVisits = new WeakMap();
+        this.sourceContextId = 1;
         this.killCounts = new Map();
         this.lootCounts = new Map();
         this.lootLog = [];
@@ -128,6 +131,7 @@ export class EQLogParser {
         this.knownPlayerNames.clear();
         this.lastKill = null;this.currentFight = null;this.currentLineAt = null;
         this.sourceEncounters = new WeakSet();this.currentSourceEvents = new WeakSet();
+        this.sourceContextId++; this.activeEncounters.clear();
         this.logContext.reset();
     }
 
@@ -146,11 +150,16 @@ export class EQLogParser {
         this.lastTakenAt = null;
         this.totalLoot = 0;
         this.totalOwnKills = 0;
+        this.totalAaGained = 0;
+        this.combatants = createCombatants();
         this.sessionStartedAt = Number.isFinite(at) ? at : Date.now();
         this.lastCombatAt = null;
         this.currentFight = null;
         this.combatEvents = [];
+        this.combatEventsDropped = false;
+        this.encounterHistoryLimited = false;
         this.encounters = [];
+        this.activeEncounters.clear();
         this.killCounts.clear();
         this.lootCounts.clear();
         this.lootLog = [];
@@ -193,11 +202,21 @@ export class EQLogParser {
 
     appendEncounterEvent(event) {
         const gapMs = this.encounterGapSeconds * 1000, currentSource = this.currentSourceEvents.has(event), eventZone = this.eventZones.get(event) ?? this.zone;
-        let encounter = this.encounters[this.encounters.length - 1];
+        const sourceContextId = this.eventSources.get(event) ?? this.sourceContextId, zoneVisit = this.eventVisits.get(event) ?? this.logContext.visit;
+        const names = this.combatantNames(event).map(name => name.toLowerCase());
+        // Concurrent nearby fights belong to their own connected group. Own
+        // damage/taken/heals remain connected through the selected character.
+        let encounter;
+        for (const candidate of this.activeEncounters) {
+            if (event.at - candidate.lastAt > gapMs || candidate.sourceContextId !== sourceContextId || candidate.zoneVisit !== zoneVisit) { this.activeEncounters.delete(candidate); continue; }
+            if (candidate.zone === eventZone && names.some(name => candidate.actorNames.has(name)) && (!encounter || candidate.lastAt >= encounter.lastAt)) encounter = candidate;
+        }
         if (!encounter || this.sourceEncounters.has(encounter) !== currentSource || encounter.zone !== eventZone || event.at - encounter.lastAt > gapMs) {
             encounter = {
                 id: `session-${this.sessionNumber}-encounter-${this.nextEncounterId++}`,
                 zone: eventZone,
+                sourceContextId,
+                zoneVisit,
                 startAt: event.at,
                 lastAt: event.at,
                 firstTarget: '',
@@ -205,14 +224,17 @@ export class EQLogParser {
                 healing: 0,
                 taken: 0,
                 takenHits: 0,
-                events: []
+                events: [],
+                actorNames:new Set(),
+                combatantState:createCombatants()
             };
             this.encounters.push(encounter);
+            this.activeEncounters.add(encounter);
             if(currentSource)this.sourceEncounters.add(encounter);
         }
 
         const target = this.encounterTarget(event);
-        if (!encounter.firstTarget && target && ['damage', 'taken', 'kill'].includes(event.type)) {
+        if (!encounter.firstTarget && target && ['damage', 'taken', 'kill', 'combatant-damage'].includes(event.type)) {
             encounter.firstTarget = target;
         }
         encounter.lastAt = Math.max(encounter.lastAt, event.at);
@@ -221,19 +243,36 @@ export class EQLogParser {
         encounter.taken += event.type === 'taken' ? Number(event.amount || 0) : 0;
         encounter.takenHits += event.type === 'taken' ? 1 : 0;
         encounter.events.push(event);
+        for (const name of names) encounter.actorNames.add(name);
+        accumulateCombatants(encounter.combatantState, event, event.character || this.character);
+    }
+
+    combatantNames(event) {
+        const self = event.character || this.character || 'You';
+        const resolve = name => this.isPlayerTarget(name) ? self : normalizeName(name);
+        if (event.type === 'damage') return [self,resolve(event.victim)];
+        if (event.type === 'taken') return [self,resolve(event.attacker)];
+        if (event.type === 'heal') return [self,resolve(event.target)];
+        if (event.type === 'combatant-damage' || event.type === 'combatant-heal') return [resolve(event.actor),/^(?:itself|himself|herself|themselves)$/i.test(event.target) ? resolve(event.actor) : resolve(event.target)];
+        return [self,resolve(event.victim || event.target)];
     }
 
     rememberCombatEvent(event) {
+        event.character = this.character || 'You';
         const saved = this.rememberEvent(event);
         this.currentSourceEvents.add(saved);this.eventZones.set(saved,this.zone);
+        this.eventSources.set(saved,this.sourceContextId);this.eventVisits.set(saved,this.logContext.visit);
         this.combatEvents.push(saved);
-        if (this.combatEvents.length > 5000) this.combatEvents.shift();
+        if (this.combatEvents.length > 5000) { this.combatEvents.shift(); this.combatEventsDropped = true; }
         this.appendEncounterEvent(saved);
+        accumulateCombatants(this.combatants, saved, saved.character);
         return saved;
     }
 
     rebuildEncounters() {
+        this.encounterHistoryLimited ||= this.combatEventsDropped;
         this.encounters = [];
+        this.activeEncounters.clear();
         this.nextEncounterId = 1;
         for (const event of this.combatEvents) this.appendEncounterEvent(event);
     }
@@ -350,6 +389,32 @@ export class EQLogParser {
         return target === 'you' || Boolean(this.character && target === this.character.toLowerCase());
     }
 
+    noteOtherCombat(actor, target, amount, source, kind, healing = false) {
+        actor = combatName(actor); target = combatName(target);
+        const n = parseNumber(amount);
+        if (!actor || !target || !Number.isFinite(n) || n < 0) return null;
+        if (this.isPlayerTarget(actor)) {
+            if (!healing) return this.noteDamage(target, n, source, kind);
+            this.totalHealing += n;
+            return this.rememberCombatEvent({type:'heal', target, amount:n, source});
+        }
+        if (!healing && this.isPlayerTarget(target)) return this.noteTaken(actor,n,source,kind,target);
+        return this.rememberCombatEvent({type:healing ? 'combatant-heal' : 'combatant-damage', actor,
+            target:this.isPlayerTarget(target) ? this.character || 'You' : target, amount:n, source, kind,
+            encounterTarget:healing ? '' : `${actor} → ${target}`});
+    }
+
+    namedCombatMatch(first, last, targetIndex) {
+        if (!first || !last || first[1] === last[1] && first[targetIndex] === last[targetIndex]) return first;
+        // Names can themselves contain "hit" or another combat verb. Prefer
+        // a split supported by an already established exact name, otherwise
+        // retain uncertainty instead of inventing two new actor names.
+        const known = value => this.isPlayerTarget(value) || this.knownPlayerNames.has(normalizeName(value).toLowerCase()) ||
+            this.combatants.rows.some(row => row.name.toLowerCase() === normalizeName(value).toLowerCase());
+        const score = match => Number(known(match[1])) + Number(known(match[targetIndex]));
+        return score(first) > score(last) ? first : score(last) > score(first) ? last : null;
+    }
+
     noteTaken(attacker, amount, source, kind, target = 'You') {
         const n = parseNumber(amount);
         if (!this.isPlayerTarget(target) || !Number.isFinite(n) || n < 0) return null;
@@ -463,6 +528,11 @@ export class EQLogParser {
         // must never repopulate the new parse with historical combat or loot.
         if (!recordSession) return null;
 
+        // Count earned points, never AA experience, bank balances or spends.
+        // EQ's GAIN_ABILITY_POINT string has an optional bank-balance suffix.
+        x = text.match(/^You have gained an ability point!(?:\s*You now have [\d,]+ ability point(?:s|\(s\))?\.)?$/i);
+        if (x) { this.totalAaGained++; return this.rememberEvent({type:'aa-gain', amount:1}); }
+
         // Incoming Legends direct spells, DoTs and melee. Only YOU or the
         // currently selected character is an authoritative player target;
         // nearby players, pets, grants of rune capacity and misses are excluded.
@@ -519,6 +589,17 @@ export class EQLogParser {
             return this.rememberCombatEvent({ type: 'heal', target: normalizeName(x[1]), amount: n, source: x[3] });
         }
 
+        // Nearby actions retain their logged actors and recipients. The own
+        // paths above run first, so a single line never earns damage twice.
+        x = this.namedCombatMatch(text.match(NEARBY_SPELL_RE),text.match(NEARBY_SPELL_LAST_RE),2);
+        if (x) return this.noteOtherCombat(x[1],x[2],x[3],x[5],'spell');
+        x = text.match(/^(.+?) ha(?:s|ve) taken ([\d,]+) damage from (.+?) by (.+?)\.(?:\s*\([^)]+\))?$/i);
+        if (x) return this.noteOtherCombat(x[4],x[1],x[2],x[3],'dot');
+        x = this.namedCombatMatch(text.match(NEARBY_MELEE_RE),text.match(NEARBY_MELEE_LAST_RE),3);
+        if (x) return this.noteOtherCombat(x[1],x[3],x[4],x[2].toLowerCase(),'melee');
+        x = this.namedCombatMatch(text.match(NEARBY_HEAL_RE),text.match(NEARBY_HEAL_LAST_RE),2);
+        if (x) return this.noteOtherCombat(x[1],x[2],x[3],x[4],'spell',true);
+
         x = text.match(/^You gain a rune for ([\d,]+) points? of absorption\.$/i);
         if (x) {
             const n = parseNumber(x[1]);
@@ -552,7 +633,7 @@ export class EQLogParser {
         }
 
         if(itemLinks.length)return this.rememberEvent({type:'item-links',items:itemLinks,evidence:{text:raw.slice(0,6000)}});
-        const itemMentions=tieredChatItemMention(body);
+        const itemMentions=rankedChatItemMentions(body,this.logContext.getPack());
         if(itemMentions.length)return this.rememberEvent({type:'item-links',items:itemMentions,itemLinkFormat:'plain-tiered-chat',evidence:{text:raw.slice(0,6000),interpretation:'possible-tiered-item-mention'}});
         return null;
     }
@@ -565,16 +646,18 @@ export class EQLogParser {
         const takenSeconds = this.takenStartedAt && this.lastTakenAt
             ? Math.max(1, (this.lastTakenAt - this.takenStartedAt) / 1000)
             : 0;
+        const combatants = combatantSnapshot(this.combatants, {character:this.character, selfSeconds:sessionSeconds});
         const encounters = this.encounters.slice().reverse().map(encounter => {
             const duration = Math.max(1, (encounter.lastAt - encounter.startAt) / 1000);
             return {
-                ...encounter,
+                ...Object.fromEntries(Object.entries(encounter).filter(([key]) => !['actorNames','combatantState','sourceContextId','zoneVisit'].includes(key))),
                 name: encounter.firstTarget || 'Encounter',
                 duration,
                 dps: encounter.damage / duration,
                 takenPerSecond: encounter.taken / duration,
                 active: now - encounter.lastAt <= this.encounterGapSeconds * 1000,
-                events: encounter.events.slice()
+                events: encounter.events.slice(),
+                combatants:combatantSnapshot(encounter.combatantState, {seconds:duration}).rows
             };
         });
         const fight = encounters[0] || null;
@@ -606,8 +689,12 @@ export class EQLogParser {
             sessionTakenPerSecond: takenSeconds ? this.totalTaken / takenSeconds : 0,
             totalKills: Array.from(this.killCounts.values()).reduce((sum, count) => sum + count, 0),
             totalOwnKills: this.totalOwnKills,
+            totalAaGained:this.totalAaGained,
+            combatants:combatants.rows,
+            combatantSeconds:combatants.seconds,
             totalLoot: this.totalLoot,
             encounterCount: this.encounters.length,
+            encounterHistoryLimited:this.encounterHistoryLimited,
             sessionSeconds,
             sessionNumber: this.sessionNumber,
             sessionStartedAt: this.sessionStartedAt,

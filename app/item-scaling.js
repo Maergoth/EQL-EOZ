@@ -15,10 +15,44 @@ export const itemStatFamily=key=>engine.statFamily(key);
 export const itemEffectiveLevel=(fullLevel,fraction=0)=>engine.effectiveLevel(fullLevel,fraction);
 export const scaleItemStat=(key,value,fullLevel,options={})=>value===null?null:engine.scaleStat(key,value,fullLevel,options);
 
+const catalogStatAliases=Object.freeze({BACKSTAB:'BACKSTAB_DMG',BACKSTAB_DAMAGE:'BACKSTAB_DMG',BACKSTAB_DMG:'BACKSTAB_DMG',ATK_DELAY:'DELAY',ATTACK_DELAY:'DELAY',DELAY:'DELAY',DMG_BON:'DMG_BONUS',DAMAGE_BON:'DMG_BONUS',DAMAGE_BONUS:'DMG_BONUS',DMG_BONUS:'DMG_BONUS'});
+const catalogStatKey=label=>catalogStatAliases[String(label).trim().toUpperCase().replace(/[ .]+/g,'_')];
+const literalNumber=value=>typeof value==='number'&&Number.isFinite(value)?value:typeof value==='string'&&/^[+\-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(value.trim())&&Number.isFinite(Number(value))?Number(value):null;
+
+/** Recover explicit catalog fields omitted by older packs. Structured own
+ * values, including zero/unknown, win. Conflicting or nonliteral card values
+ * stay unknown; notes and observed examine text are never consulted. A saved
+ * catalog base can fill only these missing fields from a refreshed record. */
+export function catalogBaseStats(item={},preservedStats) {
+    const stats={...(preservedStats??item.stats??{})},aliases=new Map(),explicit=new Map();
+    const collect=(values,key,value)=>{if(!key)return;const numeric=literalNumber(value);values.set(key,values.has(key)&&values.get(key)!==numeric?null:numeric);};
+    for(const [label,value]of Object.entries(stats)){
+        const key=catalogStatKey(label);if(!key||label===key)continue;
+        collect(aliases,key,value);delete stats[label];
+    }
+    for(const [key,value]of aliases)if(!Object.hasOwn(stats,key))stats[key]=value;
+    if(preservedStats!==undefined){
+        const fresh=catalogBaseStats(item);
+        for(const key of ['BACKSTAB_DMG','DELAY','DMG_BONUS'])if(!Object.hasOwn(stats,key)&&Object.hasOwn(fresh,key))stats[key]=fresh[key];
+        return stats;
+    }
+    for(const raw of (Array.isArray(item.displayLines)?item.displayLines:[]).slice(0,32)){
+        if(typeof raw!=='string'||raw.length>400)continue;
+        const line=raw.trim(),direct=line.match(/^(BACKSTAB(?:[ _]+(?:DMG|DAMAGE))?|(?:DMG|DAMAGE)[ _]+(?:BON|BONUS)|(?:(?:ATK|ATTACK)[ _]+)?DELAY)\s*:\s*(.*?)\s*$/i);
+        if(direct)collect(explicit,catalogStatKey(direct[1]),direct[2]);
+        const skill=line.match(/^Skill:\s*[\w /&-]{1,80}?\s+(?:Atk\s+|Attack\s+)?Delay:\s*(.*?)\s*$/i);
+        if(skill)collect(explicit,'DELAY',skill[1]);
+    }
+    const details=Array.isArray(item.details)?item.details:Array.isArray(item.cardDetails)?item.cardDetails:[];
+    for(const detail of details.slice(0,32))if(typeof detail?.label==='string'&&detail.label.length<=60&&typeof detail.value==='string'&&detail.value.length<=400)collect(explicit,catalogStatKey(detail.label),detail.value);
+    for(const [key,value]of explicit)if(!Object.hasOwn(stats,key))stats[key]=value;
+    return stats;
+}
+
 /** Catalog cards need whole-item context for conditional weapon Accuracy and
  * Void resist. Recorded examine/character totals never pass through here. */
 export function scaledItemStats(item={},fullLevel,options={}) {
-    const stats={...(item.stats||{})},details=Array.isArray(item.details)?item.details:Array.isArray(item.cardDetails)?item.cardDetails:[];
+    const stats=catalogBaseStats(item),details=Array.isArray(item.details)?item.details:Array.isArray(item.cardDetails)?item.cardDetails:[];
     const lines=Array.isArray(item.displayLines)?item.displayLines:[];
     const detail=label=>details.find(value=>value?.label===label)?.value||'';
     const slotText=detail('Slot')||lines.find(line=>/^Slot:/i.test(line))?.replace(/^Slot:\s*/i,'')||'';

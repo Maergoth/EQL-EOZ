@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.0 - Eye of Zomm 1.0
+
+- Use the native eye icon on desktop shortcuts, installers and application windows.
+- Deliver changed logged locations promptly to the minimap, restore visible-map polling and catch up through busy logs in bounded bursts. Old source and zone coordinates cannot return after a reset.
+- Share Crawl between Map and Zone & loot. Fresh kills clear matching located or loot-bearing mobs until the next zone visit; turning Crawl off restores normal previews.
+- Compare logged combatants in whole-session and encounter Overview, with per-combatant Damage, Healing and Taken details. Track AA Gained in Session. Live retains the last completed fight until another begins.
+- Use explicit wiki Backstab, Delay and Damage Bonus fields in item previews. Preserve independent base values and exact decimal weight rounding; Torturer's Signature at tier 8 has Backstab 21 and weight 0.7 from its documented bases.
+- Follow New Item Found! from a log-backed popup to the exact contribution and examine prompt. Optional OCR fills one structured numeric form; blank fields stay omitted and invalid edits stay recoverable.
+- Respect one persisted Screen Reading setting across all capture and OCR paths. When enabled, the active Contribute discoveries tab starts its reader automatically; unchecked disables capture while ordinary logs continue.
+- Match destination pages automatically, retain an already verified editor during proof refresh, and keep Preview or publication gated on fresh missing-fact proof. Permanent ignore sits to the right of dismiss.
+- Respect item-link boundaries so preceding chat prose does not become part of an item name. Preserve authentic unknown links while keeping ambiguous unmarked prose quiet.
+- Recover bounded transient Windows settings-file replacement failures without deleting the prior destination or masking terminal errors.
+
+See [the 1.0 release record](docs/RELEASE_1_0_PLAN.md).
+
 ## 0.9.15 - Verified discoveries, zones and map controls
 
 - Check the public live wiki before showing an automatic discovery, item gap or monster popup. Use the bundled snapshot to avoid checks for known facts. Keep pending, failed, broad, unsupported and inconclusive checks out of the discovery queue and popups; recheck current facts before publication.

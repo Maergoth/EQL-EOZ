@@ -1,8 +1,9 @@
 // A lightweight native-window renderer. Session ownership and all log reads stay
 // in the main app; opening or reloading a panel cannot create another parser.
 import { applyAppearance } from './appearance.js';
-import { isItemStatModified } from './item-stat-presentation.js';
+import { isItemStatModified, itemAccuracyIsPercent } from './item-stat-presentation.js';
 import { catalogItemboxMarkup } from './catalog-itembox.js';
+import { characterItemboxStatLabel } from './character-itembox.js';
 import { mountOverlayDrag } from './overlay-drag.js';
 import { createTooltipHover } from './tooltip-delay.js';
 const PANELS = Object.freeze({ parse:'Parse', intel:'Zone & loot', timers:'Triggers', map:'Map' });
@@ -22,12 +23,15 @@ export function durationLabel(milliseconds) {
     if (seconds >= 3600) return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds % 3600 / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
+function liveEncounter(encounters) {
+    return encounters.find(encounter => encounter.active) || encounters.reduce((latest,encounter) =>
+        !latest || number(encounter.lastAt || encounter.startAt) > number(latest.lastAt || latest.startAt) ? encounter : latest,null);
+}
 export function parseView(parse = {}, scope = 'live', tab = 'damage') {
     if (tab === 'session') scope = 'session';
     const encounters = Array.isArray(parse.encounters) ? parse.encounters : [];
-    const current = encounters.find(encounter => encounter.active) || null;
     const previous = encounters.find(encounter => !encounter.active) || null;
-    const chosen = scope === 'live' ? current : scope === 'previous' ? previous : encounters.find(encounter => String(encounter.id) === scope);
+    const chosen = scope === 'live' ? liveEncounter(encounters) : scope === 'previous' ? previous : encounters.find(encounter => String(encounter.id) === scope);
     const session = scope === 'session';
     const events = session ? encounters.flatMap(encounter => encounter.events || []) : chosen?.events || [];
     const types = { damage:'damage', healing:'heal', taken:'taken', runes:'rune' };
@@ -47,25 +51,29 @@ export function parseView(parse = {}, scope = 'live', tab = 'damage') {
     const source = session ? parse : chosen || {};
     const runeCapacity = Number.isFinite(source.totalRuneCapacity) ? number(source.totalRuneCapacity) : (source.breakdowns?.runes || []).reduce((sum,row) => sum + number(row.total), 0);
     const metrics = { damage:session ? number(parse.totalDamage) : number(chosen?.damage), healing:session ? number(parse.totalHealing) : number(chosen?.healing), taken:session ? number(parse.totalTaken) : number(chosen?.taken), dps:session ? number(parse.sessionDps) : number(chosen?.dps), runeCapacity };
-    return { scope, tab, character:parse.character || 'You', metrics, stats:parse,
+    return { scope, tab, character:parse.character || 'You', metrics, stats:parse, encounterId:chosen?.id || null,
+        combatants:Array.isArray(source.combatants) ? source.combatants : [],
+        combatantSeconds:session ? number(parse.combatantSeconds) : duration,
         name:session ? 'Whole session · all zones' : chosen?.name || (scope === 'live' ? 'Waiting for combat…' : 'No completed encounter'), ended:Boolean(chosen && !chosen.active),
-        title:session ? 'Session' : scope === 'live' ? current ? `Live · ${current.name || 'Encounter'}` : 'Live · waiting for combat' : scope === 'previous' ? previous ? `Previous · ${previous.name || 'Encounter'}` : 'Previous · no completed encounter' : chosen ? `${chosen.name || 'Encounter'} · saved encounter` : 'Selected encounter is no longer retained',
+        title:session ? 'Session' : scope === 'live' ? chosen ? `Live · ${chosen.name || 'Encounter'}${chosen.active ? '' : ' · ended'}` : 'Live · waiting for combat' : scope === 'previous' ? previous ? `Previous · ${previous.name || 'Encounter'}` : 'Previous · no completed encounter' : chosen ? `${chosen.name || 'Encounter'} · saved encounter` : 'Selected encounter is no longer retained',
         total, rate, duration, recordedTotal, rows:(aggregate || [...groups.values()]).sort((a,b) => b.total - a.total),
         events:session ? (parse.recentEvents || []).slice(0, 40) : events.slice().reverse().slice(0, 40),
         available:session || Boolean(chosen), truncated:!aggregate && (session && total > recordedTotal || Boolean(chosen?.eventsTruncated)), feedTruncated:session || Boolean(chosen?.eventsTruncated) };
 }
-export function renderParseContent(view) {
+export function renderParseContent(view, expanded = new Set()) {
     if (view.tab === 'session') {
         const s = view.stats;
-        const rows = [['Damage',fmt(s.totalDamage)],['Healing',fmt(s.totalHealing)],['Damage taken',fmt(s.totalTaken)],['Own kills',fmt(s.totalOwnKills)],['Items looted',fmt(s.totalLoot)],['Encounters',fmt(s.encounterCount ?? s.encounters?.length)]];
+        const rows = [['Damage',fmt(s.totalDamage)],['Healing',fmt(s.totalHealing)],['Damage taken',fmt(s.totalTaken)],['AA Gained',fmt(s.totalAaGained)],['Own kills',fmt(s.totalOwnKills)],['Items looted',fmt(s.totalLoot)],['Encounters',fmt(s.encounterCount ?? s.encounters?.length)]];
         if (Number.isFinite(s.zoneCount)) rows.push(['Zones visited',fmt(s.zoneCount)]);
         rows.push(['Session elapsed',durationLabel(number(s.sessionSeconds) * 1000)]);
         return '<div class="session-actions"><button type="button" data-new-session>New session</button><span>Split the parse here; keep your running triggers.</span></div>' + summaryRows(rows, 'Whole session');
     }
     if (view.tab === 'overview') {
         if (!view.available) return empty('Waiting for combat…');
-        return `<table class="meter-table overview-table" aria-label="Your encounter overview"><thead><tr><th>Name</th><th>Damage</th><th>DPS</th><th>Heal</th><th>Taken</th></tr></thead><tbody><tr title="Your logged actions" style="--amount:100%"><td class="meter-name"><span class="meter-rank">1</span><span class="meter-label">${escapeHtml(view.character)}</span></td><td>${fmt(view.metrics.damage)}</td><td>${fmt(view.metrics.dps)}</td><td>${fmt(view.metrics.healing)}</td><td>${fmt(view.metrics.taken)}</td></tr></tbody></table>`;
+        const rows = view.combatants.length ? view.combatants : [{name:view.character,...view.metrics}];
+        return `<table class="meter-table overview-table" aria-label="Logged combatants overview"><thead><tr><th>Name</th><th>Damage</th><th>DPS</th><th>Heal</th><th>Taken</th></tr></thead><tbody>${rows.map((row,index) => `<tr title="Logged actions; names do not imply player or NPC status" style="--amount:${rows[0]?.damage ? Math.min(100,number(row.damage) / number(rows[0].damage) * 100).toFixed(1) : 0}%"><td class="meter-name" title="${attr(row.name)}"><span class="meter-rank">${index + 1}</span><span class="meter-label">${escapeHtml(row.name)}</span></td><td>${fmt(row.damage)}</td><td>${fmt(row.dps)}</td><td>${fmt(row.healing)}</td><td>${fmt(row.taken)}</td></tr>`).join('')}</tbody></table>` + combatantCaption(view);
     }
+    if (view.combatants.length && ['damage','healing','taken'].includes(view.tab)) return renderCombatantDetails(view,expanded) + (view.tab === 'healing' ? summaryRows([['Rune capacity granted',fmt(view.metrics.runeCapacity)]], 'Your rune capacity granted') + '<div class="meter-caption">Logged capacity granted; damage absorbed is not measured. Excluded from healing and HPS.</div>' : '') + combatantCaption(view);
     const metric = TAB_LABELS[view.tab] || 'Damage';
     const heading = view.tab === 'taken' ? 'Attacker' : 'Ability';
     const rateLabel = view.tab === 'damage' ? 'DPS' : view.tab === 'healing' ? 'HPS' : 'DTPS';
@@ -75,6 +83,22 @@ export function renderParseContent(view) {
         const rate = view.tab === 'taken' && Number.isFinite(row.rate) ? row.rate : view.duration ? row.total / view.duration : null;
         return `<tr style="--amount:${width.toFixed(1)}%"><td class="meter-name" title="${attr(row.name)}"><span class="meter-rank">${index + 1}</span><span class="meter-label">${escapeHtml(row.name)}</span></td><td>${fmt(row.total)}</td><td>${rate === null ? '—' : fmt(rate)}</td><td>${fmt(percent)}%</td><td>${row.count === null ? '—' : fmt(row.count)}</td></tr>`;
     }).join('')}</tbody></table>` + (!view.rows.length ? empty(view.available ? 'No recorded actions.' : 'Waiting for combat…') : '') + (view.truncated ? '<div class="meter-caption">Retained events</div>' : '') + (view.tab === 'healing' ? summaryRows([['Rune capacity granted',fmt(view.metrics.runeCapacity)]], 'Rune capacity granted') + '<div class="meter-caption">Logged capacity granted; damage absorbed is not measured. Excluded from healing and HPS.</div>' : '');
+}
+function combatantCaption(view) {
+    return '<div class="meter-caption">Logged combatants only; pets keep their own names. Damage given and damage taken describe the same hits; do not add them together.</div>' +
+        (view.scope === 'session' ? `<div class="meter-caption">Other combatant rates use ${durationLabel(view.combatantSeconds * 1000)} of observed combat. Your DPS keeps its existing outgoing-damage clock.</div>` : '<div class="meter-caption">Rates use this encounter’s duration. Overlapping disconnected fights have separate encounters.</div>') +
+        (view.stats.encounterHistoryLimited ? '<div class="meter-caption">Encounter history was regrouped from retained events. Older encounter details may be incomplete; whole-session combatant totals are retained.</div>' : '');
+}
+function renderCombatantDetails(view, expanded) {
+    const metric = view.tab, rateKey = {damage:'dps',healing:'hps',taken:'dtps'}[metric], rateLabel = {damage:'DPS',healing:'HPS',taken:'DTPS'}[metric];
+    const actors = view.combatants.filter(row => number(row[metric]) > 0 || number(row[`${metric}Hits`]) > 0).slice().sort((a,b) => number(b[metric]) - number(a[metric]));
+    const total = actors.reduce((sum,row) => sum + number(row[metric]),0);
+    if (!actors.length) return empty('No recorded actions.');
+    return `<div class="combatant-columns" aria-hidden="true"><span>Combatant · expand</span><span>${TAB_LABELS[metric]}</span><span>${rateLabel}</span></div>` + actors.map(actor => {
+        const key = JSON.stringify([view.scope,view.scope === 'session' ? null : view.encounterId,view.tab,actor.name]), rows = actor.breakdowns?.[metric] || [];
+        const seconds = metric === 'damage' && view.scope === 'session' && actor.name?.toLowerCase() === view.character.toLowerCase() ? number(view.stats.sessionSeconds) : view.combatantSeconds;
+        return `<details class="combatant-details" data-combatant-key="${attr(key)}"${expanded.has(key) ? ' open=""' : ''}><summary title="${attr(actor.name)} · ${fmt(total ? number(actor[metric]) / total * 100 : 0)}% of logged ${metric}"><span class="combatant-name">${escapeHtml(actor.name)}</span><strong>${fmt(actor[metric])}</strong><span>${fmt(actor[rateKey])}</span></summary><table class="meter-table" aria-label="${attr(actor.name)} ${TAB_LABELS[metric]} breakdown"><thead><tr><th>${metric === 'taken' ? 'Attacker' : 'Ability'}</th><th>${TAB_LABELS[metric]}</th><th>${rateLabel}</th><th>%</th><th>Hits</th></tr></thead><tbody>${rows.map((row,index) => `<tr style="--amount:${rows[0]?.total ? (number(row.total) / number(rows[0].total) * 100).toFixed(1) : 0}%"><td class="meter-name" title="${attr(row.name)}"><span class="meter-rank">${index + 1}</span><span class="meter-label">${escapeHtml(row.name)}</span></td><td>${fmt(row.total)}</td><td>${seconds ? fmt(number(row.total) / seconds) : '—'}</td><td>${fmt(number(actor[metric]) ? number(row.total) / number(actor[metric]) * 100 : 0)}%</td><td>${fmt(row.count)}</td></tr>`).join('')}</tbody></table></details>`;
+    }).join('');
 }
 function summaryRows(rows, title) { return `<div class="summary-section">${escapeHtml(title)}</div><table class="summary-table"><tbody>${rows.map(([label,value]) => `<tr><td title="${label === 'Rune capacity granted' ? 'Logged capacity granted; damage absorbed is not measured.' : ''}">${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`).join('')}</tbody></table>`; }
 function itemIcon(value) {
@@ -93,6 +117,7 @@ export const intelNpcKey = (npc, context = '') => {
     return JSON.stringify([String(intel.zone || ''),Boolean(intel.myClassOnly),String(intel.packVersion || ''),String(intel.profileKey || ''),intelTierValue(intel.itemTier),String(npc?.id || npc?.name || ''),isRaidSource(npc)]);
 };
 export const intelTierValue = value => Math.max(0,Math.min(10,Math.trunc(Number(value)||0)));
+const crawlDefeated = (npc,intel) => intel?.crawlEnabled === true && npc?.defeated === true;
 export const intelSectionKey = (intel,raid) => JSON.stringify([String(intel?.zone || ''),raid ? 'raid' : 'normal']);
 export function intelMobAction(command,npc,zone) {
     const payload = {npc:npc.name,zone,raidInstance:isRaidSource(npc)};
@@ -102,8 +127,9 @@ export function intelMobAction(command,npc,zone) {
 export function renderItem(item = {}, index = 0, context = '') {
     const icon = itemIcon(item.icon);
     const stats = Object.entries(item.stats || {}).filter(([,value]) => ['string', 'number'].includes(typeof value)).slice(0, 18);
+    const statText=(key,value)=>key==='ACCURACY'&&itemAccuracyIsPercent(item)?`${Number(value)>0?'+':''}${value}%`:value;
     const hoverAttrs = `data-item-hover data-item-index="${index}" data-item-context="${attr(context)}" data-item-name="${attr(item.name || 'Unknown item')}" aria-describedby="intel-item-tooltip"`;
-    return `<div class="item-card"><div class="item-heading"><button type="button" class="item-icon-button" ${hoverAttrs} aria-label="${attr(`Stats for ${item.name || 'Unknown item'}`)}">${icon ? `<img class="item-icon" src="${attr(icon)}" alt="">` : '<span class="item-icon item-icon-placeholder" aria-hidden="true">◇</span>'}</button><div><button type="button" class="item-name" ${hoverAttrs}>${escapeHtml(item.name || 'Unknown item')}</button><div class="item-meta">${escapeHtml((item.slots || []).join(' · ') || 'Item')}${number(item.tier) ? ` · Tier ${number(item.tier)}` : ' · Base'}</div></div></div>${stats.length ? `<div class="item-stats">${stats.map(([key,value]) => `<span${isItemStatModified(item.baseStats?.[key],value,item.tier)?' class="is-scaled"':''}>${escapeHtml(key)} ${escapeHtml(value)}</span>`).join(' · ')}</div>` : ''}</div>`;
+    return `<div class="item-card"><div class="item-heading"><button type="button" class="item-icon-button" ${hoverAttrs} aria-label="${attr(`Stats for ${item.name || 'Unknown item'}`)}">${icon ? `<img class="item-icon" src="${attr(icon)}" alt="">` : '<span class="item-icon item-icon-placeholder" aria-hidden="true">◇</span>'}</button><div><button type="button" class="item-name" ${hoverAttrs}>${escapeHtml(item.name || 'Unknown item')}</button><div class="item-meta">${escapeHtml((item.slots || []).join(' · ') || 'Item')}${number(item.tier) ? ` · Tier ${number(item.tier)}` : ' · Base'}</div></div></div>${stats.length ? `<div class="item-stats">${stats.map(([key,value]) => `<span${isItemStatModified(item.baseStats?.[key],value,item.tier)?' class="is-scaled"':''}>${escapeHtml(characterItemboxStatLabel(key))} ${escapeHtml(statText(key,value))}</span>`).join(' · ')}</div>` : ''}</div>`;
 }
 export function renderItemTooltip(item = {}) {
     return catalogItemboxMarkup(item);
@@ -118,21 +144,22 @@ export function renderIntel(intel = {}, {query = '', expanded = new Set(), loadi
         const section = raid ? 'raid' : 'normal', label = raid ? 'Raid Zone' : 'Normal Zone', closed = collapsedSections.has(intelSectionKey(intel,raid));
         return `<section class="intel-group ${raid ? 'is-raid' : ''}${closed ? ' is-collapsed' : ''}" data-intel-section="${section}" aria-label="${label}"><h2><button type="button" class="intel-section-toggle" data-intel-section-toggle="${section}" aria-expanded="${!closed}" aria-controls="intel-section-${section}"><span class="intel-section-chevron" aria-hidden="true">${closed ? '▸' : '▾'}</span>${label}<span class="intel-section-count">${sources.length}${closed ? ' · collapsed' : ''}</span></button></h2><div id="intel-section-${section}" class="intel-section-content"${closed ? ' hidden' : ''}>${sources.length ? sources.map(({npc,index}) => {
             const key = intelNpcKey(npc,intel);
-            const open = expanded.has(key);
+            const defeated = crawlDefeated(npc,intel);
+            const open = !defeated && expanded.has(key);
             const cached = dropCache.get(key);
             const drops = Array.isArray(cached?.items) ? cached.items : Array.isArray(npc.drops) ? npc.drops : [];
-            const shown = open ? drops : drops.slice(0,3);
+            const shown = defeated ? [] : open ? drops : drops.slice(0,3);
             const total = number(cached?.total ?? npc.dropCount ?? drops.length);
             const previewCount = Math.min(3,(npc.drops || []).length);
             const pending = open && loading.has(key) && drops.length < total;
-            const focused = Boolean(intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
-            return `<article class="npc-row con-${conKey(npc.con)} ${focused ? 'is-focused' : ''}" data-intel-key="${attr(key)}" ${focused ? 'aria-current="true"' : ''}><div class="npc-summary${actionKey === key ? ' is-actions-open' : ''}"><div class="npc-heading"><button type="button" class="npc-name" aria-label="${attr(`Actions for ${npc.name}`)}" aria-describedby="npc-actions-${index}">${escapeHtml(npc.name)}</button>${raid ? '<span class="raid-source-badge">Raid</span>' : ''}<small>${npc.level || npc.levelMax ? `L${escapeHtml(npc.level || (npc.levelMin === npc.levelMax ? npc.levelMax : `${npc.levelMin}–${npc.levelMax}`))}` : ''}<span data-intel-distance-index="${index}">${Number.isFinite(npc.distance) ? ` · ${fmt(npc.distance)}u` : ''}</span></small></div><div class="npc-meta">${npc.named ? 'Named' : npc.rare ? 'Rare' : 'NPC'} · ${knownDropLabel({...npc,drops,dropCount:total},intel.myClassOnly,shown.length)}${npc.waypoint ? ' · waypoint available' : ''}</div><div id="npc-actions-${index}" class="row-actions" role="group" aria-label="${attr(`Actions for ${npc.name}`)}"><button type="button" data-npc-action="details" data-npc-index="${index}">Details</button><button type="button" data-npc-action="route" data-npc-index="${index}" ${!intel.canRoute || !npc.waypoint ? 'disabled title="Enable maps and use a current logged location in the main app"' : ''}>Route</button><button type="button" data-npc-action="copy-waypoint" data-npc-index="${index}" ${!npc.waypoint ? 'disabled' : ''}>Copy /waypoint</button><button type="button" data-npc-action="wiki" data-npc-index="${index}">Wiki</button><button type="button" data-npc-action="map" data-npc-index="${index}" ${!npc.waypoint ? 'disabled title="No known location for this mob"' : 'title="Open native Map at this mob"'}>Map</button></div></div><div class="npc-drop-list" ${pending ? 'aria-busy="true"' : ''}>${shown.map((item,itemIndex) => renderItem(item,itemIndex,`intel:${index}`)).join('')}</div>${total > previewCount ? `<button type="button" class="show-more-drops" data-intel-expand="${attr(key)}" data-npc-index="${index}" aria-expanded="${open}">${open ? 'Show Less' : `Show More (${Math.max(0,total - previewCount)})`}</button>` : ''}${pending ? '<div class="npc-meta">Loading remaining drops…</div>' : ''}${open && errors.has(key) ? `<div class="intel-drop-error" role="status">${escapeHtml(errors.get(key))}</div><button type="button" class="show-more-drops" data-intel-retry="${attr(key)}" data-npc-index="${index}">Retry loading drops</button>` : ''}</article>`;
+            const focused = !defeated && Boolean(intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
+            return `<article class="npc-row con-${conKey(npc.con)}${defeated ? ' is-defeated' : ''} ${focused ? 'is-focused' : ''}" data-intel-key="${attr(key)}" ${focused ? 'aria-current="true"' : ''}><div class="npc-summary${!defeated && actionKey === key ? ' is-actions-open' : ''}"><div class="npc-heading"><button type="button" class="npc-name" aria-label="${attr(defeated ? `${npc.name} · defeated in Crawl mode` : `Actions for ${npc.name}`)}" ${defeated ? 'disabled' : `aria-describedby="npc-actions-${index}"`}>${escapeHtml(npc.name)}</button>${raid ? '<span class="raid-source-badge">Raid</span>' : ''}<small>${npc.level || npc.levelMax ? `L${escapeHtml(npc.level || (npc.levelMin === npc.levelMax ? npc.levelMax : `${npc.levelMin}–${npc.levelMax}`))}` : ''}<span data-intel-distance-index="${index}">${Number.isFinite(npc.distance) ? ` · ${fmt(npc.distance)}u` : ''}</span></small></div><div class="npc-meta">${defeated ? 'Defeated · ' : ''}${npc.named ? 'Named' : npc.rare ? 'Rare' : 'NPC'} · ${knownDropLabel({...npc,drops,dropCount:total},intel.myClassOnly,shown.length)}${npc.waypoint ? ' · waypoint available' : ''}</div><div id="npc-actions-${index}" class="row-actions"${defeated ? ' hidden inert' : ''} role="group" aria-label="${attr(`Actions for ${npc.name}`)}"><button type="button" data-npc-action="details" data-npc-index="${index}">Details</button><button type="button" data-npc-action="route" data-npc-index="${index}" ${!intel.canRoute || !npc.waypoint ? 'disabled title="Enable maps and use a current logged location in the main app"' : ''}>Route</button><button type="button" data-npc-action="copy-waypoint" data-npc-index="${index}" ${!npc.waypoint ? 'disabled' : ''}>Copy /waypoint</button><button type="button" data-npc-action="wiki" data-npc-index="${index}">Wiki</button><button type="button" data-npc-action="map" data-npc-index="${index}" ${!npc.waypoint ? 'disabled title="No known location for this mob"' : 'title="Open native Map at this mob"'}>Map</button></div></div><div class="npc-drop-list" ${pending ? 'aria-busy="true"' : ''}>${shown.map((item,itemIndex) => renderItem(item,itemIndex,`intel:${index}`)).join('')}</div>${!defeated && total > previewCount ? `<button type="button" class="show-more-drops" data-intel-expand="${attr(key)}" data-npc-index="${index}" aria-expanded="${open}">${open ? 'Show Less' : `Show More (${Math.max(0,total - previewCount)})`}</button>` : ''}${pending ? '<div class="npc-meta">Loading remaining drops…</div>' : ''}${open && errors.has(key) ? `<div class="intel-drop-error" role="status">${escapeHtml(errors.get(key))}</div><button type="button" class="show-more-drops" data-intel-retry="${attr(key)}" data-npc-index="${index}">Retry loading drops</button>` : ''}</article>`;
         }).join('') : `<div class="intel-empty">${needle ? 'No matching mobs.' : raid ? 'No raid-instance mobs in this zone.' : 'No matching named or rare mobs.'}</div>`}</div></section>`;
     }).join('');
 }
 export function panelMarkup(panel) {
     if (panel === 'parse') return `<nav class="parse-tabs" aria-label="Parse metrics">${TABS.map(tab => `<button type="button" data-tab="${tab}" aria-pressed="${tab === 'damage'}" class="${tab === 'damage' ? 'is-active' : ''}">${TAB_LABELS[tab]}</button>`).join('')}</nav><div id="parse-body"></div>`;
-    if (panel === 'intel') return '<div class="intel-controls"><div class="panel-toolbar intel-filter-row"><label class="intel-tier-label" for="intel-item-tier">Item level <output id="intel-item-tier-value" for="intel-item-tier">Base</output></label><input id="intel-item-tier" type="range" min="0" max="10" step="1" value="0" aria-label="Item level"><label class="intel-class-label"><input id="class-filter" type="checkbox"> My Class</label></div><input id="intel-search" class="intel-search" type="search" maxlength="160" placeholder="Find named or rare mob…" aria-label="Search named and rare mobs"><span id="intel-attention" class="sr-only" role="status" aria-live="polite"></span></div><div id="intel-body" class="intel-mob-list" role="region" aria-label="Named and rare mob loot"></div>';
+    if (panel === 'intel') return '<div class="intel-controls"><div class="panel-toolbar intel-filter-row"><label class="intel-tier-label" for="intel-item-tier">Tier <output id="intel-item-tier-value" for="intel-item-tier">Base</output></label><input id="intel-item-tier" type="range" min="0" max="10" step="1" value="0" aria-label="Item level"><label class="intel-class-label"><input id="class-filter" type="checkbox"> My Class</label><label class="intel-crawl-label" title="Keep defeated mobs dimmed until the next zone entry"><input id="intel-crawl-mode" type="checkbox"> Crawl</label></div><input id="intel-search" class="intel-search" type="search" maxlength="160" placeholder="Find named or rare mob…" aria-label="Search named and rare mobs"><span id="intel-attention" class="sr-only" role="status" aria-live="polite"></span></div><div id="intel-body" class="intel-mob-list" role="region" aria-label="Named and rare mob loot"></div>';
     if (panel === 'map') return '<div id="native-map-root"></div>';
     return '<div class="timer-display"><div id="timer-list"></div><div id="swing-body"></div></div>';
 }
@@ -179,6 +206,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     let state = {}, scope = 'live', tab = 'damage', disposed = false, status = '', request = 0, stateGeneration = 0, noticeGeneration = 0, lastNoticeId = '', unsubscribe, mapController, measuredTimerHeight = 0;
     let intelQuery = '', lastIntelFocus = '', lastIntelFocusEvent = '', draftIntelTier = null, intelActionKey = '', activeItemTooltip = null, itemTooltipHideTimer = null, lastParseSession = null;
     const expandedIntel = new Set(), collapsedIntelSections = new Set(), intelLoading = new Map(), intelDropCache = new Map(), intelErrors = new Map();
+    const expandedCombatants = new Set();
     let lastIntelContent='',lastSessionAvailability=null,intelDistances=[],intelDropRevision=0;
     const itemTooltipHover=createTooltipHover({show:showItemTooltip,valid:target=>!disposed && state.sessionAvailable===true && state.preferences?.visible!==false && target?.isConnected && !target.closest('[hidden]'),setTimeout,clearTimeout});
     const listeners = [];
@@ -241,20 +269,21 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         if (height !== measuredTimerHeight) {measuredTimerHeight = height; void Promise.resolve(bridge?.action?.('content-height',height)).catch(() => {});}
     }
     const currentIntelNpc = key => (session().intel?.npcs || []).find(npc => intelNpcKey(npc,session().intel) === key);
+    const defeatedIntelNpc = npc => session().crawl?.enabled === true && npc?.defeated === true;
     async function loadIntelDrops(npc,key) {
-        if (disposed || state.sessionAvailable !== true || intelLoading.has(key) || !bridge?.action) return;
+        if (disposed || defeatedIntelNpc(npc) || state.sessionAvailable !== true || intelLoading.has(key) || !bridge?.action) return;
         const token = Symbol(key);
         intelLoading.set(key,token); intelErrors.delete(key); render();
         try {
             const result = await bridge.action('session:intel-drops',{npc:npc.name,zone:session().intel?.zone || session().zone,raidInstance:isRaidSource(npc)});
-            if (disposed || intelLoading.get(key) !== token || !currentIntelNpc(key)) return;
+            if (disposed || intelLoading.get(key) !== token || !currentIntelNpc(key) || defeatedIntelNpc(currentIntelNpc(key))) return;
             if (!Array.isArray(result?.items)) throw new Error(result?.error || 'The remaining drops could not be loaded.');
             intelDropCache.set(key,{items:result.items,total:number(result.total ?? result.items.length)});
             intelDropRevision++;
             // Keep memory bounded across long sessions with many visited zones.
             while (intelDropCache.size > 80) intelDropCache.delete(intelDropCache.keys().next().value);
         } catch (error) {
-            if (!disposed && currentIntelNpc(key)) intelErrors.set(key,String(error?.message || 'The remaining drops could not be loaded.'));
+            if (!disposed && currentIntelNpc(key) && !defeatedIntelNpc(currentIntelNpc(key))) intelErrors.set(key,String(error?.message || 'The remaining drops could not be loaded.'));
         } finally {
             if (intelLoading.get(key) === token) intelLoading.delete(key);
             if (!disposed && currentIntelNpc(key)) render();
@@ -327,26 +356,39 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         $('#session-restart').hidden = !(Number(state.sessionRestartCount) > 0);
         if (panel === 'parse') {
             const parse = s.parse || {};
-            if (lastParseSession !== null && parse.sessionNumber !== lastParseSession) scope = 'live';
+            const parseSessionChanged = lastParseSession !== null && parse.sessionNumber !== lastParseSession;
+            if (parseSessionChanged) { scope = 'live'; expandedCombatants.clear(); }
             lastParseSession = parse.sessionNumber;
             const view = parseView(parse,scope,tab);
             const selector = $('#encounter-scope');
-            const options = `<option value="live">${attr(parse.encounters?.find(encounter => encounter.active)?.name || 'Waiting for combat…')} · Live</option><option value="previous">Previous encounter</option><option value="session">Whole session</option>` + (parse.encounters || []).slice(0,50).map(encounter => `<option value="${attr(encounter.id)}">${escapeHtml(encounter.name || 'Encounter')} · ${new Date(number(encounter.startAt)).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</option>`).join('');
+            const live = liveEncounter(parse.encounters || []);
+            const options = `<option value="live">${attr(live?.name || 'Waiting for combat…')} · Live${live && !live.active ? ' (ended)' : ''}</option><option value="previous">Previous encounter</option><option value="session">Whole session</option>` + (parse.encounters || []).slice(0,50).map(encounter => `<option value="${attr(encounter.id)}">${escapeHtml(encounter.name || 'Encounter')} · ${new Date(number(encounter.startAt)).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</option>`).join('');
             replace(selector, options + (!['live','previous','session'].includes(scope) && !(parse.encounters || []).some(encounter => String(encounter.id) === scope) ? `<option value="${attr(scope)}">Encounter no longer retained</option>` : ''));
             selector.value = scope; selector.hidden = tab === 'session';
             $('#overlay-title').hidden = tab !== 'session';
             if (tab === 'session') $('#overlay-title').textContent = 'Whole session · all zones';
             $('#encounter-stats').hidden = tab === 'session' || !view.available;
             replace($('#encounter-stats'), `${view.ended ? '<span class="ended">ended</span>' : ''}<span>${durationLabel(view.duration * 1000)}</span><span class="header-total">${fmt(view.metrics.damage)} <small>dmg</small></span><span><strong>${fmt(view.metrics.dps)}</strong> <small>dps</small></span>`);
-            replace($('#parse-body'), renderParseContent(view));
+            const focusedCombatant = document.activeElement?.tagName === 'SUMMARY' ? document.activeElement.closest('[data-combatant-key]')?.dataset.combatantKey : null;
+            for (const details of parseSessionChanged ? [] : $('#parse-body').querySelectorAll('[data-combatant-key]')) {
+                if (details.open) expandedCombatants.add(details.dataset.combatantKey); else expandedCombatants.delete(details.dataset.combatantKey);
+            }
+            while (expandedCombatants.size > 1024) expandedCombatants.delete(expandedCombatants.values().next().value);
+            replace($('#parse-body'), renderParseContent(view,expandedCombatants));
+            if (focusedCombatant && !parseSessionChanged) ([...$('#parse-body').querySelectorAll('[data-combatant-key]')].find(details => details.dataset.combatantKey === focusedCombatant)?.querySelector('summary') || selector).focus({preventScroll:true});
         } else if (panel === 'intel') {
-            const intel = s.intel || {};
+            const intel = {...s.intel,crawlEnabled:s.crawl?.enabled === true};
             $('#overlay-title').textContent = s.zone || 'Zone & loot'; $('#class-filter').checked = Boolean(intel.myClassOnly);
+            $('#intel-crawl-mode').checked = s.crawl?.enabled === true;
+            for(const npc of intel.npcs || [])if(crawlDefeated(npc,intel)){
+                const key=intelNpcKey(npc,intel);expandedIntel.delete(key);intelErrors.delete(key);
+                if(intelActionKey===key)intelActionKey='';
+            }
             if (state.sessionAvailable !== true || draftIntelTier === intelTierValue(intel.itemTier)) draftIntelTier = null;
             const tier = draftIntelTier ?? intelTierValue(intel.itemTier);
-            $('#intel-item-tier').value = String(tier); $('#intel-item-tier-value').textContent = tier ? `Tier ${tier}` : 'Base';
+            $('#intel-item-tier').value = String(tier); $('#intel-item-tier-value').textContent = tier ? `+${tier}` : 'Base';
             $('#intel-item-tier').setAttribute('aria-valuetext',tier ? `Tier ${tier}` : 'Base item stats');
-            const focused = (intel.npcs || []).find(npc => intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
+            const focused = (intel.npcs || []).find(npc => !crawlDefeated(npc,intel) && intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
             const key = focused ? intelNpcKey(focused,intel) : '';
             const focusEvent = JSON.stringify([intel.zone,intel.focusedNpcId,intel.focusSequence]);
             const focus = focused ? `${key}|${focusEvent}` : '';
@@ -412,13 +454,14 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     listen($('#panel-font'),'change',event => { void action('font-scale',Number(event.target.value)); });
     listen($('#encounter-scope'),'change',event => { scope = event.target.value; render(); });
     listen($('#class-filter'),'change',event => { void action('session:class-filter',{panel,enabled:event.target.checked}); });
-    listen($('#intel-item-tier'),'input',event => { draftIntelTier = intelTierValue(event.target.value); $('#intel-item-tier-value').textContent = draftIntelTier ? `Tier ${draftIntelTier}` : 'Base'; event.target.setAttribute('aria-valuetext',draftIntelTier ? `Tier ${draftIntelTier}` : 'Base item stats'); });
+    listen($('#intel-crawl-mode'),'change',event => { void action('session:crawl-mode',{enabled:event.target.checked}); });
+    listen($('#intel-item-tier'),'input',event => { draftIntelTier = intelTierValue(event.target.value); $('#intel-item-tier-value').textContent = draftIntelTier ? `+${draftIntelTier}` : 'Base'; event.target.setAttribute('aria-valuetext',draftIntelTier ? `Tier ${draftIntelTier}` : 'Base item stats'); });
     listen($('#intel-item-tier'),'change',event => { draftIntelTier = intelTierValue(event.target.value); void action('session:item-tier',{tier:draftIntelTier}); });
     listen($('#intel-search'),'input',event => { intelQuery = event.target.value; render(); });
     // Only entering the mob name opens pointer actions. Keep the group open
     // while crossing its metadata or buttons; keyboard focus works separately.
     listen($('#intel-body'),'pointerover',event => {
-        const name = event.target.closest?.('.npc-name'); if (!name) return;
+        const name = event.target.closest?.('.npc-name'); if (!name || name.closest('.is-defeated')) return;
         const summary = name.closest('.npc-summary');
         intelActionKey = summary.closest('[data-intel-key]').dataset.intelKey;
         $('#intel-body').querySelectorAll('.npc-summary.is-actions-open').forEach(row => row.classList.remove('is-actions-open'));
@@ -486,13 +529,13 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             [...$('#intel-body').querySelectorAll('[data-intel-section-toggle]')].find(target => target.dataset.intelSectionToggle === button.dataset.intelSectionToggle)?.focus({preventScroll:true});
         }
         if (button.dataset.npcAction) {
-            const npc = s.intel?.npcs?.[Number(button.dataset.npcIndex)]; if (!npc) return;
+            const npc = s.intel?.npcs?.[Number(button.dataset.npcIndex)]; if (!npc || defeatedIntelNpc(npc)) return;
             const command = intelMobAction(button.dataset.npcAction,npc,s.intel?.zone || s.zone);
             void action(command.action,command.payload);
         }
         if (button.dataset.intelExpand || button.dataset.intelRetry) {
             const key = button.dataset.intelExpand || button.dataset.intelRetry;
-            const npc = currentIntelNpc(key); if (!npc) return;
+            const npc = currentIntelNpc(key); if (!npc || defeatedIntelNpc(npc)) return;
             if (expandedIntel.has(key) && !button.dataset.intelRetry) expandedIntel.delete(key);
             else {
                 expandedIntel.add(key);

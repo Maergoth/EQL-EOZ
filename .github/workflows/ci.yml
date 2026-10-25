@@ -37,11 +37,13 @@ jobs:
       - run: npm run test:desktop-worker
       - run: npm run test:window-lifecycle
       - run: npm run test:map-layout
+      - run: npm run test:map-location-latency -- --screenshots ci-screenshots/map-location-latency
       - run: npm run test:map-loot -- --screenshots ci-screenshots/map-loot
       - run: npm run test:character-storage
       - run: npm run test:main-cache
       - run: npm run test:map-overlay-3d
       - run: npm run test:native-overlays -- --screenshots ci-screenshots
+      - run: npm run test:combatant-overview -- --screenshots ci-screenshots/combatant-overview
       - run: npm run test:overlay-resize
       - run: npm run test:intel-stability
       - run: npm run test:discovery-notices
@@ -54,6 +56,8 @@ jobs:
       - run: npm run test:capture-calibration -- --screenshots ci-screenshots/capture-calibration
       - run: npm run test:capture-workspace -- --screenshots ci-screenshots/capture-workspace
       - run: npm run test:discovery-capture-workspace
+      - run: npm run test:screen-reading-master
+      - run: npm run test:chat-item-boundaries -- --screenshots ci-screenshots/chat-boundaries
       - run: npm run test:consider-level-workspace
       - run: npm run test:zone-creation-workspace -- --screenshots ci-screenshots/zone-creation
       - run: npm run test:workspace-099

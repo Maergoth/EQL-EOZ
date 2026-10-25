@@ -1,10 +1,12 @@
 # EQLWiki — Eye of Zomm
 
+**1.0.0: Eye of Zomm.** Responsive logged-location maps, shared Crawl progress, per-combatant parsing and AA, retained Live encounters, explicit weapon-base previews, a structured contribution form and one Screen Reading master switch. Native desktop and installer icons use the eye. See [the release record](docs/RELEASE_1_0_PLAN.md).
+
 **Eye of Zomm** is a local-first Windows and Linux app for **EverQuest Legends**. It reads ordinary game logs, combines them with cached EQLWiki knowledge, and keeps maps, named-mob loot, combat parses and triggers in separate desktop windows.
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.15: verified discoveries, zones and map controls.** Automatic discoveries stay hidden until a live public wiki check confirms the gap. Known cached facts avoid network requests; failed or inconclusive checks remain quiet. Red × dismisses a discovery, and ∞× permanently ignores its NPC/item until restored in Contribution History. New zone pages use one normal/raid blueprint with overview and Map placeholders. Log zone anchoring and same-visit numeric /con suggestions preserve evidence, while the top 3D map supports visible player markers and left-drag pan. See [release verification](docs/RELEASE_0915_PLAN.md).
+**0.9.15: verified discoveries, zones and map controls.** Automatic discoveries stay hidden until a live public wiki check confirms the gap. An already confirmed editor keeps its saved draft in place while the check renews; Preview and automatic publishing wait for fresh proof, and a covered result removes the stale task. Known cached facts avoid network requests; failed or inconclusive checks remain quiet. Red × dismisses a discovery, and ∞× permanently ignores its NPC/item until restored in Contribution History. New zone pages use one normal/raid blueprint with overview and Map placeholders. Log zone anchoring and same-visit numeric /con suggestions preserve evidence, while the top 3D map supports visible player markers and left-drag pan. See [release verification](docs/RELEASE_0915_PLAN.md).
 
 **0.9.14: contribution history and safer loot discovery.** Open
 **Contribute → Contribution History** to see this device's automatic and reviewed submissions
@@ -33,6 +35,14 @@ Items adds **Any** before **Auto** to browse every class without changing the
 character profile. Contributions preserve documented item sets instead of
 repeating their covered members. Rich item previews share a 350 ms mouseover
 delay, and Intel keeps its scrolling list intact during unrelated updates.
+
+[Crawl mode](docs/CRAWL_MODE.md) shares one checkbox between Map and Zone & loot.
+Fresh kills dim matching located or loot-bearing mobs until the next zone
+entry, and collapse their Intel drops. Uncheck it to restore normal previews.
+
+[Item contribution statistics](docs/ITEM_CONTRIBUTION_FORM.md) use one structured
+grid. Blank values stay omitted, deliberate zeros survive, and ranked readings
+retain their base-proposal validation and observed evidence.
 
 **0.9.13: correct tier-zero verification category.** Ranked and recovered item
 pages now use the exact
@@ -167,6 +177,10 @@ verified package download and manual installation handoff.
 
 The native Map reads your client text maps and shares the logged position, named destinations and validated route with the main app. Hover the full zone-title row for **Reset**, Follow, zoom and a button cycling **Map → Top → First person** beside its name. A separate grip moves the unlocked window. Its 3D scene loads only when used. Use Z controls to inspect another elevation; monster names and markers share interactive pointer targets. The complete main **Map Explorer** keeps its own views and zoomable Local Map.
 
+Changed logged coordinates update the native map promptly after reading, with
+bounded burst coalescing. A stationary repeated `/loc` uses the normal heartbeat.
+See [location timing and verification](docs/MAP_LOCATION_LATENCY.md).
+
 Both 3D views mark your latest logged location with a cyan ground ring and add
 a movement-direction arrow once later locations establish travel direction,
 even when camera Follow is off. The marker keeps a visible minimum size when
@@ -228,6 +242,11 @@ Create manual countdowns or literal/regex log triggers on the main **Triggers** 
 
 The independent **Parse** window has **Overview / Damage / Healing / Taken / Session** tabs and encounter selection. Healing includes a separately labeled rune-capacity subsection; capacity is not measured absorption or healing. **New session** in Combat or the Parse Session tab clears parse/loot totals while retaining the live log position, profile, map and triggers. One shared session reads the log for every panel. The optional swing bar defaults off; enable **Triggers → Swing → Show swing estimate** if desired. It estimates your outgoing melee rounds from logged hits and misses; one-second log timestamps limit its precision. See [trigger and countdown behavior](docs/TIMERS.md).
 
+Overview shows logged combatants for Whole session and individual encounters.
+Damage, Healing and Taken expand per combatant into ability/attacker details;
+Session includes **AA Gained**, counted from explicit earned-point messages.
+See [combatant scopes, rates and log limitations](docs/COMBATANT_OVERVIEW.md).
+
 ![Timer trigger editor with synthetic match preview](app/assets/whats-new/timers.png)
 
 Unlock an overlay to move/resize it. Locking leaves its tabs and menus interactive; **Ignore mouse** passes clicks through. Recover from Settings, the tray, or **Ctrl+Shift+O** when registered. Layout, opacity and font scale are saved separately for each panel. Closing the main window while overlays are visible keeps their shared session running; use **Quit Eye of Zomm** in the tray to exit.
@@ -249,10 +268,18 @@ restores automatic content fitting. Global Unlock restores mouse input on every 
 
 Logs remain the source for supported kills, loot, zone and character events.
 **Settings → Screen reading** adds optional local OCR for visible examine
-windows and character statistics. Enable the controls, choose a window or
-display, then press **Start contribution capture**. Pause or Stop releases
+windows and character statistics. The checkbox is a master permission, saved on
+this device and disabled by default. When unchecked, native code stops active
+readers and OCR, discards pending screen results, and blocks manual/automatic
+Contribute reading, Character stats, source screenshots, and file/clipboard OCR.
+Logs, text entry and inventory-file imports keep working. While checked, opening
+**Contribute** starts item reading automatically; enabling it while Contribute is
+open does the same. One recommended game window is selected automatically; an
+ambiguous source requires your choice. OCR fills existing chat/log discoveries
+only, including a uniquely matched small reading typo; it never creates discoveries
+from screenshots alone. Pause or Stop releases
 capture work; status shows which workspace owns it. **Read a screenshot** imports
-one image without starting continuous capture. Screen reading starts disabled.
+one image without starting continuous capture, while the master permission is enabled.
 The main app and both new tabs retain the selected fonts and text size.
 
 Observed text and evidence remain in a bounded local journal. OCR values are
@@ -559,6 +586,7 @@ before changing either side of that contract.
 | [0.9.10 release record](docs/RELEASE_0910_PLAN.md), [discovery](docs/CONTRIBUTION_DISCOVERY_PLAN.md) and [item forms](docs/CONTRIBUTION_ITEM_FORM_PLAN.md) | Current request/evidence lifecycle, simpler review, component source map and separate app/wiki publication gates |
 | [Product vision](docs/UX_VISION.md) and [PNUT interaction plan](docs/PNUT_UX_PLAN.md) | UX contracts and feature scope |
 | [Window/map follow-up](docs/WINDOW_MAP_POLISH.md) | Current window, map and tour changes |
+| [Windows configuration writes](docs/WINDOWS_CONFIG_WRITES.md) | Bounded transient rename recovery without deleting existing settings |
 | [0.9.0 capture/contribution status](docs/CAPTURE_CONTRIBUTIONS.md) | Feature scope, ownership and acceptance contracts |
 | [0.9.0 release verification](docs/RELEASE_090.md) | Authorized release checks, platform evidence and publication ledger |
 | [Guided Character and overlay release](docs/CHARACTER_WALKTHROUGH.md) | Current flow, component ownership, native acceptance and 0.9.1 publication gates |
@@ -590,3 +618,5 @@ item/monster/zone edits; it never trusts a UI summary as authorization. Unsuppor
 existing page layouts need manual resolution instead of destructive reformatting.
 `npm run test:workspace-099` exercises the real component with isolated synthetic
 records, including pointer timing, filters, focused tier changes and slot badges.
+
+Native desktop/installer artwork and 1.0 acceptance checks: [App icons](docs/APP_ICONS.md).

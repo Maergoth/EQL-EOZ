@@ -5,9 +5,9 @@ import {installOverlayMode,installViewerTopPan} from '../app/zoneviewer/overlay-
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
 function fixture(apis){
-    const frames=[],modes=[],focuses=[],locations=[],locationOptions=[],clears=[],selections=[],applied=[],statuses=[];
+    const frames=[],modes=[],focuses=[],locations=[],locationOptions=[],clears=[],selections=[],applied=[],statuses=[],markers=[];
     const makeApi=()=>({useConfiguredFolder:async()=>({ok:true}),loadZone:async name=>({ok:true,name}),
-        setView:mode=>modes.push(mode),syncLocation:(location,options)=>{locations.push(location);locationOptions.push(options);},clearPlayerLocation:()=>clears.push(true),setRareMobs(){},setOverlaySelection(){},
+        setView:mode=>modes.push(mode),syncLocation:(location,options)=>{locations.push(location);locationOptions.push(options);},clearPlayerLocation:()=>clears.push(true),setRareMobs:records=>markers.push(records),setOverlaySelection(){},
         setOverlayRoute(){},setOverlaySlice(){},overlayZoom(){},resize(){},focusAtLocation:loc=>{focuses.push(loc);return {ok:true};}});
     const document={createElement(){const listeners=new Map();const frame={listeners,style:{},removed:false,
         contentWindow:{eqlEyeOfZommViewer:apis?.shift?.()||makeApi(),listeners:new Map(),addEventListener(type,handler){this.listeners.set(type,handler);}},
@@ -16,7 +16,7 @@ function fixture(apis){
     const session={zone:'Synthetic Zone',map:{zone:'Synthetic Zone',viewerZone:'synthetic',dataVersion:1,location:{x:10,y:20,z:30,at:1},
         npcs:[{id:'normal',name:'Synthetic Keeper',loc:[1,2],raidInstance:false},{id:'raid',name:'Synthetic Keeper',loc:[3,4,5],raidInstance:true}],route:{points:[]}}};
     const controller=mountMapOverlay3D({root,getSession:()=>session,onStatus:message=>statuses.push(message),onSelectNpc:npc=>selections.push(npc),onFocusApplied:focus=>applied.push(focus)});
-    return {controller,frames,session,modes,focuses,locations,locationOptions,clears,selections,applied,statuses,makeApi};
+    return {controller,frames,session,modes,focuses,locations,locationOptions,clears,selections,applied,statuses,markers,makeApi};
 }
 const f=fixture();
 try{
@@ -41,6 +41,15 @@ try{
     unverified.session.map.viewerZone='';await unverified.controller.setMode('top');
     assert.equal(unverified.frames.length,0,'An explicitly unverified short name cannot fall back to a different display-name archive');assert.match(unverified.statuses.at(-1),/no verified matching archive/);
 }finally{unverified.controller.dispose();}
+const crawl=fixture();
+try{
+    crawl.session.crawl={enabled:true};crawl.session.map.npcs[0].defeated=true;await crawl.controller.setMode('top');
+    assert.deepEqual(crawl.markers.at(-1).map(npc=>[npc.id,npc.defeated]),[['normal',true],['raid',false]],'Top receives defeated presentation without removing either source');
+    await crawl.controller.setMode('first');assert.equal(crawl.markers.at(-1)[0].defeated,true,'First Person preserves the same defeated source state');
+    const markerUpdates=crawl.markers.length;crawl.controller.render(crawl.session);await tick();assert.equal(crawl.markers.length,markerUpdates,'Unrelated duplicate snapshots do not rebuild 3D marker elements');
+    crawl.controller.render({...crawl.session,crawl:{enabled:false}});await tick();assert.equal(crawl.markers.at(-1)[0].defeated,false,'Disabling Crawl restores marker styling even if a stale NPC flag remains');
+    assert.equal(crawl.session.map.npcs[0].defeated,true,'The map adapter cannot mutate shared defeated history');assert.equal(crawl.markers.at(-1).length,2);
+}finally{crawl.controller.dispose();}
 const retryApi={useConfiguredFolder:async()=>({ok:true}),loadZone:async()=>({ok:true}),setView(){},setRareMobs(){},setOverlayRoute(){},resize(){},syncLocation(){return ++this.attempts===1?{ok:false,reason:'load-zone-first'}:{ok:true};},attempts:0},retrying=fixture([retryApi]);
 try{await retrying.controller.setMode('top');assert.equal(retryApi.attempts,1);retrying.controller.render(retrying.session);await tick();assert.equal(retryApi.attempts,2,'an initial rejected location sample must be retried even when coordinates did not change');}finally{retrying.controller.dispose();}
 

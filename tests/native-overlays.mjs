@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './win32-hit-test-probe.mjs';
 import { EventEmitter } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -404,6 +405,24 @@ test('automatic Triggers height survives native rounding; only explicit height e
     win.emit('will-resize',{preventDefault(){prevented=true;}},{...win.getBounds(),height:160});assert.equal(prevented,true);assert.equal(host.getState().panels.timers.manualHeight,false,'a blocked locked gesture does not change height policy');
 }));
 
+test('automatic Triggers native minimum can exceed computed height without becoming manual',()=>fixture(async({host,overlayEvent})=>{
+    await host.control('show','timers');const win=host.windows.get('timers'),nativeBounds=win.setBounds.bind(win);
+    win.setBounds=value=>nativeBounds({...value,height:Math.max(39,value.height)});
+    win.setBounds({...win.getBounds(),height:50});
+    await host.handleOverlayRequest(overlayEvent('timers'),'content-height',36);
+    const automatic=host.getState().panels.timers;
+    assert.equal(automatic.bounds.height,36,'The stored automatic request remains the measured content height');
+    assert.equal(win.getBounds().height,39,'The native platform can enforce a different minimum');
+    assert.equal(automatic.manualHeight,false);
+    assert.deepEqual([win.getBounds().x,win.getBounds().y,win.getBounds().width],[automatic.bounds.x,automatic.bounds.y,automatic.bounds.width]);
+    await host.control('lock','timers',false);
+    await host.handleOverlayRequest(overlayEvent('timers'),'resize',{deltaWidth:0,deltaHeight:20});
+    const manual=host.getState().panels.timers;
+    assert.equal(manual.manualHeight,true);assert.equal(manual.bounds.height,59);assert.equal(win.getBounds().height,59,'An explicit manual height still matches actual native bounds');
+    await host.handleOverlayRequest(overlayEvent('timers'),'content-height',36);
+    assert.equal(win.getBounds().height,59,'Later content fitting cannot replace the user-selected manual height');
+}));
+
 test('startup restores only the selected native panels with their independent lock and mouse state', () => fixture(async ({ host, nativeWindows }) => {
     assert.equal(nativeWindows.length, 1);
     assert.equal(host.windows.has('parse'), true);
@@ -795,6 +814,9 @@ test('overlay preload exposes no filesystem, updater, raw IPC, or Electron event
 });
 
 test('malformed command objects do not escape the command allowlist', () => {
+    assert.deepEqual(sessionCommand('session:crawl-mode',{enabled:true}),{enabled:true});
+    for(const enabled of [undefined,1,'true',null])assert.throws(()=>sessionCommand('session:crawl-mode',{enabled}),/Invalid Crawl/);
+    assert.throws(()=>sessionCommand('session:crawl-mode',{enabled:true,npc:'Synthetic Keeper'}),/Invalid Crawl/);
     assert.deepEqual(sessionCommand('session:new-session', {}), {});
     assert.throws(() => sessionCommand('session:new-session', {logOffset:0}), /does not accept options/);
     assert.throws(() => sessionCommand('session:class-filter', { panel:'timers', enabled:true }), /Invalid/);
@@ -805,6 +827,19 @@ test('malformed command objects do not escape the command allowlist', () => {
     assert.throws(() => sessionCommand('session:intel-drops', {npc:'Synthetic Keeper',raidInstance:'true'}),/Invalid/);
     assert.throws(() => sessionCommand('session:map-data', {zone:{name:'Unrest'}}),/Invalid/);
 });
+
+test('Crawl commands are issued only by authenticated Map or Intel panels',()=>fixture(async({host,mainEvent,overlayEvent,commands})=>{
+    await publish(host,mainEvent);
+    for(const id of ['map','intel','parse','timers'])await host.control('show',id);
+    for(const id of ['map','intel'])await host.handleOverlayRequest(overlayEvent(id),'session:crawl-mode',{enabled:true});
+    assert.deepEqual(commands.slice(-2).map(row=>row[1]),[
+        {panel:'map',action:'session:crawl-mode',payload:{enabled:true}},
+        {panel:'intel',action:'session:crawl-mode',payload:{enabled:true}}
+    ]);
+    for(const id of ['parse','timers'])await assert.rejects(host.handleOverlayRequest(overlayEvent(id),'session:crawl-mode',{enabled:true}),/available in Map/);
+    const wrong=overlayEvent('map');wrong.senderFrame={url:wrong.senderFrame.url};
+    await assert.rejects(host.handleOverlayRequest(wrong,'session:crawl-mode',{enabled:true}),/unavailable/);
+}));
 
 test('opening a selected NPC rechecks its zone and native routing keeps the main window hidden', async () => {
     const source = await readFile(new URL('../app/app.js', import.meta.url), 'utf8');

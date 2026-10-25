@@ -1,7 +1,7 @@
 import {characterCatalogDetails,characterItemDetailsMarkup} from './character-item-card.js';
 import {createWikiResolver,itemExaltationBaseIdentity,itemExportBaseIdentity} from './wiki-identity.js';
 import { characterBaseItemName, characterSlotKinds, normalizeCharacterStats, safeCharacterIcon } from './character-model.js';
-import { scaledItemStats } from './item-scaling.js';
+import { catalogBaseStats, scaledItemStats } from './item-scaling.js';
 import { isItemStatModified } from './item-stat-presentation.js';
 
 // Character-local catalog access. No capture, remote request or global item-tier
@@ -111,7 +111,7 @@ export function resolveInventoryCatalog(pack,name,{socket=false}={}){
  */
 export function characterCatalogCard(item,options={}){
     if(!item||typeof item!=='object'||!text(item.name||item.wikiTitle))throw Error('Choose a cached item first.');
-    const {tier,fraction}=tierOptions(options),baseStats=normalizeCharacterStats(item.stats),name=characterBaseItemName(item.name||item.wikiTitle),wikiTitle=text(item.wikiTitle||item.name);
+    const {tier,fraction}=tierOptions(options),baseStats=normalizeCharacterStats(catalogBaseStats(item)),name=characterBaseItemName(item.name||item.wikiTitle),wikiTitle=text(item.wikiTitle||item.name);
     return{name,observedName:'',wikiTitle,wikiMatch:'confirmed',catalogIdentity:{name,wikiTitle,match:'manual'},iconId:text(item.iconId),icon:safeCharacterIcon(options.icon),
         slots:characterSlotKinds(item.slots),details:characterCatalogDetails(item),augmentSlots:Number.isInteger(item.augmentSlots)&&item.augmentSlots>=0&&item.augmentSlots<=8?item.augmentSlots:5,tier,fraction,baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,
         unscaledStatKeys:[],accuracyPercent:item.accuracyPercent===true||/\bAccuracy\s*:\s*[+\-]?\d+(?:\.\d+)?\s*%/i.test((item.displayLines||[]).join('\n')),

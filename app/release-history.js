@@ -2,6 +2,64 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.0",
+  "title": "Eye of Zomm 1.0",
+  "changes": [
+    "Use the native eye icon on desktop shortcuts, installers and application windows.",
+    "Deliver changed logged locations promptly to the minimap, restore visible-map polling and catch up through busy logs in bounded bursts. Old source and zone coordinates cannot return after a reset.",
+    "Share Crawl between Map and Zone & loot. Fresh kills clear matching located or loot-bearing mobs until the next zone visit; turning Crawl off restores normal previews.",
+    "Compare logged combatants in whole-session and encounter Overview, with per-combatant Damage, Healing and Taken details. Track AA Gained in Session. Live retains the last completed fight until another begins.",
+    "Use explicit wiki Backstab, Delay and Damage Bonus fields in item previews. Preserve independent base values and exact decimal weight rounding; Torturer's Signature at tier 8 has Backstab 21 and weight 0.7 from its documented bases.",
+    "Follow New Item Found! from a log-backed popup to the exact contribution and examine prompt. Optional OCR fills one structured numeric form; blank fields stay omitted and invalid edits stay recoverable.",
+    "Respect one persisted Screen Reading setting across all capture and OCR paths. When enabled, the active Contribute discoveries tab starts its reader automatically; unchecked disables capture while ordinary logs continue.",
+    "Match destination pages automatically, retain an already verified editor during proof refresh, and keep Preview or publication gated on fresh missing-fact proof. Permanent ignore sits to the right of dismiss.",
+    "Respect item-link boundaries so preceding chat prose does not become part of an item name. Preserve authentic unknown links while keeping ambiguous unmarked prose quiet.",
+    "Recover bounded transient Windows settings-file replacement failures without deleting the prior destination or masking terminal errors."
+  ],
+  "steps": [
+    {
+      "title": "Keep dungeon progress in view",
+      "view": "map",
+      "action": "Open Map",
+      "copy": "Check Crawl in Map or Zone & loot. Located or loot-bearing mobs you kill stay struck out and collapsed in both panels until you zone, or turn Crawl off.",
+      "alt": "Actual native Zone and loot panel with Crawl checked and a synthetic defeated monster struck out.",
+      "caption": "Actual isolated Electron capture with synthetic NPC, loot and kill data. The native fixture verifies matching Map/Intel controls and zone re-entry reset. No player profile or production wiki edit.",
+      "image": "1.0.0/crawl-intel",
+      "imageSha256": "a0612338333eeb4ea6cd289f25b357778ebeb20cc1c3f6b415f29f48c1f34eee"
+    },
+    {
+      "title": "See the logged combatants",
+      "view": "combat",
+      "action": "Open Combat",
+      "copy": "The Parse overlay lists damage, DPS, healing and damage taken for logged combatants. Expand their details, count AA Gained in Session, and keep the last fight visible in Live while idle.",
+      "alt": "Actual native whole-session Parse Overview showing separate synthetic combatants with damage, DPS, healing and taken columns.",
+      "caption": "Actual isolated Electron renderer using the real parser and compact shared session with synthetic log lines. Names and totals are demonstration data; no player log or installed profile.",
+      "image": "1.0.0/combatants",
+      "imageSha256": "12ff3f295fe47ff13affe7dfd3879e2f2c65825d95398e36ff604fade03e6cf3"
+    },
+    {
+      "title": "Review one item stat form",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Examine readings fill individual fields. Leave an unknown statistic blank to omit it, or enter zero deliberately. Ranked readings remain editable base proposals that need tier-zero verification.",
+      "alt": "Actual structured item contribution grid with one Observed tier control, individual numeric fields and blank values omitted.",
+      "caption": "Actual isolated Electron Chromium capture with synthetic item readings, an unverified ranked base proposal and local wiki fixtures. No real game pixels or production publication.",
+      "image": "1.0.0/item-fields",
+      "imageSha256": "d73fe3791feb75bb47b3df266e51cbac4a4c09588a2228dea4fef542afd8cf9b"
+    },
+    {
+      "title": "Contribute a new item from its popup",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "A confirmed missing log item opens New Item Found! in the lower-right corner. Contribute selects that item and asks for its examine window. Screen Reading must be enabled; its master setting can disable all capture.",
+      "alt": "Actual standalone native New Item Found popup with two synthetic items and Contribute or Ignore actions.",
+      "caption": "Actual isolated native popup capture with synthetic missing-item proof. The fixture checks bottom-right placement, foreground preservation, explicit actions and fifteen-second completion expiry; no automatic screenshot or live wiki write.",
+      "image": "1.0.0/new-item-popup",
+      "imageSha256": "654f0c6e5ef67a42f7ed35d85c835ecfe351784fe22c5d585d5c415dbe8dcf94"
+    }
+  ]
+},
+{
   "version": "0.9.15",
   "title": "Verified discoveries, zones and map controls",
   "changes": [

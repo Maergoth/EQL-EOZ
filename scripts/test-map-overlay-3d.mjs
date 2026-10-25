@@ -267,7 +267,55 @@ try{
             await click('reset');assert.equal(await mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)),128,'Reset enables Auto Z at the newest known logged height');
             await fs.appendFile(log,[`[${stamp}] [26 MNK] Fixture (Iksar) ZONE: The Castle of Mistmoore (mistmoore)`,`[${stamp}] Your Location is 10, 20, 12`].join('\n')+'\n');
             await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===12),'other zones keep their normal logged elevation default');
-            console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,realConfiguredFolder:true,realS3dEqgHydration:true,realParserWorker:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,groundMarkerBothViews:true,screenSizedPlayerMarker:true,headingArrow:true,topLeftDragPan:true,followOffMarker:true,autoZManualReenable:true,mainViewerAutoZ:true,unknownHeightGrounded:true,resetAndHideUnload:true,hateFallbackAndManualSlice:true}));
+            await click('mode');
+            await until(()=>frame()&&childExecute(()=>Boolean(window.eqlEyeOfZommViewer?.focusAtLocation&&window.eqlZoneViewer?.renderer)),'Crawl viewer API');
+            await childExecute(installGeometry);
+            await until(()=>childExecute(()=>window.eqlZoneViewer.zoneGroup.getObjectByName('synthetic-ci-plane-not-an-archive')&&window.eqlZoneViewer.mode==='top'),'Crawl Top geometry');
+            await click('mode');await until(()=>childExecute(()=>window.eqlZoneViewer.mode==='first'),'Crawl First Person mode');
+            // Crawl is owned by this same real main renderer. Exercise both
+            // native controls, ordinary fresh log ingestion, and the actual
+            // custom WebGL marker DOM without replacing the session model.
+            await control('show','intel');
+            const intel=await until(()=>BrowserWindow.getAllWindows().find(window=>window.webContents.getURL().includes('/overlay.html?panel=intel')),'native Intel');
+            const intelExecute=(fn,...args)=>mainExecute(intel,fn,...args);
+            const freshLine=async text=>fs.appendFile(log,`[${new Date().toString().replace(/ GMT.*$/,'')}] ${text}\n`);
+            await until(()=>intelExecute(()=>document.querySelector('#intel-crawl-mode')&&!document.querySelector('#intel-crawl-mode').disabled&&document.querySelectorAll('.npc-row').length===3),'native Intel controls');
+            assert.equal(await intelExecute(()=>document.querySelector('#intel-crawl-mode').checked),false);
+            await freshLine('You have slain Unknown Elevation Watcher!');
+            await until(async()=>(await state()).snapshot.session.parse.totalKills>=1,'off-mode kill ingested');
+            await mainExecute(map,()=>document.querySelector('[data-map-crawl]').click());
+            await until(()=>intelExecute(()=>document.querySelector('#intel-crawl-mode').checked),'Map toggle synchronizes Intel');
+            assert.equal((await state()).snapshot.session.crawl.defeatedCount,0,'Enabling never replays the already ingested kill');
+            await freshLine('You have slain Unknown Elevation Watcher!');
+            await until(async()=>{const s=(await state()).snapshot.session;return s.crawl.defeatedCount===1&&s.map.npcs.some(npc=>npc.name==='Unknown Elevation Watcher'&&npc.defeated)&&s.intel.npcs.some(npc=>npc.name==='Unknown Elevation Watcher'&&npc.defeated);},'one shared defeated map and Intel identity');
+            const deadIntel=await until(()=>intelExecute(()=>{const row=[...document.querySelectorAll('.npc-row')].find(row=>row.querySelector('.npc-name')?.textContent==='Unknown Elevation Watcher');return row?.classList.contains('is-defeated')?{strike:getComputedStyle(row.querySelector('.npc-name')).textDecorationLine,opacity:getComputedStyle(row).opacity,drops:row.querySelectorAll('.item-card').length,actionsHidden:row.querySelector('.row-actions').hidden,nameDisabled:row.querySelector('.npc-name').disabled}:null;}),'defeated native Intel presentation');
+            assert.match(deadIntel.strike,/line-through/);assert(Number(deadIntel.opacity)<.6);assert.equal(deadIntel.drops,0);assert(deadIntel.actionsHidden&&deadIntel.nameDisabled);
+            const deadMarker=await until(()=>childExecute(()=>{const marker=[...document.querySelectorAll('.eoz-rare-marker')].find(node=>node.dataset.npc==='Unknown Elevation Watcher');return marker?.classList.contains('is-defeated')?{strike:getComputedStyle(marker).textDecorationLine,aria:marker.getAttribute('aria-label'),disabled:marker.disabled}:null;}),'actual First Person defeated marker');
+            assert.match(deadMarker.strike,/line-through/);assert.match(deadMarker.aria,/defeated/);assert.equal(deadMarker.disabled,false);
+            await click('mode');await click('mode');
+            await until(()=>frame()&&childExecute(()=>Boolean(window.eqlEyeOfZommViewer?.focusAtLocation&&window.eqlZoneViewer?.renderer)),'new Top viewer API');
+            await childExecute(installGeometry);
+            await until(()=>childExecute(()=>window.eqlZoneViewer.mode==='top'&&Boolean(document.querySelector('.eoz-rare-marker.is-defeated'))),'Top 3D retains defeated marker');
+            await capture('crawl-top-defeated.png');
+            if(screenshots)await fs.writeFile(path.join(screenshots,'crawl-intel-defeated.png'),(await intel.webContents.capturePage()).toPNG());
+            await freshLine('You have slain Synthetic Keeper!');
+            await wait(1100);assert.equal((await state()).snapshot.session.crawl.defeatedCount,1,'Same-name Normal/Raid kills remain ambiguous rather than marking both');
+            await intelExecute(()=>document.querySelector('#intel-crawl-mode').click());
+            await until(()=>mainExecute(map,()=>!document.querySelector('[data-map-crawl]').checked),'Intel toggle synchronizes Map');
+            await until(()=>childExecute(()=>!document.querySelector('.eoz-rare-marker.is-defeated')),'disable restores actual markers');
+            assert.equal(await intelExecute(()=>Boolean(document.querySelector('.npc-row.is-defeated'))),false);
+            await intelExecute(()=>document.querySelector('#intel-crawl-mode').click());await until(async()=>(await state()).snapshot.session.crawl.enabled,'Crawl re-enabled');
+            await freshLine('You have slain Unknown Elevation Watcher!');await until(async()=>(await state()).snapshot.session.crawl.defeatedCount===1,'new kill marks again');
+            await freshLine('You have entered The Castle of Mistmoore.');
+            await until(async()=>{const s=(await state()).snapshot.session;return s.crawl.enabled&&s.crawl.defeatedCount===0&&s.intel.npcs.every(npc=>!npc.defeated);},'same-zone entry clears defeated set while retaining Crawl checkbox');
+            await freshLine('Your Location is 10, 20, 12');
+            await until(async()=>(await state()).snapshot.session.map.location?.z===12,'location restored after reentry');
+            for(const [width,fontScale]of [[520,1],[260,1],[260,1.5]]){
+                intel.setContentSize(width,550);await intelExecute(fontScale=>document.documentElement.style.setProperty('--font-scale',String(fontScale)),fontScale);
+                const layout=await intelExecute(()=>{const row=document.querySelector('.intel-filter-row'),range=document.querySelector('#intel-item-tier'),crawl=document.querySelector('.intel-crawl-label');return{row:row.getBoundingClientRect().toJSON(),range:range.getBoundingClientRect().toJSON(),crawl:crawl.getBoundingClientRect().toJSON(),last:row.lastElementChild===crawl};});
+                assert(layout.last&&layout.crawl.right<=layout.row.right+1&&layout.range.width>=11,'Far-right Crawl leaves a usable Intel slider at '+JSON.stringify({width,fontScale,layout}));
+            }
+            console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,realConfiguredFolder:true,realS3dEqgHydration:true,realParserWorker:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,groundMarkerBothViews:true,screenSizedPlayerMarker:true,headingArrow:true,topLeftDragPan:true,followOffMarker:true,autoZManualReenable:true,mainViewerAutoZ:true,unknownHeightGrounded:true,resetAndHideUnload:true,hateFallbackAndManualSlice:true,crawlNativeMapIntel:true,crawlBothWebglViews:true,crawlReentryReset:true}));
             BrowserWindow.prototype.focus=originalFocus;app.exit(0);
         }
         app.on('browser-window-created',(_event,window)=>{observeWindow(window);if(started)return;started=true;void inspect().catch(error=>{console.error('EOZ_MAP_DIAGNOSTICS='+JSON.stringify(diagnostics));console.error(error.stack);app.exit(1);});});

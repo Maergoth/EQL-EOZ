@@ -1,4 +1,5 @@
 'use strict';
+const path=require('node:path');
 const {WikiClient,WikiError,PRODUCTION_ORIGIN,validatePNG}=require('./wiki-client.cjs');
 const {readBoundedFile}=require('./wiki-attachments.cjs');
 const {ContributionGapVerifier}=require('./contribution-gap-verifier.cjs');
@@ -151,7 +152,7 @@ class WikiHost {
     login(){
         if(this.disposed)throw new WikiError('closed','Wiki login has closed.');
         if(this.loginWindow&&!this.loginWindow.isDestroyed()){this.loginWindow.show();this.loginWindow.focus();void this.publishStatus();return {opening:true};}
-        const window=new this.electron.BrowserWindow({width:1000,height:760,minWidth:640,minHeight:480,title:'Log in to EQL Wiki',autoHideMenuBar:true,backgroundColor:'#0b1420',parent:this.getMainWindow(),webPreferences:{session:this.session,nodeIntegration:false,nodeIntegrationInSubFrames:false,contextIsolation:true,sandbox:true,webSecurity:true,webviewTag:false,allowRunningInsecureContent:false,navigateOnDragDrop:false}});
+        const window=new this.electron.BrowserWindow({width:1000,height:760,minWidth:640,minHeight:480,title:'Log in to EQL Wiki',icon:path.join(__dirname,'../app/assets/eye-of-zomm.png'),autoHideMenuBar:true,backgroundColor:'#0b1420',parent:this.getMainWindow(),webPreferences:{session:this.session,nodeIntegration:false,nodeIntegrationInSubFrames:false,contextIsolation:true,sandbox:true,webSecurity:true,webviewTag:false,allowRunningInsecureContent:false,navigateOnDragDrop:false}});
         this.loginWindow=window;
         const trusted=url=>{try{const parsed=new URL(url);return parsed.origin===this.client.origin&&!parsed.username&&!parsed.password;}catch{return false;}};
         const guard=(event,url)=>{if(!trusted(url))event.preventDefault();};

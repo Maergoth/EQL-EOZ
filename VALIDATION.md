@@ -1,5 +1,7 @@
 # Validation report — v0.9.10
 
+1.0.0 release integration uses the reviewed combined source tree and preserves all original feature test commands and historical captures. See [the 1.0 release record](docs/RELEASE_1_0_PLAN.md) for exact CI, package, formula and dataset receipts. Synthetic native tests do not establish installed-game or compositor acceptance.
+
 0.9.10 release preparation: source/native synthetic receipts for overlay drag,
 shared wiki cards, map trajectory/transparency, tiered item forms and persistent
 fresh-evidence discovery flows are indexed in

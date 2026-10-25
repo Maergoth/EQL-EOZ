@@ -1,5 +1,7 @@
 # Eye of Zomm contributor handoff
 
+1.0.0 integrates the six reviewed icon, tier-stat, Crawl, combatant, contribution and map-latency features. Preserve exact wiki base fields, capture permission, fresh-proof publication guards and one shared session. See [the 1.0 release record](RELEASE_1_0_PLAN.md); older receipts below remain historical.
+
 0.9.15 adds native anonymous discovery verification, persistent device ignores, the unified zone creation blueprint, general log anchoring and same-visit numeric /con level suggestions. All automatic queue and popup paths must remain hidden before confirmed live absence, including Character item gaps and legacy saved automatic drafts. See [the release plan](RELEASE_0915_PLAN.md), [verification policy](CONTRIBUTION_GAP_VERIFICATION.md), [ignores](CONTRIBUTION_IGNORES.md) and [level evidence](CONSIDER_LEVEL_PREFILL.md).
 
 0.9.14 puts Discoveries and Contribution History inside one Contribute section,
