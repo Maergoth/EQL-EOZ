@@ -13,7 +13,7 @@ export const RELEASE_HISTORY = freeze([
     "Attribute heal-over-time ticks and critical heals to their logged healer, and remove repetitive explanations below the Parse tables.",
     "Count measured short heals, damage-shield retaliation, unnamed-caster DoT damage and nearby reave/smite attacks while retaining unknown sources and separate pet names.",
     "Match a first unnamed DoT tick to the earliest pending cast of that exact spell. Explicit caster names take priority; unavailable or conflicting context remains unknown.",
-    "Restore Nektropos Castle and Undercrofts in both 3D map views, including their local companion files and Castle's large terrain mesh."
+    "Restore Nektropos Castle and Undercrofts in both 3D map views, including their local support files and Castle's large terrain mesh."
   ],
   "steps": [
     {
