@@ -4,6 +4,29 @@ Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.9-x64.exe`.
 
 Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.9` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
 
+## Overlay drag and resize acceptance
+
+1. Unlock all four panels. Drag from the Parse grip, Map grip, Zone & loot title,
+   and Triggers body/grip. Test the whole visible grip, including its corners,
+   at narrow widths and the smallest/largest font settings. Dragging must move
+   the selected panel without resizing it; menus, selects and map controls must
+   retain their normal interaction. Repeat with Triggers at its 36 px minimum
+   height. Every edge and corner must still show and perform its own resize.
+2. Build a dock chain, then drag its root and a middle panel separately. The
+   selected panel must detach immediately, keep its size and follow the pointer
+   without moving its former parent or children. Direct children remain where
+   placed, with their own remaining children unchanged. Session updates during
+   the drag must not pull any panel back or change its size.
+3. Release more than 8 px from all eligible edges: the panel remains free.
+   Release within 8 px of a new panel: edges touch, above/below share width and
+   left/right share height. The formerly connected group must not be eligible
+   for that drag; release and start a new drag to dock to it again. Resize the
+   newly docked target and confirm size sharing still propagates normally.
+4. Repeat around monitor edges, at 100/125/150% OS scaling, and after locking,
+   hiding/showing and restarting. Locked or click-through panels cannot drag or
+   resize; global Hidden retains the suspended layout. Record real compositor
+   and foreground-game behavior separately from synthetic fixture results.
+
 ## 0.9.8 targeted acceptance
 
 - Adjust equipped-hover tiers with pointer and keyboard. Keep the hover, focus
@@ -157,8 +180,9 @@ archive audit, acceptance and limits.
 4. On all four unlocked overlays, hover every edge and corner. Axis/diagonal
    arrows and actual resizing must replace the cancel cursor. Check opposite
    anchors and locked handles. Dock each side of another panel: above/below share
-   width, side-by-side share height and edges touch. Resize the target, move the
-   group and drag a child away to detach. Repeat at monitor edges and other DPI.
+   width, side-by-side share height and edges touch. Resize the target to keep
+   followers aligned; drag any panel to detach it without moving its neighbors.
+   Use the current drag/release matrix above. Repeat at monitor edges and other DPI.
 5. Cycle **Unlocked → Locked → Hidden → Unlocked**. Globally hidden groups return
    together; individually hiding a panel detaches its relations. Verify mouse
    input and saved layout after restart and display removal.

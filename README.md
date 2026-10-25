@@ -149,11 +149,15 @@ The independent **Parse** window has **Overview / Damage / Healing / Taken / Ses
 Unlock an overlay to move/resize it. Locking leaves its tabs and menus interactive; **Ignore mouse** passes clicks through. Recover from Settings, the tray, or **Ctrl+Shift+O** when registered. Layout, opacity and font scale are saved separately for each panel. Closing the main window while overlays are visible keeps their shared session running; use **Quit Eye of Zomm** in the tray to exit.
 
 Every unlocked overlay has clear axis/diagonal resize edges and a visible corner.
-Move any panel until it touches another: above/below share width, left/right
-share height. Saved dock chains follow target movement and resizing. Drag away
-to detach. Global Hidden suspends the group until it is shown again; hiding one
-panel detaches its relations. A manual Triggers height stays saved; **Reset positions** restores
-automatic content fitting. Global Unlock restores mouse input on every panel.
+Use the Parse/Map grip, Zone & loot title, or the Triggers body to drag. Dragging
+immediately detaches that panel and its direct children, keeps the panel's size,
+and leaves every other panel where it was. Release within 8 px of a new panel
+edge to snap: above/below share width, left/right share height. The group you
+just detached from cannot pull the panel back during that drag. Resizing a docked
+panel still keeps its docked followers aligned and sharing the matching size.
+Global Hidden suspends the group until it is shown again; hiding one panel
+detaches its relations. A manual Triggers height stays saved; **Reset positions**
+restores automatic content fitting. Global Unlock restores mouse input on every panel.
 
 ![0.9.1 unlocked native Parse with separate drag and resize grips](app/assets/whats-new/0.9.1/overlay-resize.png)
 

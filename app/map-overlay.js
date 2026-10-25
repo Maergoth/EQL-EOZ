@@ -79,13 +79,13 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     if (!root) return {render(){},setVisible(){},dispose(){}};
     root.innerHTML = `<style>
 .native-map{height:100%;display:flex;flex-direction:column;min-height:0}
-.native-map-header{display:grid!important;grid-template-columns:12px minmax(28px,1fr) auto max(18px,calc(18px * var(--font-scale)));grid-template-rows:minmax(max(36px,calc(28px * var(--font-scale))),auto) auto;column-gap:4px;row-gap:0;height:auto!important;min-height:36px!important;outline-offset:-1px;-webkit-app-region:no-drag!important}
-.native-map-header .native-map-title{grid-column:2;grid-row:1;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:max(36px,calc(28px * var(--font-scale)));-webkit-app-region:no-drag}
-.native-map-drag-grip{grid-column:1;grid-row:1;display:block;width:12px;height:28px;line-height:28px;text-align:center;color:#8d9aa9;cursor:grab;-webkit-app-region:drag}
+.native-map-header{display:grid!important;grid-template-columns:26px minmax(28px,1fr) auto max(18px,calc(18px * var(--font-scale)));grid-template-rows:minmax(max(38px,calc(28px * var(--font-scale))),auto) auto;column-gap:4px;row-gap:0;height:auto!important;min-height:38px!important;outline-offset:-1px;-webkit-app-region:no-drag!important}
+.native-map-header .native-map-title{grid-column:2;grid-row:1;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:max(38px,calc(28px * var(--font-scale)));-webkit-app-region:no-drag}
+.native-map-drag-grip{grid-column:1;grid-row:1;align-self:center;display:block;margin-left:14px;width:12px;height:28px;line-height:28px;text-align:center;color:#8d9aa9;cursor:grab;-webkit-app-region:no-drag;touch-action:none}
 .is-locked .native-map-drag-grip{opacity:.35;cursor:default;-webkit-app-region:no-drag}
 .native-map-header>.hover-menu{grid-column:4;grid-row:1;align-self:center;margin:0}
 .native-map-tools{grid-column:3;grid-row:1;display:flex;flex-wrap:nowrap;gap:3px;align-items:center;min-width:0;max-width:0;visibility:hidden;opacity:0;overflow:hidden;pointer-events:none;padding:0;font-size:calc(11px * var(--font-scale,1));-webkit-app-region:no-drag}
-.native-map-header:is(:hover,:focus-visible,.is-controls-open) .native-map-tools,.native-map-header:has(:focus-visible) .native-map-tools{max-width:min(250px,calc(100vw - 78px - 18px * max(1,var(--font-scale))));visibility:visible;opacity:1;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;pointer-events:auto}
+.native-map-header:is(:hover,:focus-visible,.is-controls-open) .native-map-tools,.native-map-header:has(:focus-visible) .native-map-tools{max-width:min(250px,calc(100vw - 92px - 18px * max(1,var(--font-scale))));visibility:visible;opacity:1;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;pointer-events:auto}
 .native-map-tools::-webkit-scrollbar{display:none}
 .native-map-tools::after{content:"";flex:0 0 6px;height:1px}
 .native-map [hidden]{display:none!important}

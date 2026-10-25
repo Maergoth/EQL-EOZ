@@ -164,6 +164,8 @@ class OverlayHost {
         this.recoveryShortcutRegistered = false;
         this.dockingSync=false;
         this.docksSuspended=false;
+        this.moveGestures=new Map();
+        this.nativeMoveTimers=new Map();
         this.onDisplaysChanged = () => this.restoreBounds();
     }
 
@@ -246,12 +248,21 @@ class OverlayHost {
         const id = this.overlaySender(event);
         if (!id) throw new Error('Overlay request is unavailable.');
         if (action === 'get-state') return this.getState(id);
+        if(['move-start','move','move-end'].includes(action)){
+            if(action==='move-end')return this.finishPanelMove(id,{cancel:payload?.cancel===true});
+            const prefs=this.preferences.panels[id];
+            if(!prefs.visible||prefs.locked||prefs.passThrough)throw new Error('Unlock and show this panel before moving it.');
+            if(action==='move-start')return this.beginPanelMove(id);
+            if(!payload||typeof payload!=='object'||Array.isArray(payload)||!Number.isFinite(payload.deltaX)||!Number.isFinite(payload.deltaY)||Math.abs(payload.deltaX)>20000||Math.abs(payload.deltaY)>20000)throw new Error('Invalid overlay movement.');
+            return this.movePanel(id,payload.deltaX,payload.deltaY);
+        }
         if(action==='resize'){
             const prefs=this.preferences.panels[id];
             if(!prefs.visible||prefs.locked||prefs.passThrough)throw new Error('Unlock and show this panel before resizing it.');
             if(!payload||typeof payload!=='object'||Array.isArray(payload))throw new Error('Invalid overlay size.');
             const edge=payload.edge??'se';if(!['n','ne','e','se','s','sw','w','nw'].includes(edge))throw new Error('Invalid resize edge.');
             const win=this.windows.get(id);if(!win||win.isDestroyed())throw new Error('This overlay is unavailable.');
+            this.cancelPanelMove(id);
             const current=win.getBounds(),delta=Object.hasOwn(payload,'deltaWidth')||Object.hasOwn(payload,'deltaHeight');
             if(delta&&(!Number.isFinite(payload.deltaWidth)||!Number.isFinite(payload.deltaHeight)||Math.abs(payload.deltaWidth)>4000||Math.abs(payload.deltaHeight)>4000))throw new Error('Invalid overlay size.');
             const width=delta?current.width+payload.deltaWidth:payload.width,height=delta?current.height+payload.deltaHeight:payload.height;
@@ -319,8 +330,12 @@ class OverlayHost {
             if (prefs.visible) win.showInactive();
             this.broadcast(false);
         });
-        win.webContents.on('render-process-gone', () => { this.ready.delete(id); this.crashed.add(id); });
-        win.on('will-move', event => { if (prefs.locked) event.preventDefault(); });
+        win.webContents.on('render-process-gone', () => { this.cancelPanelMove(id);this.ready.delete(id); this.crashed.add(id); });
+        win.on('will-move', event => {
+            if(prefs.locked||prefs.passThrough||!prefs.visible){event.preventDefault();return;}
+            if(!this.dockingSync&&!this.moveGestures.has(id))this.beginPanelMove(id,{native:true});
+        });
+        win.on('moved',()=>{if(this.moveGestures.get(id)?.native)this.finishPanelMove(id,{cancel:true});});
         // Electron emits will-resize for native user gestures, not setBounds.
         // Generic resize events also include auto-fit and native DIP rounding.
         win.on('will-resize', (event,bounds) => {
@@ -330,6 +345,23 @@ class OverlayHost {
         const saveBounds = (resizing=false) => {
             if (win.isDestroyed() || this.disposed || this.dockingSync || this.docksSuspended) return;
             const current=win.getBounds(),displays=this.displays();
+            const gesture=this.moveGestures.get(id),positionChanged=current.x!==prefs.bounds.x||current.y!==prefs.bounds.y;
+            const sameSize=current.width===prefs.bounds.width&&current.height===prefs.bounds.height;
+            if(gesture&&!gesture.native)return;
+            if(gesture?.native||positionChanged&&(!resizing||sameSize)){
+                if(prefs.visible&&!prefs.locked&&!prefs.passThrough){
+                    if(!gesture)this.beginPanelMove(id,{native:true});
+                    const initial=this.moveGestures.get(id).bounds;
+                    this.movePanel(id,current.x-initial.x,current.y-initial.y);
+                    clearTimeout(this.nativeMoveTimers.get(id));
+                    const timer=setTimeout(()=>{this.nativeMoveTimers.delete(id);this.finishPanelMove(id,{cancel:true});},250);
+                    timer.unref?.();this.nativeMoveTimers.set(id,timer);
+                }else{prefs.bounds=clampBounds(current,displays,prefs.bounds,id==='timers'?36:160);this.scheduleSave();}
+                return;
+            }
+            // Native move/resize notifications can be duplicated. A same-size
+            // resize is not a request to magnet back to the previous dock.
+            if(sameSize)return;
             let bounds=clampBounds(current,displays,prefs.bounds,id==='timers'?36:160);
             this.updateDocking(id,bounds,{snap:!prefs.locked&&!prefs.passThrough});
             this.scheduleSave();
@@ -341,7 +373,7 @@ class OverlayHost {
             event.preventDefault();
             void this.control('hide', id).catch(this.warn);
         });
-        win.on('closed', () => { this.windows.delete(id); this.ready.delete(id); this.crashed.delete(id); });
+        win.on('closed', () => { this.cancelPanelMove(id);this.windows.delete(id); this.ready.delete(id); this.crashed.delete(id); });
         void win.loadURL(this.panelUrl(id)).catch(error => this.warn('[Eye of Zomm] overlay load unavailable:', error?.message));
         return win;
     }
@@ -362,6 +394,41 @@ class OverlayHost {
         return this.preferences.panels.parse.visible&&parse&&!parse.isDestroyed()?snapTriggersBounds(bounds,parse.getBounds(),displays,{resizing}):bounds;
     }
     dockingPanels(){const displays=this.displays();return PANEL_IDS.map(id=>{const prefs=this.preferences.panels[id],workArea=boundsArea(prefs.bounds,displays);return{id,bounds:clone(prefs.bounds),visible:prefs.visible,displayId:displayKey(workArea),workArea};});}
+    cancelPanelMove(id){clearTimeout(this.nativeMoveTimers.get(id));this.nativeMoveTimers.delete(id);this.moveGestures.delete(id);}
+    beginPanelMove(id,{native=false}={}){
+        const win=this.windows.get(id);if(!win||win.isDestroyed()||this.disposed)throw new Error('This overlay is unavailable.');
+        const group=new Set([id]);
+        for(let n=0;n<PANEL_IDS.length;n++)for(const member of PANEL_IDS){const target=this.preferences.panels[member].dock?.targetId;if(target&&(group.has(member)||group.has(target))){group.add(member);group.add(target);}}
+        this.cancelPanelMove(id);
+        for(const member of PANEL_IDS)if(member===id||this.preferences.panels[member].dock?.targetId===id)delete this.preferences.panels[member].dock;
+        const bounds=win.getBounds();this.preferences.panels[id].bounds=clone(bounds);
+        this.moveGestures.set(id,{bounds:clone(bounds),excluded:group,native});this.scheduleSave();
+        return{ok:true,bounds:clone(bounds)};
+    }
+    movePanel(id,deltaX,deltaY){
+        const gesture=this.moveGestures.get(id);if(!gesture)throw new Error('Start moving this overlay first.');
+        const requested={...gesture.bounds,x:Math.round(gesture.bounds.x+deltaX),y:Math.round(gesture.bounds.y+deltaY)};
+        const area=boundsArea(requested,this.displays())||this.displays()[0]?.workArea||{x:0,y:0,width:1280,height:720};
+        // Translation preserves size, including at mixed-size monitor edges.
+        const bounds={...requested,x:clamp(requested.x,area.x,Math.max(area.x,area.x+area.width-requested.width)),y:clamp(requested.y,area.y,Math.max(area.y,area.y+area.height-requested.height))};
+        this.preferences.panels[id].bounds=bounds;this.apply(id);this.scheduleSave();
+        return{ok:true,bounds:clone(bounds)};
+    }
+    finishPanelMove(id,{cancel=false}={}){
+        const gesture=this.moveGestures.get(id),prefs=this.preferences.panels[id];
+        this.cancelPanelMove(id);
+        if(gesture&&!cancel&&!gesture.native&&prefs.visible&&!prefs.locked&&!prefs.passThrough&&!this.disposed){
+            const panels=this.dockingPanels(),owner=panels.find(panel=>panel.id===id),relations=Object.fromEntries(PANEL_IDS.flatMap(member=>this.preferences.panels[member].dock?[[member,this.preferences.panels[member].dock]]:[]));
+            const targets=panels.filter(panel=>panel.id!==id&&!gesture.excluded.has(panel.id)&&!this.moveGestures.has(panel.id));
+            const result=snapOverlayBounds({...owner,targets,relations,threshold:8});
+            if(result.relation){
+                const target=panels.find(panel=>panel.id===result.relation.targetId);
+                const aligned=applyOverlayDock({...owner,relation:result.relation,targetBounds:target.bounds,targets:panels,relations});
+                if(aligned){prefs.bounds=aligned;prefs.dock=result.relation;this.apply(id);}
+            }
+        }
+        this.scheduleSave();return{ok:true,bounds:clone(prefs.bounds)};
+    }
     pruneDocks({includeHidden=false}={}){const panels=this.dockingPanels(),relations=fittedDocks(panels,Object.fromEntries(PANEL_IDS.flatMap(id=>this.preferences.panels[id].dock?[[id,this.preferences.panels[id].dock]]:[])),{includeHidden});for(const id of PANEL_IDS){if(relations[id])this.preferences.panels[id].dock=relations[id];else delete this.preferences.panels[id].dock;}return relations;}
     updateDocking(id,bounds,{snap=true,maintain=false}={}){
         if(this.dockingSync||this.docksSuspended)return;
@@ -396,6 +463,7 @@ class OverlayHost {
             this.preferences.appearance = normalizeAppearance(value);
             this.timerContentHeight = null; this.fitTimerWindow();
         } else if (all.includes(action)) {
+            for(const id of PANEL_IDS)this.cancelPanelMove(id);
             const defaults = normalizePreferences({}, this.displays());
             const cycleMode=action==='cycle-all'?globalOverlayMode(this.preferences.panels):null;
             if(action==='hide-all'||cycleMode==='locked')this.docksSuspended=true;
@@ -432,6 +500,7 @@ class OverlayHost {
             else if (action === 'opacity' && typeof value === 'number' && Number.isFinite(value)) prefs.backgroundOpacity = clamp(value, 0.15, 1);
             else if (action === 'font-scale' && typeof value === 'number' && Number.isFinite(value)) prefs.fontScale = clamp(value, 0.75, 1.75);
             else throw new Error('Unknown overlay action or invalid value.');
+            if(!prefs.visible||prefs.locked||prefs.passThrough)this.cancelPanelMove(id);
             if (prefs.visible && (action === 'show' || action === 'toggle')) this.recoverPanel(id);
             this.apply(id);
         }
@@ -461,7 +530,7 @@ class OverlayHost {
 
     fitTimerWindow() {
         const prefs = this.preferences?.panels.timers;
-        if (!prefs || this.docksSuspended) return;
+        if (!prefs || this.docksSuspended || this.moveGestures.size) return;
         const timers = this.snapshot?.session?.timers || {};
         const count = Math.min(8, (timers.timers || []).filter(timer => timer.visible !== false).length);
         const swingHeight = timers.swing?.enabled === false ? 0 : 22;
@@ -484,6 +553,7 @@ class OverlayHost {
     noteSessionRestart() { this.sessionRestartCount += 1; this.markSessionUnavailable(); }
     restoreBounds() {
         if (!this.preferences || this.disposed) return;
+        for(const id of PANEL_IDS)this.cancelPanelMove(id);
         for (const id of PANEL_IDS) {
             const prefs = this.preferences.panels[id];
             prefs.bounds = clampBounds(prefs.bounds, this.displays(), prefs.bounds, id === 'timers' ? 36 : 160);
@@ -541,6 +611,7 @@ class OverlayHost {
     dispose() {
         if (this.disposed) return;
         this.disposed = true;
+        for(const id of PANEL_IDS)this.cancelPanelMove(id);
         this.markSessionUnavailable();
         clearInterval(this.staleTimer);
         clearTimeout(this.saveTimer);

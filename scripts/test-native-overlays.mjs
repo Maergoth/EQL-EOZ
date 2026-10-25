@@ -199,7 +199,7 @@ try {
             assert.equal(panels().parse.isResizable(), false,'custom hit regions resize transparent overlays'); assert.equal(panels().parse.isMovable(), true);
             assert.equal(nativeCalls.get(panels().parse.id).filter(call => call[0] === 'setMovable').at(-1)[1],true);
             if(process.platform !== 'linux')assert.equal(panels().parse.isFocusable(),true);
-            await until(async()=>execute(panels().parse,()=>getComputedStyle(document.querySelector('#parse-drag-grip')).webkitAppRegion==='drag'),'unlocked dedicated Parse drag region');
+            await until(async()=>execute(panels().parse,()=>getComputedStyle(document.querySelector('#parse-drag-grip')).webkitAppRegion==='no-drag'),'unlocked dedicated Parse drag region');
             const parseGrip=await execute(panels().parse,()=>{const grip=document.querySelector('#parse-drag-grip'),rect=grip.getBoundingClientRect(),select=document.querySelector('#encounter-scope').getBoundingClientRect();return{width:rect.width,height:rect.height,right:rect.right,selectLeft:select.left,headerRegion:getComputedStyle(document.querySelector('#overlay-header')).webkitAppRegion,selectRegion:getComputedStyle(document.querySelector('#encounter-scope')).webkitAppRegion,tabRegion:getComputedStyle(document.querySelector('[data-tab="healing"]')).webkitAppRegion,resizeHint:getComputedStyle(document.querySelector('#overlay-resize-handle')).display,resizeCursor:getComputedStyle(document.querySelector('#overlay-resize-handle')).cursor};});
             assert(parseGrip.width>=24&&parseGrip.height>=20&&parseGrip.right<=parseGrip.selectLeft,'Parse has an exposed grip separate from encounter controls');
             assert.equal(parseGrip.headerRegion,'no-drag');assert.equal(parseGrip.selectRegion,'no-drag');assert.equal(parseGrip.tabRegion,'no-drag');assert.equal(parseGrip.resizeHint,'block');assert.equal(parseGrip.resizeCursor,'nwse-resize');
@@ -236,14 +236,15 @@ try {
             await control('hide','map');await control('hide','intel');
             const resizeTarget={x:100,y:100,width:parseBeforeResize.width+86,height:parseBeforeResize.height+40};panels().parse.setBounds(resizeTarget);
             const actualTarget=panels().parse.getBounds(),timerWindow=panels().timers;
-            timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+9,width:actualTarget.width-8,height:84});
+            timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+7,width:actualTarget.width-8,height:84});
+            await action('timers','move-start');await action('timers','move-end');
             try{await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height&&bounds.width===actualTarget.width;},'Triggers touches current resized native Parse bounds and shares its width');}catch(error){throw Error(`${error.message}; target=${JSON.stringify(actualTarget)} timer=${JSON.stringify(timerWindow.getBounds())} workAreas=${JSON.stringify(fixtureScreen.getAllDisplays().map(display=>display.workArea))} preferences=${JSON.stringify((await state()).panels)}`);}
             // Native setBounds is fixture positioning, not user height intent.
             // Establish manual height through the real own-panel resize path.
             await action('timers','resize',{deltaWidth:0,deltaHeight:20});
             const timerBeforeResize=timerWindow.getBounds();
             const timerHandle=await execute(timerWindow,()=>{const handle=document.querySelector('#overlay-resize-handle'),grip=document.querySelector('#parse-drag-grip'),menu=document.querySelector('.hover-menu');return{cursor:getComputedStyle(handle).cursor,display:getComputedStyle(handle).display,grip:getComputedStyle(grip).webkitAppRegion,handle:handle.getBoundingClientRect().toJSON(),menu:menu.getBoundingClientRect().toJSON()};});
-            assert.equal(timerHandle.cursor,'nwse-resize');assert.equal(timerHandle.display,'block');assert.equal(timerHandle.grip,'drag');assert(timerHandle.handle.left>=timerHandle.menu.right,'Triggers resize corner is separate from its settings button');
+            assert.equal(timerHandle.cursor,'nwse-resize');assert.equal(timerHandle.display,'block');assert.equal(timerHandle.grip,'no-drag');assert(timerHandle.handle.left>=timerHandle.menu.right,'Triggers resize corner is separate from its settings button');
             await execute(timerWindow,()=>document.querySelector('#overlay-resize-handle').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',shiftKey:true,bubbles:true})));
             await until(()=>timerWindow.getBounds().height===timerBeforeResize.height+20,'Triggers keyboard corner resize changes real native height');
             assert.equal((await state()).panels.timers.manualHeight,true);
@@ -449,7 +450,7 @@ try {
                     const details=JSON.stringify({width,locked,...geometry});
                     assert(geometry.band.height>=36&&geometry.title.height>=36&&geometry.title.width>=28,`The full title band remains a usable hover target: ${details}`);
                     assert.equal(geometry.headerRegion,'no-drag',`Header hover must reach Chromium: ${details}`);assert.equal(geometry.titleRegion,'no-drag',`Zone title must not be a native drag region: ${details}`);
-                    assert.equal(geometry.gripRegion,locked?'no-drag':'drag',`Only the unlocked grip owns native dragging: ${details}`);
+                    assert.equal(geometry.gripRegion,'no-drag',`The grip uses the explicit pointer drag lifecycle: ${details}`);
                     assert(geometry.buttons.every(button=>button.top>=geometry.title.top&&button.bottom<=geometry.title.bottom&&button.right<=geometry.menu.left+1),`Title and every primary control share one unclipped row: ${details}`);
                     const last=geometry.buttons.at(-1),controlPoint={x:Math.round(last.left+last.width/2),y:Math.round(last.top+last.height/2)};
                     mapWindow.webContents.sendInputEvent({type:'mouseMove',...controlPoint});
