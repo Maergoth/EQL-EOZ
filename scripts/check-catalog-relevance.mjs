@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { itemHasZoneSource, itemMatchesClasses, scoreItemForBrowse } from '../app/item-browse.js';
+import {assertGlobalLootCountContract} from './global-loot-count-contract.mjs';
 
 const packPath = fileURLToPath(new URL('../app/data/eye-of-zomm-pack.bootstrap.json', import.meta.url));
 const pack = JSON.parse(readFileSync(packPath, 'utf8'));
+const globalCounts=assertGlobalLootCountContract(pack);
+console.log(`Global loot count contract passed: ${globalCounts.items} item titles, ${globalCounts.complete} complete counts, ${globalCounts.commonLowerBounds} Common lower bounds.`);
 if (!Array.isArray(pack.items) || pack.items.length < 1000) {
     throw new Error('Catalog relevance check requires the production bootstrap pack.');
 }

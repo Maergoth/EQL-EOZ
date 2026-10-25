@@ -86,6 +86,7 @@ contextBridge.exposeInMainWorld('eyeOfZommWiki', {
     preparePlan:value=>ipcRenderer.invoke('eye-of-zomm:wiki','prepare-plan',value),
     submitPlan:value=>ipcRenderer.invoke('eye-of-zomm:wiki','submit-plan',value),
     getPlan:value=>ipcRenderer.invoke('eye-of-zomm:wiki','get-plan',value),
+    contributionHistory:value=>ipcRenderer.invoke('eye-of-zomm:wiki','contribution-history',value),
     uploadCharacter:value=>ipcRenderer.invoke('eye-of-zomm:wiki','upload-character',value),
     characterSheetCapability:()=>ipcRenderer.invoke('eye-of-zomm:wiki','character-sheet-capability'),
     shareCharacter:value=>ipcRenderer.invoke('eye-of-zomm:wiki','share-character',value),

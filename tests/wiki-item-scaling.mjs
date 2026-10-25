@@ -25,6 +25,7 @@ assert.equal(scaleItemStat('RANGE', 150, 2, { fraction:3 }), 170, 'fractions do 
 assert.equal(scaleItemStat('RANGE', 150, 11), 250, 'Range honors the rank-10 cap');
 assert.equal(scaleItemStat('RANGE', -5, 2, { isAmmo:true }), -5, 'a negative Range stays unchanged');
 assert.equal(Object.hasOwn(scaledItemStats({ stats:{ STR:5 } }, 2), 'RANGE'), false, 'no Range is invented');
+assert.equal(scaleItemStat('WT', 2.5, 10), 0.3, 'rank-ten weight rounds 2.5 up to the displayed 0.3');
 
 const weapon={slots:['PRIMARY','SECONDARY'],classes:['ROG'],stats:{DMG:12,STR:5,DEX:5,COLD_DMG:4},displayLines:['Skill: Piercing Atk Delay: 19']},original=structuredClone(weapon);
 const thorn=scaledItemStats(weapon,5,{fraction:4});

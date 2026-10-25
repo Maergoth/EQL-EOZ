@@ -1,5 +1,12 @@
 # Eye of Zomm implementation status
 
+0.9.14 adds native contribution History receipts with account filtering and
+bounded private storage, explicit owner-labelled pet exclusion, and global
+Common/Unique placement from the trusted cached wiki dataset without live count
+queries. See [the release record](RELEASE_0914_PLAN.md) for integration and
+publication gates; synthetic fixtures do not certify installed profiles or
+production wiki edits.
+
 0.9.13 corrects the canonical category to Tier 0 Verification Needed. The
 category-only hotfix preserves the existing contribution and formula flows.
 

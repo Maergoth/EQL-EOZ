@@ -4,6 +4,18 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
+**0.9.14: contribution history and safer loot discovery.** Open
+**Contribute → History** to see this device's automatic and reviewed submissions
+for your signed-in wiki account, including partly saved and unconfirmed results.
+Saved pages offer revision and diff links. History never retries a submission.
+Explicit owner-labelled pets stay out of monster discoveries and contribution
+plans. Common/Unique loot placement uses distinct monsters across the cached
+wiki dataset: six or more means Common; fewer means Unique only when the count
+is complete. No live counter requests are made. See
+[the history guide](docs/CONTRIBUTION_HISTORY.md),
+[cached loot classification](docs/CONTRIBUTION_LOOT_CLASSIFICATION.md), and
+[the release record](docs/RELEASE_0914_PLAN.md).
+
 **0.9.13: correct tier-zero verification category.** Ranked and recovered item
 pages now use the exact
 [Tier 0 Verification Needed](https://eqlwiki.com/Category:Tier_0_Verification_Needed)

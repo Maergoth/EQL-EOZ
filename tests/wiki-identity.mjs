@@ -38,9 +38,9 @@ for(const name of ['Laser','Gektik','Ger','Gn','Jabektik','a Gtik','Gtik Guardia
 assert.equal(classifyNpcEvidence('Gtik',{membership:'missing'}).eligible,false);
 assert.equal(classifyNpcEvidence('Gtik',{membership:'present'}).eligible,true,'An actual canonical NPC overrides the name heuristic');
 assert.equal(classifyNpcEvidence('Gtik',{membership:'ambiguous'}).eligible,true,'Ambiguity needs review rather than pet-based deletion');
-for(const name of ["A Sampleowner's pet","Sampleowner's pet",'A Sampleowner’s PET!',"The corpse of Sampleowner's pet.","Sampleowner's pet's corpse",'Sampleowner’s pet (corpse)',"A Sampleowner&#39;s pet"]){
+for(const name of ["A Sampleowner's pet","Sampleowner's pet",'A Sampleowner’s PET!',"The corpse of Sampleowner's pet.","Sampleowner's pet's corpse",'Sampleowner’s pet (corpse)',"A Sampleowner&#39;s pet",'A loathling lich pet','a synthetic necromancer PET!',"a synthetic necromancer's pet",'A loathling lich pet’s corpse','The corpse of A loathling lich pet.','A loathling lich pet (corpse)',"A synthetic lichs' pet"]){
     assert(isOwnedPetName(name),name);
-    for(const membership of ['missing','present','ambiguous'])assert.deepEqual(classifyNpcEvidence(name,{membership}),{eligible:false,reason:'owned-pet',heuristic:false},'Explicit owner labels override stale catalog membership');
+    for(const membership of ['missing','present','ambiguous'])assert.deepEqual(classifyNpcEvidence(name,{membership}),{eligible:false,reason:'owned-pet',heuristic:false},'Explicit pet labels override stale catalog membership');
 }
-for(const name of ["Captain's guard",'A pet goblin',"Sampleowner's pet guard",'Pet Rock',"The Captain's petkeeper","Sampleowner's petal",'pet',"'s pet"]){assert.equal(isOwnedPetName(name),false,name);assert.equal(classifyNpcEvidence(name,{membership:'missing'}).eligible,true,name);}
+for(const name of ["Captain's guard",'A pet goblin',"Sampleowner's pet guard",'Pet Rock',"The Captain's petkeeper","Sampleowner's petal",'a carpet','Carpet Crawler','a petal keeper','a trumpeter','pet',"'s pet"]){assert.equal(isOwnedPetName(name),false,name);assert.equal(classifyNpcEvidence(name,{membership:'missing'}).eligible,true,name);}
 console.log('Typed wiki identity: canonical aliases/tier/Unicode, grammatical articles, partial presence, collision refusal and pinned generated-pet exclusions passed.');

@@ -33,3 +33,7 @@ console.log('Loot provenance: explicit corpse versus inferred recent kill and un
 }
 
 const bareCorpse=parser.parse('[Thu Oct 22 17:10:06 2026] You have looted a Synthetic Shield from corpse of a synthetic bat.');assert.equal(bareCorpse.source,'a synthetic bat');assert.equal(bareCorpse.sourceEvidence.kind,'explicit-corpse','Optional article must not become part of the NPC identity');
+for(const source of ['A loathling lich pet',"a synthetic lich's pet"]){
+    const petLoot=parser.parse(`[Thu Oct 22 17:10:07 2026] You have looted a Synthetic Pet Token from ${source}'s corpse.`);
+    assert.equal(petLoot.source,source);assert.equal(petLoot.sourceIsPet,true,'Explicit pet loot sources carry their pet identity into contribution filtering');
+}

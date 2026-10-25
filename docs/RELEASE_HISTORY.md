@@ -1,5 +1,13 @@
 # Browsable release history
 
+0.9.14 archives an actual CUA capture of the integrated contribution workspace,
+modules and styles with synthetic account-scoped receipts, partial and uncertain
+outcomes, local filters and saved-page links. The History tab and expanded
+partial result were visually reviewed. Its version-owned image and SHA-256 are
+recorded under `0.9.14/contribution-history`. Isolated wiki/storage APIs supply
+synthetic data; no player pixels, installed profiles or production wiki edits
+appear. Earlier captures, captions and hashes remain immutable.
+
 0.9.13 archives one visually reviewed actual Electron Chromium capture of the
 current contribution saved-plan review. The real contribution model generates
 a synthetic ranked item with Category:Tier 0 Verification Needed. Its After

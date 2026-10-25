@@ -7,7 +7,9 @@ No player/client requests are involved in this process, and the exporter itself 
 ## Files
 
 EQLWiki's deployed producer lives in its application repository at
-`maintenance/BuildEyeOfZommPack.php` and `maintenance/zone-catalog.json`.
+`maintenance/BuildEyeOfZommPack.php`, `maintenance/ItemLootSourceCounts.php`,
+`maintenance/zone-catalog.json` and
+`extensions/DynamicZoneList/NpcLootWikitext.php`.
 The files here mirror that contract. Review matching producer changes in both
 repositories; merging an EoZ PR alone does not install a wiki exporter or
 publish a new dataset. EQLWiki contribution PRs target `staging`, and promotion
@@ -16,7 +18,14 @@ of those reviewed commits to production is a separate owner action.
 Copy to MediaWiki `maintenance/`:
 
 - `BuildEyeOfZommPack.php`
+- `ItemLootSourceCounts.php`
 - `zone-catalog.json`
+
+Copy the matching `NpcLootWikitext.php` to
+`extensions/DynamicZoneList/NpcLootWikitext.php`. These PHP files are exact
+source mirrors; keep their dependency paths and versions together. The exporter
+check loads the mirrored parser and collector with synthetic data, without a
+MediaWiki installation or database.
 
 Copy to `$HOME/bin/` and make executable:
 
@@ -168,6 +177,24 @@ comments, namespace links and prose do not establish additional drops.
 `npcLootSourceCounts` reports candidate titles, distinct resolved items,
 unresolved candidate titles, enriched items and added unique source variants.
 These additions require producer deployment and a new published dataset.
+
+`meta.lootSourceCountsVersion: 1` marks the additive global loot-count contract.
+The top-level `lootSourceCounts` map is keyed by canonical item title, including
+statless materials and item redlinks documented by public NPC loot. Each entry
+contains `lootSourceCount`, `lootSourceCountComplete` and `lootSourceNpcs`;
+rich item records mirror those fields. Counts union direct item `dropsfrom`
+with authored NPC `known_loot`/`common_loot` across every zone and instance.
+Public redirects and page IDs deduplicate monsters; NPC records also carry
+their public redirect aliases. Explicit pet labels and the exact normalized
+`Ground Spawn`/`Ground Spawns` source labels are excluded from monster counts.
+
+Only anonymous-readable current public source contributes. Bounded parsing,
+redirect resolution or scans that fail or overflow mark counts incomplete and
+retain the proven lower bound. Six known monsters prove Common even then;
+fewer than six prove Unique only with complete metadata. Clients classify from
+the cached GitHub pack, without live count requests. Old packs remain readable
+and lack proof of a complete count. Deploy the matching wiki source and rebuild
+the dataset to provide this metadata; no host-wrapper installation is needed.
 
 The October 21, 2026 owner-approved rollout completed staging and production
 deployment via EQLWiki PRs #35/#36 and the explicit-zone precedence follow-up

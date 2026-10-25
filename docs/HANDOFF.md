@@ -1,5 +1,11 @@
 # Eye of Zomm contributor handoff
 
+0.9.14 adds Contribute History, shared explicit pet exclusion, and native cached
+global loot classification while retaining the exact category fix from 0.9.13
+and the wiki-owned formula snapshot from 0.9.12. The
+[release record](RELEASE_0914_PLAN.md) separates source fixtures,
+screenshot, package/publication, and independent dataset producer receipts.
+
 0.9.13 corrects the canonical category to Tier 0 Verification Needed. The
 category-only hotfix preserves the existing contribution and formula flows.
 

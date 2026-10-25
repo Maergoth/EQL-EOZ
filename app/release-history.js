@@ -2,6 +2,28 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "0.9.14",
+  "title": "Contribution history and safer loot discovery",
+  "changes": [
+    "Open Contribute History for this device's automatic and reviewed submissions, including partial and unconfirmed outcomes. Filter locally, load older receipts and open confirmed saved-page, revision and diff links.",
+    "Keep native receipt metadata separate from editable plans, scoped to the signed-in account and bounded on disk. History cannot retry or publish work and excludes raw evidence and credentials.",
+    "Exclude explicit owner-labelled pets from monster discoveries and contribution plans while preserving ordinary monster names and existing edited or submitted work.",
+    "Choose Common Loot at six or more distinct monsters across the cached wiki dataset. Choose Unique below six only with complete count provenance; incomplete counts stay for review. Native pack verification makes no live counter requests."
+  ],
+  "steps": [
+    {
+      "title": "Review automatic and manual wiki submissions",
+      "image": "0.9.14/contribution-history",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Open History inside Contribute to see this device's submissions for your signed-in wiki account. Inspect saved pages, partial work and unconfirmed results, filter locally, or load older receipts. Page, saved revision and diff links show confirmed results. History never publishes or retries an edit.",
+      "alt": "Contribute History with synthetic Published, Partly published and Needs attention receipts, local filters, and an expanded partial result with saved-page links.",
+      "caption": "Actual CUA capture of the integrated Chromium contribution workspace, modules and styles with synthetic receipts and isolated wiki/storage APIs. No game/player pixels, installed profiles or production wiki submissions.",
+      "imageSha256": "970d770f2351acd0e490ff236082d0577f5ba5fb8e60c542853cc922d21c8eb8"
+    }
+  ]
+},
+{
   "version": "0.9.13",
   "title": "Correct tier-zero verification category",
   "changes": [

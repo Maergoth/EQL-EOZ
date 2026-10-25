@@ -11,7 +11,7 @@ class WikiHost {
         this.onItemCatalog=onItemCatalog;this.capturedItemPlans=new Map();this.preparingCapturedItem=false;
         this.statusRevision=0;
         this.session=electron.session.fromPartition(devWikiOrigin?'eye-of-zomm-wiki-development':'persist:eye-of-zomm-wiki');
-        this.client=client||new WikiClient({session:this.session,version,stateDir,origin:devWikiOrigin||PRODUCTION_ORIGIN,allowLoopbackDevelopment});
+        this.client=client||new WikiClient({session:this.session,version,stateDir,origin:devWikiOrigin||PRODUCTION_ORIGIN,allowLoopbackDevelopment,getItemCatalog:onItemCatalog});
         this.session.setPermissionRequestHandler?.((_contents,_permission,callback)=>callback(false));
         this.session.setPermissionCheckHandler?.(()=>false);
         this.session.setDevicePermissionHandler?.(()=>false);
@@ -25,6 +25,7 @@ class WikiHost {
         try{
             switch(action){
             case 'status':{await this.client.load();return await this.freshStatus();}
+            case 'contribution-history':return await this.client.contributionHistory(value);
             case 'observation-status':return await this.client.observationStatus();
             case 'submit-observations':return await this.client.submitObservations(value?.batch,{expectedUser:value?.expectedUser});
             case 'prepare-attachment':return await this.prepareAttachment(value);

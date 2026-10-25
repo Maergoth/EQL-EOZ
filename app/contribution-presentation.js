@@ -3,6 +3,7 @@ import { contributionSourceIncluded } from './contribution-update.js';
 import { contributionTitle, contributionItemEffects } from './contribution-model.js';
 import { normalizeWikiIdentity, createWikiResolver } from './wiki-identity.js';
 import { contributionSameIdentity as same, contributionInstanceMatches as instanceMatches } from './contribution-reasons.js';
+import {cachedLootKindLabel} from './loot-classification.js';
 const kinds={item:'Item',npc:'Monster',zone:'Zone',spell:'Spell'};
 export const CONTRIBUTION_FILTERS=Object.freeze([
     {key:'new-npc',label:'New monsters'},
@@ -54,9 +55,11 @@ export function contributionLootEntryInfo(candidate={},item,{pack,resolver=pack?
     const relation=(candidate.relations||[]).find(relation=>relation.type==='drop-source'&&relation.evidence==='explicit-corpse'&&normalizeWikiIdentity(relation.item)===normalizeWikiIdentity(item));
     const change={role:candidate.kind==='npc'?'npc-loot':'zone-loot',subject:item,item,npc:candidate.kind==='npc'?candidate.title||candidate.name:relation?.name,zone:candidate.kind==='zone'?candidate.title||candidate.name:candidate.zone,instance:relation?.instance||candidate.instance};
     const status=contributionRelationshipStatus(candidate,change,{resolver});
-    if(status==='recorded')return {status,description:'Already recorded in cached wiki'};
+    if(status==='recorded')return {status,description:'Already recorded in cached wiki',classificationLabel:'Existing classification preserved'};
     if(candidate.kind==='zone'&&!relation&&candidate.fields?.knownLoot?.edited!==true)return {status:'needs-source',description:'Captured loot · monster source not recorded'};
-    return {status,description:'Add '+(candidate.fields?.lootKinds?.value?.[item]==='common'?'Common Loot':'Unique Loot')};
+    const proposed=candidate.kind==='npc'?[candidate.title||candidate.name]:(candidate.relations||[]).filter(row=>row.type==='drop-source'&&normalizeWikiIdentity(row.item)===normalizeWikiIdentity(item)).map(row=>row.name);
+    const classification=pack?cachedLootKindLabel(pack,item,proposed):{label:'Classification needs complete cached wiki data'};
+    return {status,description:classification.label,classificationLabel:classification.label};
 }
 export function contributionDestinations(candidate={}, {pack}={}){
     const destinations=new Map(),title=candidate.title||candidate.name;
@@ -77,7 +80,7 @@ export function contributionDestinations(candidate={}, {pack}={}){
     add(title,'primary',title,updating?'Review page changes':'Create '+(kinds[candidate.kind]||'page').toLowerCase()+' page',{primary:true});
     const zoneName=instance=>instance==='raid'?'Raid Zone':instance==='normal'?'Normal Zone':'instance to choose';
     const instanceOf=source=>['normal','raid'].includes(source?.instance)?source.instance:candidate.instance;
-    const lootKind=item=>field('lootKinds')?.value?.[item]==='common'?'Common Loot':'Unique Loot';
+    const lootKind=item=>pack?cachedLootKindLabel(pack,item,candidate.kind==='npc'?[title]:[]).label:'classification checked from cached wiki data at preview';
     const lootAllowed=section('missing-source')||field('knownLoot')?.edited===true;
     if(candidate.kind==='item'){
         for(const source of (candidate.sources||[]).filter(source=>source.npc&&source.zone&&contributionSourceIncluded(source)&&(section('missing-source')||source.edited===true))){

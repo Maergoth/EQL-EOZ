@@ -16,6 +16,7 @@ const requiredModules = [
     'app/trigger-match-core.js', 'app/trigger-matcher.js', 'app/workers/trigger-match.worker.js',
     'app/timer-alerts.js', 'desktop/discovery-host.cjs', 'desktop/overlay-host.cjs', 'desktop/overlay-docking.cjs', 'desktop/overlay-preload.cjs', 'app/character-walkthrough.js',
     'app/contribution-evidence.js','app/contribution-choice-picker.js','app/contribution-review-view.js',
+    'app/contribution-history.js','desktop/contribution-history.cjs','app/loot-classification.js',
     'app/character-itembox.js','app/catalog-itembox.js','app/wiki-itembox.css','app/overlay-drag.js','app/discovery-contribution-flow.js',
     'app/capture-png.worker.js','app/inventory-export.js','desktop/inventory-file-host.cjs',
     'app/character-inventory-view.js','app/character-storage.js','app/character-profiles.js','desktop/character-storage.cjs',

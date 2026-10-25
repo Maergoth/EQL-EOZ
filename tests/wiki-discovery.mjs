@@ -29,7 +29,10 @@ for(const event of [
     {type:'kill',victim:'Synthetic player',isPlayer:true},
     {type:'kill',victim:'Synthetic player',victimIsPlayer:true},
     {type:'kill',victim:'Synthetic player',targetType:'player'},
-    {type:'kill',victim:'Synthetic pet',isPet:true}
+    {type:'kill',victim:'Synthetic pet',isPet:true},
+    {type:'kill',victim:'A loathling lich pet'},
+    {type:'kill',victim:"a synthetic lich's pet"},
+    {type:'kill',victim:'The corpse of A loathling lich pet.'}
 ])assert.equal(consume(event),null,'Player and pet deaths do not become missing monsters');
 assert.equal(consume({type:'kill',victim:'sYnThEtIc HeRo'},{playerNames:['Synthetic Hero']}),null,'Known player names are compared case-insensitively');
 assert.equal(discovery.snapshot().pending.length,0,'Passive observations and player/pet deaths leave no discovery notices');

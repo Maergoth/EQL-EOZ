@@ -107,6 +107,9 @@ define('NS_MAIN', 0);
 $fixtures = json_decode(getenv('EOZ_RAID_FIXTURES'), true);
 $source = file_get_contents(getenv('EOZ_EXPORTER_SOURCE'));
 $source = str_replace("require_once __DIR__ . '/Maintenance.php';", '', $source);
+// This harness isolates the pre-existing raid/source methods; the separate
+// exporter check exercises the mirrored global-count modules themselves.
+$source = str_replace("require_once __DIR__ . '/ItemLootSourceCounts.php';", '', $source);
 $source = preg_replace('/^use [^;]+;\\r?$/m', '', $source);
 $source = str_replace("__DIR__ . '/zone-catalog.json'", "getenv('EOZ_CATALOG_PATH')", $source);
 $source = preg_replace('/\\$maintClass = BuildEyeOfZommPack::class;[\\s\\S]*$/', '', $source);

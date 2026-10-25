@@ -241,11 +241,11 @@ export class EQLogParser {
         if (addToEncounter) this.totalOwnKills += 1;
         this.lastKill = { name: victim, zone: this.zone, at };
         this.rememberNpc(victim, { killed: true });
-        const playerEvidence=this.isPlayerTarget(victim)||this.knownPlayerNames.has(victim.toLowerCase())?{victimIsPlayer:true}:{};
+        const targetEvidence={...(this.isPlayerTarget(victim)||this.knownPlayerNames.has(victim.toLowerCase())?{victimIsPlayer:true}:{}),...(isOwnedPetName(victim)?{isPet:true}:{})};
         if (addToEncounter) {
-            return this.rememberCombatEvent({ type: 'kill', victim, encounterTarget: victim, ...playerEvidence });
+            return this.rememberCombatEvent({ type: 'kill', victim, encounterTarget: victim, ...targetEvidence });
         }
-        return this.rememberEvent({ type: 'kill', victim, ...playerEvidence });
+        return this.rememberEvent({ type: 'kill', victim, ...targetEvidence });
     }
 
     noteLoot(itemName, sourceName = '') {
@@ -282,6 +282,7 @@ export class EQLogParser {
             item,
             quantity: parsedItem.quantity,
             source: source || 'Unknown',
+            ...(isOwnedPetName(source)?{sourceIsPet:true}:{}),
             sourceEvidence,
             sourceConfidence:sourceEvidence.kind === 'explicit-corpse' ? 1 : sourceEvidence.kind === 'unknown' ? 0 : sourceEvidence.kind === 'explicit-source' ? 0.5 : 0.25,
             zone: this.zone,

@@ -31,6 +31,9 @@
         },
         "sample": {
           "type": "boolean"
+        },
+        "lootSourceCountsVersion": {
+          "const": 1
         }
       }
     },
@@ -89,6 +92,13 @@
           },
           "wikiTitle": {
             "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
           },
           "loc": {
             "type": "array",
@@ -180,10 +190,34 @@
               }
             }
           },
+          "lootSourceCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "lootSourceCountComplete": {
+            "type": "boolean"
+          },
+          "lootSourceNpcs": {
+            "type": "array",
+            "maxItems": 1000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "revisionId": {
             "type": "integer"
           }
         }
+      }
+    },
+    "lootSourceCounts": {
+      "type": "object",
+      "description": "Canonical item title to distinct global authored NPC loot sources, including statless items and public item redlinks. Incomplete records retain a lower bound only.",
+      "additionalProperties": {
+        "$ref": "#/$defs/lootSourceCount"
       }
     },
     "icons": {
@@ -192,6 +226,36 @@
         "type": "string",
         "pattern": "^data:image/"
       }
+    }
+  },
+  "$defs": {
+    "lootSourceCount": {
+      "type": "object",
+      "required": [
+        "lootSourceCount",
+        "lootSourceCountComplete",
+        "lootSourceNpcs"
+      ],
+      "properties": {
+        "lootSourceCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "lootSourceCountComplete": {
+          "type": "boolean"
+        },
+        "lootSourceNpcs": {
+          "type": "array",
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

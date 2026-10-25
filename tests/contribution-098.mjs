@@ -36,21 +36,23 @@ pack={...pack,npcs:[...pack.npcs,{name:'Gtik',zone:'Forest Glade'}],wikiEntities
 assert.equal(q.add({kind:'npc',name:'Gtik'},true).name,'Gtik','Manual override remains possible');
 const ownedPet="A Sampleowner's pet";
 pack={...pack,npcs:[...pack.npcs,{name:ownedPet,zone:'Forest Glade'}],wikiEntities:{...pack.wikiEntities,npcs:[...pack.wikiEntities.npcs,ownedPet]}};
-for(const name of [ownedPet,'Sampleowner’s pet',"The corpse of Sampleowner's pet."]){
+for(const name of [ownedPet,'Sampleowner’s pet',"The corpse of Sampleowner's pet.",'A loathling lich pet',"A loathling lich pet's corpse"]){
     assert.equal(event('kill',{victim:name}).candidate,null);assert.equal(event('kill',{victim:name}).prompt,null);
     assert.equal(event('consider',{target:{name,level:50}}).candidate,null);
     const priorSources=q.snapshot().find(candidate=>candidate.kind==='item'&&candidate.name==='Known Cloak').sources.length;
     event('loot',{item:'Known Cloak',source:name,sourceEvidence:{kind:'explicit-corpse'}});assert.equal(q.snapshot().find(candidate=>candidate.kind==='item'&&candidate.name==='Known Cloak').sources.length,priorSources,'Pet corpses never add an item source');
     assert.equal(discovery.consume({type:'kill',victim:name,at:clock},{live:true,zone:'Forest Glade'}),null);
+    assert.equal(q.add({kind:'npc',name},true),null,'An explicit pet label cannot be manually forced into a new NPC candidate');
 }
 assert.equal(q.add({kind:'npc',name:ownedPet},true),null,'An explicit owner-pet label is never a new NPC page');
 assert(!q.snapshot().some(candidate=>candidate.kind==='npc'&&candidate.name.includes('Sampleowner')));
 assert(!q.snapshot().some(candidate=>candidate.sources.some(source=>source.npc.includes('Sampleowner'))));
 assert(event('kill',{victim:"Captain's guard"}).candidate,'A normal possessive NPC name stays eligible');
 assert(event('kill',{victim:'A pet goblin'}).candidate,'Pet-like common nouns alone do not identify an owned pet');
+for(const name of ['a carpet','a petal keeper','a trumpeter'])assert(event('kill',{victim:name}).candidate,'Names containing pet inside another token stay eligible');
 const zoneProposal=q.consume({id:'synthetic-zone-pets',kind:'screen-read',owner:'contribution',subject:{kind:'zone',name:'Synthetic New Zone'},fields:[{key:'knownNPCs',value:[ownedPet,"Captain's guard"]}],input:{zone:'Synthetic New Zone'}});assert.deepEqual(zoneProposal.fields.knownNPCs.value,["Captain's guard"],'Observed zone NPC lists use the same pet classification');
 const observedParser=new EQLogParser();observedParser.parse('[Thu Aug 20 03:10:19 2026] You have entered Synthetic Vale.');
-for(const line of ["You have slain A Sampleowner's pet!",'Sampleowner’s pet glares at you threateningly -- looks like quite a gamble. (Lvl: 50)',"You slash A Sampleowner's pet for 12 points of damage."])observedParser.parse('[Thu Aug 20 03:10:23 2026] '+line);
+for(const line of ["You have slain A Sampleowner's pet!",'Sampleowner’s pet glares at you threateningly -- looks like quite a gamble. (Lvl: 50)',"You slash A Sampleowner's pet for 12 points of damage.",'You have slain A loathling lich pet!','A loathling lich pet glares at you threateningly -- looks like quite a gamble. (Lvl: 50)','You slash A loathling lich pet for 12 points of damage.'])observedParser.parse('[Thu Aug 20 03:10:23 2026] '+line);
 assert.equal(observedParser.snapshot().observed.length,0,'Owned pets never enter the parser’s found-NPC state through kill, consider or damage');
 observedParser.rememberNpc("Captain's guard");observedParser.rememberNpc('Gtik');assert.equal(observedParser.snapshot().observed.length,2,'Parser filtering remains limited to explicit owner-pet labels');
 
@@ -59,6 +61,18 @@ const ownedDrafts=[{id:'owned-untouched',kind:'npc',name:ownedPet,title:ownedPet
 const petDisk=new Map([[CONTRIBUTION_QUEUE_KEY,JSON.stringify({schemaVersion:1,candidates:ownedDrafts})]]),petQueue=createContributionQueue({...options,storage:{getItem:key=>petDisk.get(key),setItem:(key,value)=>petDisk.set(key,value)}});
 assert.deepEqual(petQueue.archived().map(candidate=>[candidate.id,candidate.archive.reason]),[['owned-untouched','owned-pet']]);assert.deepEqual(petQueue.snapshot().map(candidate=>candidate.id),['owned-protected'],'Existing contributor edits remain private and intact');
 const protectedKill=petQueue.consumeLog({type:'kill',victim:'Sampleowner’s pet'},{live:true,zone:'Forest Glade',at:clock,logId:'synthetic-owned-pet',cursor:1});assert.equal(protectedKill.prompt,null,'A preserved old pet draft cannot re-arm a spawn prompt');assert.equal(petQueue.spawnStatus(),null);
+assert.equal(petQueue.armSpawnLocation('owned-protected',{persistent:true}).ok,false,'A preserved manually edited pet draft cannot arm spawn capture either');
+
+const npcPetDrafts=[
+    {id:'npc-pet-untouched',kind:'npc',name:'A loathling lich pet',title:'A loathling lich pet',zone:'Forest Glade',fields:{},sources:[],relations:[],evidence:[],spawnRequest:{status:'requested'},status:'needs-review'},
+    {id:'npc-pet-protected',kind:'npc',name:'A loathling lich pet',title:'A loathling lich pet',zone:'Forest Glade',fields:{notes:{value:'Keep this private edited evidence.',edited:true}},sources:[],relations:[],evidence:[],status:'needs-review'},
+    {id:'npc-pet-title',kind:'npc',name:'a synthetic watcher',title:'A loathling lich pet',zone:'Forest Glade',manual:true,fields:{},sources:[],relations:[],evidence:[],status:'needs-review'}
+];
+const npcPetDisk=new Map([[CONTRIBUTION_QUEUE_KEY,JSON.stringify({schemaVersion:1,candidates:npcPetDrafts})]]),npcPetOptions={...options,storage:{getItem:key=>npcPetDisk.get(key),setItem:(key,value)=>npcPetDisk.set(key,value)}},npcPetQueue=createContributionQueue(npcPetOptions);
+assert.deepEqual(npcPetQueue.archived().map(candidate=>candidate.id),['npc-pet-untouched'],'Old automatic NPC-owned pet candidates move to the bounded archive');
+assert.deepEqual(npcPetQueue.snapshot().map(candidate=>candidate.id),['npc-pet-protected','npc-pet-title'],'Contributor edits remain intact');
+for(const id of ['npc-pet-protected','npc-pet-title'])assert.equal(npcPetQueue.armSpawnLocation(id,{persistent:true}).ok,false,'Neither an explicit pet name nor title may arm spawn capture');
+const npcPetOnce=npcPetDisk.get(CONTRIBUTION_QUEUE_KEY);createContributionQueue(npcPetOptions);assert.equal(npcPetDisk.get(CONTRIBUTION_QUEUE_KEY),npcPetOnce,'NPC-owned pet cleanup is restart-idempotent');
 
 // Reconciliation keeps private original data in a bounded archive, never
 // destroys edited work or genuine source/verification tasks.

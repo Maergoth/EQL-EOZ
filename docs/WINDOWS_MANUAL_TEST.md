@@ -1,5 +1,18 @@
 # Eye of Zomm Windows/game-client acceptance test
 
+## 0.9.14 contribution history and discovery checks
+
+Release candidate: `v0.9.14`. In an isolated synthetic profile, open Contribute
+then History and check manual/automatic, partial and uncertain receipts, local
+filters, older receipts, fixed-origin links and readable narrow/large-text
+layouts. Change accounts or log out during an in-flight load; old rows must
+clear immediately and cannot reappear. History must not publish or retry edits.
+Corrupt optional history should show a recoverable warning while leaving its
+file intact. Test owner-labelled pet discoveries and cached global counts just
+below/at six without adding live counter requests. Physical game capture,
+production authentication, installer and package checks remain separate receipts
+in [the release record](RELEASE_0914_PLAN.md).
+
 0.9.13 hotfix: the item page preview should use
 `[[Category:Tier 0 Verification Needed]]` for unverified ranked or recovered
 base values. This category-title change does not certify the physical matrix.

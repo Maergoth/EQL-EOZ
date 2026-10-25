@@ -87,7 +87,7 @@ class AutomaticLootSources{
                     if(!sameUser(plan.expectedUser,account.user)||plan.blockers?.length||plan.attachment||!Array.isArray(plan.pages)||!plan.pages.length||plan.pages.length>3||plan.pages.filter(page=>page.role==='primary'&&page.title===item.title).length!==1||new Set(plan.pages.map(page=>page.title)).size!==plan.pages.length)throw Error('The source update requires manual review.');
                     for(const page of plan.pages){
                         if(page.operation!=='replace-reviewed')throw Error('Automatic source observations cannot create or replace unrelated pages.');
-                        const base={itemTitle:item.title,npcTitle:npc.title,zoneTitle:zonePage.title,instance};let expected;
+                        const base={itemTitle:item.title,npcTitle:npc.title,zoneTitle:zonePage.title,instance,lootKind:plan.lootClassifications?.[item.title]?.kind,preserveExisting:true};let expected;
                         if(page.title===item.title&&page.role==='primary')expected=patchContributionRelationship(page.beforeText,{...base,role:'item-source'}).text;
                         else if(!npc.missing&&page.title===npc.title&&page.role==='npc-loot')expected=patchContributionRelationship(page.beforeText,{...base,role:'npc-loot'}).text;
                         else if(page.title===zonePage.title&&['zone-population','zone-loot'].includes(page.role)){expected=patchContributionRelationship(page.beforeText,{...base,role:'zone-population'}).text;expected=patchContributionRelationship(expected,{...base,role:'zone-loot'}).text;}

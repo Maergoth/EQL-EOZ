@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.14 - Contribution history and safer loot discovery
+
+- Add **Contribute → History** with automatic and reviewed submission receipts, partial and unconfirmed outcomes, local filters, older receipts, and saved-page/revision/diff links. Load only the current wiki account's receipts; switching accounts or logging out clears displayed rows. History cannot publish or retry work.
+- Retain bounded native receipt metadata independently of editable plans. Preserve unreadable history, keep evidence and credentials out of the receipt file, and report history-storage failures without changing a confirmed wiki edit result.
+- Exclude explicit owner-labelled pets from new monster discoveries and contribution plans, including stale catalog matches, while preserving literal monster names that merely contain similar letters. Existing edited and submitted work stays available.
+- Classify new loot placement from distinct monsters across the trusted cached wiki dataset. Six or more means Common; fewer means Unique only with complete count provenance. Missing or incomplete counts require refreshed data/review and never silently default to Unique. Count lookup makes no live wiki requests; ordinary publication/account/revision guards remain.
+- Retain the existing weight formula and cover the rank-ten display boundary: base weight 2.5 displays as 0.3.
+
+See [the release record](docs/RELEASE_0914_PLAN.md),
+[history contract](docs/CONTRIBUTION_HISTORY.md), and
+[cached loot-classification contract](docs/CONTRIBUTION_LOOT_CLASSIFICATION.md).
+
 ## 0.9.13 - Correct tier-zero verification category
 
 - Use the exact [Tier 0 Verification Needed](https://eqlwiki.com/Category:Tier_0_Verification_Needed) category title for new items with unverified ranked or recovered base values.
