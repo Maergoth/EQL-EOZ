@@ -53,6 +53,7 @@ jobs:
       - run: npm run test:hover-ocr
       - run: npm run test:capture-calibration -- --screenshots ci-screenshots/capture-calibration
       - run: npm run test:capture-workspace -- --screenshots ci-screenshots/capture-workspace
+      - run: npm run test:discovery-capture-workspace
       - run: npm run test:workspace-099
       - run: npm run test:character-walkthrough -- --screenshots ci-screenshots/character-walkthrough
       - run: npm run test:system-fonts -- --screenshots ci-screenshots/system-fonts

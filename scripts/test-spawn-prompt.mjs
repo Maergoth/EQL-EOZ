@@ -33,9 +33,17 @@ async function run({root,temporary,screenshots}){
         if(screenshots){await fs.mkdir(screenshots,{recursive:true});await fs.writeFile(path.join(screenshots,'unknown-monster-spawn.png'),(await popup.webContents.capturePage()).toPNG());}
         foreign=new BrowserWindow({show:false,webPreferences:{preload:path.join(root,'desktop/spawn-prompt-preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false}});await foreign.loadURL(`${origin}/spawn-prompt.html`);
         const denied=await foreign.webContents.executeJavaScript("window.eyeOfZommSpawnPrompt.getState().then(()=>false,()=>true)");assert(denied,'Identical URL/preload in another window cannot access the popup bridge');foreign.destroy();foreign=null;
+        let requestedMain=0;host.showMain=()=>{requestedMain++;};
+        await execute(()=>document.getElementById('contribute').click());await until(()=>host.spawnState()[0]?.captureState==='waiting','explicit contribution is armed');assert.equal(requestedMain,1);
+        await wait(1100);assert.equal(popup.isVisible(),true,'Contribute leaves the native notice open until a fresh location is received');assert.equal(await execute(()=>document.getElementById('contribute').disabled),false,'Waiting for /loc leaves Retry and Dismiss available');
+        const armed=host.spawnState()[0],completion={id:armed.id,purpose:armed.purpose,captureRequest:armed.captureRequest,candidateId:armed.candidateId,status:'captured'};
+        await assert.rejects(host.handle(mainEvent,'capture-status',{...completion,candidateId:'another'}),/does not match/);
+        await host.handle(mainEvent,'capture-status',completion);await until(()=>execute(()=>document.getElementById('prompt').classList.contains('is-complete')),'green completed location');
+        await until(()=>!popup.isVisible()&&!host.spawnState().length,'successful location closes after its green interval');
+        await host.handle(mainEvent,'show',{id:'spawn-dismiss',candidateId:'dismiss',kind:'monster',name:'a second synthetic guardian',zone:'Synthetic Grove',purpose:'spawn-location'});await until(()=>execute(()=>document.getElementById('name').textContent==='a second synthetic guardian'),'next spawn notice');
         const button=await execute(()=>{const r=document.getElementById('dismiss').getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};});popup.webContents.sendInputEvent({type:'mouseMove',...button});popup.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,...button});popup.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,...button});
         await until(()=>!popup.isVisible()&&!host.spawnState().length,'trusted native dismiss');assert.equal(main.isVisible(),false);
-        console.log('Native spawn prompt: actual sandboxed preload/text, bottom-right non-activating window, 15s hover hold, foreign-window denial and trusted dismissal passed.');
+        console.log('Native spawn prompt: actual sandboxed preload/text, non-activating window, 15s hover hold, foreign-window denial, pinned contribution, matched-location green completion and trusted dismissal passed.');
     }finally{host.dispose();if(foreign&&!foreign.isDestroyed())foreign.destroy();if(!main.isDestroyed())main.destroy();await new Promise(done=>server.close(done));app.quit();}
 }
 try{

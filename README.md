@@ -200,6 +200,22 @@ prompt. Stand at that monster's spawn before typing the command. A newer eligibl
 kill replaces the active target; older drafts remain available for explicit
 rearming. Locations remain proposals for review, and EoZ never types commands.
 
+The next-release work in [PR #27](https://github.com/Maergoth/EQL-EOZ/pull/27)
+also recognizes encoded item links in live chat. Missing wiki items offer
+**Contribute**; open the linked item's complete examine window. That action
+starts or reuses the contribution reader, using a configured game window or
+asking for an explicit source inside Contribute. An active Character capture
+keeps ownership. The notice stays open until that item's fresh OCR reading is
+saved, flashes green, then closes. Plain chat names never count as item links,
+and chat links do not imply loot or a drop source.
+
+Choosing **Contribute** on a monster prompt similarly pins it and re-arms the
+next `/loc`, without a timeout while waiting. The captured location flashes the
+prompt green before it closes. **×** cancels the pending request; Ignore also
+removes or suppresses the suggestion. Cancelling or finishing an item request
+stops only a reader started for these requests, leaving prior reader sessions
+alone. Zone/log-source changes cancel an incompatible spawn request.
+
 Correct the readable fields, choose **Raid Instance** when appropriate, and
 classify observed drops as **Common Loot** or **Unique Loot**. These are wiki
 sections, not measured drop probabilities. Optional unknown fields use the

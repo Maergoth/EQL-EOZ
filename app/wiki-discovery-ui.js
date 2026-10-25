@@ -1,8 +1,10 @@
 // Shared by the main trigger editor and its native Timers surface. This is a
 // presentation queue only; catalog checks and clipboard capture stay in owner IPC.
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const requestNumber = value => typeof value === 'string' && /^capture-[1-9]\d{0,14}$/.test(value) ? Number(value.slice(8)) : 0;
 export function createDiscoveryNoticeQueue({now = Date.now, durationMs = 15000, maxVisible = 4} = {}) {
     const entries = new Map(), dismissed = new Set();
+    const held = entry => entry.captureState === 'captured' ? entry.holds.has('hidden') : entry.holds.size > 0;
     function activate() {
         let slots = maxVisible;
         for (const entry of entries.values()) {
@@ -11,13 +13,29 @@ export function createDiscoveryNoticeQueue({now = Date.now, durationMs = 15000, 
         }
     }
     function settle(entry) {
-        if (entry.startedAt !== null && !entry.holds.size) entry.remainingMs = Math.max(0, entry.remainingMs - Math.max(0, now() - entry.startedAt));
+        if (entry.startedAt !== null && !held(entry)) entry.remainingMs = Math.max(0, entry.remainingMs - Math.max(0, now() - entry.startedAt));
         if (entry.startedAt !== null) entry.startedAt = now();
     }
     function hold(id, reason, enabled) {
         const entry = entries.get(String(id)); if (!entry) return;
         settle(entry);
         if (enabled) entry.holds.add(reason); else entry.holds.delete(reason);
+    }
+    function captureStatus(id, state, message = '', request) {
+        const entry = entries.get(String(id));
+        if (!entry || !['item-link','spawn-location'].includes(entry.prompt.purpose) || !['waiting','retry','captured'].includes(state)) return;
+        request ??= entry.captureRequest;
+        if (requestNumber(request) < requestNumber(entry.captureRequest)) return;
+        if (entry.captureState === 'captured' && requestNumber(request) <= requestNumber(entry.captureRequest)) return;
+        const changed = entry.captureState !== state || requestNumber(request) > requestNumber(entry.captureRequest);
+        settle(entry); entry.captureState = state;
+        if (requestNumber(request)) entry.captureRequest = request;
+        entry.message = String(message || (state === 'captured' ? entry.prompt.purpose === 'spawn-location' ? 'Spawn location captured.' : 'Item captured in Contribute.' : state === 'retry' ? 'Capture paused. Try again, or dismiss this notice.' : entry.prompt.purpose === 'spawn-location' ? 'Waiting for your next /loc.' : 'Open the item’s examine window. This notice stays until its item is read.'));
+        entry.error = state === 'retry';
+        if (state === 'captured') {
+            entry.holds.delete('contribution');
+            if (changed) {entry.remainingMs = 900; entry.startedAt = entry.visible ? now() : null;}
+        } else entry.holds.add('contribution');
     }
     return {
         reconcile(pending = []) {
@@ -28,24 +46,26 @@ export function createDiscoveryNoticeQueue({now = Date.now, durationMs = 15000, 
                 const id = String(prompt.id || ''); if (!id || dismissed.has(id)) continue;
                 const existing = entries.get(id);
                 if (existing) existing.prompt = {...prompt};
-                else entries.set(id,{id,prompt:{...prompt},visible:false,startedAt:null,remainingMs:durationMs,holds:new Set(),busy:false,choices:[],message:'',error:false,captured:false});
+                else entries.set(id,{id,prompt:{...prompt},visible:false,startedAt:null,remainingMs:durationMs,holds:new Set(),busy:false,choices:[],message:'',error:false,captured:false,captureState:'',captureRequest:0});
+                captureStatus(id,prompt.captureState,prompt.captureMessage,prompt.captureRequest);
             }
             activate();
         },
-        hold,
+        hold, captureStatus,
         reset(id) { const entry = entries.get(String(id)); if (entry) {entry.remainingMs = durationMs; entry.startedAt = entry.visible ? now() : null;} },
         get:id => entries.get(String(id)),
         visible:() => [...entries.values()].filter(entry => entry.visible),
         queued:() => [...entries.values()].filter(entry => !entry.visible).length,
         remove(id) { id = String(id); dismissed.add(id); entries.delete(id); activate(); },
-        tick() { const expired = []; for (const entry of entries.values()) { if (!entry.visible) continue; settle(entry); if (!entry.remainingMs && !entry.holds.size) expired.push(entry.id); } for (const id of expired) this.remove(id); return expired; }
+        tick() { const expired = []; for (const entry of entries.values()) { if (!entry.visible) continue; settle(entry); if (!entry.remainingMs && !held(entry)) expired.push(entry.id); } for (const id of expired) this.remove(id); return expired; }
     };
 }
 export function discoveryNoticeMarkup(entry) {
+    const itemLink = entry.prompt.purpose === 'item-link', complete = entry.captureState === 'captured';
     const choices = entry.choices.length ? `<div class="wiki-discovery-choices" aria-label="Screenshot source">${entry.choices.map(choice => `<button type="button" data-discovery-command="capture" data-source-id="${escape(choice.id)}">${escape(choice.name)}</button>`).join('')}<button type="button" data-discovery-command="cancel-choices">Cancel</button></div>` : '';
-    return `<article class="wiki-discovery-card${entry.captured ? ' is-copied' : ''}" data-discovery-id="${escape(entry.id)}" aria-label="Wiki suggestion" aria-busy="${entry.busy}"><div class="wiki-discovery-title">${entry.captured ? 'Screenshot copied' : entry.prompt.kind === 'item' ? "This item isn't on the wiki!" : "This monster isn't on the wiki!"}<button type="button" class="wiki-discovery-close" data-discovery-command="dismiss" aria-label="Dismiss wiki suggestion" ${entry.busy ? 'disabled' : ''}>×</button></div><div class="wiki-discovery-name">${escape(entry.prompt.name)}</div>${entry.prompt.hint?`<div class="wiki-discovery-message">${escape(entry.prompt.hint)}</div>`:''}${entry.message ? `<div class="wiki-discovery-message${entry.error ? ' is-error' : ''}" role="status">${escape(entry.message)}</div>` : ''}${choices}<div class="wiki-discovery-actions"><button type="button" data-discovery-command="capture" ${entry.busy ? 'disabled' : ''}>${entry.busy ? 'Capturing…' : entry.captured ? 'Screenshot again' : 'Screenshot'}</button><button type="button" data-discovery-command="ignore" ${entry.busy ? 'disabled' : ''}>Ignore</button></div></article>`;
+    return `<article class="wiki-discovery-card${entry.captured || complete ? ' is-copied' : ''}${complete ? ' is-complete' : ''}" data-discovery-id="${escape(entry.id)}" aria-label="Wiki suggestion" aria-busy="${entry.busy}"><div class="wiki-discovery-title">${complete ? 'Item captured' : entry.captured ? 'Screenshot copied' : entry.prompt.kind === 'item' ? "This item isn't on the wiki!" : "This monster isn't on the wiki!"}<button type="button" class="wiki-discovery-close" data-discovery-command="dismiss" aria-label="Dismiss wiki suggestion" ${entry.busy ? 'disabled' : ''}>×</button></div><div class="wiki-discovery-name">${escape(entry.prompt.name)}</div>${entry.prompt.hint?`<div class="wiki-discovery-message">${escape(entry.prompt.hint)}</div>`:''}${entry.message ? `<div class="wiki-discovery-message${entry.error ? ' is-error' : ''}" role="status">${escape(entry.message)}</div>` : ''}${choices}${complete ? '' : `<div class="wiki-discovery-actions"><button type="button" data-discovery-command="${itemLink ? 'contribute' : 'capture'}" ${entry.busy ? 'disabled' : ''}>${entry.busy ? itemLink ? 'Opening…' : 'Capturing…' : itemLink ? entry.captureState ? 'Retry capture' : 'Contribute' : entry.captured ? 'Screenshot again' : 'Screenshot'}</button><button type="button" data-discovery-command="ignore" ${entry.busy ? 'disabled' : ''}>Ignore</button></div>`}</article>`;
 }
-const STYLES = `.wiki-discovery-notices{display:flow-root;font-family:inherit;font-size:calc(12px * var(--text-scale,1));line-height:1.3;-webkit-app-region:no-drag}.wiki-discovery-card{position:relative;padding:6px 7px;margin:5px 0;border:1px solid #d8b75c50;border-left:2px solid #d8b75c;background:#111722;color:#e9edf3;border-radius:4px;transition:opacity .15s}.wiki-discovery-title{font-size:calc(10px * var(--text-scale,1));text-transform:uppercase;letter-spacing:.04em;color:#d8b75c;padding-right:18px}.wiki-discovery-name{font-weight:600;overflow-wrap:anywhere;margin:2px 0 5px}.wiki-discovery-card button{font:inherit;font-size:calc(11px * var(--text-scale,1));cursor:pointer;background:#17202b;color:#e7d18a;border:1px solid #d8b75c40;border-radius:3px;padding:3px 6px;-webkit-app-region:no-drag}.wiki-discovery-card button:disabled{opacity:.5;cursor:default}.wiki-discovery-card button:focus-visible{outline:2px solid #f0d77f;outline-offset:1px}.wiki-discovery-close{position:absolute;right:5px;top:3px;font-size:calc(16px * var(--text-scale,1))!important;border:0!important;padding:0 3px!important;background:transparent!important}.wiki-discovery-actions{display:flex;gap:5px}.wiki-discovery-message{font-size:calc(11px * var(--text-scale,1));color:#b8d8bc;margin:3px 0 5px}.wiki-discovery-message.is-error{color:#f0a6a6}.wiki-discovery-choices{display:flex;flex-direction:column;align-items:stretch;gap:3px;max-height:120px;overflow:auto;margin:4px 0 6px}.wiki-discovery-choices button{text-align:left;overflow-wrap:anywhere}.wiki-discovery-queued{font-size:calc(10px * var(--text-scale,1));color:#9ba8b8;padding:0 4px}.wiki-discovery-card.is-copied{border-color:#80b89280}@media(prefers-reduced-motion:reduce){.wiki-discovery-card{transition:none}}`;
+const STYLES = `.wiki-discovery-notices{display:flow-root;font-family:inherit;font-size:calc(12px * var(--text-scale,1));line-height:1.3;-webkit-app-region:no-drag}.wiki-discovery-card{position:relative;padding:6px 7px;margin:5px 0;border:1px solid #d8b75c50;border-left:2px solid #d8b75c;background:#111722;color:#e9edf3;border-radius:4px;transition:opacity .15s}.wiki-discovery-title{font-size:calc(10px * var(--text-scale,1));text-transform:uppercase;letter-spacing:.04em;color:#d8b75c;padding-right:18px}.wiki-discovery-name{font-weight:600;overflow-wrap:anywhere;margin:2px 0 5px}.wiki-discovery-card button{font:inherit;font-size:calc(11px * var(--text-scale,1));cursor:pointer;background:#17202b;color:#e7d18a;border:1px solid #d8b75c40;border-radius:3px;padding:3px 6px;-webkit-app-region:no-drag}.wiki-discovery-card button:disabled{opacity:.5;cursor:default}.wiki-discovery-card button:focus-visible{outline:2px solid #f0d77f;outline-offset:1px}.wiki-discovery-close{position:absolute;right:5px;top:3px;font-size:calc(16px * var(--text-scale,1))!important;border:0!important;padding:0 3px!important;background:transparent!important}.wiki-discovery-actions{display:flex;gap:5px}.wiki-discovery-message{font-size:calc(11px * var(--text-scale,1));color:#b8d8bc;margin:3px 0 5px}.wiki-discovery-message.is-error{color:#f0a6a6}.wiki-discovery-choices{display:flex;flex-direction:column;align-items:stretch;gap:3px;max-height:120px;overflow:auto;margin:4px 0 6px}.wiki-discovery-choices button{text-align:left;overflow-wrap:anywhere}.wiki-discovery-queued{font-size:calc(10px * var(--text-scale,1));color:#9ba8b8;padding:0 4px}.wiki-discovery-card.is-copied{border-color:#80b89280}.wiki-discovery-card.is-complete{background:#143b26;border-color:#69d78d}.wiki-discovery-card.is-complete .wiki-discovery-title{color:#9ff1b5}@media(prefers-reduced-motion:reduce){.wiki-discovery-card{transition:none}}`;
 export function playDiscoveryShutter() {
     // Local synthesis only: no audio file, network request, or game focus change.
     try {
@@ -99,10 +119,14 @@ export function mountWikiDiscoveryNotices({root, action, now = Date.now, setInte
                 entry.choices = []; queue.hold(id,'choices',false); entry.captured = true; entry.error = false;
                 entry.message = 'Paste your clipboard into discord!'; queue.reset(id); playShutter();
             } else if (name === 'capture') throw new Error('Screenshot was not copied. Try again.');
+            else if (name === 'contribute' && result?.pendingCapture === true) {
+                queue.captureStatus(id,'waiting',result.captureMessage,result.captureRequest);
+            } else if (name === 'contribute') throw new Error('Capture could not start. Try again, or dismiss this notice.');
             else queue.remove(id);
         } catch (error) {
             if (queue.get(id) !== entry) return;
-            entry.choices = []; queue.hold(id,'choices',false); entry.error = true; entry.message = String(error?.message || 'Action unavailable. Try again.'); queue.reset(id);
+            entry.choices = []; queue.hold(id,'choices',false); entry.error = true; entry.message = String(error?.message || 'Action unavailable. Try again.');
+            if (name === 'contribute') queue.captureStatus(id,'retry',entry.message); else queue.reset(id);
         } finally {entry.busy = false; queue.hold(id,'busy',false); paint();}
     }
     const cardFor = target => target?.closest?.('[data-discovery-id]');

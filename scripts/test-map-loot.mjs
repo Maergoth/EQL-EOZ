@@ -69,8 +69,8 @@ try {
             assert.equal(await execute(owner,()=>document.querySelector('#map-loot-pane .map-loot-item .stat strong').textContent),'170','Pane uses the existing tier scaling');
             await execute(owner,()=>{const target=document.querySelector('#map-loot-pane .item-hover');target.focus();target.dispatchEvent(new FocusEvent('focusin',{bubbles:true}));});
             await until(()=>execute(owner,()=>!document.querySelector('#item-tooltip').hidden),'keyboard item tooltip');
-            const tooltip=await execute(owner,()=>document.querySelector('#item-tooltip').textContent);
-            if(!/Tier 7/.test(tooltip)||!/170/.test(tooltip))issues.push('Tooltip and pane must use the same selected tier: expected Tier 7 / HP170.');
+            const tooltip=await execute(owner,()=>{const card=document.querySelector('#item-tooltip'),hp=card.querySelector('[data-item-stat="HP"] .wiki-itembox-value');return{title:card.querySelector('.wiki-itembox-title strong')?.textContent,hp:Number(hp?.textContent),scaled:hp?.classList.contains('is-scaled')};});
+            if(!/\s\+7$/.test(tooltip.title)||tooltip.hp!==170||!tooltip.scaled)issues.push('Tooltip and pane must use the same selected tier: expected +7 / green HP170.');
             await capture('map-loot-normal-tier7');
             await execute(owner,()=>{document.querySelector('[data-map-loot-tier]').focus();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));});
             await until(()=>execute(owner,()=>document.querySelector('#item-tooltip').hidden),'tooltip dismissed for pane capture');

@@ -52,6 +52,7 @@ jobs:
             npm run test:hover-ocr
             npm run test:capture-calibration -- --screenshots ci-screenshots/linux-capture-calibration
             npm run test:capture-workspace -- --screenshots ci-screenshots/linux-capture-workspace
+            npm run test:discovery-capture-workspace
             npm run test:workspace-099
             npm run test:character-walkthrough -- --screenshots ci-screenshots/linux-character-walkthrough
             npm run test:system-fonts -- --screenshots ci-screenshots/linux-system-fonts

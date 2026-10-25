@@ -41,6 +41,13 @@ assert.equal(consume('Your Location is 4, 5, 6').locationCaptured,null,'Changing
 assert.equal(q.armSpawnLocation(second.prompt.candidateId).ok,true);consume('You have entered Other Vale.');consume('You have entered Hidden Vale.');
 assert.equal(consume('Your Location is 4, 5, 6').locationCaptured,null,'Leaving and returning to the zone does not restore an old listener');
 assert.equal(q.armSpawnLocation(second.prompt.candidateId).ok,true);clock+=300001;assert.equal(consume('Your Location is 4, 5, 6').locationCaptured,null,'Location requests time out');
+const persistentSpawn=q.armSpawnLocation(second.prompt.candidateId,{persistent:true});assert.equal(persistentSpawn.persistent,true);assert.equal(persistentSpawn.expiresAt,null);
+const boundary=q.spawnStatus();clock+=3600000;assert.equal(q.spawnStatus().candidateId,second.prompt.candidateId,'An explicit Contribute request keeps waiting beyond the automatic five-minute timeout');
+const beforePersistent=feed('Your Location is 7, 8, 9');beforePersistent.context.cursor=boundary.cursor;assert.equal(q.consumeLog(beforePersistent.event,beforePersistent.context).locationCaptured,null,'Persistent capture still rejects a location at the pre-click cursor');
+assert.equal(consume('Your Location is 7, 8, 9').locationCaptured.candidateId,second.prompt.candidateId,'The next fresh location completes the persistent request');
+assert.equal(q.armSpawnLocation(second.prompt.candidateId,{persistent:true}).ok,true);q.cancelSpawnLocation();clock+=3600000;assert.equal(consume('Your Location is 7, 8, 9').locationCaptured,null,'Manual dismissal cancels a persistent request');
+assert.equal(q.armSpawnLocation(second.prompt.candidateId,{persistent:true}).ok,true);const previousSource=source;source='C:/Synthetic/eqlog_PersistentOther_server.txt';assert.equal(consume('Your Location is 7, 8, 9').locationCaptured,null,'Persistent capture retains the log-source guard');source=previousSource;
+assert.equal(q.armSpawnLocation(second.prompt.candidateId,{persistent:true}).ok,true);consume('You have entered Other Vale.');consume('You have entered Hidden Vale.');assert.equal(consume('Your Location is 7, 8, 9').locationCaptured,null,'Persistent capture retains the zone-transition guard');
 assert.equal(q.armSpawnLocation(second.prompt.candidateId).ok,true);
 q.update(second.prompt.candidateId,{playerText:'A factual description entered while waiting for the requested /loc.'});
 const stale=feed('Your Location is 4, 5, 6');stale.context.at-=20000;assert.equal(q.consumeLog(stale.event,stale.context).locationCaptured,null);

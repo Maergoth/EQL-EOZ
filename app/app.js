@@ -15,6 +15,7 @@ import { createMapDataLoader } from './map-overlay-data.js';
 import { createTimerAlerts } from './timer-alerts.js';
 import { createWikiDiscovery } from './wiki-discovery.js';
 import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
+import { createDiscoveryContributionFlow } from './discovery-contribution-flow.js';
 import { mountWhatsNew } from './whats-new.js';
 import { FONT_PRESETS, DEFAULT_APPEARANCE, normalizeAppearance, applyAppearance, inheritViewerAppearance } from './appearance.js';
 import { mountCaptureWorkspace } from './capture-workspace.js';
@@ -76,6 +77,9 @@ let overlayMapFocus = null;
 let overlayMapFocusSequence = 0;
 let nativeMapVisible = false;
 let discoveryInNative = false;
+const discoveryCaptureStates = new Map();
+let discoveryContributionFlow = null;
+const discoveryPrompts = () => wikiDiscovery.snapshot().pending.map(entry => ({...entry,...(discoveryCaptureStates.get(entry.id)||{})}));
 let mapDataRevision = 0;
 let activeTooltipItem = null;
 let activeTooltipTarget = null;
@@ -520,6 +524,7 @@ function mapSourceContextMatches(context) {
 }
 
 function clearSourceLocation() {
+    void discoveryContributionFlow?.cancelWhere(() => true,{close:true});
     captureWorkspace.cancelSource();
     parser.resetSourceContext();
     clearActiveRoute({clearViewer:false});
@@ -626,8 +631,10 @@ function consumeText(text, allowTransientUi = true) {
             const observation=collectDropObservation(event,{live:true,at:parser.currentLineAt,cursor:observationCursor,logId:source,sessionId:observationSession,server,zone:parser.zone,playerNames:[parser.character].filter(Boolean),pack,resolver:observationResolver});
             if(observation)queueObservation(observation);
         }
-        captureWorkspace.consumeLog(event,{zone:parser.zone,live:allowTransientUi&&freshTimerEvent,
+        if(allowTransientUi&&freshTimerEvent&&['zone','profile'].includes(event?.type))void discoveryContributionFlow?.cancelWhere(request=>request.purpose==='spawn-location',{close:true});
+        const captureLogResult=captureWorkspace.consumeLog(event,{zone:parser.zone,live:allowTransientUi&&freshTimerEvent,
             logId:bridgeInfo?.logPath||'current-log',at:parser.currentLineAt,cursor:observationCursor});
+        if(captureLogResult?.prompt)void discoveryContributionFlow?.cancelWhere(request=>request.purpose==='spawn-location'&&request.candidateId!==captureLogResult.prompt.candidateId,{close:true});
     }
     overlaySession.flush();
     if (zoneChanged) {
@@ -717,7 +724,7 @@ function overlaySessionSnapshot() {
     const selected = focusedIntelTarget && zoneKey(focusedIntelTarget.zone) === zoneKey(s.zone) ? focusedIntelTarget : null;
     const navigation = activeRoute?.status === 'ready' && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? viewerApi()?.overlayNavigation?.() : null;
     return { character:s.character, zone:s.zone, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
-        parse:compactParseSnapshot(s), discovery:discoveryInNative ? wikiDiscovery.snapshot().pending : [], intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
+        parse:compactParseSnapshot(s), discovery:discoveryInNative ? discoveryPrompts() : [], intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
             packVersion:pack.meta?.manifestVersion || pack.meta?.version || '', profileKey:JSON.stringify([profile.classes.slice().sort(),settings.itemTier,settings.era]),
             focusedNpcId:selected?.id || '', focusSequence:intelFocusSequence },
         map:{ zone:s.zone, viewerZone:zoneRecord(s.zone)?.viewerName || zoneRecord(s.zone)?.name || s.zone, dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
@@ -2353,7 +2360,22 @@ const wikiDiscovery = createWikiDiscovery({getPack:()=>pack,
     onIgnore:(kind,name,options)=>captureWorkspace.suppress?.(kind,name,options),
     onMissing:entry=>window.eyeOfZommDiscovery?.show(entry) || Promise.reject(new Error('The desktop discovery prompt is unavailable.')),
     onWarning:message=>showNotice(message,{tone:'warning'})});
-window.eyeOfZommDiscovery?.onAction?.(({action,id,candidateId,purpose})=>{if(purpose==='spawn-location'&&candidateId){if(action==='contribute')captureWorkspace.openContribution(candidateId);else if(action==='ignore')captureWorkspace.ignoreContribution(candidateId);}else if(action==='ignore')wikiDiscovery.ignore(id);else wikiDiscovery.dismiss(id);void overlaySession.publish();});
+window.eyeOfZommDiscovery?.onAction?.(event=>{
+    const {action,id,candidateId,purpose,captureRequest,captureState,captureMessage}=event;
+    if(action==='contribute'&&['item-link','spawn-location'].includes(purpose)){
+        discoveryCaptureStates.set(id,{captureRequest,captureState:'waiting',captureMessage});
+        void discoveryContributionFlow?.request(event);
+    }else if(action==='capture-status'){
+        const prior=discoveryCaptureStates.get(id);
+        if(!prior||prior.captureRequest===captureRequest)discoveryCaptureStates.set(id,{captureRequest,captureState,captureMessage});
+    }else if(action==='dismiss'||action==='ignore'){
+        void discoveryContributionFlow?.cancel(event);
+        discoveryCaptureStates.delete(id);
+        if(purpose==='spawn-location'&&candidateId){if(action==='ignore')captureWorkspace.ignoreContribution(candidateId);}
+        else if(action==='ignore')wikiDiscovery.ignore(id);else wikiDiscovery.dismiss(id);
+    }
+    void overlaySession.publish();
+});
 window.eyeOfZommOverlays?.onState?.(next => {
     if (next.appearance && !appearancePending && !appearanceDraft) acceptAppearance(next.appearance);
     nativeMapVisible = Boolean(next.panels?.map?.visible);
@@ -2367,7 +2389,7 @@ Promise.resolve(window.eyeOfZommOverlays?.getState?.()).then(next => {
 const overlayController = mountOverlayController({ root:document.getElementById('overlay-controller'), api:window.eyeOfZommOverlays });
 const timerSettings = mountTimerSettings({ root:document.getElementById('timer-settings'), session:overlaySession });
 const discoveryNotices = mountWikiDiscoveryNotices({root:document.getElementById('wiki-discovery-notices'),action:(action,value)=>window.eyeOfZommDiscovery.action(action,value)});
-overlaySession.onTimers(()=>discoveryNotices.render(discoveryInNative ? [] : wikiDiscovery.snapshot().pending));
+overlaySession.onTimers(()=>discoveryNotices.render(discoveryInNative ? [] : discoveryPrompts()));
 const appUpdatesUi = mountAppUpdates({
     openSettings:async () => {
         setView('settings');
@@ -2376,14 +2398,23 @@ const appUpdatesUi = mountAppUpdates({
 });
 const whatsNew = mountWhatsNew({ button:$('#open-whats-new'), navigate:view => setView(view),getVersion:()=>bridgeInfo?.version });
 let captureWorkspace={consumeLog(){},refresh(){},dispose(){}};
+discoveryContributionFlow=createDiscoveryContributionFlow({
+    begin:request=>captureWorkspace.beginDiscoveryContribution(request),
+    cancel:request=>captureWorkspace.cancelDiscoveryContribution(request),
+    status:value=>window.eyeOfZommDiscovery.action('capture-status',value),
+    dismiss:value=>window.eyeOfZommDiscovery.action('dismiss',{id:value.id})
+});
 const characterStorage=await createCharacterStorage({onWarning:message=>showNotice(message,{tone:'warning'})});
 captureWorkspace = mountCaptureWorkspace({characterStorage,contributionStorage:characterStorage,getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
-    getAppearance:()=>settings.appearance,notify:showNotice,navigate:view=>setView(view)});
+    getAppearance:()=>settings.appearance,notify:showNotice,navigate:view=>setView(view),
+    onDiscoveryItem:observation=>discoveryContributionFlow.recordItem(observation),
+    onDiscoveryLocation:location=>discoveryContributionFlow.recordLocation(location),
+    onDiscoveryCapture:(request,result)=>discoveryContributionFlow.ready(request,result)});
 const observationSettings=document.createElement('section');observationSettings.className='observation-settings';observationSettings.innerHTML='<h2>Drop observations</h2><label class="check-control"><input type="checkbox" data-observation-enabled checked> Collect and sync drop observations</label><p class="settings-helper">Keeps minimal kill and loot observations locally and sends them hourly when logged in to the wiki. Chat, screenshots and file paths are excluded. Drop percentages are not calculated yet.</p><p data-observation-status role="status"></p><a href="https://eqlwiki.com/API_Documentation" target="_blank" rel="noopener">Wiki API documentation</a>';document.getElementById('capture-settings').append(observationSettings);
 const renderObservationStatus=async()=>{try{const status=await window.eyeOfZommObservations?.status();if(!status){observationSettings.hidden=true;return;}observationPreference=status.enabled;observationSettings.querySelector('[data-observation-enabled]').checked=status.enabled;observationSettings.querySelector('[data-observation-status]').textContent=`${status.pending} pending · ${status.acknowledged} delivered${status.error?' · '+status.error:''}`;}catch{observationSettings.querySelector('[data-observation-status]').textContent='Observation storage unavailable.';}};
 observationSettings.querySelector('[data-observation-enabled]').onchange=async event=>{try{await window.eyeOfZommObservations.configure({enabled:event.target.checked});await renderObservationStatus();}catch(error){showNotice(error.message,{tone:'warning'});await renderObservationStatus();}};
 void renderObservationStatus();const observationStatusTimer=setInterval(()=>void renderObservationStatus(),60000);
-window.addEventListener('pagehide', () => { clearTimeout(observationRetry);clearInterval(observationStatusTimer);captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
+window.addEventListener('pagehide', () => { clearTimeout(observationRetry);clearInterval(observationStatusTimer);void discoveryContributionFlow.dispose();captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); discoveryNotices.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

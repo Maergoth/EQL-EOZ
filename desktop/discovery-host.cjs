@@ -2,6 +2,7 @@
 const path = require('node:path');
 const CHANNEL = 'eye-of-zomm:discovery';
 const SPAWN_CHANNEL = 'eye-of-zomm:spawn-prompt';
+const itemIdentity = value => String(value || '').normalize('NFKC').replace(/_/g,' ').replace(/[\u2018\u2019`]/g,"'").replace(/\s*\+(?:10|[0-9])\s*$/,'').replace(/\s*\(Exaltation\)\s*$/i,'').replace(/\s*\+(?:10|[0-9])\s*$/,'').replace(/\s+/g,' ').trim().toLowerCase();
 
 // Pending catalog suggestions and user-requested clipboard capture only.
 // Inline notices are rendered by the main app/native Timers panel; this host
@@ -11,7 +12,7 @@ class DiscoveryHost {
     constructor({ electron, origin, getMainWindow, isTimerPanel = () => false, showMain = null }) {
         this.electron = electron; this.origin = origin; this.getMainWindow = getMainWindow; this.isTimerPanel = isTimerPanel;
         this.showMain = showMain; this.spawnWindow = null; this.spawnReady = null; this.spawnGeneration = 0;
-        this.queue = []; this.disposed = false; this.capturing = false; this.captureId = null; this.captureGeneration = 0;
+        this.queue = []; this.disposed = false; this.capturing = false; this.captureId = null; this.captureGeneration = 0; this.contributionSequence = 0;
         electron.ipcMain.handle(CHANNEL, (event, action, value) => this.handle(event, action, value));
         electron.ipcMain.handle(SPAWN_CHANNEL, (event, action, value) => this.handleSpawn(event, action, value));
     }
@@ -30,20 +31,31 @@ class DiscoveryHost {
         const window = this.spawnWindow;
         return Boolean(window && !window.isDestroyed() && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && event.senderFrame?.url === `${this.origin}/spawn-prompt.html`);
     }
+    contributionDetails(item) {
+        return {id:item.id,purpose:item.purpose,name:item.name,...(item.candidateId?{candidateId:item.candidateId}:{}),...(item.captureRequest?{captureRequest:item.captureRequest,captureState:item.captureState}:{}),...(item.captureMessage?{captureMessage:item.captureMessage}:{})};
+    }
+    startContribution(item) {
+        const main = this.getMainWindow();
+        if (!main || main.isDestroyed()) throw new Error('Open the main app and try again.');
+        item.captureRequest = `capture-${++this.contributionSequence}`; item.captureState = 'waiting'; delete item.captureMessage;
+        if (this.showMain) this.showMain();
+        else {if(main.isMinimized?.())main.restore?.();main.show?.();main.focus?.();}
+        const details = this.contributionDetails(item);
+        main.webContents.send('eye-of-zomm:discovery-action',{action:'contribute',...details});
+        if (item.purpose === 'spawn-location') this.publishSpawn();
+        return {pendingCapture:true,...details};
+    }
     async handleSpawn(event, action, value) {
         if (this.disposed || !this.isSpawn(event)) throw new Error('The spawn prompt is unavailable.');
         if (action === 'get-state') return this.spawnState();
         if (!['contribute','ignore','dismiss'].includes(action)) throw new Error('Unknown spawn prompt action.');
         const item = this.queue.find(item => item.purpose === 'spawn-location' && item.id === value?.id);
         if (!item) throw new Error('This spawn prompt has expired.');
+        if (action === 'contribute') return this.startContribution(item);
         this.queue = this.queue.filter(entry => entry.id !== item.id);
         const main = this.getMainWindow();
         if (main && !main.isDestroyed()) {
-            if (action === 'contribute') {
-                if (this.showMain) this.showMain();
-                else { if (main.isMinimized?.()) main.restore?.(); main.show?.(); main.focus?.(); }
-            }
-            main.webContents.send('eye-of-zomm:discovery-action', {action,id:item.id,candidateId:item.candidateId,purpose:'spawn-location'});
+            main.webContents.send('eye-of-zomm:discovery-action', {action,...this.contributionDetails(item)});
         }
         this.publishSpawn(); return this.spawnState();
     }
@@ -89,13 +101,15 @@ class DiscoveryHost {
             if (!value || !['item', 'monster'].includes(value.kind) || typeof value.id !== 'string' || !value.id.trim() || value.id.length > 512 ||
                 typeof value.name !== 'string' || !value.name.trim() || value.name.length > 240) throw new Error('Invalid wiki discovery.');
             const spawn = value.purpose === 'spawn-location';
+            const itemLink = value.purpose === 'item-link';
+            if (itemLink && value.kind !== 'item') throw new Error('Invalid item link request.');
             if (spawn && (value.kind !== 'monster' || typeof value.candidateId !== 'string' && !value.id.startsWith('spawn-') || typeof value.candidateId==='string'&&(!value.candidateId.trim()||value.candidateId.length>240) || !value.candidateId&&!value.id.slice(6).trim())) throw new Error('Invalid spawn location request.');
             if (this.queue.some(item => item.id === value.id)) return { ok:true, queued:true };
             // The newest kill owns the one armed /loc target. Never display an
             // old, inactive prompt after the new one expires.
             if (spawn) this.queue = this.queue.filter(item => item.purpose !== 'spawn-location');
             if (this.queue.length >= 20) return { ok:false, queued:false, error:'The wiki suggestion list is full.' };
-            this.queue.push({ id:value.id, kind:value.kind, name:value.name, zone:String(value.zone || '').slice(0, 240),...(typeof value.hint==='string'?{hint:value.hint.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,400)}:{}),...(spawn?{purpose:'spawn-location',candidateId:String(value.candidateId||value.id.slice(6)).slice(0,240)}:{}) });
+            this.queue.push({ id:value.id, kind:value.kind, name:value.name, zone:String(value.zone || '').slice(0, 240),...(typeof value.hint==='string'?{hint:value.hint.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,400)}:{}),...(spawn?{purpose:'spawn-location',candidateId:String(value.candidateId||value.id.slice(6)).slice(0,240)}:itemLink?{purpose:'item-link'}:{}) });
             if (spawn) try { await this.showSpawn(); } catch { this.queue=this.queue.filter(item=>item.id!==value.id);return {ok:false,queued:false,error:'The spawn prompt could not open. The request remains in Contribute.'}; }
             return { ok:true, queued:true };
         }
@@ -103,12 +117,28 @@ class DiscoveryHost {
         if (action === 'get-state') return this.state();
         const item = this.queue.find(item => item.id === value?.id);
         if (!item) throw new Error('This suggestion has already been dismissed.');
+        if (action === 'capture-status') {
+            if (!this.isMain(event)) throw new Error('Capture completion is unavailable.');
+            if (!['item-link','spawn-location'].includes(item.purpose) || value?.purpose !== item.purpose || typeof value.captureRequest !== 'string' || value.captureRequest !== item.captureRequest || !['waiting','retry','captured'].includes(value.status)) throw new Error('This capture request is no longer active.');
+            if (value.status === 'captured' && (item.captureState !== 'waiting' || item.purpose === 'item-link' && (typeof value.matchedName !== 'string' || value.matchedName.length > 240 || !itemIdentity(value.matchedName) || itemIdentity(value.matchedName) !== itemIdentity(item.name)) || item.purpose === 'spawn-location' && value.candidateId !== item.candidateId)) throw new Error('The captured evidence does not match this request.');
+            if (item.captureState === 'captured') return {ok:true,...this.contributionDetails(item)};
+            item.captureState = value.status;
+            item.captureMessage = typeof value.message === 'string' ? value.message.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,400) : '';
+            const details = this.contributionDetails(item), main = this.getMainWindow();
+            if (main && !main.isDestroyed()) main.webContents.send('eye-of-zomm:discovery-action',{action:'capture-status',...details});
+            if (item.purpose === 'spawn-location') this.publishSpawn();
+            return {ok:true,...details};
+        }
+        if (action === 'contribute') {
+            if (item.purpose !== 'item-link' && item.purpose !== 'spawn-location') throw new Error('This suggestion has no contribution capture.');
+            return this.startContribution(item);
+        }
         if (action === 'ignore' || action === 'dismiss') {
             if (this.captureId === item.id) throw new Error('Please wait for the screenshot.');
             this.queue = this.queue.filter(entry => entry.id !== item.id);
             if (item.purpose === 'spawn-location') this.publishSpawn();
             const main = this.getMainWindow();
-            if (main && !main.isDestroyed()) main.webContents.send('eye-of-zomm:discovery-action', { action, id:item.id,...(item.purpose==='spawn-location'?{purpose:item.purpose,candidateId:item.candidateId}:{}) });
+            if (main && !main.isDestroyed()) main.webContents.send('eye-of-zomm:discovery-action', { action, id:item.id,...(item.purpose?this.contributionDetails(item):{}) });
             return this.state();
         }
         if (action === 'capture') return this.capture(value);

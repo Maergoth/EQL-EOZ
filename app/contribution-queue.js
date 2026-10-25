@@ -1,6 +1,6 @@
 import { findPotentialMatches } from './contribution-model.js';
 import { CONTRIBUTION_QUEUE_KEY, CONTRIBUTION_QUEUE_BYTES, contributionSourceToken, logContributionObservation } from './contribution-evidence.js';
-import { createWikiResolver, normalizeWikiIdentity as contributionNameKey, itemBaseIdentity as itemIdentity, wikiIdentityKey, wikiEntityKind } from './wiki-identity.js';
+import { createWikiResolver, normalizeWikiIdentity as contributionNameKey, itemBaseIdentity as itemIdentity, itemExaltationBaseIdentity, wikiIdentityKey, wikiEntityKind } from './wiki-identity.js';
 import { contributionReasons } from './contribution-reasons.js';
 import { classifyNpcEvidence } from './generated-pets.js';
 import { collectTierZeroEvidence, tierZeroVerificationPreview, confirmTierZeroVerification } from './contribution-tier-zero.js';
@@ -123,10 +123,19 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         save();return result||relatedCandidate;
     }
     function consumeLog(event,context={}){
+        if(event?.type==='item-links'){
+            const linked=[];
+            for(const item of (Array.isArray(event.items)?event.items:[]).slice(0,8))if(typeof item==='string'&&item.length<=230){
+                const result=consumeLog({...event,type:'item-link',item},context);
+                if(result.candidate&&!linked.some(candidate=>candidate.id===result.candidate.id))linked.push(result.candidate);
+            }
+            return {candidate:linked[0]||null,candidates:linked,prompt:null,locationCaptured:null};
+        }
+        if(event?.type==='item-link'&&(typeof event.item!=='string'||resolver().resolve('item',itemExaltationBaseIdentity(event.item)).membership!=='missing'))return {candidate:null,prompt:null,locationCaptured:null};
         const observation=logContributionObservation(event,context,{now:now()});
         if(!observation)return {candidate:null,prompt:null,locationCaptured:null};
-        const at=Date.parse(observation.capturedAt),source=observation.input.logId,zone=observation.input.zone;
-        if(armed&&(armed.source!==source||contributionNameKey(armed.zone)!==contributionNameKey(zone)||now()>armed.expiresAt))armed=null;
+        const at=Date.parse(observation.capturedAt),source=observation.input.logId,zone=event.type==='item-link'?clean(context.zone):observation.input.zone;
+        if(armed&&(armed.source!==source||contributionNameKey(armed.zone)!==contributionNameKey(zone)||!armed.persistent&&now()>armed.expiresAt))armed=null;
         if(lastLog?.source===source&&at<lastLog.at)return {candidate:null,prompt:null,locationCaptured:null};
         lastLog={source,zone,at,cursor:observation.input.cursor};
         if(seenLogIds.has(observation.id))return {candidate:null,prompt:null,locationCaptured:null};
@@ -151,7 +160,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         }
         return {candidate:prompt?structuredClone(candidates.find(value=>value.id===prompt.candidateId)):candidate,prompt,locationCaptured:null};
     }
-    function armSpawnLocation(candidateId){const candidate=candidates.find(value=>value.id===candidateId&&value.kind==='npc');if(!candidate||!lastLog?.zone||contributionNameKey(candidate.zone)!==contributionNameKey(lastLog.zone))return {ok:false,error:'Return to the monster’s zone before recording its spawn location.'};const armedAt=now();armed={candidateId,source:lastLog.source,zone:lastLog.zone,cursor:lastLog.cursor,armedAt,expiresAt:armedAt+300000};return {ok:true,candidateId,name:candidate.name,zone:candidate.zone,expiresAt:armed.expiresAt};}
+    function armSpawnLocation(candidateId,{persistent=false}={}){const candidate=candidates.find(value=>value.id===candidateId&&value.kind==='npc');if(!candidate||!lastLog?.zone||contributionNameKey(candidate.zone)!==contributionNameKey(lastLog.zone))return {ok:false,error:'Return to the monster’s zone before recording its spawn location.'};const armedAt=now();armed={candidateId,source:lastLog.source,zone:lastLog.zone,cursor:lastLog.cursor,armedAt,expiresAt:persistent===true?null:armedAt+300000,...(persistent===true?{persistent:true}:{})};return {ok:true,candidateId,name:candidate.name,zone:candidate.zone,expiresAt:armed.expiresAt,...(persistent===true?{persistent:true}:{})};}
     function reconcile({apply=false}={}){
         if(apply&&readBlocked)return {version:1,applied:false,changed:false,rows:[],active:candidates.length,archived:archive.length,blocked:true,persisted:false,error:'The preserved queue must be recovered before reconciliation.'};
         const rows=[],seen=new Map(),before=apply?{candidates:structuredClone(candidates),archive:structuredClone(archive),armed:structuredClone(armed)}:null;let changed=false;
@@ -182,7 +191,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
     ensureReconciled();
     return{
         snapshot:()=>{ensureReconciled();return structuredClone(candidates);},cursor:()=>cursor,archived:()=>structuredClone(archive),reconcile,suppression,refreshCatalog:ensureReconciled,
-        spawnStatus(){if(armed&&now()>armed.expiresAt)armed=null;return armed?{...armed}:null;},
+        spawnStatus(){if(armed&&!armed.persistent&&now()>armed.expiresAt)armed=null;return armed?{...armed}:null;},
         tierZeroReview(id,options={}){return tierZeroVerificationPreview(candidates.find(value=>value.id===id),{...options,now:now()});},
         confirmTierZero(id,options={}){const candidate=candidates.find(value=>value.id===id);if(!candidate)throw Error('This contribution no longer exists.');const patch=confirmTierZeroVerification(candidate,{...options,now:now()});Object.assign(candidate,patch);candidate.planId=null;candidate.status='needs-review';candidate.reasons=contributionReasons(candidate,resolver()).reasons;save();return structuredClone(candidate);},
         add,consume,consumeLog,

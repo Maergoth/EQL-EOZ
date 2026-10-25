@@ -203,8 +203,18 @@ class CaptureHost {
         this.phase='error';this.error=clean(message,500);this.revision++;
         await this.cancelWork({destroySource:true});this.emitStatus();
     }
-    async stop({mode} = {}) {
+    async stop({mode,expectedSessionId,expectedSourceId} = {}) {
         if (mode!==undefined && !MODES.has(mode)) throw new Error('Invalid capture mode.');
+        const expected=expectedSessionId!==undefined||expectedSourceId!==undefined;
+        if(expected&&(typeof expectedSessionId!=='string'||/^[\w-]{1,120}$/.test(expectedSessionId)===false||
+            typeof expectedSourceId!=='string'||!expectedSourceId.length||expectedSourceId.length>512||/[\u0000-\u001f\u007f]/.test(expectedSourceId)))throw new Error('Invalid expected capture session.');
+        if(expected){
+            // Popup cleanup can arrive after another reader has taken over.
+            // Under Character ownership it may cancel only its own queued
+            // contribution, never a later request waiting to resume.
+            const target=this.owner==='character'&&mode==='contribution'?this.contributionResume:this;
+            if(target?.sessionId!==expectedSessionId||target?.source?.id!==expectedSourceId)return this.getStatus();
+        }
         if (this.owner==='character' && mode==='contribution') { this.contributionResume=null;this.emitStatus();return this.getStatus(); }
         if(mode&&this.owner&&mode!==this.owner)return this.getStatus();
         const restore = this.owner==='character' && mode==='character' ? this.contributionResume:null;

@@ -46,6 +46,20 @@ acceptance are separate milestones. Preserve the pending feature PRs below.
 - [x] Exclude explicit owner-labelled pets from parser found-NPC state, kill
   discovery, loot-source proposals and observation uploads. Archive only safe
   untouched old false positives; preserve edited and in-flight drafts.
+- [x] Detect actual encoded item links in fresh chat, check complete wiki
+  membership and local suppression, then offer Contribute for missing items.
+  Keep the triggering line as private evidence without inferring a drop source.
+- [x] Pin an accepted item-link prompt until a fresh matching live item-examine
+  read from its contribution source/session/generation has been saved. Flash
+  green for 900ms and close. Keep safe inline source selection and retry paths;
+  preserve Character ownership and prior user-started capture sessions.
+- [x] Pin an accepted monster prompt until its freshly re-armed next `/loc` is
+  saved. Explicit waits persist until completion/cancellation; the initial
+  automatic kill arm retains its bounded timeout. Flash green and close.
+- [x] Manual dismissal cancels pending reader/location intent, including startup
+  races. Old tokens, replay/manual/Character observations and unrelated items
+  cannot complete a request. New monster targets, zone/log changes and disposal
+  cancel incompatible work. Draft evidence remains available for review.
 
 ## Components and related change PRs
 
@@ -53,6 +67,18 @@ acceptance are separate milestones. Preserve the pending feature PRs below.
 `app/overlay.js` integrates it with panel state and resize controls;
 `desktop/overlay-host.cjs` owns detachment, native rectangles and release docking.
 `app/overlay.css` and `app/map-overlay.js` own pointer-hit geometry.
+
+`app/parser.js` extracts bounded encoded chat links; `app/wiki-discovery.js`
+checks typed wiki membership before offering a prompt. `desktop/discovery-host.cjs`
+authenticates actions and issues request tokens. The main renderer's
+`app/discovery-contribution-flow.js` matches those tokens to fresh evidence;
+`app/capture-workspace.js` owns reader source/ownership and queue `/loc` boundaries.
+The shared notice UI and native spawn prompt render waiting/retry/captured states.
+Only the exact main frame may mark completion; the native windows request actions.
+The capture host accepts paired expected-session/source guards for request-owned
+cleanup. A late Stop cannot end a replacement reader or clear another reader
+queued behind Character capture. Trusted running-status updates refresh evidence
+proof after resize/calibration/resume; stopped/error/takeover states offer retry.
 
 Pending next-release related changes (do not silently drop or claim deployed):
 
@@ -85,6 +111,14 @@ resolve any shared form hunks in favor of the final requested behavior.
 - [x] Full required source suite (`npm test`), including final syntax checks.
 - [x] Real main/preload loopback contribution workflow: proposal persistence,
   observed-versus-base evidence, saved-page receipts, partial retry and reload.
+- [x] Encoded modern/escaped chat-link parser fixtures, complete-catalog guards,
+  deduplication and local-only triggering evidence; existing loot/combat totals
+  remain intact. Coordinator/host tests cover token, provenance and cancellation.
+- [x] Isolated actual Chromium workspace flow: existing/selecting reader reuse,
+  safe game-window autostart, inline source choice, Character protection, fresh
+  workspace-to-coordinator OCR completion, last-owned-stream cleanup, monster
+  re-arming and persistent wait. Native spawn fixture covers green completion
+  and manual dismissal. These are synthetic fixtures, not live-game acceptance.
 - [ ] Exact-head CI and scoped PR.
 - [ ] Next installer release (version/history screenshots/platform packaging).
 - [ ] Installed build / physical game acceptance. Synthetic fixtures do not
@@ -111,3 +145,9 @@ jobs stopped at a new pixel-test assumption about opaque cyan tip length. The
 fixture now compares direction against the real CSS canvas center at forced
 1x/1.5x and rejects dots, wrong-axis and reversed arrows. Both local runs pass;
 the application marker geometry is unchanged. CI must pass on the amended head.
+
+The subsequent CI run passed source and marker checks but reached an obsolete
+map-loot fixture expecting a removed "Tier 7" label. It now checks the wiki-card
+title's +7 badge and the exact scaled HP170 field; the actual native fixture
+passes locally. The new discovery flow adds its own workspace fixture to both
+platform jobs and the Windows installer workflow. Exact-head CI remains a gate.

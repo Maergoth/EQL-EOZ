@@ -131,4 +131,24 @@ freshCapture.resolve([{ id:'game', name:'EverQuest', thumbnail:image() }]); awai
 assert.equal(cleared.images.length, 1);
 assert.equal(cleared.host.state()[0].id, 'new-owner', 'new renderer suggestions are accepted after a reset');
 cleared.host.dispose();
+
+const linked=fixture(),linkedPrompt={id:'linked-item',kind:'item',purpose:'item-link',name:'Synthetic Blade',zone:''};
+await linked.host.handle(linked.mainEvent,'show',linkedPrompt);
+assert.equal(linked.windowsCreated(),0);assert.equal(linked.captures.length,0,'Chat item discovery never starts a screenshot');
+const requested=await linked.host.handle(linked.timerEvent,'contribute',{id:linkedPrompt.id});
+assert.equal(requested.pendingCapture,true);assert.match(requested.captureRequest,/^capture-\d+$/);assert.equal(linked.host.state()[0].captureState,'waiting');assert.equal(linked.host.state().length,1,'Contribute keeps the notice registered');
+assert.equal(linked.main.webContents.sent.at(-1)[1].action,'contribute');assert.equal(linked.main.webContents.sent.at(-1)[1].purpose,'item-link');
+const status={id:linkedPrompt.id,purpose:'item-link',captureRequest:requested.captureRequest,status:'captured',matchedName:'Synthetic Blade +5'};
+await assert.rejects(linked.host.handle(linked.timerEvent,'capture-status',status),/unavailable/,'A native presentation surface cannot assert OCR success');
+await assert.rejects(linked.host.handle(linked.mainEvent,'capture-status',{...status,matchedName:'Another Blade'}),/does not match/);
+await linked.host.handle(linked.mainEvent,'capture-status',{...status,status:'retry',message:'Choose a source again.'});
+assert.equal(linked.host.state()[0].captureState,'retry');await assert.rejects(linked.host.handle(linked.mainEvent,'capture-status',status),/does not match/,'A cancelled request cannot complete');
+const retried=await linked.host.handle(linked.timerEvent,'contribute',{id:linkedPrompt.id});assert.notEqual(retried.captureRequest,requested.captureRequest);
+await assert.rejects(linked.host.handle(linked.mainEvent,'capture-status',status),/no longer active/,'A retry rejects the previous OCR session token');
+await linked.host.handle(linked.mainEvent,'capture-status',{...status,captureRequest:retried.captureRequest,matchedName:'synthetic_blade +5 (Exaltation)'});
+assert.equal(linked.host.state()[0].captureState,'captured');assert.equal(linked.host.state().length,1,'The successful notice remains for its green UI interval');
+const reversed=await linked.host.handle(linked.timerEvent,'contribute',{id:linkedPrompt.id});
+await linked.host.handle(linked.mainEvent,'capture-status',{...status,captureRequest:reversed.captureRequest,matchedName:'synthetic_blade (Exaltation) +5'});assert.equal(linked.host.state()[0].captureState,'captured','Tier suffixes normalize before or after the Exaltation marker');
+await linked.host.handle(linked.timerEvent,'dismiss',{id:linkedPrompt.id});assert.equal(linked.host.state().length,0);assert.equal(linked.main.webContents.sent.at(-1)[1].captureRequest,reversed.captureRequest);assert.equal(linked.main.webContents.sent.at(-1)[1].purpose,'item-link');
+await assert.rejects(linked.host.handle(linked.mainEvent,'capture-status',{...status,captureRequest:retried.captureRequest}),/dismissed/,'Late completion cannot resurrect a dismissed flow');linked.host.dispose();
 console.log('Inline wiki discovery host: exact main/Timers auth, no windows or auto-capture, source selection, clipboard/error/busy handling and bounded private notices passed.');

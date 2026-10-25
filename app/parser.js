@@ -18,8 +18,25 @@ function normalizeName(name) {
 
 function stripLogLinks(text) {
     return String(text || '')
+        .replace(/\x12([0-9a-f]{56})([^\x12\r\n]{1,240})\x12/gi, (_match,body,label)=>nativeItemLinkName(body,label)||label)
         .replace(/\\a(?:ITEM|PC)\s+[^:]*:([^\\]*?)\\\/a/gi, '$1')
         .replace(/\\a(?:ITEM|PC)[^\\]*?\\\/a/gi, match => match.replace(/^.*?:/, '').replace(/\\\/a$/i, ''));
+}
+
+const safeItemLinkName=value=>{const name=normalizeName(value);return name.length>0&&name.length<=230&&!/[\u0000-\u001f\u007f\\<>\[\]{}|]/.test(name)&&/[\p{L}\p{N}]/u.test(name)?name:null;};
+function nativeItemLinkName(body,label){
+    // Current EQEmu/RoF2: a 56-character hex body inside 0x12 delimiters.
+    // https://github.com/EQEmu/EQEmu/blob/master/common/say_link.cpp
+    // Reserved proxy IDs represent quest/say links rather than real items.
+    const itemId=parseInt(body.slice(1,6),16);
+    return body[0]==='0'&&itemId>0&&itemId<0xfffff&&itemId!==999999?safeItemLinkName(label):null;
+}
+export function extractItemLinks(text){
+    const input=String(text||'').slice(0,16384),found=[],seen=new Set();
+    const add=(name,index)=>{if(name)found.push({name,index});};
+    for(const match of input.matchAll(/\\aITEM\s+(-?\d{1,10})(?:\s+-?\d{1,10}){1,8}:([^\\\r\n]{1,240})\\\/a/gi))if(Number(match[1])!==0)add(safeItemLinkName(match[2]),match.index);
+    for(const match of input.matchAll(/\x12([0-9a-f]{56})([^\x12\r\n]{1,240})\x12/gi))add(nativeItemLinkName(match[1],match[2]),match.index);
+    return found.sort((a,b)=>a.index-b.index).filter(link=>{const key=link.name.toLowerCase();if(seen.has(key))return false;seen.add(key);return true;}).slice(0,8).map(link=>link.name);
 }
 
 function trimSentence(text) {
@@ -319,7 +336,8 @@ export class EQLogParser {
         const m = raw.match(LINE_RE);
         const parsedAt = m ? Date.parse(m[1]) : NaN;
         this.currentLineAt = Number.isFinite(parsedAt) ? parsedAt : Date.now();
-        const text = stripLogLinks((m ? m[2] : raw).trim()).replace(/^--(.*?)--$/, '$1');
+        const body=(m ? m[2] : raw).trim(),itemLinks=extractItemLinks(body);
+        const text = stripLogLinks(body).replace(/^--(.*?)--$/, '$1');
         if (!text) return null;
 
         let x;
@@ -490,6 +508,7 @@ export class EQLogParser {
             return this.noteLoot(x[2], x[3] || '');
         }
 
+        if(itemLinks.length)return this.rememberEvent({type:'item-links',items:itemLinks,evidence:{text:raw.slice(0,6000)}});
         return null;
     }
 

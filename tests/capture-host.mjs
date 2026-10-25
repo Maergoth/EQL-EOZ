@@ -78,6 +78,37 @@ try{
 }finally{await f.host.dispose();}
 assert.equal(f.handlers.size,0,'shutdown unregisters both exact-frame IPC handlers');
 {
+    const guarded=fixture();
+    try{
+        await guarded.host.listSources();await guarded.host.start({mode:'contribution',sourceId:'window:game',sessionId:'popup-old'});
+        await guarded.host.start({mode:'contribution',sourceId:'window:game',sessionId:'replacement-reader'});
+        const unchanged=async(options)=>{
+            const before=guarded.host.getStatus(),revision=guarded.host.revision,stops=guarded.ocr.stops,sent=guarded.main.webContents.sent.length,resume=guarded.host.contributionResume;
+            assert.deepEqual(await guarded.host.stop(options),before);
+            assert.equal(guarded.host.revision,revision);assert.equal(guarded.ocr.stops,stops);assert.equal(guarded.main.webContents.sent.length,sent);assert.equal(guarded.host.contributionResume,resume,'mismatched cleanup does not mutate a pending resume');
+        };
+        await unchanged({mode:'contribution',expectedSessionId:'popup-old',expectedSourceId:'window:game'});
+        await unchanged({mode:'contribution',expectedSessionId:'replacement-reader',expectedSourceId:'screen:one'});
+        const beforeInvalid=guarded.host.getStatus();
+        for(const options of [{expectedSessionId:'replacement-reader'},{expectedSourceId:'window:game'},{expectedSessionId:'',expectedSourceId:'window:game'},{expectedSessionId:'x'.repeat(121),expectedSourceId:'window:game'},{expectedSessionId:'replacement-reader',expectedSourceId:''},{expectedSessionId:'replacement-reader',expectedSourceId:'x'.repeat(513)},{expectedSessionId:'replacement-reader',expectedSourceId:'window:\ngame'},{expectedSessionId:42,expectedSourceId:'window:game'}])await assert.rejects(guarded.host.stop({mode:'contribution',...options}),/expected capture session/);
+        assert.deepEqual(guarded.host.getStatus(),beforeInvalid,'invalid paired proof cannot change the current reader');
+        await guarded.host.handle(guarded.event,'stop',{mode:'contribution',expectedSessionId:'replacement-reader',expectedSourceId:'window:game'});
+        assert.equal(guarded.host.owner,null,'matching active proof stops only the owned contribution reader');
+        await guarded.host.start({mode:'contribution',sourceId:'window:game',sessionId:'popup-owned'});
+        await guarded.host.start({mode:'character',sourceId:'window:game',sessionId:'character-owned'});
+        await unchanged({mode:'contribution',expectedSessionId:'character-owned',expectedSourceId:'window:game'});
+        const characterGeneration=guarded.host.generation;
+        await guarded.host.stop({mode:'contribution',expectedSessionId:'popup-owned',expectedSourceId:'window:game'});
+        assert.equal(guarded.host.contributionResume,null,'matching queued contribution proof clears its own resume');assert.equal(guarded.host.owner,'character');assert.equal(guarded.host.sessionId,'character-owned');assert.equal(guarded.host.generation,characterGeneration,'canceling an owned resume does not interrupt Character capture');
+        await guarded.host.start({mode:'contribution',sourceId:'window:game',sessionId:'popup-old'});
+        await guarded.host.start({mode:'contribution',sourceId:'screen:one',sessionId:'other-queued'});
+        await unchanged({mode:'contribution',expectedSessionId:'popup-old',expectedSourceId:'window:game'});
+        await unchanged({mode:'contribution',expectedSessionId:'other-queued',expectedSourceId:'window:game'});
+        await guarded.host.stop({mode:'character'});
+        assert.equal(guarded.host.owner,'contribution');assert.equal(guarded.host.sessionId,'other-queued');assert.equal(guarded.host.source.id,'screen:one','stale popup cleanup preserves an unrelated queued reader for normal Character completion');
+    }finally{await guarded.host.dispose();}
+}
+{
     const reading=fixture();let destroyed=0;
     try{
         await reading.host.listSources();await reading.host.start({mode:'character',sourceId:'window:game',sessionId:'persistent-character'});
