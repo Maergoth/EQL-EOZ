@@ -26,8 +26,11 @@ export function itemBaseReviewPreview(candidate={},options={}){
     const calculation={tier,fraction,augmentStatus:options.modifiersExcluded===true?'excluded':'unknown'};
     return {...recoverItemBaseStats(source.observed,calculation),observed:source.observed,options:calculation};
 }
+export function itemRecoveryHasKnownModifiers(candidate={}){
+    return value(candidate,'modified')===true||value(candidate,'augmented')===true||Array.isArray(value(candidate,'augmentNames'))&&value(candidate,'augmentNames').length>0;
+}
 function provisionalPreview(candidate,source,{tier,fraction}){
-    const knownModifiers=value(candidate,'modified')===true||value(candidate,'augmented')===true||Array.isArray(value(candidate,'augmentNames'))&&value(candidate,'augmentNames').length>0;
+    const knownModifiers=itemRecoveryHasKnownModifiers(candidate);
     const validTier=Number.isInteger(tier)&&tier>=0&&tier<=10,validFraction=fraction===null||fraction===undefined||Number.isInteger(fraction)&&fraction>=0&&fraction<2**tier&&(tier!==10||fraction===0);
     const fractions=validTier&&validFraction?(fraction===null||fraction===undefined?Array.from({length:tier===10?1:2**tier},(_,index)=>index):[fraction]):[];
     const calculation={tier,fraction:fraction??null,augmentStatus:'assumed-unverified',reviewMode:'provisional'};
@@ -82,9 +85,9 @@ export function itemBaseReviewChoices(preview={},fixed={}){
         if(!preferred)throw Error('Review the edited base statistics: they must be supported values from one possible item progress state.');
         choices={...preferred,...fixed};
     }
-    // Void on tiered gear includes contextual gains; zero is the editable base
-    // default requested by the contributor flow, not an exact recovered value.
-    return {...choices,SV_CORRUPTION:0};
+    // Contextual Void has no certified inverse. Omit it unless the contributor
+    // explicitly enters a supported value; absence never manufactures zero.
+    return choices;
 }
 const baseLabelKey=label=>String(label).toLowerCase().replace(/[^a-z0-9]/g,'');
 const BASE_LABEL_KEYS=Object.fromEntries([
@@ -119,7 +122,8 @@ export function createItemBaseReview(candidate,{tier,fraction,choices={},modifie
             if(!(key==='SV_CORRUPTION'&&base===0)&&(!result||!['exact','range'].includes(result.status)||numeric(base)===null||!result.ranges.some(range=>base>=range.min&&base<=range.max&&Math.abs((base-range.min)/range.step-Math.round((base-range.min)/range.step))<1e-7)))throw Error(`Review a supported base value for ${itemRecoveryLabel(key)}.`);
             selected[key]=base;
         }
-        if(!Object.keys(selected).length)throw Error('Choose at least one supported base statistic. Unresolved values stay omitted.');
+        // An explicitly reviewed empty selection omits every numeric value.
+        // It remains fingerprint-bound and cannot authorize observed numbers.
         const fractions=preview.options.fraction===null?Array.from({length:preview.options.tier===10?1:2**preview.options.tier},(_,index)=>index):[preview.options.fraction];
         if(!fractions.some(progress=>Object.entries(selected).every(([key,base])=>key==='SV_CORRUPTION'&&base===0||isItemBaseCandidate(key,base,preview.observed[key],{tier:preview.options.tier,fraction:progress,augmentStatus:'excluded'}))))throw Error('The selected base values do not match one possible item progress state. Review the choices together.');
         return {schemaVersion:2,reviewMode:'provisional',sourceFingerprint:itemRecoveryFingerprint(candidate),tier:preview.options.tier,fraction:preview.options.fraction,modifiersExcluded:null,reviewed:true,choices:selected};

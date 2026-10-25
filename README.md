@@ -38,6 +38,10 @@ delay, and Intel keeps its scrolling list intact during unrelated updates.
 Fresh kills dim matching located or loot-bearing mobs until the next zone
 entry, and collapse their Intel drops. Uncheck it to restore normal previews.
 
+[Item contribution statistics](docs/ITEM_CONTRIBUTION_FORM.md) use one structured
+grid. Blank values stay omitted, deliberate zeros survive, and ranked readings
+retain their base-proposal validation and observed evidence.
+
 **0.9.13: correct tier-zero verification category.** Ranked and recovered item
 pages now use the exact
 [Tier 0 Verification Needed](https://eqlwiki.com/Category:Tier_0_Verification_Needed)

@@ -81,6 +81,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/item-base-recovery.js',
     'app/item-base-review.js',
     'app/item-base-review-ui.js',
+    'app/item-contribution-stats.js',
     'app/character-share.js',
     'app/capture-source.html',
     'app/capture-source.js',

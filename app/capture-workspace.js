@@ -13,7 +13,7 @@ import { buildCharacterWikiSheet } from './character-wiki-sheet.js';
 import { characterInspectMarkup } from './character-inspect-view.js';
 import { mountCharacterCatalog, resolveCharacterCatalog, resolveInventoryCatalog, searchCharacterCatalog, characterCatalogCard } from './character-catalog.js';
 import { characterItemLabel, characterEquipmentMarkup, characterLooseInventoryMarkup, characterIdentityMarkup, characterStatSummaryMarkup, characterItemTooltipMarkup, characterItemTitleMarkup, characterItemStatBodyMarkup, characterTierControlsMarkup, updateCharacterItemTierMarkup } from './character-inventory-view.js';
-import { applyItemBaseReview, isItemNumericStatLine } from './item-base-review.js';
+import {itemContributionStatSource,itemContributionStatLines} from './item-contribution-stats.js';
 import { mountItemBaseReview } from './item-base-review-ui.js';
 import { parseInventoryExport } from './inventory-export.js';
 import { buildWikiEntityCatalog } from './wiki-discovery.js';
@@ -34,28 +34,10 @@ import {zoneCreationFields,zoneCreationMarkup,updateZoneCreationVisibility,ZONE_
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let eras=['Classic Era','Kunark Era','Velious Era'];
 const statText=stats=>Object.entries(stats||{}).map(([key,value])=>`${characterStatLabel(key)}: ${value??'?'}`).join('\n');
-const ITEM_CONTRIBUTION_STAT_LABELS={ac:'AC',hp:'HP',mana:'Mana',endurance:'Endurance',str:'STR',sta:'STA',agi:'AGI',dex:'DEX',wis:'WIS',int:'INT',cha:'CHA',
-    resistPoison:'SV Poison',resistMagic:'SV Magic',resistDisease:'SV Disease',resistFire:'SV Fire',resistCold:'SV Cold',resistCorruption:'SV Void',
-    hpRegen:'HP Regen',manaRegen:'Mana Regen',enduranceRegen:'Endurance Regen',attackSpeed:'Attack Speed',requiredLevel:'Required Level',recommendedLevel:'Recommended Level',
-    weight:'Weight',damage:'Damage',damageBonus:'Damage Bonus',delay:'Delay',attack:'Attack',haste:'Haste'};
 export function withDefaultItemStatLines(fields={}){
-    // SV Void's editable zero default is form text, not a manufactured OCR stat.
-    // Explicit contributor text and confirmed values always take priority.
-    const voidValue=fields.resistCorruption?.value,voidLine=`SV Void: ${typeof voidValue==='number'&&Number.isFinite(voidValue)?voidValue:0}`;
-    if(Object.hasOwn(fields,'statLines')){
-        const saved=fields.statLines;
-        if(!saved||typeof saved!=='object'||saved.edited===true||saved.confirmed===true)return {...fields};
-        const lines=Array.isArray(saved.value)?saved.value:typeof saved.value==='string'?saved.value.split(/\r?\n/):null;
-        if(!lines||lines.some(line=>/^\s*(?:SV[._ ]*(?:Void|Corruption)|(?:Void|Corruption)[ _]*resist)\s*:/i.test(String(line))))return {...fields};
-        const value=[...lines,voidLine];
-        return {...fields,statLines:{...saved,value:Array.isArray(saved.value)?value:value.join('\n')}};
-    }
-    const value=Object.entries(ITEM_CONTRIBUTION_STAT_LABELS).flatMap(([key,label])=>{
-        const number=fields[key]?.value;
-        return typeof number==='number'&&Number.isFinite(number)?[`${label}: ${number}`]:[];
-    });
-    if(!value.some(line=>line.startsWith('SV Void:')))value.push(voidLine);
-    return {...fields,statLines:{value,confirmed:false}};
+    if(Object.hasOwn(fields,'statLines'))return {...fields};
+    const source=itemContributionStatSource(fields);
+    return {...fields,statLines:{value:itemContributionStatLines(source.values,source.retained),confirmed:false}};
 }
 export function contributionItemEvidenceMarkup(candidate,fields=candidate?.fields||{}){
     if(candidate?.kind!=='item')return '';
@@ -188,8 +170,10 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             const previous=candidate.fields[key],nonblank=Array.isArray(value)?value.length>0:value!==''&&value!==null;
             fields[key]={value,confirmed:key==='notable'?typeof value==='boolean':reviewFields?nonblank:previous?.confirmed===true,edited:previous?.edited===true||!unchanged,...(key==='notable'&&typeof value==='boolean'?{source:'player'}:{})};
         }
+        const itemStatPatch=candidate.kind==='item'?itemBaseUi?.readPatch({...candidate,fields},{reviewed:reviewFields}):null;
+        if(itemStatPatch){for(const key of Object.keys(fields))if(!Object.hasOwn(itemStatPatch.fields,key))delete fields[key];Object.assign(fields,itemStatPatch.fields);}
         const sources=candidate.sources.map((source,index)=>{const button=form.querySelector(`[data-source-toggle="${index}"]`);return {...source,confirmed:button?button.getAttribute('aria-pressed')==='true':source.confirmed,...(button&&button.getAttribute('aria-pressed')!==String(contributionSourceIncluded(source))?{edited:true}:{})};});
-        const patch={...Object.fromEntries(['name','title','zone','era','playerText'].map(key=>[key,data.get(key)===String(originalCandidate[key]??'')?candidate[key]:data.get(key)])),intent:data.get('intent')||candidate.intent||'create',instance:form.dataset.newZone==='true'?'normal':form.dataset.instanceEdited==='true'?form.elements.raid.checked?'raid':'normal':candidate.instance||'unknown',matchesReviewed:reviewFields||candidate.matchesReviewed===true,fields,sources};
+        const patch={...(itemStatPatch?{baseRecovery:itemStatPatch.baseRecovery}:{}),...Object.fromEntries(['name','title','zone','era','playerText'].map(key=>[key,data.get(key)===String(originalCandidate[key]??'')?candidate[key]:data.get(key)])),intent:data.get('intent')||candidate.intent||'create',instance:form.dataset.newZone==='true'?'normal':form.dataset.instanceEdited==='true'?form.elements.raid.checked?'raid':'normal':candidate.instance||'unknown',matchesReviewed:reviewFields||candidate.matchesReviewed===true,fields,sources};
         if(candidate.attachment)patch.attachment={...candidate.attachment,caption:String(data.get('attachmentCaption')||'').slice(0,1000),license:data.get('attachmentLicense')||'own-screenshot'};
         if(reviewFields&&patch.fields.lootKinds)patch.fields.lootKinds={...patch.fields.lootKinds,confirmed:true};
         const changed=Object.keys(patch).some(key=>JSON.stringify(patch[key])!==JSON.stringify(candidate[key]));
@@ -277,21 +261,9 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         liveMatchesView=mountContributionLiveMatches({form,candidate,lookup:liveMatchesLookup,isActive:()=>!publishing&&contributionTab==='discoveries'&&Boolean(root.closest('.view.is-active')),onResult(result){
             matches={...result,candidateId:candidate.id};form.querySelector('[data-match-results]').innerHTML=contributionMatchesMarkup({...candidate,title:form.elements.title.value},result.matches);bindMatches();
         }});
-        if(candidate.kind==='item'&&$('[data-item-base-review]'))itemBaseUi=mountItemBaseReview({host:$('[data-item-base-review]'),getCandidate:()=>saveCandidate()||selected(),onInvalidate(settings){
-            if(publishing)return;const current=selected(),fields={...current.fields,tier:{...current.fields.tier,value:settings.tier,edited:true}};
-            const tierInput=form.querySelector('[data-field-key="tier"] [data-field-value]');if(tierInput)tierInput.value=String(settings.tier);
-            if(settings.tier===0){
-                const retained=(Array.isArray(fields.statLines?.value)?fields.statLines.value:[]).filter(line=>!isItemNumericStatLine(line));
-                fields.statLines={value:[...Object.entries(ITEM_CONTRIBUTION_STAT_LABELS).flatMap(([key,label])=>typeof fields[key]?.value==='number'&&Number.isFinite(fields[key].value)?[`${label}: ${fields[key].value}`]:[]),...retained],confirmed:true,edited:true};
-                const input=form.querySelector('[data-field-key="statLines"] [data-field-value]');if(input)input.value=fields.statLines.value.join('\n');
-            }
-            // Invalid typed choices must block preview instead of silently
-            // falling back to the original automatically selected proposal.
-            queue.update(candidate.id,{fields,baseRecovery:settings.tier===0?null:{schemaVersion:2,reviewMode:'provisional',tier:settings.tier,fraction:null,sourceFingerprint:'',choices:{},reviewed:true,modifiersExcluded:null},planId:null,status:'needs-review'});invalidatePlan();
-        },onApply(current,review){
-            if(publishing)return;const patch=applyItemBaseReview(current,review);
-            const input=form.querySelector('[data-field-key="statLines"] [data-field-value]');if(input)input.value=patch.fields.statLines.value.join('\n');
-            if(JSON.stringify(current.baseRecovery)===JSON.stringify(patch.baseRecovery)&&JSON.stringify(current.fields.statLines)===JSON.stringify(patch.fields.statLines))return;
+        if(candidate.kind==='item'&&$('[data-item-base-review]'))itemBaseUi=mountItemBaseReview({host:$('[data-item-base-review]'),getCandidate:()=>selected(),onChange(patch){
+            if(publishing)return;const current=selected();if(!current)return;
+            if(JSON.stringify(current.baseRecovery)===JSON.stringify(patch.baseRecovery)&&JSON.stringify(current.fields)===JSON.stringify(patch.fields))return;
             queue.update(current.id,{...patch,planId:null,status:'needs-review'});invalidatePlan();
         }});
         const tierReview=queue.tierZeroReview?.(candidate.id);if(tierReview?.evidence){const button=document.createElement('button');button.type='button';button.className='secondary-button';button.textContent='Confirm this unmodified tier 0 reading';button.disabled=!tierReview.ok;button.title=tierReview.reason;button.onclick=()=>{saveCandidate();const result=queue.confirmTierZero(candidate.id,{evidenceId:queue.tierZeroReview(candidate.id)?.evidence?.id,modifiersExcluded:true,reviewed:true});if(result?.ok===false)return warning(result.error);invalidatePlan();renderCandidate();};$('[data-item-base-review]')?.prepend(button);}
