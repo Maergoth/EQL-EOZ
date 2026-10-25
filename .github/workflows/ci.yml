@@ -55,6 +55,7 @@ jobs:
       - run: npm run test:capture-workspace -- --screenshots ci-screenshots/capture-workspace
       - run: npm run test:discovery-capture-workspace
       - run: npm run test:screen-reading-master
+      - run: npm run test:chat-item-boundaries -- --screenshots ci-screenshots/chat-boundaries
       - run: npm run test:consider-level-workspace
       - run: npm run test:zone-creation-workspace -- --screenshots ci-screenshots/zone-creation
       - run: npm run test:workspace-099

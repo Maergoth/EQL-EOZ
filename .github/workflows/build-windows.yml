@@ -52,6 +52,10 @@ jobs:
         run: npm test
       - name: Test actual desktop CSP and browser worker
         run: npm run test:desktop-worker
+      - name: Test screen-reading permission and chat item boundaries
+        run: |
+          npm run test:screen-reading-master
+          npm run test:chat-item-boundaries
       - name: Test native overlay windows
         if: inputs.extended_ui_checks
         run: npm run test:native-overlays

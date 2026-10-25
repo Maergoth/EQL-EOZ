@@ -56,6 +56,7 @@ jobs:
             npm run test:window-lifecycle
             npm run test:discovery-capture-workspace
             npm run test:screen-reading-master
+            npm run test:chat-item-boundaries -- --screenshots ci-screenshots/linux-chat-boundaries
             if [ "$EXTENDED_UI_CHECKS" = "true" ]; then
             npm run test:map-layout
             npm run test:map-loot -- --screenshots ci-screenshots/linux-map-loot
