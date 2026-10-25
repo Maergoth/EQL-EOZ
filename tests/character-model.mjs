@@ -98,7 +98,7 @@ const crossPage=automaticRestart.intake(automaticRead('other-page','session-e',5
 const previewStorage=memory(),previewModel=createCharacterModel({storage:previewStorage}),previewCard=previewModel.intake(automaticRead('preview-original','preview-session',1000,2,1),{wikiItem:automaticCatalog}).candidate;
 previewModel.assign(previewCard.id,'any1');const originalPreviewStats=structuredClone(previewCard.observedStats),originalPreviewEvidence=structuredClone(previewCard.evidence);
 const catalogPreview=previewModel.setTierPreview(previewCard.id,{tier:3,fraction:0}).candidate,previewStats=characterItemStats(catalogPreview);
-assert.equal(previewStats.basis,'catalog-tier-preview');assert.equal(previewStats.stats.HP,130);assert.equal(previewStats.stats.HASTE,null,'An observed-only stat has no fabricated catalog preview');assert.equal(previewStats.stats.SV_CORRUPTION,null,'Unsupported conditional Void scaling remains unknown');assert.deepEqual(catalogPreview.observedStats,originalPreviewStats);assert.deepEqual(catalogPreview.evidence,originalPreviewEvidence);assert.equal(catalogPreview.observedTier,2);assert.equal(catalogPreview.observedFraction,null,'Character no longer collects fractional progress from OCR');
+assert.equal(previewStats.basis,'catalog-tier-preview');assert.equal(previewStats.stats.HP,130);assert.equal(previewStats.stats.HASTE,null,'An observed-only stat has no fabricated catalog preview');assert.equal(previewStats.stats.SV_CORRUPTION,4,'An explicit catalog Void value stays authoritative under wiki rules');assert.deepEqual(catalogPreview.observedStats,originalPreviewStats);assert.deepEqual(catalogPreview.evidence,originalPreviewEvidence);assert.equal(catalogPreview.observedTier,2);assert.equal(catalogPreview.observedFraction,null,'Character no longer collects fractional progress from OCR');
 assert.equal(previewModel.setTierPreview(previewCard.id,{tier:2,fraction:1}).candidate.statBasis,'observed','Returning to reliable original tier restores captured values');assert.equal(characterItemStats(previewModel.snapshot().candidates[0]).stats.HP,80);
 previewModel.setTierPreview(previewCard.id,{tier:6,fraction:0});
 const previewFresh=previewModel.intake(automaticRead('preview-new','new-preview-session',2000,4,2,{hp:89}),{wikiItem:automaticCatalog}).candidate;
@@ -401,7 +401,7 @@ assert.equal(model.setStatSnapshot('invented',{}).ok,false);
 
 const catalog={name:'Catalog Blade',wikiTitle:'Catalog Blade',iconId:'42',slots:['PRIMARY'],stats:{HP:100,STR:5,DMG:10,RANGE:20}};
 const scaled=model.intake({id:'catalog',item:{name:'Catalog Blade',tier:2,fraction:0,augmentStatus:'none'}},{wikiItem:catalog}).candidate;
-assert.deepEqual(characterItemStats(scaled).stats,{HP:120,STR:7,DMG:12,RANGE:40});
+assert.deepEqual(characterItemStats(scaled).stats,{HP:120,STR:7,DMG:12,RANGE:40,ACCURACY:5});
 const observed=model.intake({id:'observed',item:{name:'Catalog Blade',tier:10,stats:{HP:999},statsComplete:true,augmentStatus:'included',augments:[{name:'Ruby',stats:{HP:50},statsComplete:true}]}},{wikiItem:catalog}).candidate;
 assert.equal(characterItemStats(observed).stats.HP,999,'examine stats are not rescaled or augmented twice');
 const excluded={...observed,observedStats:{HP:100},augmentStatus:'excluded'};

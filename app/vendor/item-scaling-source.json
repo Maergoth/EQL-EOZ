@@ -1,0 +1,10 @@
+{
+  "repository": "Maergoth/EQLWiki",
+  "commit": "8f7ff332d31cf523fc0459db897270dc46a974bc",
+  "directory": "extensions/ItemLevelSlider",
+  "sha256": {
+    "item-scaling-core.js": "becf94c7d4bafbdef7b0010f0aaaccdb58710767323d8bcc0ea1fed43e741be5",
+    "item-scaling-rules.json": "f039f43610a2f7b88ab63085dcf7c4cb5ff57aae8a80bc9ff1b12ba8239b9f3a",
+    "item-scaling-core.LICENSE": "2807f12aa9a5193569e3c4c6e26bb2d230c5511c99de07b40767a8bdf5e99ac0"
+  }
+}

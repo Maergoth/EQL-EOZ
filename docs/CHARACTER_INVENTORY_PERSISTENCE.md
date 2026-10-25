@@ -120,8 +120,9 @@ recognition and does not claim that every unobserved tooltip was readable.
 - Changing tier previews known catalog base values, with modified values green.
   Original observed stats/text/evidence and observed tier/progress remain
   separate. **Use captured stats** restores that basis. Missing base data,
-  unknown progress and unsupported conditional Void scaling remain unknown or
-  visibly unavailable; the catalog never invents observed numbers.
+  unknown progress and unsupported fields remain unknown or visibly unavailable.
+  Conditional Void uses the shared wiki engine and known item context; the
+  catalog never invents observed numbers.
 - Eligible automatic reads reuse a unique matching saved item across journal
   rereads, source sessions and tier changes. Older evidence cannot overwrite a
   newer observed value; reviewed edits and deliberate nulls remain protected.

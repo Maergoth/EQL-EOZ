@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { isItemStatModified } from '../app/item-stat-presentation.js';
 import { renderItem,renderItemTooltip } from '../app/overlay.js';
 import { scaledItemStats } from '../app/item-scaling.js';
-for(const [base,value,tier,expected] of [[100,170,7,true],[-8,-1,7,true],[1,.4,7,true],[10,10,7,false],[0,0,7,false],[10,17,0,false],[undefined,10,7,false],['',0,7,false],[NaN,10,7,false],['10',10,7,false]])assert.equal(isItemStatModified(base,value,tier),expected);
+for(const [base,value,tier,expected] of [[100,170,7,true],[-8,-1,7,true],[1,.4,7,true],[10,10,7,false],[0,0,7,false],[10,17,0,false],[undefined,10,7,true],[undefined,0,7,false],[undefined,null,7,false],[null,10,7,false],['',0,7,false],[NaN,10,7,false],['10',10,7,false]])assert.equal(isItemStatModified(base,value,tier),expected);
 const base={HP:100,DMG:10,WT:1,HASTE:0,DELAY:20},item={name:'Synthetic Blade',tier:7,baseStats:base,stats:scaledItemStats({stats:base},7)};
 const tooltip=renderItemTooltip(item),card=renderItem(item);
 assert.match(tooltip,/data-item-stat="HP">HP: <span class="wiki-itembox-value is-scaled">\+170<\/span>/);

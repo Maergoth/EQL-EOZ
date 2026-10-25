@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { searchCharacterCatalog, resolveCharacterCatalog, characterCatalogCard, characterCatalogPreview, CHARACTER_CATALOG_LIMITS } from '../app/character-catalog.js';
 import { createCharacterModel, characterItemStats, characterShareSummary } from '../app/character-model.js';
+import {applyItemScalingRules,getItemScalingRules} from '../app/item-scaling.js';
 
 const ring={name:'Synthetic Émber Ring',wikiTitle:'Ring of the Ember Guardian',iconId:'Exact_Icon_007',slots:['Fingers'],requiredLevel:21,stats:{HP:100,STR:2,DEX:-2,DMG:13,DELAY:20,WT:2.3,ATK:50,SV_CORRUPTION:9}};
 const weapon={name:'Synthetic Quartz Blade',wikiTitle:'Test:Quartz Blade',slots:['Primary'],stats:{HP:20,DMG:11}};
@@ -44,7 +45,7 @@ const preview=characterCatalogPreview(ring,{tier:3,fraction:2}),rows=Object.from
 assert.equal(preview.card.fraction,0,'Character catalog ignores obsolete progress options');assert.equal(rows.HP.value,130);assert.equal(rows.STR.value,5);assert.equal(rows.DEX.value,0);assert.equal(rows.DMG.value,16);assert.equal(rows.WT.value,1.7);
 for(const key of ['HP','STR','DEX','DMG','WT'])assert.equal(rows[key].modified,true,key);
 for(const key of ['ATK','DELAY']){assert.equal(rows[key].value,ring.stats[key]);assert.equal(rows[key].modified,false,key);}
-assert.equal(rows.SV_CORRUPTION.base,9);assert.equal(rows.SV_CORRUPTION.value,null);assert.equal(rows.SV_CORRUPTION.unsupported,true);assert.equal(rows.SV_CORRUPTION.modified,false);
+assert.equal(rows.SV_CORRUPTION.base,9);assert.equal(rows.SV_CORRUPTION.value,9);assert.equal(rows.SV_CORRUPTION.unsupported,false);assert.equal(rows.SV_CORRUPTION.modified,false,'Explicit base Void remains authoritative under shared wiki rules');
 assert.equal(characterCatalogPreview(ring,{tier:0}).rows.find(row=>row.key==='SV_CORRUPTION').value,9,'known base Void resist remains usable at tier zero');
 for(const tier of [-1,11,null,3.5])assert.throws(()=>characterCatalogCard(ring,{tier}),/Choose tier/);
 for(const fraction of [8,.5,null,'',1023])assert.equal(characterCatalogCard(ring,{tier:3,fraction}).fraction,0,'Removed progress input is not collected or solicited');
@@ -59,23 +60,23 @@ assert.equal(characterCatalogCard({...ring,statsComplete:false}).baseStatsComple
 const store=new Map(),storage={getItem:key=>store.get(key),setItem:(key,value)=>store.set(key,value)},model=createCharacterModel({storage});
 const first=model.intake({item:card}),second=model.intake({item:card});assert.equal(first.ok,true);assert.equal(second.ok,true);assert.notEqual(first.candidate.id,second.candidate.id,'every Add creates a distinct physical copy');
 assert.equal(first.deduplicated,false);assert.equal(second.deduplicated,false);assert.equal(first.candidate.fraction,0);assert.deepEqual(first.candidate.observedStats,{});assert.deepEqual(first.candidate.baseStats,ring.stats);assert(!/progress/i.test(card.notes));
-assert.equal(characterItemStats(first.candidate).stats.HP,130,'catalog stats scale exactly once at the selected whole tier');assert.equal(characterItemStats(first.candidate).stats.SV_CORRUPTION,null);
+assert.equal(characterItemStats(first.candidate).stats.HP,130,'catalog stats scale exactly once at the selected whole tier');assert.equal(characterItemStats(first.candidate).stats.SV_CORRUPTION,9);
 for(const [candidate,slot]of [[first.candidate,'finger1'],[second.candidate,'finger2']]){model.updateCandidate(candidate.id,{augmentStatus:'none'});assert.equal(model.assign(candidate.id,slot).ok,true);}
 model.setStatSnapshot('base',{stats:{HP_MAXIMUM:450},confirmed:true});model.setStatSnapshot('equipped',{stats:{HP_MAXIMUM:812},confirmed:true});
 assert.equal(model.totals().computed.HP_MAXIMUM,undefined,'Legacy snapshots and catalog gear do not create a current maximum-resource total');
 model.setStatSnapshot('current',{stats:{HP_CURRENT:53,HP_MAXIMUM:997,SV_CORRUPTION:null},confirmed:true});
-const restored=createCharacterModel({storage}),total=restored.totals();assert.deepEqual(total.derived,{});assert.equal(total.current.stats.HP_MAXIMUM,997);assert.equal(total.computed.HP_MAXIMUM.value,997);assert.equal(total.computed.SV_CORRUPTION.value,null);assert.deepEqual(restored.snapshot().candidates[0].unscaledStatKeys,['SV_CORRUPTION']);assert.equal(restored.snapshot().statSnapshots.base.stats.HP_MAXIMUM,450);assert.equal(restored.snapshot().statSnapshots.equipped.stats.HP_MAXIMUM,812);
+const restored=createCharacterModel({storage}),total=restored.totals();assert.deepEqual(total.derived,{});assert.equal(total.current.stats.HP_MAXIMUM,997);assert.equal(total.computed.HP_MAXIMUM.value,997);assert.equal(total.computed.SV_CORRUPTION.value,null);assert.deepEqual(restored.snapshot().candidates[0].unscaledStatKeys,[]);assert.equal(restored.snapshot().statSnapshots.base.stats.HP_MAXIMUM,450);assert.equal(restored.snapshot().statSnapshots.equipped.stats.HP_MAXIMUM,812);
 const observedTotals=structuredClone(total.computed);
 assert.equal(restored.setTierPreview(first.candidate.id,{tier:6}).ok,true);assert.equal(characterItemStats(restored.snapshot().candidates.find(candidate=>candidate.id===first.candidate.id)).stats.HP,160,'Per-item wiki tier preview remains available');
 assert.equal(restored.setAugmentSlots(first.candidate.id,1).ok,true);assert.equal(restored.setAugment(first.candidate.id,0,characterCatalogCard(weapon,{tier:2})).ok,true);assert.equal(characterItemStats(restored.snapshot().candidates.find(candidate=>candidate.id===first.candidate.id)).stats.HP,184,'The item tooltip can preview its chosen augment independently');
 assert.deepEqual(restored.totals().computed,observedTotals,'Tier and augment previews never rescale or add to observed character totals');
 restored.removeAugment(first.candidate.id,0);restored.unassign('finger1');assert.deepEqual(restored.totals().computed,observedTotals,'Removing a modeled augment or equipped item never subtracts from observed totals');assert(restored.assign(first.candidate.id,'finger1').ok);
 assert.deepEqual(createCharacterModel({storage}).totals().computed,observedTotals,'Observed totals retain their exact values through persistence and layout edits');
-const summary=characterShareSummary(restored.snapshot());assert.equal(summary.equipment.find(slot=>slot.slot==='finger1').item.stats.SV_CORRUPTION,null);assert.equal(summary.equipment.find(slot=>slot.slot==='finger1').item.baseStats.SV_CORRUPTION,9);
+const summary=characterShareSummary(restored.snapshot());assert.equal(summary.equipment.find(slot=>slot.slot==='finger1').item.stats.SV_CORRUPTION,9);assert.equal(summary.equipment.find(slot=>slot.slot==='finger1').item.baseStats.SV_CORRUPTION,9);
 const observed={...first.candidate,observedStats:{SV_CORRUPTION:19,HP:150},observedStatsComplete:true,augmentStatus:'included'};assert.equal(characterItemStats(observed).stats.SV_CORRUPTION,19,'actual observed stats override unsupported catalog adjustment without scaling');
 assert.equal(JSON.stringify(pack),before,'preview and Add never edit the catalog');
 console.log('Character catalog: flexible local search, bounded/incomplete results, whole-tier preview, modified stats, exact identity and distinct cards passed.');
-console.log('Catalog provenance: per-item values stay separate; observed character totals survive tier, augment and equipment edits without arithmetic; unsupported Void adjustment remains unknown.');
+console.log('Catalog provenance: per-item values stay separate; observed character totals survive tier, augment and equipment edits without arithmetic; explicit Void values stay authoritative.');
 
 const {resolveInventoryCatalog}=await import('../app/character-catalog.js');
 const presenceOnly={meta:{wikiEntitiesComplete:true},items:[],wikiEntities:{items:['Synthetic Known Crown'],titles:[{title:'Synthetic Known Rune (Exaltation)'}]}};
@@ -83,3 +84,14 @@ assert.equal(resolveInventoryCatalog(presenceOnly,'Synthetic Known Crown +4').it
 assert.equal(resolveInventoryCatalog(presenceOnly,'Synthetic Known Rune (Exaltation)').item.wikiTitle,'Synthetic Known Rune (Exaltation)');
 assert.deepEqual(resolveInventoryCatalog(presenceOnly,'Synthetic Krown'),{},'Presence lookup never autochooses fuzzy name');
 assert.deepEqual(resolveInventoryCatalog(presenceOnly,'Unknown'),{});
+
+const rogue={name:'Synthetic Rank Dagger',slots:['PRIMARY','SECONDARY'],classes:['ROG'],stats:{HP:100,STR:5,DEX:5,DMG:12},displayLines:['Skill: Piercing Atk Delay: 19']};
+const rogueCard=characterCatalogCard(rogue,{tier:5}),roguePreview=characterCatalogPreview(rogue,{tier:5});
+assert.equal(characterItemStats(rogueCard).stats.BACKSTAB_DMG,15);assert.equal(characterItemStats(rogueCard).stats.ACCURACY,12.5);assert.equal(characterItemStats(rogueCard).stats.SV_CORRUPTION,5);
+for(const key of ['BACKSTAB_DMG','ACCURACY','SV_CORRUPTION'])assert.equal(roguePreview.rows.find(row=>row.key===key)?.value,characterItemStats(rogueCard).stats[key],`${key}: Character search and equipped previews share whole-card context`);
+const captured={...rogueCard,observedStats:{DMG:18,BACKSTAB_DMG:15,ACCURACY:12.9,SV_CORRUPTION:5,HP:777},observedStatsComplete:true,augmentStatus:'included'};
+const recorded={...captured.observedStats},rules=getItemScalingRules(),totalsBefore=structuredClone(restored.totals().computed);
+applyItemScalingRules({...rules,revision:rules.revision+1,primary:{...rules.primary,divisor:20}});
+assert.equal(characterItemStats(rogueCard).stats.HP,125,'Character previews adopt accepted shared rule updates');
+assert.deepEqual(characterItemStats(captured).stats,recorded,'Observed examine values remain immutable after a formula update');
+assert.deepEqual(restored.totals().computed,totalsBefore,'Formula changes never alter recorded character-sheet totals');

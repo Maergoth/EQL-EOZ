@@ -1,31 +1,31 @@
-import { scaleItemStat } from './item-scaling.js';
+import { scaleItemStat, getItemScalingRules, getItemScalingRevision, getItemScalingIdentity, itemStatFamily } from './item-scaling.js';
 
 // An inverse is a reviewed proposal under an explicit tier/unit/modifier
 // contract. It never replaces the observation or confirms/publishes a field.
-export const ITEM_BASE_RECOVERY_VERSION = 1;
+export const ITEM_BASE_RECOVERY_VERSION = 2;
 export const ITEM_BASE_RECOVERY_LIMITS = Object.freeze({ min:-2147483648,max:2147483647,fields:64,sample:16 });
 export const ITEM_BASE_RECOVERY_CONTRACT = Object.freeze({
     forward:'app/item-scaling.js',
-    wiki:'https://eqlwiki.com/extensions/ItemLevelSlider/itemlevelslider.js',
-    checkedAt:'2026-10-22',wikiSha256:'0011db5f4b6e3ec2fa723a39f7dd697c3862ac718d83783669246f625fee8f23'
+    wiki:'https://eqlwiki.com/extensions/ItemLevelSlider/item-scaling-core.js',
+    get rulesRevision(){return getItemScalingRevision();},
+    get rulesIdentity(){return getItemScalingIdentity();}
 });
-const PRIMARY = new Set(['AC','HP','MP','END','STR','STA','AGI','DEX','WIS','INT','CHA','SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE']);
-const FLAT = new Set(['HP_REGEN','MANA_REGEN','END_REGEN','HASTE']);
-const STATIC = new Set(['DELAY','COLD_DMG','FIRE_DMG','MAGIC_DMG','POISON_DMG','DISEASE_DMG','CORRUPTION_DMG','CHROMATIC_DMG','PRISMATIC_DMG','ELEMENTAL_DMG','BANE_DMG','BACKSTAB_DMG']);
+const STATIC = new Set(['DELAY','COLD_DMG','FIRE_DMG','MAGIC_DMG','POISON_DMG','DISEASE_DMG','CORRUPTION_DMG','CHROMATIC_DMG','PRISMATIC_DMG','ELEMENTAL_DMG','BANE_DMG']);
 const ALIASES = Object.freeze({MANA:'MP',ENDURANCE:'END',WEIGHT:'WT',DAMAGE:'DMG',BASE_DMG:'DMG',
     STRENGTH:'STR',STAMINA:'STA',AGILITY:'AGI',DEXTERITY:'DEX',WISDOM:'WIS',INTELLIGENCE:'INT',CHARISMA:'CHA',
     RESISTMAGIC:'SV_MAGIC',RESISTFIRE:'SV_FIRE',RESISTCOLD:'SV_COLD',RESISTPOISON:'SV_POISON',RESISTDISEASE:'SV_DISEASE',RESISTCORRUPTION:'SV_CORRUPTION',SV_VOID:'SV_CORRUPTION',
     HPREGEN:'HP_REGEN',MANAREGEN:'MANA_REGEN',ENDURANCEREGEN:'END_REGEN',ENDURANCE_REGEN:'END_REGEN',MP_REGEN:'MANA_REGEN',
-    DAMAGEBONUS:'DMG_BONUS',DAMAGE_BONUS:'DMG_BONUS',ATTACKSPEED:'ATTACK_SPEED',ATTACK:'ATK'});
+    DAMAGEBONUS:'DMG_BONUS',DAMAGE_BONUS:'DMG_BONUS',BACKSTAB:'BACKSTAB_DMG',BACKSTAB_DAMAGE:'BACKSTAB_DMG',BACKSTABDAMAGE:'BACKSTAB_DMG',ATTACKSPEED:'ATTACK_SPEED',ATTACK:'ATK'});
 const canonical = value => {const key=String(value??'').trim().replace(/[ .-]+/g,'_').toUpperCase().slice(0,80);return ALIASES[key]||key;};
 const finite = value => typeof value==='number'&&Number.isFinite(value);
-const familyOf = key => PRIMARY.has(key)?'primary':FLAT.has(key)?'flat':STATIC.has(key)?'static':({DMG:'damage',RANGE:'range',WT:'weight'}[key]||null);
+const familyOf = key => STATIC.has(key)?'static':['primary','flat','damage','backstab','range','weight'].includes(itemStatFamily(key))?itemStatFamily(key):null;
 const point = (index,unit) => index/unit;
 
 function context(options={}) {
     const tier=options?.tier,fraction=options?.fraction,augmentStatus=options?.augmentStatus;
-    if(!Number.isInteger(tier)||tier<0||tier>10)return {reason:'unknown-or-invalid-tier'};
-    if(!Number.isInteger(fraction)||fraction<0||fraction>=2**tier||tier===10&&fraction!==0)return {reason:'unknown-or-invalid-fraction'};
+    const maximum=getItemScalingRules().maxTier;
+    if(!Number.isInteger(tier)||tier<0||tier>maximum)return {reason:'unknown-or-invalid-tier'};
+    if(!Number.isInteger(fraction)||fraction<0||fraction>=2**tier||tier===maximum&&fraction!==0)return {reason:'unknown-or-invalid-fraction'};
     if(!['none','excluded'].includes(augmentStatus))return {reason:'unverified-augment-or-modifier-context'};
     if(augmentStatus==='none'&&Array.isArray(options.augments)&&options.augments.length)return {reason:'contradictory-augment-context'};
     return {tier,fraction,augmentStatus};
@@ -56,7 +56,8 @@ function inverseRanges(key,observed,state,bounds,family) {
     // Primary scaling has a genuine discontinuity between -11 and -10 near
     // the cap. Searching that whole domain as one monotone curve loses valid
     // penalties/zeroes. Every branch is independently monotone on this grid.
-    const branches=family==='primary'&&state.tier>0?[[ITEM_BASE_RECOVERY_LIMITS.min,-11],[-10,-1],[0,0],[1,10],[11,ITEM_BASE_RECOVERY_LIMITS.max]]:[[family==='weight'?0:ITEM_BASE_RECOVERY_LIMITS.min,ITEM_BASE_RECOVERY_LIMITS.max]];
+    const threshold=Math.floor(getItemScalingRules().primary.smallThreshold);
+    const branches=family==='primary'&&state.tier>0?[[ITEM_BASE_RECOVERY_LIMITS.min,-threshold-1],[-threshold,-1],[0,0],[1,threshold],[threshold+1,ITEM_BASE_RECOVERY_LIMITS.max]]:[[family==='weight'?0:ITEM_BASE_RECOVERY_LIMITS.min,ITEM_BASE_RECOVERY_LIMITS.max]];
     const ranges=[];let outside=false,omittedLow=false,omittedHigh=false;
     // Search the complete declared domain before applying optional narrower
     // review bounds. A hidden disjoint branch must not create false uniqueness.
@@ -104,10 +105,10 @@ export function recoverItemBaseStat(inputKey,observed,options={}) {
     const inverse=inverseRanges(key,observed,state,bounds,family),candidateCount=inverse.ranges.reduce((sum,range)=>sum+range.high-range.low+1,0),ranges=describeRanges(inverse.ranges,bounds.unit),
         details={...result,candidateCount,ranges,candidates:sampleRanges(inverse.ranges,bounds.unit,candidateCount),sampleTruncated:candidateCount>ITEM_BASE_RECOVERY_LIMITS.sample};
     if(!candidateCount)return {...details,reason:inverse.outside?'outside-base-domain':'no-forward-roundtrip'};
-    // The current app subtracts 1e-9 before WT's ceiling; the verified wiki
-    // implementation does not. Elevated-weight candidate ranges are diagnostic
-    // only until that pre-existing parity boundary has a separate resolution.
-    if(family==='weight'&&state.tier>0&&observed>0)return {...details,reason:'weight-rounding-contract-not-equivalent'};
+    // Forward weight now exactly shares the wiki's ceiling. Keep reverse weight
+    // diagnostic: decimal floating boundaries need a stronger inverse-domain
+    // contract before a captured weight can be certified as an item base.
+    if(family==='weight'&&state.tier>0&&observed>0)return {...details,reason:'weight-inverse-not-certified'};
     const clipped=ranges.some(range=>range.clipped);
     return {...details,status:candidateCount===1&&!clipped?'exact':'range',value:candidateCount===1&&!clipped?details.candidates[0]:null,
         reason:clipped?'bounded-range-clipped':candidateCount===1?'unique-forward-roundtrip':'multiple-forward-roundtrips'};

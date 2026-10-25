@@ -25,6 +25,7 @@ const { RendererDrain } = require('./renderer-drain.cjs');
 const { ShareHost } = require('./share-host.cjs');
 const { CharacterStorage } = require('./character-storage.cjs');
 const { InventoryFileHost } = require('./inventory-file-host.cjs');
+const { ItemScalingHost } = require('./item-scaling-host.cjs');
 const { installLocalFontPermissions } = require('./font-permissions.cjs');
 const { normalizeWindowPlacement, WindowPlacement } = require('./window-placement.cjs');
 const {
@@ -68,6 +69,7 @@ let reloading = false;
 let shareHost = null;
 let characterStorage = null;
 let inventoryFileHost = null;
+let itemScalingHost = null;
 let quitting = false;
 let sessionNeedsReload = false;
 let windowPlacement = null;
@@ -678,6 +680,7 @@ async function apiInfo() {
         logSelection: config.logSelection === 'manual' ? 'manual' : 'automatic',
         safety: 'log/local-file reads only; optional static wiki data pack',
         dataPack: dataPackRefreshState(state),
+        itemScaling: itemScalingHost?.status() || null,
         productionPack: fs.existsSync(productionPackPath()),
         windowState: windowSettings(config),
         desktop: true
@@ -879,6 +882,9 @@ function createWindow(config = {}, savedPlacement = {}) {
 
 async function bootstrap() {
     await ensureUserDirs();
+    itemScalingHost = new ItemScalingHost({file:path.join(userDataDir(),'item-scaling-rules.json')});
+    await itemScalingHost.initialize();
+    itemScalingHost.start();
     await startServer();
     let config = await readConfig();
     if (!config.eqRootPath || !fs.existsSync(config.eqRootPath)) {
@@ -1009,7 +1015,7 @@ app.on('before-quit', event => {
             quitting=false;rendererDrain.resume();
             dialog.showErrorBox('Eye of Zomm could not save pending observations','The app has been left open. Check available disk space and try closing it again.');return;
         }
-        stopDataPackRefresh();automaticLogReader?.dispose();automaticLootSources?.dispose();overlayHost?.dispose();discoveryHost?.dispose();wikiHost?.dispose();iconFinderHost?.dispose();shareHost?.dispose();inventoryFileHost?.dispose();appUpdater?.shutdown();
+        stopDataPackRefresh();itemScalingHost?.stop();automaticLogReader?.dispose();automaticLootSources?.dispose();overlayHost?.dispose();discoveryHost?.dispose();wikiHost?.dispose();iconFinderHost?.dispose();shareHost?.dispose();inventoryFileHost?.dispose();appUpdater?.shutdown();
         try { server?.close(); } catch {}
         await Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain,characterStorage?.close(),observationHost?.close()]);
         rendererDrain?.dispose();electron.session.defaultSession.flushStorageData();quitReady=true;app.quit();

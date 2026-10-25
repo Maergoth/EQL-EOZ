@@ -85,6 +85,14 @@ version; no separate Linux branch, release schedule or wiki dataset is needed.
 
 On Linux, make the AppImage executable and launch it, or install the deb using your distribution's package installer. Choose the actual client directory inside your Wine/Proton prefix or mounted installation; EoZ reads that directory's ordinary logs and map files. It runs as a separate native desktop app. X11/XWayland is preferred for independently positioned overlays; [native Wayland limits](https://www.electronjs.org/docs/latest/api/browser-window) can affect placement, focus and topmost behavior.
 
+## Shared item formulas
+
+Item sliders and recovered-base proposals use the wiki-owned, versioned item
+scaling engine. The desktop refreshes supported balance rules hourly and keeps
+an offline copy, independently of the wiki database mirror. See the
+[shared formula guide](docs/SHARED_ITEM_SCALING.md) for the canonical source,
+public API, synchronization procedure and algorithm-version contract.
+
 ## A look around
 
 The inventory images show the actual **0.9.4 Character component with synthetic records**. The tooltip-reading image shows the actual **0.9.2 Character component with synthetic records and capture status**; other guided Character images show 0.9.1. Capture and contribution images show 0.9.0 with a loopback-only wiki; font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).

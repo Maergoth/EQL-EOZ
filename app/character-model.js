@@ -1,5 +1,5 @@
 import {characterCatalogDetails,normalizeCharacterItemDetails} from './character-item-card.js';
-import { scaleItemStat } from './item-scaling.js';
+import { scaledItemStats } from './item-scaling.js';
 import { parseItemAugmentSlots } from './screen-read-parser.js';
 
 // Local, versioned data only. This module has no DOM, capture, network or wiki
@@ -175,7 +175,7 @@ function normalizeCandidate(value={}) {
         wikiMatch:['confirmed','suggested','unmatched'].includes(value.wikiMatch) ? value.wikiMatch : 'unmatched',
         iconId:clean(value.iconId,120), icon:safeCharacterIcon(value.icon), details:normalizeCharacterItemDetails(value.details), slots:characterSlotKinds(value.slots), tier,
         fraction:tierFraction(value.fraction,tier),
-        observedStats:normalizeCharacterStats(value.observedStats), baseStats:normalizeCharacterStats(value.baseStats),
+        observedStats:normalizeCharacterStats(value.observedStats), baseStats:normalizeCharacterStats(value.baseStats),accuracyPercent:value.accuracyPercent===true||/\bAccuracy\s*:\s*[+\-]?\d+(?:\.\d+)?\s*%/i.test(block),
         editedStatKeys:[...new Set(list(value.editedStatKeys).map(keyFor).filter(key=>/^[A-Z][A-Z0-9_]{0,31}$/.test(key)))].slice(-CHARACTER_LIMITS.stats*2),
         editedFields:[...new Set(list(value.editedFields).filter(key=>EDITABLE_CAPTURE_FIELDS.has(key)))],
         unscaledStatKeys:[...new Set(list(value.unscaledStatKeys).slice(0,CHARACTER_LIMITS.stats).map(keyFor).filter(key=>/^[A-Z][A-Z0-9_]{0,31}$/.test(key)))],
@@ -243,8 +243,9 @@ export function characterExaltationStats(item={}){
 export function characterItemStats(candidate) {
     const item = normalizeCandidate(candidate),previewRequested=item.statBasis==='catalog-tier-preview',preview=previewRequested&&characterEquipmentEligibility(item).known&&Object.keys(item.baseStats).length>0, observed = !preview&&Object.keys(item.observedStats).length > 0;
     const bases=preview?Object.fromEntries([...new Set([...Object.keys(item.baseStats),...Object.keys(item.observedStats)])].map(key=>[key,has(item.baseStats,key)?item.baseStats[key]:null])):item.baseStats;
-    const stats = observed ? {...item.observedStats} : Object.fromEntries(Object.entries(bases).map(([key,value]) =>
-        [key,value === null || item.tier === null || item.tier>0&&item.unscaledStatKeys.includes(key) ? null : scaleItemStat(key,value,item.tier,{fraction:0})]));
+    const unsupportedKeys=item.unscaledStatKeys.filter(key=>key!=='SV_CORRUPTION');
+    const stats = observed ? {...item.observedStats} : item.tier===null?Object.fromEntries(Object.keys(bases).map(key=>[key,null])):scaledItemStats({...item,stats:bases},item.tier,{fraction:0});
+    if(!observed&&item.tier>0)for(const key of unsupportedKeys)if(has(stats,key))stats[key]=null;
     const warnings = [];
     const suffix=item.observedName.match(/(?:\s*\+(?:10|[0-9]))+\s*$/u)?.[0],writtenTiers=suffix?[...suffix.matchAll(/\+(10|[0-9])/g)].map(match=>Number(match[1])):[];
     const nameTier=preview?item.observedTier:item.tier;
@@ -256,7 +257,7 @@ export function characterItemStats(candidate) {
     let complete = observed ? item.observedStatsComplete : item.baseStatsComplete && item.tier !== null;
     let uncertainAll = false;
     if (!observed && item.tier === null) warnings.push('Item tier is unknown; catalog base stats are not an equipped value.');
-    if (!observed && item.tier>0 && item.unscaledStatKeys.length) warnings.push(`Tier adjustment is unverified for ${item.unscaledStatKeys.join(', ')}; those equipped values remain unknown.`);
+    if (!observed && item.tier>0 && unsupportedKeys.length) warnings.push(`Tier adjustment is unverified for ${unsupportedKeys.join(', ')}; those equipped values remain unknown.`);
     if (!complete) warnings.push('Item stats are incomplete.');
     if (item.augmentStatus === 'unknown') { complete=false; uncertainAll=true; warnings.push('Exaltation presence or stat inclusion needs review.'); }
     if(preview&&item.augmentStatus==='included'){complete=false;uncertainAll=true;warnings.push('Catalog preview does not establish the effects included in the captured item with Exaltations.');}
@@ -297,7 +298,7 @@ export function characterItemStats(candidate) {
         if (!item.augments.length) { complete=false; uncertainAll=true; warnings.push('Excluded Exaltation stats have not been supplied.'); }
     }
     if (Object.values(stats).some(value => value === null)) complete=false;
-    return {stats, complete, uncertainAll, basis:preview?'catalog-tier-preview':observed ? 'observed-examine' : 'scaled-catalog', warnings};
+    return {stats, complete, uncertainAll,accuracyPercent:item.accuracyPercent||!observed&&!has(item.baseStats,'ACCURACY')&&has(stats,'ACCURACY'),basis:preview?'catalog-tier-preview':observed ? 'observed-examine' : 'scaled-catalog', warnings};
 }
 
 export function characterSlotCompatibility(candidate, slotId) {
@@ -446,7 +447,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         const baseStats=normalizeCharacterStats(item.stats);
         return {name:identity.name,wikiTitle:identity.wikiTitle,catalogIdentity:identity,wikiMatch:match==='fuzzy'?'suggested':'confirmed',
             baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,details:characterCatalogDetails(item),
-            unscaledStatKeys:has(baseStats,'SV_CORRUPTION')?['SV_CORRUPTION']:[],iconId:clean(item.iconId,120),icon:safeCharacterIcon(icon)};
+            unscaledStatKeys:[],accuracyPercent:item.accuracyPercent===true,iconId:clean(item.iconId,120),icon:safeCharacterIcon(icon)};
     }
     function resolveCatalog(id,item,options={}) {
         const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
@@ -583,7 +584,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         const identity=options.wikiItem?catalogPatch(wiki,{match:options.catalogMatch||'exact',icon:options.icon}):null;
         const candidate=normalizeCandidate({id:nextId(),instanceKey,origin:automaticObservation(observation)?'automatic':'manual',lastObservedAt:evidence.at,lastObservedSequence:journalSequence(observation.sequence),observedTier:automaticObservation(observation)?fullTier(source.tier):null,observedFraction:automaticObservation(observation)?source.fraction:null,name:source.name || wiki.name,observedName:source.observedName ?? (!source.catalogIdentity&&(Array.isArray(observation.fields)||evidence.observationId)?source.name:''),wikiTitle:source.wikiTitle || wiki.wikiTitle || wiki.name,catalogIdentity:source.catalogIdentity,
             wikiMatch:options.wikiItem ? 'suggested' : source.wikiMatch,iconId:source.iconId ?? wiki.iconId,icon:options.icon || source.icon,
-            details:source.details,slots:source.slots?.length ? source.slots : wiki.slots,tier:source.tier,fraction:source.fraction,observedStats:source.observedStats || source.stats,
+            details:source.details,accuracyPercent:source.accuracyPercent===true,slots:source.slots?.length ? source.slots : wiki.slots,tier:source.tier,fraction:source.fraction,observedStats:source.observedStats || source.stats,
             observedStatsComplete:source.statsComplete || source.observedStatsComplete,editedStatKeys:automaticObservation(observation)?[]:Object.keys(normalizeCharacterStats(source.observedStats||source.stats)),baseStats:wiki.stats || source.baseStats,
             unscaledStatKeys:source.unscaledStatKeys,
             baseStatsComplete:options.wikiItem ? true : source.baseStatsComplete,augments:source.augments,augmentSlots:source.augmentSlots,emptyAugmentSlots:source.emptyAugmentSlots,augmentStatus:source.augmentStatus,

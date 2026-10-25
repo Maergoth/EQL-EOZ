@@ -1,6 +1,6 @@
 import { EQLogParser } from './parser.js';
 import { conForLevel } from './con-colors.js';
-import { scaledItemStats } from './item-scaling.js';
+import { scaledItemStats, applyItemScalingRules, getItemScalingRevision } from './item-scaling.js';
 import { itemHasClassStats, itemHasZoneSource, itemMatchesClasses, scoreItemForBrowse } from './item-browse.js';
 import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
@@ -438,6 +438,7 @@ async function loadPack() {
 async function connectBridge() {
     try {
         bridgeInfo = await api('/api/info');
+        installDesktopItemRules(bridgeInfo.itemScaling);
         whatsNew.refresh();
         mapDataLoader.invalidate(); mapDataRevision++;
         parser.setCharacterFromFilename(bridgeInfo.logPath || '');
@@ -496,9 +497,24 @@ function renderPackSyncStatus(sync = bridgeInfo?.dataPack || {}) {
     error.hidden = !error.textContent;
 }
 
+function installDesktopItemRules(status) {
+    if (!status?.rules) return;
+    try {
+        const changed=applyItemScalingRules(status.rules);
+        let label=document.getElementById('item-formula-status');
+        if (!label) {
+            label=document.createElement('p'); label.id='item-formula-status'; label.className='settings-helper';
+            document.getElementById('pack-sync-error')?.after(label);
+        }
+        label.textContent=`Item formulas: wiki revision ${getItemScalingRevision()}${status.error?' · using saved formulas':''}`;
+        if (changed) renderAll();
+    } catch { /* Incompatible future rules keep the last accepted snapshot. */ }
+}
+
 async function checkForDesktopPackRefresh() {
     try {
         const info = await api('/api/info');
+        installDesktopItemRules(info.itemScaling);
         bridgeInfo = { ...(bridgeInfo || {}), dataPack:info.dataPack, productionPack:info.productionPack };
         const stateVersion = String(info?.dataPack?.version || '');
         const activeManifestVersion = String(pack?.meta?.manifestVersion || '');
@@ -726,7 +742,7 @@ function overlaySessionSnapshot() {
     const navigation = activeRoute?.status === 'ready' && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? viewerApi()?.overlayNavigation?.() : null;
     return { character:s.character, zone:s.zone, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
         parse:compactParseSnapshot(s), discovery:discoveryInNative ? discoveryPrompts() : [], intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
-            packVersion:pack.meta?.manifestVersion || pack.meta?.version || '', profileKey:JSON.stringify([profile.classes.slice().sort(),settings.itemTier,settings.era]),
+            packVersion:pack.meta?.manifestVersion || pack.meta?.version || '', profileKey:JSON.stringify([profile.classes.slice().sort(),settings.itemTier,settings.era,getItemScalingRevision()]),
             focusedNpcId:selected?.id || '', focusSequence:intelFocusSequence },
         map:{ zone:s.zone, viewerZone:zoneRecord(s.zone)?.viewerName || zoneRecord(s.zone)?.name || s.zone, dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
             focus:overlayMapFocus && overlayMapFocus.dataVersion === mapDataRevision && zoneKey(overlayMapFocus.zone) === zoneKey(s.zone) ? overlayMapFocus : null,

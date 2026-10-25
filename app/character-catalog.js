@@ -1,7 +1,7 @@
 import {characterCatalogDetails,characterItemDetailsMarkup} from './character-item-card.js';
 import {createWikiResolver,itemExaltationBaseIdentity,itemExportBaseIdentity} from './wiki-identity.js';
 import { characterBaseItemName, characterSlotKinds, normalizeCharacterStats, safeCharacterIcon } from './character-model.js';
-import { scaleItemStat } from './item-scaling.js';
+import { scaledItemStats } from './item-scaling.js';
 import { isItemStatModified } from './item-stat-presentation.js';
 
 // Character-local catalog access. No capture, remote request or global item-tier
@@ -114,19 +114,18 @@ export function characterCatalogCard(item,options={}){
     const {tier,fraction}=tierOptions(options),baseStats=normalizeCharacterStats(item.stats),name=characterBaseItemName(item.name||item.wikiTitle),wikiTitle=text(item.wikiTitle||item.name);
     return{name,observedName:'',wikiTitle,wikiMatch:'confirmed',catalogIdentity:{name,wikiTitle,match:'manual'},iconId:text(item.iconId),icon:safeCharacterIcon(options.icon),
         slots:characterSlotKinds(item.slots),details:characterCatalogDetails(item),augmentSlots:Number.isInteger(item.augmentSlots)&&item.augmentSlots>=0&&item.augmentSlots<=8?item.augmentSlots:5,tier,fraction,baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,
-        unscaledStatKeys:Object.hasOwn(baseStats,'SV_CORRUPTION')?['SV_CORRUPTION']:[],
+        unscaledStatKeys:[],accuracyPercent:item.accuracyPercent===true||/\bAccuracy\s*:\s*[+\-]?\d+(?:\.\d+)?\s*%/i.test((item.displayLines||[]).join('\n')),
         observedStats:{},observedStatsComplete:false,augments:[],augmentStatus:item.augmentStatus==='none'?'none':'unknown',
         level:item.requiredLevel??null,notes:'Added from the local wiki catalog. Verify tier, compatible slots and Exaltations against the item you own.'};
 }
 
-/** Preview rows use the same forward scaling and modified-stat predicate as the
- * existing item browser. Unsupported conditional Void scaling stays unknown.
+/** Preview rows use the wiki's whole-card context and shared stat engine.
  */
 export function characterCatalogPreview(item,options={}){
-    const card=characterCatalogCard(item,options);
-    return{card,rows:Object.entries(card.baseStats).map(([key,base])=>{
-        const unsupported=card.tier>0&&card.unscaledStatKeys.includes(key),value=base===null||unsupported?null:scaleItemStat(key,base,card.tier,{fraction:card.fraction});
-        return{key,label:statsLabel(key),base,value,modified:isItemStatModified(base,value,card.tier),unsupported};
+    const card=characterCatalogCard(item,options),stats=scaledItemStats({...card,stats:card.baseStats},card.tier,{fraction:card.fraction});
+    return{card,rows:Object.entries(stats).map(([key,value])=>{
+        const base=Object.hasOwn(card.baseStats,key)?card.baseStats[key]:0;
+        return{key,label:statsLabel(key),base,value,modified:isItemStatModified(base,value,card.tier),unsupported:false};
     })};
 }
 

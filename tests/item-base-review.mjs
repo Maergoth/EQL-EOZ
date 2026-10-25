@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {itemRecoverySource,itemRecoveryFingerprint,itemBaseReviewPreview,createItemBaseReview,applyItemBaseReview,validateItemBaseReview,characterContributionFields} from '../app/item-base-review.js';
 import {buildContributionDraft,normalizeContributionCandidate} from '../app/contribution-model.js';
 import {createContributionQueue} from '../app/contribution-queue.js';
+import {applyItemScalingRules,getItemScalingRules} from '../app/item-scaling.js';
 
 const wrap=(value,confirmed=false)=>({value,confirmed});
 const make=()=>({kind:'item',name:'Synthetic Recovery Cloak +4',title:'Synthetic Recovery Cloak',zone:'Synthetic Vale',instance:'normal',era:'Classic Era',
@@ -93,4 +94,11 @@ q.consume(observe(1,42));assert.equal(validateItemBaseReview(q.snapshot().find(c
 q.consume(observe(2,43));q=queue();restored=q.snapshot().find(candidate=>candidate.id===queued.id);assert.equal(validateItemBaseReview(restored).ok,false,'fresh changed observed stats invalidate persisted base choices');assert.equal(restored.fields.statLines.value[0],'HP: 30','invalidating a review preserves editable contributor text');assert(buildContributionDraft(restored,blueprints).blockers.length>0);
 const converted=characterContributionFields({tier:4,fraction:null,slots:['BACK'],augmentStatus:'unknown',observedStats:{HP:42,DMG_BONUS:41,SV_CORRUPTION:4}});
 assert.equal(converted.fraction,null);assert.equal(converted.augmented,true);assert.equal(converted.hp,42);assert.equal(converted.damageBonus,41);assert.equal(converted.resistCorruption,4);assert.deepEqual(itemRecoverySource({fields:Object.fromEntries(Object.entries(converted).map(([key,value])=>[key,wrap(value)]))}).observed,{HP:42,SV_CORRUPTION:4,DMG_BONUS:41});
+const backstabSource={kind:'item',name:'Synthetic Backstab Blade',fields:{tier:wrap(5),fraction:wrap(4),backstabDamage:wrap(15),statLines:wrap(['Backstab DMG: 15'])}};
+const backstabReview=createItemBaseReview(backstabSource,{tier:5,fraction:4,modifiersExcluded:true,reviewed:true,choices:{BACKSTAB_DMG:12}});
+assert.deepEqual(backstabReview.choices,{BACKSTAB_DMG:12});assert.equal(applyItemBaseReview(backstabSource,backstabReview).fields.statLines.value[0],'Backstab DMG: 12');
+const previousRules=getItemScalingRules(),fingerprint=itemRecoveryFingerprint(confirmed);
+applyItemScalingRules({...previousRules,revision:previousRules.revision+1,backstab:{divisor:25}});
+assert.notEqual(itemRecoveryFingerprint(confirmed),fingerprint,'Saved recovery depends on the canonical rule identity');
+assert.equal(validateItemBaseReview(confirmed).ok,false,'A rule update invalidates a previously reviewed calculation before publication');
 console.log('Item base review: explicit exact/range choices, context/source/stat invalidation, preserved prose and observations, verified outgoing text, inference markers and replay persistence passed.');
