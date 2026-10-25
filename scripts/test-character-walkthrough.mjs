@@ -28,7 +28,7 @@ async function run({root,temporary,screenshots}){
             res.setHeader('Content-Type','text/html');
             res.end('<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/app/styles.css"><link rel="stylesheet" href="/app/capture-workspace.css"><style>html,body{height:auto;min-height:100%;overflow:auto}body{display:block}.fixture-shell{max-width:1400px;margin:auto;padding:20px}.fixture-heading{display:flex;align-items:baseline;justify-content:space-between;gap:16px;color:var(--gold2)}.fixture-heading small{color:var(--muted);font-size:12px}#capture-settings,#contribution-workspace{display:none}</style></head><body><main class="fixture-shell"><div class="fixture-heading"><h1>Eye of Zomm · Character</h1><small>Synthetic walkthrough fixture</small></div><section id="capture-settings"></section><section id="contribution-workspace" hidden></section><section id="character-workspace"></section></main></body></html>');return;
         }
-        if(!/^\/app\/[a-z.-]+\.(js|css|json)$/.test(name)){res.writeHead(404).end();return;}
+        if(!/^\/app\/[a-z.-]+\.(js|css|json)$/.test(name)&&!['/app/vendor/item-scaling-core.js','/app/vendor/item-scaling-rules.js'].includes(name)){res.writeHead(404).end();return;}
         res.setHeader('Content-Type',name.endsWith('.css')?'text/css':name.endsWith('.json')?'application/json':'text/javascript');
         res.end(await fs.readFile(path.join(root,name)));
     }catch{res.writeHead(404).end();}});
