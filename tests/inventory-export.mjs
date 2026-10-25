@@ -38,7 +38,7 @@ const socketGear=worn().flatMap((value,index)=>{
     if(index===4)return [row('Ear','Synthetic Ear Stone +5',200,1,11),row('Ear-Slot7'),row('Ear-Slot10','Synthetic Alternate (Exaltation)',201,1,11)];
     return [value];
 });
-const socketResult=parseInventoryExport(exportText(socketGear,[row('General 1','Synthetic Bag',300,1,8),row('General 1-Slot1','Synthetic Stored Blade',301,1,11),row('General 1-Slot1-Slot2'),row('General 1-Slot1-Slot7','Synthetic Stored Rune (Exaltation)',302,1,11)]));
+const socketResult=parseInventoryExport(exportText(socketGear,[row('General 1','Synthetic Bag',300,1,8),row('General 1-Slot1','Synthetic Stored Blade',301,1,11),row('General 1-Slot1-Slot2'),row('General 1-Slot1-Slot7','Synthetic Stored Rune (Exaltation)',302,1,11)]),{classifyParent:entry=>entry.baseName==='Synthetic Stored Blade'?'equipment':'unknown'});
 const ears=socketResult.equipment.filter(item=>item.location==='Ear');assert.deepEqual(ears.map(item=>item.tier),[4,5]);assert.deepEqual(ears.map(item=>item.augmentSlots),[2,2]);
 assert.equal(ears[0].augments[0].itemId,200);assert.equal(ears[0].augments[1].empty,true);assert.equal(ears[1].augments[0].empty,true);assert.equal(ears[1].augments[1].itemId,201);
 assert.deepEqual(ears[0].augments.map(item=>[item.index,item.sourceSlot]),[[0,7],[1,10]],'Dense UI indices do not overwrite the source socket positions');

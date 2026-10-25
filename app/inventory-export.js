@@ -51,7 +51,7 @@ function groupFor(location){
  * Ordered worn children belong to that physical occurrence of the root slot.
  * Their source socket positions remain separate from dense UI indices.
  */
-export function parseInventoryExport(text){
+export function parseInventoryExport(text,{classifyParent=()=> 'unknown'}={}){
     if(typeof text!=='string'||text.length>MAX_CHARACTERS)fail(0,'expected a bounded text export.');
     const lines=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').split('\n');
     while(lines.at(-1)==='')lines.pop();
@@ -102,19 +102,25 @@ export function parseInventoryExport(text){
     if(equipment.length!==WORN_SLOT_COUNT||Object.entries(SLOT_LABELS).some(([label,slots])=>seenLabels.get(label)!==slots.length))fail(0,'incomplete worn equipment table; all 23 equipment locations are required.');
     const attached=new Set();
     for(const node of nodes){
+        const kind=node.item.empty?'unknown':classifyParent(node.item);
+        if(kind==='container')node.item.contentsSeparate='container';
         if(!node.children.length)continue;
-        // Worn descendants are sockets. For storage, an observed Exaltation
-        // child distinguishes a socket set from ordinary container contents.
-        // Slots=11 supplies neither of these facts.
-        const sockets=Object.hasOwn(node.item,'slot')||node.children.some(child=>/\(Exaltation\)(?:\s+\+(?:10|[0-9]))?$/iu.test(child.item.name));
-        if(!sockets)continue;
+        // A loose Exaltation inside a bag cannot turn its siblings into
+        // sockets. Stored parents need exact catalog equipment evidence;
+        // explicit container facts also override a worn Any Slot label.
+        const worn=Object.hasOwn(node.item,'slot');
+        const storedSockets=kind==='equipment'&&node.children.every(child=>!child.children.length&&(child.item.empty||child.item.count===1));
+        const sockets=kind!=='container'&&(worn||storedSockets);
+        if(!sockets){node.item.contentsSeparate=kind==='container'?'container':'unverified';continue;}
         if(node.children.length>32)fail(node.index,'too many observed augment sockets; no children were imported.');
         node.item.augmentSlots=node.children.length;
         node.item.augments=node.children.map((child,index)=>{attached.add(child);return {index,sourceSlot:child.sourceSlot,...child.item};});
     }
     for(const node of nodes){
         if(node.item.slot||node.item.empty||attached.has(node))continue;
-        const {empty,...value}=node.item;inventory.push({...value,group:node.group});
+        const {empty,...value}=node.item;
+        const group=/\(Exaltation\)$/iu.test(value.baseName)?'augment':node.group==='augment'?'inventory':node.group;
+        inventory.push({...value,group});
     }
     return {kind:'eql-inventory-export',schemaVersion:1,equipment,inventory,keyring,warnings,rowCount,equipmentSlotCount:equipment.length,emptyEquipmentCount:equipment.filter(item=>item.empty).length};
 }

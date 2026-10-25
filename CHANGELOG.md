@@ -11,6 +11,7 @@
 - Count measured short heals, damage-shield retaliation, unnamed-caster DoT damage and nearby reave/smite attacks while retaining unknown sources and separate pet names.
 - Match a first unnamed DoT tick to the earliest pending cast of that exact spell. Explicit caster names take priority; unavailable or conflicting context remains unknown.
 - Restore Nektropos Castle and Undercrofts in both 3D map views, including their local support files and Castle's large terrain mesh.
+- Import bag contents separately from attached Exaltations, preserve genuine item sockets and keep loose Exaltations out of equipped gear.
 
 ## 1.0.0 - Eye of Zomm 1.0
 

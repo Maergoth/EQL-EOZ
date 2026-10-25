@@ -32,9 +32,13 @@ The parser validates the complete worn table before an atomic replacement.
 Preserve counts, IDs, exact worn locations, paired slots and physical duplicates.
 General bags, nested storage, Held, Bank, SharedBank and the separate KeyRing
 table do not become equipped gear. The file's Slots column is not proof of
-Exaltation capacity. Attached child rows prefill their known parent's sockets.
-An exact trailing `(Exaltation)` can match its known base article only for a
-socket; ordinary worn gear still needs its exact identity. Unknown capacity uses
+Exaltation capacity. Stored socket groups require an exact cached equipment
+parent; container facts override gear slots and child names. Unknown parents
+keep their contents separate. An exact trailing `(Exaltation)` can match its
+known base article for an attached socket or a loose exported Exaltation.
+Loose Exaltations retain their role and label and cannot become ordinary worn
+gear through that alias, including old exports, duplication or a catalog refresh.
+Ordinary worn gear still needs its exact identity. Unknown capacity uses
 five sockets, explicit observed capacity wins, and occupied positions are kept
 through the existing maximum of eight. Original source socket positions remain
 private. Malformed/stale results or a profile switch cannot partially

@@ -11,7 +11,7 @@ import { parseItemStatBlock } from './screen-read-parser.js';
 import { renderCharacterShare } from './character-share.js';
 import { buildCharacterWikiSheet } from './character-wiki-sheet.js';
 import { characterInspectMarkup } from './character-inspect-view.js';
-import { mountCharacterCatalog, resolveCharacterCatalog, resolveInventoryCatalog, searchCharacterCatalog, characterCatalogCard } from './character-catalog.js';
+import { mountCharacterCatalog, resolveCharacterCatalog, resolveInventoryCatalog, inventoryParentKind, searchCharacterCatalog, characterCatalogCard } from './character-catalog.js';
 import { characterItemLabel, characterEquipmentMarkup, characterLooseInventoryMarkup, characterIdentityMarkup, characterStatSummaryMarkup, characterItemTooltipMarkup, characterItemTitleMarkup, characterItemStatBodyMarkup, characterTierControlsMarkup, updateCharacterItemTierMarkup } from './character-inventory-view.js';
 import {itemContributionStatSource,itemContributionStatLines} from './item-contribution-stats.js';
 import { mountItemBaseReview } from './item-base-review-ui.js';
@@ -598,7 +598,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         const result=await inventory.read({name:metadata.name,server:metadata.server,...(chooseFile?{chooseFile:true}:{})});if(!current()||result?.cancelled)return;
         if(!result?.ok){inventoryMessage=result?.notFound?'Waiting for the game to create your inventory file. Type /outputfile inventory, or choose the file below.':result?.error||'The inventory file could not be read.';renderWalkthrough();return;}
         if(automatic&&result.file.modifiedAt<(flow.inventoryAfterAt||flow.startedAt)){inventoryMessage='An older export is present. Keep all gear equipped and type /outputfile inventory to create a fresh copy.';renderWalkthrough();return;}
-        const parsed=parseInventoryExport(result.text),pack=getPack();
+        const pack=getPack(),parsed=parseInventoryExport(result.text,{classifyParent:entry=>inventoryParentKind(pack,entry)});
         const imported=character.applyInventoryExport(parsed,{file:result.file,resolveItem(entry){return resolveInventoryCatalog(pack,entry.baseName||entry.name,{socket:entry.group==='augment'});}});
         if(!imported.ok)throw Error(imported.error||'The inventory could not be imported. Your saved items are unchanged.');
         stopInventoryWatch();inventoryMessage='';gapCacheKey='';shareImage=null;lastStats=null;lastStatsManualRead=null;baseProposalId='';

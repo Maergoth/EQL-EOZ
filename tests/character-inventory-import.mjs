@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './inventory-parent-classification.mjs';
 import {parseInventoryExport} from '../app/inventory-export.js';
 import {createCharacterModel,characterEquipmentEligibility,CHARACTER_STORAGE_KEY,CHARACTER_SLOTS} from '../app/character-model.js';
 

@@ -16,6 +16,25 @@ and [walkthrough](../CHARACTER_WALKTHROUGH.md).
 - `app/inventory-export.js` validates the complete worn table and classifies
   General/bag/bank/Held/KeyRing data separately. Keep physical duplicates, IDs,
   counts and exact worn locations; do not infer socket capacity from Slots.
+- Stored socket groups require an exact cached equipment parent and direct,
+  unstacked leaf children. Container Capacity, Size Capacity or Weight Reduction
+  facts override equipment slots, stats and child names, including Any Slot
+  roots. Unknown parents keep their contents loose. A loose Exaltation cannot
+  turn an ordinary bag's other contents or empty rows into sockets. Known stored
+  gear preserves ornaments as well as Exaltations, explicit empty sockets and
+  sparse source positions; UI indices count observed rows, not the largest
+  source position. More than eight actual sockets still rejects the import
+  atomically with the item and location identified; nothing is truncated.
+- Loose exported Exaltations may use an exact base-item alias for wiki presence
+  while retaining their raw export evidence and a durable non-equipment role.
+  They stay visibly labelled Exaltations and cannot be equipped as ordinary
+  gear after editing, duplication, catalog refresh or restart. Reimport reuses
+  unique old physical bindings and repairs export-derived fake bag sockets,
+  including newly empty containers, without removing manual socket data or
+  unrelated cards. Separate children of an unknown parent retire old export
+  relationships while leaving socket capacity and presence unverified;
+  they do not establish a container or a known empty socket set. Deliberate
+  retained socket data also remains unverified.
 - `applyInventoryExport` replaces the selected profile's import atomically only
   after validation. Fresh-file time, selected profile/session and action epoch
   must still match after asynchronous reads. A bad/stale import preserves saved
