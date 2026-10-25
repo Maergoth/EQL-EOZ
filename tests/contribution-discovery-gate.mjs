@@ -49,10 +49,10 @@ for(const mutate of [gate=>gate.clear(),()=>{pack={...pack,meta:{version:'synthe
 
 const original={FormData:globalThis.FormData,document:globalThis.document,window:globalThis.window,discovery:globalThis.eyeOfZommDiscovery};
 clock=Date.now();
-async function workspace({verify,manual=false,seed=true,active=true}={},run){
+async function workspace({verify,manual=false,seed=true,active=true,itemName='',instance='normal'}={},run){
     const dom=new JSDOM('<section class="view '+(active?'is-active':'')+'"><div id="contribution-workspace"></div></section><div id="character-workspace"></div><div id="capture-settings"></div>',{url:'http://127.0.0.1/',pretendToBeVisual:true});Object.assign(globalThis,{FormData:dom.window.FormData,document:dom.window.document,window:dom.window});
     const data=new Map(),storage={getItem:key=>data.get(key)??null,setItem:(key,value)=>data.set(key,value),removeItem:key=>data.delete(key)},pack={meta:{version:'synthetic-workspace',sample:false,wikiEntitiesComplete:true},items:[],npcs:[],zones:[{name:'Synthetic Vale'}],wikiEntities:{items:[],npcs:[],zones:['Synthetic Vale'],titles:['Synthetic Vale']}};
-    const queue=createContributionQueue({storage,getPack:()=>pack}),draft=seed?queue.add({kind:'npc',name:candidate.name,zone:candidate.zone,instance:'normal',fields:{level:42},relations:[fact]},manual):null,shows=[],notices=[],navigations=[];
+    const queue=createContributionQueue({storage,getPack:()=>pack}),draft=seed?queue.add(itemName?{kind:'item',name:itemName,zone:candidate.zone,instance,fields:{hp:12}}:{kind:'npc',name:candidate.name,zone:candidate.zone,instance,fields:{level:42},relations:[fact]},manual):null,shows=[],notices=[],navigations=[];
     globalThis.eyeOfZommDiscovery={show:async value=>{shows.push(value);return value;},action:async()=>({})};
     const wiki={status:async()=>({authenticated:false}),blueprints:async()=>({eras:[]}),onStatus:()=>()=>{},...(verify?{verifyDiscovery:verify}:{})};
     const view=mountCaptureWorkspace({document:dom.window.document,storage,characterStorage:storage,contributionStorage:storage,wiki,capture:null,inventory:null,share:null,getPack:()=>pack,notify:message=>notices.push(message),navigate:value=>navigations.push(value)});
@@ -60,6 +60,17 @@ async function workspace({verify,manual=false,seed=true,active=true}={},run){
 }
 await workspace({},async({draft,view,rows,editor,navigations})=>{assert.equal(rows().length,0);assert.equal(editor(),null);view.openContribution(draft.id);assert.equal(editor(),null);assert.deepEqual(navigations,[],'A hidden legacy draft cannot be opened by its stale ID');});
 await workspace({manual:true},async({rows,editor})=>{assert.equal(rows().length,1);assert(editor(),'Manual new-page creation works without live admission API');});
+{
+    const calls=[],raid=deferred();await workspace({itemName:'Synthetic Unknown Blade +4',instance:'unknown',verify:request=>{calls.push(request);return request.instance==='raid'?raid.promise:Promise.resolve(proof({canonicalTitle:request.name,confirmedRelations:[]}));}},async({dom,data,draft,rows,editor})=>{
+        assert.equal(editor(),null);await tick();assert.equal(rows().length,1);assert(editor(),'Tier recovery can mount after unknown-instance item proof');assert.equal(editor().elements.raid.indeterminate,true,'Unknown instance has a visible mixed-state control');assert.match(editor().querySelector('[data-instance-unknown]').textContent,/Instance unconfirmed/);
+        const saved=()=>JSON.parse(data.get('eql-eye-of-zomm-contributions-v1')).candidates.find(candidate=>candidate.id===draft.id);
+        assert.equal(saved().instance,'unknown','Rendering and recovery initialization never manufacture Normal');assert.equal(saved().fields.tier.value,4);assert.equal(calls.length,1,'Implicit form saving retains the exact proved projection');
+        const stats=editor().querySelector('[data-field-key="statLines"] [data-field-value]');stats.value='HP: 14\nSV Void: 0';stats.dispatchEvent(new dom.window.Event('input',{bubbles:true}));assert.equal(saved().instance,'unknown');assert(editor());assert.equal(calls.length,1,'Editing stats does not silently select an instance');
+        editor().elements.raid.checked=true;editor().elements.raid.dispatchEvent(new dom.window.Event('input',{bubbles:true}));assert.equal(editor(),null,'An explicit instance change hides the old proof immediately');assert.equal(saved().instance,'raid');await tick();assert.equal(calls.at(-1).instance,'raid');
+        raid.resolve(proof({canonicalTitle:'Synthetic Unknown Blade',confirmedRelations:[]}));await tick();assert(editor());assert.equal(editor().elements.raid.checked,true);
+        editor().elements.raid.checked=false;editor().elements.raid.dispatchEvent(new dom.window.Event('input',{bubbles:true}));await tick();assert.equal(saved().instance,'normal','An explicit unchecked choice can select Normal');assert.equal(calls.at(-1).instance,'normal');assert(editor());
+    });
+}
 {
     let calls=0;await workspace({active:false,verify:async()=>{calls++;return proof();}},async({view,dom,draft,rows,navigations})=>{
         await tick();view.refresh();await tick();assert.equal(calls,0,'Inactive background renders do not check persisted misses');assert.equal(rows().length,0);
