@@ -1,5 +1,13 @@
 # Eye of Zomm Windows/game-client acceptance test
 
+## Shared item formulas and tier-zero verification
+
+In 0.9.12, compare a known wiki item at the same tier in Character and the wiki.
+Check Backstab, Accuracy, Void resist and weight where applicable; recorded
+Character totals must remain unchanged. Formula updates arrive only with app
+updates. A new ranked item with unverified base values should retain its
+verification note and Tier 0 verification needed category in the page preview.
+
 ## Contribute reader and chat follow-up
 
 Open Contribute with one EverQuest window available. Verify automatic gentle
@@ -13,9 +21,9 @@ notice when link codes are stripped. Repeated queued/ignored/submitted items
 must not create duplicate drafts. These physical game checks remain separate
 from synthetic component checks.
 
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.11-x64.exe`.
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.12-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.11` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.12` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
 
 ## Overlay drag and resize acceptance
 

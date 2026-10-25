@@ -12,6 +12,9 @@ on:
       bootstrap_artifact:
         type: string
         default: ''
+      item_scaling_artifact:
+        type: string
+        default: ''
       extended_ui_checks:
         type: boolean
         default: true
@@ -27,6 +30,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Download the fixed shared formula snapshot
+        if: inputs.item_scaling_artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.item_scaling_artifact }}
+          path: app/vendor
       - name: Install native runtime and packaging prerequisites
         run: |
           sudo apt-get update

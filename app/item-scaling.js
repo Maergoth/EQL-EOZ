@@ -1,65 +1,40 @@
-const PRIMARY = new Set([
-    'AC','HP','MP','END','STR','STA','AGI','DEX','WIS','INT','CHA',
-    'SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE'
-]);
-const FLAT = new Set(['HP_REGEN','MANA_REGEN','END_REGEN','HASTE']);
+import './vendor/item-scaling-core.js';
+import bundledRules from './vendor/item-scaling-rules.js';
 
-function excelRound(value) {
-    if (!Number.isFinite(value)) return value;
-    return value >= 0 ? Math.floor(value + 0.5) : Math.ceil(value - 0.5);
-}
+// Every app version ships the wiki-owned engine and reviewed rules together.
+// Formula changes arrive through app releases; no runtime refresh or override.
+const core=globalThis.EQLItemScalingCore;
+const engine=core.createEngine(bundledRules);
+const canonical=value=>value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
+const identity=rules=>JSON.stringify(canonical(rules));
+const snapshotIdentity=identity(engine.rules);
+export const getItemScalingRules=()=>engine.rules;
+export const getItemScalingRevision=()=>engine.revision;
+export const getItemScalingIdentity=()=>snapshotIdentity;
+export const itemStatFamily=key=>engine.statFamily(key);
+export const itemEffectiveLevel=(fullLevel,fraction=0)=>engine.effectiveLevel(fullLevel,fraction);
+export const scaleItemStat=(key,value,fullLevel,options={})=>value===null?null:engine.scaleStat(key,value,fullLevel,options);
 
-export function itemEffectiveLevel(fullLevel, fraction = 0) {
-    const full = Math.max(0, Math.min(10, Math.floor(Number(fullLevel) || 0)));
-    const denom = Math.pow(2, full);
-    const frac = Math.max(0, Math.min(Math.max(0, denom - 1), Math.floor(Number(fraction) || 0)));
-    return full + (denom ? frac / denom : 0);
-}
-
-export function scaleItemStat(key, value, fullLevel, options = {}) {
-    const stat = String(key || '').toUpperCase();
-    const base = Number(value);
-    const full = Math.max(0, Math.min(10, Math.floor(Number(fullLevel) || 0)));
-    const effective = itemEffectiveLevel(full, options.fraction || 0);
-    if (!Number.isFinite(base) || full <= 0) return base;
-
-    if (PRIMARY.has(stat)) {
-        if (base === 0) return 0;
-        if (base > 0 && base <= 10) return base + full;
-        if (base > 10) return Math.trunc(base + excelRound(base * effective / 10));
-        if (base < 0 && Math.abs(base) <= 10) return Math.min(0, base + full);
-        if (base < -10) return Math.min(0, base + excelRound(Math.abs(base) * effective / 10));
+/** Catalog cards need whole-item context for conditional weapon Accuracy and
+ * Void resist. Recorded examine/character totals never pass through here. */
+export function scaledItemStats(item={},fullLevel,options={}) {
+    const stats={...(item.stats||{})},details=Array.isArray(item.details)?item.details:Array.isArray(item.cardDetails)?item.cardDetails:[];
+    const lines=Array.isArray(item.displayLines)?item.displayLines:[];
+    const detail=label=>details.find(value=>value?.label===label)?.value||'';
+    const slotText=detail('Slot')||lines.find(line=>/^Slot:/i.test(line))?.replace(/^Slot:\s*/i,'')||'';
+    const slots=options.slots??(Array.isArray(item.slots)?item.slots.length?item.slots:slotText:item.slots||slotText);
+    const skill=String(detail('Skill')||lines.find(line=>/^Skill:/i.test(line))?.replace(/^Skill:\s*/i,'').replace(/\s+(?:Atk\s+)?Delay:.*$/i,'')||'');
+    const classes=String(detail('Class')||(Array.isArray(item.classes)?item.classes.join(' '):'')||lines.find(line=>/^Class:/i.test(line))?.replace(/^Class:\s*/i,'')||'');
+    // Itembox's wiki template supplies a Backstab baseline for rogue piercing
+    // weapons. Apply the shared engine to that baseline once, like the wiki.
+    if(!Object.hasOwn(stats,'BACKSTAB_DMG')&&!Object.hasOwn(stats,'BACKSTAB')&&/\b(?:ROG|ALL)\b/i.test(classes)&&/^(?:1H )?Piercing$/i.test(skill)&&Number.isFinite(stats.DMG)&&stats.DMG>0)stats.BACKSTAB_DMG=stats.DMG;
+    const explicitAccuracy=Object.hasOwn(stats,'ACCURACY');
+    const accuracyPercent=options.accuracyPercent??item.accuracyPercent??(/\bAccuracy\s*:\s*[+\-]?\d+(?:\.\d+)?\s*%/i.test(lines.join('\n'))?true:explicitAccuracy?false:undefined);
+    const known={},unknown={};
+    for(const [key,value]of Object.entries(stats)){
+        const numeric=typeof value==='number'?value:typeof value==='string'&&value.trim()!==''?Number(value):NaN;
+        if(Number.isFinite(numeric))Object.defineProperty(known,key,{value:numeric,enumerable:true});
+        else Object.defineProperty(unknown,key,{value:null,enumerable:true});
     }
-
-    if (stat === 'DMG') {
-        return base > 0 ? base + Math.trunc(base * effective / 10) : base;
-    }
-
-    // Elemental/Bane/Backstab damage intentionally does not match DMG.
-    // Match the wiki slider: every listed Range scales, including bows and
-    // throwing weapons. Fractional progress adds no extra Range.
-    if (stat === 'RANGE') {
-        return base >= 0 ? base + (10 * full) : base;
-    }
-
-    if (FLAT.has(stat)) {
-        return base > 0 ? base + full : base;
-    }
-
-    if (stat === 'WT' && base > 0.1) {
-        const totalProgression = Math.pow(2, full) + (options.fraction || 0);
-        const scaled = base * (1 - 0.09 * (Math.log(totalProgression) / Math.log(2)));
-        return Math.ceil(scaled * 10 - 1e-9) / 10;
-    }
-
-    return base;
-}
-
-export function scaledItemStats(item, fullLevel) {
-    const stats = item && item.stats ? item.stats : {};
-    const result = {};
-    for (const [key, value] of Object.entries(stats)) {
-        result[key] = scaleItemStat(key, value, fullLevel);
-    }
-    return result;
+    return {...engine.scaleItemStats(known,fullLevel,{...options,slots,accuracyPercent}),...unknown};
 }

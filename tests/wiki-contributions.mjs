@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {contributionUpdateSummary} from '../app/contribution-update.js';
 import {buildContributionDraft,contributionNameKey,contributionTitle,extractContributionBlueprints,findPotentialMatches,patchContributionRelationship,contributionTemplates,patchContributionPrimary,normalizeContributionCandidate,contributionItemEffects,contributionItemSourceMatches} from '../app/contribution-model.js';
 import {createItemBaseReview,applyItemBaseReview} from '../app/item-base-review.js';
-import {collectTierZeroEvidence,confirmTierZeroVerification,validateTierZeroVerification} from '../app/contribution-tier-zero.js';
+import {collectTierZeroEvidence,confirmTierZeroVerification,validateTierZeroVerification,TIER_ZERO_CATEGORY_MARKER,TIER_ZERO_VERIFICATION_CATEGORY} from '../app/contribution-tier-zero.js';
 
 const source=`== Items ==\n=== Item Page Blueprint ===\n<pre>{{Era}}\n<onlyinclude>{{Itempage\n|itemname=ITEM_NAME\n|statsblock=\n}}</onlyinclude></pre>\n== NPCs ==\n=== NPC Page Blueprint ===\n<pre>{{Namedmobpage\n|name=\n}}</pre>\n=== Raid Encounter Blueprint ===\n<pre>{{Namedmobpage\n|name=\n}}</pre>\n== Zones ==\n=== Zone Page Blueprint ===\n<pre>{| class="zoneTopTable"\n|}</pre>`;
 const blueprints=extractContributionBlueprints(source,123);
@@ -138,6 +138,28 @@ const oldWarning='Base statistics were proposed by reversing a reviewed tier 4 e
 const beforeVerification=`{{Itempage|itemname=Synthetic Base Proof\n|statsblock=HP: 29\n|notes=Keep this historical note.\n${oldWarning}\nThese stats are reverse calculated from a tier 4 item. Please confirm with a tier 0 item and remove this message\n|dropsfrom=?\n}}`;
 const verified=patchContributionPrimary(beforeVerification,JSON.parse(JSON.stringify(base)));assert.match(verified.text,/HP: 30/);assert.doesNotMatch(verified.text,/reverse calculated|inference, not a base-item capture/);assert.match(verified.text,/Keep this historical note/);assert.equal(patchContributionPrimary(verified.text,base).changed,false);
 for(const patch of [{baseVerification:null},{fields:{...base.fields,hp:{value:31}}},{fields:{...base.fields,statLines:{value:['HP: 999'],confirmed:true}}},{title:'A different article'}])assert.throws(()=>patchContributionPrimary(beforeVerification,{...base,...patch}),/tier.zero|base values|base reading|statistic text|accepted/i);
+
+const verificationCategory='[[Category:'+TIER_ZERO_VERIFICATION_CATEGORY+']]',categoryCount=text=>(text.match(/\[\[Category:Tier[ _]0[ _]verification[ _]needed(?:\|[^\]]*)?\]\]/gi)||[]).length;
+const ranked=buildContributionDraft({...item,fields:{...item.fields,tier:itemValue(3),hp:itemValue(147)}},blueprints);
+assert.match(ranked.text,/reverse calculated from a tier 3 item/);assert.equal(categoryCount(ranked.text),1);assert(ranked.text.includes(TIER_ZERO_CATEGORY_MARKER));
+assert.equal(categoryCount(draft.text),0,'Ordinary unranked items are not inferred as needing a tier-zero correction');
+const preCategorized=buildContributionDraft({...item,playerText:'Keep this prose. [[Category:Tier_0_verification_needed|Manual sort]]',fields:{...item.fields,tier:itemValue(3)}},blueprints);
+assert.equal(categoryCount(preCategorized.text),1,'An existing manually supplied category is not duplicated');assert(preCategorized.text.includes('|Manual sort]]'));assert(!preCategorized.text.includes(TIER_ZERO_CATEGORY_MARKER));
+const ordinaryUpdate={kind:'item',name:'Synthetic Base Proof',intent:'update',reasons:['missing-source'],sources:[]},backfilled=patchContributionPrimary(beforeVerification,ordinaryUpdate);
+assert.equal(categoryCount(backfilled.text),1);assert(backfilled.text.includes(TIER_ZERO_CATEGORY_MARKER));assert(backfilled.text.includes(oldWarning));assert.equal(patchContributionPrimary(backfilled.text,ordinaryUpdate).changed,false,'Existing inference notes gain one idempotent category');
+const relationship=patchContributionRelationship(beforeVerification,{role:'item-source',itemTitle:'Synthetic Base Proof',npcTitle:'Synthetic Guardian',zoneTitle:'Synthetic Vale',instance:'normal'});
+assert.equal(categoryCount(relationship.text),1,'Automatic source additions also categorize a pre-existing inferred item');assert(relationship.text.includes(oldWarning));
+const knownBase='{{Itempage|itemname=Synthetic Base Proof|statsblock=HP: 30|notes=Known base stats.|dropsfrom=?}}';
+assert.equal(categoryCount(patchContributionPrimary(knownBase,{...ordinaryUpdate,fields:{tier:itemValue(5)}}).text),0,'A ranked copy in a source observation does not mark known wiki base stats as inferred');
+const corrected=patchContributionPrimary(backfilled.text+'\n[[Category:Hands|Keep sort]]\n[[Category:Warrior Equipment]]\n',base);
+assert.equal(categoryCount(corrected.text),0);assert(!corrected.text.includes(TIER_ZERO_CATEGORY_MARKER));assert(corrected.text.includes('[[Category:Hands|Keep sort]]'));assert(corrected.text.includes('[[Category:Warrior Equipment]]'));assert(corrected.text.includes('Keep this historical note.'));
+assert.equal(patchContributionPrimary(corrected.text,base).changed,false,'Verified correction does not re-add the category');
+const manualCategory=patchContributionPrimary(beforeVerification+'\n'+verificationCategory+'\n[[Category:Hands|Manual sort]]\n',base);
+assert.equal(categoryCount(manualCategory.text),1,'A manually maintained verification category is not silently removed');assert(manualCategory.text.includes('|Manual sort]]'));
+const quotedWarning=beforeVerification.replace(oldWarning,'<nowiki>'+oldWarning+'</nowiki>'),quotedCorrected=patchContributionPrimary(quotedWarning,base);
+assert(quotedCorrected.text.includes('<nowiki>'+oldWarning+'</nowiki>'),'Quoted recovery examples remain contributor prose');
+const quotedMarker=beforeVerification+'\n<nowiki>'+TIER_ZERO_CATEGORY_MARKER+'\n'+verificationCategory+'</nowiki>';
+assert(patchContributionPrimary(quotedMarker,base).text.includes('<nowiki>'+TIER_ZERO_CATEGORY_MARKER+'\n'+verificationCategory+'</nowiki>'),'Protected category examples stay untouched');
 
 // Canonical duplicates collapse once, while two actual case-sensitive wiki
 // pages remain visible for an explicit destination choice. Generic articles

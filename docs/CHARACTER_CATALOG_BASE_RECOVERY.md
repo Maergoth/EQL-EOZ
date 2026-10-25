@@ -173,12 +173,12 @@ The name and one independent tier badge are shown in inventory/equipment and
 exports. Conflicting written tier suffixes remain a review warning, with the
 original text retained. Unread stats and unsupported formulas stay unknown.
 
-Conditional SV Void scaling is not inferred without its required item context.
-Cards retain the exact `SV_CORRUPTION` base value and bounded
-`unscaledStatKeys:['SV_CORRUPTION']` metadata. At tier zero the known base is
-usable. At a higher tier its adjusted value stays null in preview, derived sums
-and sharing, with a warning; actual observed examine values still take precedence
-unchanged. Other supported stats continue to use existing forward rules.
+Catalog previews use the [shared wiki engine](SHARED_ITEM_SCALING.md) for
+conditional Void and weapon Accuracy, with full item context. Recorded explicit
+Void stays authoritative; missing qualified Void is generated from known fields.
+Unknown fields remain unknown. Legacy `unscaledStatKeys` are retained in stored
+records, but no longer suppress supported Void previews. Observed examine values
+still take precedence unchanged.
 
 The component exports `searchCharacterCatalog(pack,query,{limit?})`,
 `resolveCharacterCatalog(pack,name,{limit?})`,
@@ -203,7 +203,9 @@ the current release owner.
 ## Base recovery engine
 
 Owner: capture_pipeline_089. Implemented independently in
-`app/item-base-recovery.js`; it imports the unchanged `scaleItemStat` helper.
+`app/item-base-recovery.js`; it calls the wiki-owned shared forward engine
+through `scaleItemStat`. Recovery provenance and review fingerprints include the
+accepted rules identity; see [shared item scaling](SHARED_ITEM_SCALING.md).
 
 - `recoverItemBaseStat(key,observed,{tier,fraction,augmentStatus,bounds?})` returns
   `status: exact | range | unknown | unsupported`, nullable `value`, inclusive
@@ -244,24 +246,18 @@ that the observed values exclude augments and other modifiers. `'included'` and
 values. Unknown item identity, OCR accuracy and other modifiers remain review
 limits even when the inverse is mathematically unique.
 
-The current [primary ItemLevelSlider source](https://eqlwiki.com/extensions/ItemLevelSlider/itemlevelslider.js)
-was fetched read-only on 2026-10-22: 23,525 bytes, SHA256
-`0011db5f4b6e3ec2fa723a39f7dd697c3862ac718d83783669246f625fee8f23`.
-Its primary-stat, standalone damage, range, flat regen/haste and explicit static
-delay/elemental/bane/backstab families informed the inverse. Existing EoZ forward
-behavior is preserved. Unsupported keys do not silently use the forward helper's
-identity fallback. Conditional/generated SV Void, damage bonus, Attack Speed,
-Attack and character resource totals require other context and remain unsupported.
+Forward and inverse calculations use the same versioned wiki-owned engine.
+Primary stats, standalone damage, Backstab, Range and flat regen/haste use its
+family definitions and coefficients. Delay, elemental and bane damage stay
+static. Unsupported keys never silently use an identity fallback. Contextual
+Void/Accuracy, derived damage bonuses and character resource totals cannot be
+recovered as independent base fields.
 
-Two pre-existing parity boundaries are explicit. The app permits progress at
-tier10, while the wiki lists only tier10/fraction0; inverse input rejects the
-extra states. The app subtracts `1e-9` before weight's ceiling, while the live wiki
-uses direct ceiling. A synthetic base-weight1/tier10 boundary produces app0.1
-versus wiki0.2. Consequently positive-tier weight ranges are **app-only diagnostic
-candidates with `status:'unknown'`**, never certified exact bases or accepted
-human choices. Tier0 weight can be exact on the tenth grid. Resolving this
-forward parity behavior is outside this engine and must not silently change the
-shared slider in this feature.
+Rank 10 has fraction zero. Forward weight now uses the wiki's exact ceiling,
+including its floating-point boundaries. Positive-tier weight inverse ranges
+remain diagnostic with `status:'unknown'` until that inverse is independently
+certified; they are not accepted as base proposals. Tier-zero weight can be exact
+on the tenth grid. Changed rules invalidate older pending recovered-base reviews.
 
 `node tests/item-base-recovery.mjs` passes all declared families, positive/negative
 and clamp cases, fractional near-cap disjoint ranges, clipped custom bounds,

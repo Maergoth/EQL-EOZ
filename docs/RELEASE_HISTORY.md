@@ -1,5 +1,12 @@
 # Browsable release history
 
+0.9.12 archives one visually reviewed actual Electron Chromium capture of the
+current Character tooltip with a synthetic tier-five piercing weapon. Its real
+tier control and shared wiki frame show green Backstab 15, Accuracy +12.5% and
+SV Void +5 at 1.25 text scale. The isolated loopback-only fixture checks those
+values and unchanged recorded HP of 4321. No icon artwork, player/game pixels
+or production requests are used. Older images and hashes remain unchanged.
+
 0.9.11 archives one visually reviewed actual Chromium capture of automatic
 Contribute reading: the selected-item prompt, one-second status, Pause control,
 staged synthetic screenshot and adjacent icon section. It uses isolated fake

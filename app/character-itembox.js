@@ -6,7 +6,7 @@ import {safeCharacterIcon,characterStatLabel} from './character-model.js';
 const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const own=(value,key)=>Object.hasOwn(value||{},key),finite=value=>typeof value==='number'&&Number.isFinite(value);
 const number=value=>!finite(value)?'?':Number.isInteger(value)?String(value):String(Math.round(value*1000)/1000);
-const labels={MP:'MANA',END:'END',ATK:'ATK',DMG_BONUS:'DMG Bonus',BACKSTAB_DMG:'BACKSTAB',SV_MAGIC:'SV MAGIC',SV_FIRE:'SV FIRE',SV_COLD:'SV COLD',SV_POISON:'SV POISON',SV_DISEASE:'SV DISEASE',SV_CORRUPTION:'SV VOID',HP_REGEN:'HP Regen',MANA_REGEN:'Mana Regen',END_REGEN:'End Regen',ATTACK_SPEED:'Attack Speed %'};
+const labels={MP:'MANA',END:'END',ATK:'ATK',ACCURACY:'Accuracy',DMG_BONUS:'DMG Bonus',BACKSTAB_DMG:'BACKSTAB',SV_MAGIC:'SV MAGIC',SV_FIRE:'SV FIRE',SV_COLD:'SV COLD',SV_POISON:'SV POISON',SV_DISEASE:'SV DISEASE',SV_CORRUPTION:'SV VOID',HP_REGEN:'HP Regen',MANA_REGEN:'Mana Regen',END_REGEN:'End Regen',ATTACK_SPEED:'Attack Speed %'};
 const attributeOrder=['STR','DEX','STA','AGI','WIS','INT','CHA','AC','HP','MP','END','ATK','HP_REGEN','MANA_REGEN','END_REGEN','HASTE','ATTACK_SPEED'];
 const resistOrder=['SV_FIRE','SV_COLD','SV_MAGIC','SV_DISEASE','SV_POISON'];
 const handModifiers={'1H BLUNT':.8,'1H SLASHING':.8,'PIERCING':.8,'1H PIERCING':.8,'HAND TO HAND':.8,'2H BLUNT':1.1,'2H SLASHING':1.1,'2H PIERCING':1.1};
@@ -14,7 +14,7 @@ export function characterItemboxTitleMarkup(label,{title=''}={}){
     const safe=safeCharacterDetailTitle(title),text=e(label);
     return `<div class="character-item-detail-title wiki-itembox-title"><strong>${safe?`<a href="https://eqlwiki.com/${encodeURIComponent(safe)}" target="_blank" rel="noopener">${text}</a>`:text}</strong></div>`;
 }
-export function characterItemboxBodyMarkup({stats={},baseStats={},details=[],icon='',slots=[],modifiedKeys=[]}={}){
+export function characterItemboxBodyMarkup({stats={},baseStats={},details=[],icon='',slots=[],modifiedKeys=[],accuracyPercent=!own(baseStats,'ACCURACY')&&own(stats,'ACCURACY')}={}){
     const facts=normalizeCharacterItemDetails(details),first=label=>facts.find(fact=>fact.label===label)?.value||'',used=new Set(),modified=new Set(modifiedKeys);
     const metaValue=detail=>{if(!detail.linkTitle)return e(detail.value);const link=`<a href="https://eqlwiki.com/${encodeURIComponent(detail.linkTitle)}" target="_blank" rel="noopener">${e(detail.linkTitle)}</a>`;return detail.value.startsWith(detail.linkTitle)?link+e(detail.value.slice(detail.linkTitle.length)):`<a href="https://eqlwiki.com/${encodeURIComponent(detail.linkTitle)}" target="_blank" rel="noopener">${e(detail.value)}</a>`;};
     const line=(section,body)=>body?`<div class="wiki-itembox-line" data-itembox-section="${section}">${body}</div>`:'';
@@ -31,6 +31,7 @@ export function characterItemboxBodyMarkup({stats={},baseStats={},details=[],ico
     else if(!own(baseStats,'DMG_BONUS')&&primary&&hand&&finite(baseDamage)&&baseDamage>0&&finite(baseDelay)&&baseDelay>0)weapon.push(stat('DMG_BONUS',{value:Math.floor(hand*Math.max(baseDamage,50)*Math.min(baseDelay,50)/40*.5),derived:true,suffix:' @ lvl 50'}));
     if(finite(stats.DMG)&&stats.DMG>0&&finite(delay)&&delay>0)weapon.push(`<span class="wiki-itembox-ratio">Ratio: <span class="wiki-itembox-value${modified.has('DMG')||modified.has('DELAY')?' is-scaled':''}">(${(stats.DMG/delay).toFixed(2)})</span></span>`);
     const backstab=own(stats,'BACKSTAB_DMG')?stat('BACKSTAB_DMG'):!own(baseStats,'BACKSTAB_DMG')&&/\b(?:ROG|ALL)\b/i.test(first('Class'))&&/^Piercing$/i.test(skillName)&&finite(baseDamage)&&baseDamage>0?stat('BACKSTAB_DMG',{value:baseDamage,derived:true}):'';
+    const accuracy=own(stats,'ACCURACY')?stat('ACCURACY',{signed:accuracyPercent,suffix:accuracyPercent?'%':''}):'';
     const attributes=attributeOrder.filter(key=>own(stats,key)).map(key=>stat(key,{signed:!['AC','ATK'].includes(key)})).join(' ');
     const resists=resistOrder.filter(key=>own(stats,key)).map(key=>stat(key,{signed:true})).join(' ');
     const effects=facts.filter(fact=>/^(?:Effect|Combat effect|Proc effect|Click effect|Worn effect|Focus effect|Focus Exaltation|Proc Exaltation|Rune Exaltation)$/.test(fact.label)).map(fact=>line('effect',`<span data-item-detail="${e(fact.label)}">${e(fact.label==='Effect'?'Effect':fact.label)}: ${metaValue(fact)}</span>`)).join('');
@@ -40,7 +41,7 @@ export function characterItemboxBodyMarkup({stats={},baseStats={},details=[],ico
     const extraStats=Object.keys(stats).filter(key=>!used.has(key)).map(key=>stat(key)).join(' ');
     const extras=facts.filter(fact=>['Charges','Required level','Recommended level','Notes','Details'].includes(fact.label)).map(fact=>line('detail',`<span data-item-detail="${e(fact.label)}">${fact.label==='Details'?'':e(fact.label)+': '}${metaValue(fact)}</span>`)).join('');
     const source=safeCharacterIcon(icon),image=source?`<img class="wiki-itembox-icon" src="${e(source)}" alt="" draggable="false">`:'';
-    return `<div class="wiki-itembox-data">${image}${flags}${slot}${skill}${line('weapon',weapon.join(' '))}${line('backstab',backstab)}${line('attributes',attributes)}${line('resists',resists)}${effects}${weightSize}${classRace}${voidStat}${line('other-stats',extraStats)}${extras}${!Object.keys(stats).length?'<div class="wiki-itembox-line wiki-itembox-unread">Statistics not read</div>':''}</div>`;
+    return `<div class="wiki-itembox-data">${image}${flags}${slot}${skill}${line('weapon',weapon.join(' '))}${line('backstab',backstab)}${line('accuracy',accuracy)}${line('attributes',attributes)}${line('resists',resists)}${effects}${weightSize}${classRace}${voidStat}${line('other-stats',extraStats)}${extras}${!Object.keys(stats).length?'<div class="wiki-itembox-line wiki-itembox-unread">Statistics not read</div>':''}</div>`;
 }
 
 /** Socket children are identities/effects only, never nested full Itemboxes. */

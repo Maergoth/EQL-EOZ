@@ -3,6 +3,16 @@
 import { ITEM_RECOVERY_FIELDS, itemRecoveryFingerprint, itemRecoverySource, itemRecoveryLabel, isItemNumericStatLine } from './item-base-review.js';
 import { normalizeWikiIdentity, itemBaseIdentity } from './wiki-identity.js';
 import { parseItemStatBlock } from './screen-read-parser.js';
+export const TIER_ZERO_VERIFICATION_CATEGORY='Tier 0 verification needed';
+export const TIER_ZERO_CATEGORY_MARKER='<!-- EoZ: tier-zero verification category -->';
+// These two exact app-authored warnings are the only prose cleared when an
+// independent reviewed tier-zero reading replaces recovered base statistics.
+export const tierZeroRecoveryNoteMatches=source=>[...String(source||'').matchAll(/These stats are reverse calculated from a tier\s+(?:10|[0-9])\s+item\.\s*Please confirm with a tier 0 item and remove this message\.?|Base statistics were proposed by reversing a reviewed tier\s+(?:10|[0-9])\s+examine at\s+\d+\/\d+\s+progress, excluding augments and other modifiers\.\s*Rounding choices were reviewed; this is an inference, not a base-item capture\./gi)];
+export function requiresTierZeroVerification(candidate={}){
+    if(candidate.kind!=='item'||validateTierZeroVerification(candidate).ok)return false;
+    const tier=Number(candidate.baseRecovery?.tier??candidate.fields?.tier?.value);
+    return Boolean(candidate.baseRecovery)||Number.isInteger(tier)&&tier>0&&tier<=10;
+}
 const finite=value=>typeof value==='number'&&Number.isFinite(value);
 const viewFingerprint=candidate=>JSON.stringify([itemRecoveryFingerprint(candidate),candidate.baseRecovery||null,candidate.fields?.statLines?.value??null,candidate.title]);
 const proofFingerprint=candidate=>{const source=itemRecoverySource(candidate);return JSON.stringify([candidate.kind,normalizeWikiIdentity(itemBaseIdentity(candidate.name).name),normalizeWikiIdentity(candidate.title),source.tier,source.fraction,Object.entries(source.observed).sort(([a],[b])=>a.localeCompare(b)),...['modified','augmented','augmentNames'].map(key=>candidate.fields?.[key]?.value??null),candidate.fields?.statLines?.value??null]);};

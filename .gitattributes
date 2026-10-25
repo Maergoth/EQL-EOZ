@@ -1,1 +1,3 @@
 vendor/zoneviewer/ZoneViewerApp.part* -text
+# These files are pinned to the wiki commit's exact bytes and SHA-256 hashes.
+app/vendor/item-scaling-* text eol=lf

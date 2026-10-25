@@ -72,7 +72,7 @@ publish test edits/uploads to the live wiki. Preserve unrelated dirty files in
 | Wiki component map | `D:\EQLWiki\README.md`, `CONTRIBUTING.md`, `docs/EQL_DEVELOPMENT.md`, `docs/EQL_COMPONENTS.md`, `PROJECT.md` read for this task. Preserve template/category contracts, normal edit permissions, verification/email and wiki/forum authentication. |
 | Existing capture | `desktop/discovery-host.cjs`: trusted main/Triggers IPC, explicit desktopCapturer window/display selection, clipboard. New capture arbitration must include this existing Screenshot action. |
 | Authoritative log events | `app/parser.js`, `app/overlay-session.js`, `app/app.js`; retain one parser and existing log identity/cursor/replay guards. Identify actual supported kill/loot/zone/who/loc grammar before adding OCR equivalents. |
-| Catalog / item scaling | `app/wiki-discovery.js`, `app/item-scaling.js`, `app/item-browse.js`, canonical zone/source helpers, complete wiki presence catalog. Preserve base versus tier-adjusted stats, exact icons, raid identity and unknown fields. |
+| Catalog / item scaling | `app/wiki-discovery.js`, `app/item-scaling.js`, the [wiki-owned engine/rules](SHARED_ITEM_SCALING.md), `app/item-browse.js`, canonical zone/source helpers, complete wiki presence catalog. Preserve base versus tier-adjusted stats, exact icons, raid identity and unknown fields. |
 | Native boundary | `desktop/main.cjs`, `desktop/preload.cjs`, `desktop/overlay-host.cjs`; remote login content never gets local file/capture/editor IPC. Native overlays do not receive auth credentials or raw capture frames. |
 | UI / tests | `app/index.html`, `app/app.js`, `app/styles.css`, `scripts/test-native-overlays.mjs`, current appearance/native CI. New tabs retain fonts and normal app/overlay behavior. |
 

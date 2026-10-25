@@ -2,6 +2,27 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "0.9.12",
+  "title": "Shared wiki item formulas and tier-zero verification",
+  "changes": [
+    "Use the wiki-owned item calculation engine and revisioned rules for every item-tier preview. Match wiki Backstab, weapon Accuracy, Void resist, weight and tier limits while preserving recorded Character totals.",
+    "Bundle one formula snapshot in each app release. Windows and Linux use the same release-time wiki source; formula changes arrive with app updates without background formula requests.",
+    "Add new item pages based on unverified ranked or recovered values to Category:Tier 0 verification needed, alongside their verification note."
+  ],
+  "steps": [
+    {
+      "title": "Preview item tiers with the wiki formulas",
+      "image": "0.9.12/shared-item-formulas",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Hover equipped gear and adjust Item tier directly below its name. The shared wiki engine supplies green adjusted values, including Backstab, Accuracy and Void resist. The app keeps its bundled formula snapshot until the next app update; recorded Character totals stay unchanged. New item pages with unverified tier-zero values also appear in the wiki verification category.",
+      "alt": "Actual Character item tooltip for a synthetic tier-five piercing weapon, with its tier slider, green Backstab 15, Accuracy plus 12.5 percent and SV Void plus 5.",
+      "caption": "Actual current Character tooltip rendered in isolated Electron Chromium from synthetic catalog data, with the shared wiki frame and 1.25 text scale. No icon artwork, game/player pixels or production requests. The fixture verifies the shown green values and unchanged recorded HP of 4321.",
+      "imageSha256": "e493aabc1a7d31abba0a30266def84f598c99bd9b39930af9546af4a41feab2a"
+    }
+  ]
+},
+{
   "version": "0.9.11",
   "title": "Automatic contribution reading and chat item detection",
   "changes": [

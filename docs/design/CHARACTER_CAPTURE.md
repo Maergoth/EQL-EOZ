@@ -273,8 +273,8 @@ from zero during variant matching. Catalog-only values remain unknown until both
 tier and progress are known; observed examine values are still usable unchanged.
 Bounded `unscaledStatKeys` metadata retains known catalog base values whose
 tier adjustment lacks required context. Those derived values stay null above
-tier zero; direct observed examine stats still take precedence. The Character
-catalog currently uses this for conditional SV Void scaling. See
+tier zero; direct observed examine stats still take precedence. Conditional Void now uses the wiki-owned shared engine and known item context;
+legacy metadata no longer suppresses it. See
 [catalog search and base recovery](../CHARACTER_CATALOG_BASE_RECOVERY.md).
 `catalogIdentity` contains bounded canonical `name`, `wikiTitle` and match method
 (`exact`, `fuzzy` or `manual`). It is separate from observed stats and from the

@@ -36,3 +36,7 @@ try {
     await rm(directory, { recursive:true, force:true });
 }
 console.log('Windows/Linux release names and corrupted-asset checksum rejection passed.');
+
+const formulaCommit='b'.repeat(40);
+assert.match(releaseDownloadNotes('0.8.8','a'.repeat(40),formulaCommit),new RegExp(`Shared item formulas: https://github.com/Maergoth/EQLWiki/commit/${formulaCommit}`));
+assert.throws(()=>releaseDownloadNotes('0.8.8','a'.repeat(40),'main'),/wiki formula commit/);

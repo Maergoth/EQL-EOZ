@@ -1,7 +1,8 @@
 import { recoverItemBaseStats, isItemBaseCandidate } from './item-base-recovery.js';
+import { getItemScalingIdentity } from './item-scaling.js';
 
-export const ITEM_RECOVERY_FIELDS = Object.freeze({ac:'AC',hp:'HP',mana:'MP',endurance:'END',str:'STR',sta:'STA',agi:'AGI',dex:'DEX',wis:'WIS',int:'INT',cha:'CHA',resistPoison:'SV_POISON',resistMagic:'SV_MAGIC',resistDisease:'SV_DISEASE',resistFire:'SV_FIRE',resistCold:'SV_COLD',resistCorruption:'SV_CORRUPTION',hpRegen:'HP_REGEN',manaRegen:'MANA_REGEN',enduranceRegen:'END_REGEN',attackSpeed:'ATTACK_SPEED',haste:'HASTE',weight:'WT',damage:'DMG',damageBonus:'DMG_BONUS',delay:'DELAY',range:'RANGE',attack:'ATK'});
-const LABELS={MP:'Mana',END:'Endurance',WT:'Weight',DMG:'DMG',DMG_BONUS:'Damage Bonus',DELAY:'Delay',ATK:'Attack',ATTACK_SPEED:'Attack Speed',HP_REGEN:'HP Regen',MANA_REGEN:'Mana Regen',END_REGEN:'End Regen',SV_POISON:'SV Poison',SV_MAGIC:'SV Magic',SV_DISEASE:'SV Disease',SV_FIRE:'SV Fire',SV_COLD:'SV Cold',SV_CORRUPTION:'SV Void'};
+export const ITEM_RECOVERY_FIELDS = Object.freeze({ac:'AC',hp:'HP',mana:'MP',endurance:'END',str:'STR',sta:'STA',agi:'AGI',dex:'DEX',wis:'WIS',int:'INT',cha:'CHA',resistPoison:'SV_POISON',resistMagic:'SV_MAGIC',resistDisease:'SV_DISEASE',resistFire:'SV_FIRE',resistCold:'SV_COLD',resistCorruption:'SV_CORRUPTION',hpRegen:'HP_REGEN',manaRegen:'MANA_REGEN',enduranceRegen:'END_REGEN',attackSpeed:'ATTACK_SPEED',haste:'HASTE',weight:'WT',damage:'DMG',backstabDamage:'BACKSTAB_DMG',damageBonus:'DMG_BONUS',delay:'DELAY',range:'RANGE',attack:'ATK'});
+const LABELS={MP:'Mana',END:'Endurance',WT:'Weight',DMG:'DMG',BACKSTAB_DMG:'Backstab DMG',DMG_BONUS:'Damage Bonus',DELAY:'Delay',ATK:'Attack',ATTACK_SPEED:'Attack Speed',HP_REGEN:'HP Regen',MANA_REGEN:'Mana Regen',END_REGEN:'End Regen',SV_POISON:'SV Poison',SV_MAGIC:'SV Magic',SV_DISEASE:'SV Disease',SV_FIRE:'SV Fire',SV_COLD:'SV Cold',SV_CORRUPTION:'SV Void'};
 export const itemRecoveryLabel=key=>LABELS[key]||key;
 const numeric=value=>typeof value==='number'&&Number.isFinite(value)?value:null;
 const value=(candidate,key)=>candidate.fields?.[key]?.value;
@@ -17,7 +18,7 @@ export function itemRecoverySource(candidate={}){
 }
 export function itemRecoveryFingerprint(candidate={}){
     const source=itemRecoverySource(candidate);
-    return JSON.stringify([candidate.kind,candidate.name,source.tier,source.fraction,Object.entries(source.observed).sort(([a],[b])=>a.localeCompare(b)),...['modified','augmented','augmentNames'].map(key=>value(candidate,key)??null)]);
+    return JSON.stringify([candidate.kind,candidate.name,source.tier,source.fraction,Object.entries(source.observed).sort(([a],[b])=>a.localeCompare(b)),...['modified','augmented','augmentNames'].map(key=>value(candidate,key)??null),getItemScalingIdentity()]);
 }
 export function itemBaseReviewPreview(candidate={},options={}){
     const source=itemRecoverySource(candidate),tier=options.tier===undefined?source.tier:options.tier,fraction=options.fraction===undefined?source.fraction:options.fraction;
@@ -36,7 +37,7 @@ function provisionalPreview(candidate,source,{tier,fraction}){
     const previews=fractions.map(progress=>recoverItemBaseStats(source.observed,{tier,fraction:progress,augmentStatus:'excluded'})),fields={};
     for(const key of Object.keys(previews[0].fields)){
         const results=previews.map(preview=>preview.fields[key]),first=results[0];
-        if(first.status==='unsupported'||results.some(result=>result.reason==='weight-rounding-contract-not-equivalent')){fields[key]={...first,provenance:{...first.provenance,fraction:fraction??null,augmentStatus:'assumed-unverified'}};continue;}
+        if(first.status==='unsupported'||results.some(result=>result.reason==='weight-inverse-not-certified')){fields[key]={...first,provenance:{...first.provenance,fraction:fraction??null,augmentStatus:'assumed-unverified'}};continue;}
         const ranges=[];
         for(const range of results.filter(result=>['exact','range'].includes(result.status)).flatMap(result=>result.ranges).sort((a,b)=>a.min-b.min)){
             const prior=ranges.at(-1);if(prior&&range.step===prior.step&&range.min<=prior.max+prior.step){prior.max=Math.max(prior.max,range.max);prior.clipped||=range.clipped;prior.count=Math.round((prior.max-prior.min)/prior.step)+1;}

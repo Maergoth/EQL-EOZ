@@ -4,6 +4,15 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
+**0.9.12: shared wiki item formulas and tier-zero verification.** Item-tier
+previews use the wiki-owned engine and rules bundled with the app. Each release
+resolves one formula snapshot for both Windows and Linux; installed apps receive
+formula changes through app updates, without background formula requests.
+Backstab, weapon Accuracy, Void resist, weight and tier limits now agree with
+the wiki. Recorded Character totals remain unchanged. New item pages based on
+unverified ranked or recovered values join
+[Tier 0 verification needed](https://eqlwiki.com/Category:Tier_0_verification_needed).
+
 **0.9.11: automatic contribution reading and chat item detection.** Open
 Contribute, then open the selected item’s examine window in EverQuest. A gentle
 reader proposes matching stats, stages a reliable item screenshot and helps
@@ -84,6 +93,14 @@ Windows and Linux users. Each release contains every platform package under one
 version; no separate Linux branch, release schedule or wiki dataset is needed.
 
 On Linux, make the AppImage executable and launch it, or install the deb using your distribution's package installer. Choose the actual client directory inside your Wine/Proton prefix or mounted installation; EoZ reads that directory's ordinary logs and map files. It runs as a separate native desktop app. X11/XWayland is preferred for independently positioned overlays; [native Wayland limits](https://www.electronjs.org/docs/latest/api/browser-window) can affect placement, focus and topmost behavior.
+
+## Shared item formulas
+
+Item sliders and recovered-base proposals use the wiki-owned, versioned item
+scaling engine. Release preparation takes one snapshot of the wiki source for
+both Windows and Linux; each installed app version keeps those fixed formulas. See the
+[shared formula guide](docs/SHARED_ITEM_SCALING.md) for the canonical source,
+release synchronization procedure and formula-version contract.
 
 ## A look around
 

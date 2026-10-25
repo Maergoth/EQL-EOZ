@@ -72,7 +72,7 @@ export function characterItemStatBodyMarkup(card){
     const read=characterItemStats(card),known=characterEquipmentEligibility(card).known;
     const raw=String(card.observedName||'').trim(),tierMatch=raw.match(/\+(\d+)\s*$/),tierConflict=tierMatch&&card.tier!==null&&Number(tierMatch[1])!==card.tier;
     const modifiedKeys=read.basis==='observed-examine'?[]:Object.keys(read.stats).filter(key=>isItemStatModified(card.baseStats[key],read.stats[key],card.tier));
-    const facts=characterItemboxBodyMarkup({stats:read.stats,baseStats:card.baseStats,details:card.details,icon:card.icon,slots:card.slots,modifiedKeys});
+    const facts=characterItemboxBodyMarkup({stats:read.stats,baseStats:card.baseStats,details:card.details,icon:card.icon,slots:card.slots,modifiedKeys,accuracyPercent:read.accuracyPercent});
     return `<div class="character-itembox-body">${known?'':'<p class="character-match-warning">! Match this item to the cached wiki catalog before equipping.</p>'}${facts}${characterAugmentSlotsMarkup(card)}${raw&&characterBaseItemName(raw)!==characterBaseItemName(card.name)?`<p class="settings-helper">Screen read: ${escape(raw)}</p>`:''}${tierConflict&&read.basis!=='catalog-tier-preview'?'<p class="character-match-warning">The screen-read tier differs from this card. Review its tier.</p>':''}<p class="settings-helper wiki-itembox-basis">${read.basis==='observed-examine'?'Captured values':read.basis==='catalog-tier-preview'?'Preview from wiki base stats':'Catalog values at this tier'}</p>${[card.previewWarning,card.slotReadWarning].filter(Boolean).map(message=>`<p class="character-match-warning">${escape(message)}</p>`).join('')}</div>`;
 }
 export function characterAugmentSlotsMarkup(card){

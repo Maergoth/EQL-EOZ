@@ -1,7 +1,7 @@
 // Pure contribution preparation. OCR observations are suggestions; only reviewed
 // fields enter wikicode. No network, account state, or narrative generation.
 import { validateItemBaseReview, proposeItemBaseReview, applyItemBaseReview } from './item-base-review.js';
-import { validateTierZeroVerification } from './contribution-tier-zero.js';
+import { validateTierZeroVerification, requiresTierZeroVerification, tierZeroRecoveryNoteMatches, TIER_ZERO_VERIFICATION_CATEGORY, TIER_ZERO_CATEGORY_MARKER } from './contribution-tier-zero.js';
 import { normalizeContributionChoices } from './contribution-choice-picker.js';
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 const TYPES = new Set(['item', 'npc', 'zone', 'spell']);
@@ -152,6 +152,7 @@ export function buildContributionDraft(input, blueprints) {
     if (candidate.zone) categories.add(contributionTitle(candidate.zone));
     let text;
     if (candidate.kind === 'item') {
+        if(requiresTierZeroVerification(candidate))categories.add(TIER_ZERO_VERIFICATION_CATEGORY);
         let lines = Array.isArray(field('statLines')) ? field('statLines').map(value => literalWikiText(value)).filter(Boolean).slice(0, 60) :
             typeof field('statsblock') === 'string' ? field('statsblock').split(/\r?\n|<br\s*\/?>/i).map(value => literalWikiText(value)).filter(Boolean).slice(0, 60) : [];
         const recovery=validateItemBaseReview(candidate),upgraded=Number(candidate.fields.tier?.value)>0||candidate.fields.augmented?.value===true||candidate.fields.modified?.value===true||candidate.fields.augmentNames?.value?.length>0;
@@ -222,7 +223,8 @@ export function buildContributionDraft(input, blueprints) {
     if(candidate.attachmentFilename&&candidate.kind!=='npc')text+=`\n[[File:${safeContributionFilename(candidate.attachmentFilename)}|thumb|${literalWikiText(input.attachment?.caption||candidate.title)}]]\n`;
     if (/\b(?:NPC_Name|ZONE_NAME|ZONE NAME|ITEM_NAME|Item Name|Describe the|Add a brief)\b/.test(text)) blockers.push('Replace all blueprint instructional placeholders.');
     if (/\{\{\s*(?:Special:|#|DISPLAYTITLE|DEFAULTSORT|subst:|safesubst:)|<\s*(?:script|iframe|object|embed)\b/i.test(candidate.playerText)) blockers.push('Remove unsupported executable or special-page markup from the contribution prose.');
-    return { title:candidate.title, kind:candidate.kind, text:`${text}\n${[...categories].map(category).join('\n')}\n`, warnings, blockers, blueprintRevision:blueprints?.revision ?? null };
+    if([...activeContributionText(text).matchAll(/\[\[\s*Category\s*:\s*([^\]|]+)(?:\|[^\]]*)?\]\]/gi)].some(match=>contributionNameKey(match[1])===contributionNameKey(TIER_ZERO_VERIFICATION_CATEGORY)))categories.delete(TIER_ZERO_VERIFICATION_CATEGORY);
+    return { title:candidate.title, kind:candidate.kind, text:`${text}\n${[...categories].map(title=>title===TIER_ZERO_VERIFICATION_CATEGORY?TIER_ZERO_CATEGORY_MARKER+'\n'+category(title):category(title)).join('\n')}\n`, warnings, blockers, blueprintRevision:blueprints?.revision ?? null };
 }
 
 function distance(a, b) {
@@ -273,6 +275,33 @@ export function contributionTemplates(source, name) {
 }
 
 function activeContributionText(source){let outline=source;for(const [start,end]of protectedRanges(source).reverse())outline=outline.slice(0,start)+outline.slice(start,end).replace(/[^\r\n]/g,' ')+outline.slice(end);return outline;}
+function removeTierZeroRecoveryNotes(source){
+    let result=source;
+    for(const match of tierZeroRecoveryNoteMatches(activeContributionText(source)).reverse())result=result.slice(0,match.index)+result.slice(match.index+match[0].length);
+    return result;
+}
+function syncTierZeroVerificationCategory(source,{required=false,verified=false}={}){
+    const key=contributionNameKey(TIER_ZERO_VERIFICATION_CATEGORY),active=activeContributionText(source);
+    if(verified){
+        // Preserve manually assigned categories and protected examples. Only
+        // remove a membership emitted with this exact application marker.
+        const escaped=TIER_ZERO_CATEGORY_MARKER.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+        const expression=new RegExp(escaped+'[ \\t]*(?:\\r?\\n)?[ \\t]*(\\[\\[Category:Tier 0 verification needed\\]\\])','g');
+        let text=source;
+        for(const match of [...source.matchAll(expression)].reverse()){
+            const categoryAt=match.index+match[0].indexOf(match[1]);
+            if(active.slice(categoryAt,categoryAt+match[1].length)!==match[1])continue;
+            text=text.slice(0,match.index)+text.slice(match.index+match[0].length);
+        }
+        return text;
+    }
+    const noted=contributionTemplates(source,'Itempage').some(template=>template.fields.some(field=>field.name.toLowerCase()==='notes'&&tierZeroRecoveryNoteMatches(activeContributionText(field.value)).length>0));
+    if(!required&&!noted)return source;
+    const present=[...active.matchAll(/\[\[\s*Category\s*:\s*([^\]|]+)(?:\|[^\]]*)?\]\]/gi)].some(match=>contributionNameKey(match[1])===key);
+    if(present)return source;
+    const eol=source.includes('\r\n')?'\r\n':'\n';
+    return source+eol+TIER_ZERO_CATEGORY_MARKER+eol+category(TIER_ZERO_VERIFICATION_CATEGORY)+eol;
+}
 function moveNpcLootFromOpposite(source,itemTitle,instance,lootKind){
     const template=contributionScopedTemplate(source,'Namedmobpage',instance),opposite=lootKind==='common'?'known_loot':'common_loot',fields=template.fields.filter(field=>field.name.toLowerCase()===opposite);
     if(fields.length>1)throw Error('The existing page has duplicate loot fields; reclassify this item in the wiki source editor.');
@@ -365,6 +394,7 @@ export function patchContributionRelationship(source, { role, itemTitle, npcTitl
         const present=[...activeContributionText(text).matchAll(/\[\[Category:([^\]|]+)(?:\|[^\]]*)?\]\]/gi)].some(match=>contributionNameKey(match[1])===key);
         if (!present) text+=`\n${category(zone)}\n`;
     }
+    if(role==='item-source')text=syncTierZeroVerificationCategory(text);
     return { text, changed:text!==originalSource };
 }
 
@@ -500,14 +530,14 @@ export function patchContributionPrimary(source,input){
     const candidate=normalizeContributionCandidate(input),warnings=[],targeted=candidate.reasons.some(reason=>['missing-source','missing-population','tier0-verification'].includes(reason));let text=source;
     if(candidate.kind==='item'){
         for(const entry of candidate.sources.filter(source=>source.confirmed&&source.npc&&source.zone&&(!targeted||candidate.reasons.includes('missing-source')||source.edited)))text=patchContributionRelationship(text,{role:'item-source',itemTitle:candidate.title,npcTitle:entry.npc,zoneTitle:entry.zone,instance:entry.instance==='unknown'?candidate.instance:entry.instance}).text;
-        const updates={},verification=candidate.reasons.includes('tier0-verification');
+        const updates={},accepted=validateTierZeroVerification(candidate),verification=candidate.reasons.includes('tier0-verification')||accepted.ok;
         if(verification){
-            const accepted=validateTierZeroVerification(candidate);if(!accepted.ok)throw Error(accepted.reason);
+            if(!accepted.ok)throw Error(accepted.reason);
             const stats=candidate.field('statLines');if(!Array.isArray(stats)||!stats.length)throw Error('Provide the tier 0 item statistics to confirm this page.');
             updates.statsblock=stats.slice(0,60).map(literalWikiText).join('<br>\n');
             const templates=contributionTemplates(text,'Itempage');if(templates.length!==1)throw Error('Select the existing item template on the wiki.');
             const notes=templates[0].fields.filter(field=>field.name.toLowerCase()==='notes');if(notes.length>1)throw Error('The item has duplicate notes fields.');
-            if(notes.length)updates.notes=notes[0].value.replace(/These stats are reverse calculated from a tier\s+\d+\s+item\.\s*Please confirm with a tier 0 item and remove this message\.?/gi,'').replace(/Base statistics were proposed by reversing a reviewed tier\s+(?:10|[0-9])\s+examine at\s+\d+\/\d+\s+progress, excluding augments and other modifiers\.\s*Rounding choices were reviewed; this is an inference, not a base-item capture\./gi,'').trim();
+            if(notes.length)updates.notes=removeTierZeroRecoveryNotes(notes[0].value).trim();
         }
         const updateStats=transform=>{const template=contributionScopedTemplate(text,'Itempage',candidate.instance),fields=template.fields.filter(field=>field.name.toLowerCase()==='statsblock');if(fields.length>1)throw Error('The item has duplicate statistic fields. Update this field in the wiki source editor.');updates.statsblock=transform(updates.statsblock??fields[0]?.value??'').trim();};
         if(itemEffectWasCleared(candidate)||itemOptionalText(candidate.field('effectName'))&&['effectName','effectType','effectCastTime','effectLevel'].some(key=>candidate.fields[key]?.edited)){
@@ -517,6 +547,7 @@ export function patchContributionPrimary(source,input){
         if(candidate.fields.focusEffect?.edited&&(candidate.field('focusEffect')!==undefined||!itemOptionalText(candidate.fields.focusEffect.value)))updates.focus_effect=literalWikiText(itemOptionalText(candidate.field('focusEffect')));
         if(candidate.fields.iconId?.edited&&(candidate.field('iconId')!==undefined||!itemOptionalText(candidate.fields.iconId.value))){if(!itemOptionalText(candidate.fields.iconId.value))updates.lucy_img_ID='';else{const icon=Number(candidate.field('iconId'));if(!Number.isInteger(icon)||icon<0||icon>1000000)throw Error('Choose a valid wiki icon.');updates.lucy_img_ID=String(icon);}}
         if(Object.keys(updates).length)text=patchTemplateFields(text,'Itempage',updates,candidate.instance);
+        text=syncTierZeroVerificationCategory(text,{required:Boolean(candidate.baseRecovery)&&requiresTierZeroVerification(candidate),verified:accepted.ok});
     }else if(candidate.kind==='npc'){
         const updates={},mapping={location:'location',level:'level',race:'race',class:'class',respawnTime:'respawn_time',AC:'AC',HP:'HP',special:'special'};
         for(const [key,parameter]of Object.entries(mapping))if(candidate.fields[key]?.edited&&candidate.field(key)!==undefined)updates[parameter]=literalWikiText(candidate.field(key))||'?';

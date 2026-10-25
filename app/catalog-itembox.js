@@ -18,7 +18,8 @@ export function catalogItemboxMarkup(item={},options={}){
     const name=String(item.name||item.wikiTitle||'Unknown item').slice(0,240),title=String(item.wikiTitle||name).replace(/\s+\+\d+\s*$/,'');
     const label=tier?name.replace(/\s+\+\d+\s*$/,'')+' +'+tier:name;
     const modifiedKeys=Object.keys(stats).filter(key=>isItemStatModified(baseStats[key],stats[key],tier));
-    const body=characterItemboxBodyMarkup({stats,baseStats,details:characterCatalogDetails(item),icon:options.icon??item.icon,slots:item.slots,modifiedKeys});
+    const accuracyPercent=item.accuracyPercent===true||/\bAccuracy\s*:\s*[+\-]?\d+(?:\.\d+)?\s*%/i.test((item.displayLines||[]).join('\n'))||!Object.hasOwn(baseStats,'ACCURACY')&&Object.hasOwn(stats,'ACCURACY');
+    const body=characterItemboxBodyMarkup({stats,baseStats,details:characterCatalogDetails(item),icon:options.icon??item.icon,slots:item.slots,modifiedKeys,accuracyPercent});
     const sources=options.showSources===true?(Array.isArray(item.dropSources)?item.dropSources:[]).slice(0,8).map(source=>escape([source?.zone,source?.name].filter(Boolean).join(' · '))).filter(Boolean):[];
     const footer=sources.length?'<div class="wiki-itembox-sources"><strong>Drops from</strong><br>'+sources.join('<br>')+'</div>':'';
     return '<section class="wiki-itembox">'+characterItemboxTitleMarkup(label,{title})+'<div class="character-itembox-body">'+body+footer+'</div></section>';

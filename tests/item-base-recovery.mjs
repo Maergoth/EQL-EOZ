@@ -40,19 +40,19 @@ assert.equal(recoverItemBaseStat('HASTE',3,options).reason,'no-forward-roundtrip
 assert.equal(isItemBaseCandidate('STR',5.5,9,options),false);assert.equal(isItemBaseCandidate('STR',6,9,options),false);
 assert.equal(recoverItemBaseStat('STR',1e30,options).reason,'outside-base-domain');
 
-// Weight uses tenths, not arbitrary decimal division. Elevated candidates are
-// intentionally not certified while wiki ceil and app epsilon-ceil differ.
+// Weight uses tenths, not arbitrary decimal division. Forward weight shares the
+// exact wiki ceiling; reverse decimal boundaries remain diagnostic.
 for(const base of [0,0.1,0.2,0.7,1,2.3,8.9]){
     const observed=scaleItemStat('WT',base,4),result=recoverItemBaseStat('WT',observed,options);
     assert(contains(result,base));assert.equal(result.status,base===0?'exact':'unknown');
-    if(base>0){assert.equal(result.reason,'weight-rounding-contract-not-equivalent');assert.equal(isItemBaseCandidate('WT',base,observed,options),false);}
+    if(base>0){assert.equal(result.reason,'weight-inverse-not-certified');assert.equal(isItemBaseCandidate('WT',base,observed,options),false);}
 }
 const baseWeight=recoverItemBaseStat('WT',2.3,{tier:0,fraction:0,augmentStatus:'none'});assert.equal(baseWeight.status,'exact');assert.equal(baseWeight.value,2.3);
 assert.equal(isItemBaseCandidate('WT',2.3,2.3,{tier:0,fraction:0,augmentStatus:'none'}),true);
 assert.equal(recoverItemBaseStat('WT',0.25,options).reason,'observation-outside-weight-grid');
 assert.equal(recoverItemBaseStat('HP',2.5,options).reason,'observation-outside-integer-stat-grid');
 const liveWeightCeil=Math.max(0,Math.ceil(1*(1-0.09*(Math.log(2**10)/Math.LN2))*10)/10);
-assert.equal(scaleItemStat('WT',1,10,{fraction:0}),0.1);assert.equal(liveWeightCeil,0.2,'the primary wiki/current-app ceiling boundary really differs');
+assert.equal(scaleItemStat('WT',1,10,{fraction:0}),liveWeightCeil);assert.equal(liveWeightCeil,0.2,'the wiki floating ceiling is shared exactly, without a private app epsilon');
 
 for(const state of [{tier:null,fraction:0,augmentStatus:'none'},{tier:4,fraction:null,augmentStatus:'none'},{tier:4,augmentStatus:'none'},
     {tier:4,fraction:16,augmentStatus:'none'},{tier:10,fraction:1,augmentStatus:'none'},{tier:4,fraction:0,augmentStatus:'included'},
