@@ -56,7 +56,9 @@ export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis
     }
     function remember(set, key, limit) { set.add(key); if (set.size > limit) set.delete(set.values().next().value); }
     function consume(event, context = {}) {
-        if (context.live !== true || !event) return null;
+        // Considers and nearby casting are not evidence of an NPC death.
+        // Ignore them before advancing the live-log replay watermark.
+        if (context.live !== true || !event || !['kill','loot'].includes(event.type)) return null;
         const at = event.at ?? context.at, current = now();
         if (!finite(at) || !finite(current) || current - at > freshnessMs || at - current > 2000) return null;
         const source = clean(context.logId || 'current');
@@ -65,12 +67,13 @@ export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis
         watermarks.set(source, Math.max(previous ?? -Infinity, at));
         if (watermarks.size > 8) watermarks.delete(watermarks.keys().next().value);
         let kind, value;
-        if (event.type === 'consider') { kind = 'monster'; value = event.target?.name; }
-        else if (event.type === 'kill') { kind = 'monster'; value = event.victim; }
+        if (event.type === 'kill') { kind = 'monster'; value = event.victim; }
         else if (event.type === 'loot') { kind = 'item'; value = event.item; }
         else return null;
         const name = clean(value).slice(0, 240), canonical = wikiIdentityKey(kind,name).split('|').slice(1).join('|');
         if (!canonical) return null;
+        const players = new Set(['you','yourself',...(Array.isArray(context.playerNames)?context.playerNames.slice(0,200):[]).map(normalizeWikiIdentity)]);
+        if (kind === 'monster' && (event.isPlayer === true || event.victimIsPlayer === true || event.targetType === 'player' || event.isPet === true || players.has(normalizeWikiIdentity(name)))) return null;
         const index = currentCatalog(), key = `${kind}|${canonical}`,resolved=index.resolve(kind,name);
         let suppressed=false;try{suppressed=getSuppression(kind,name,{zone:context.zone||event.zone||'',purpose:'missing-page'})?.suppressed===true;}catch{/* Local state failure never proves an entity missing. */return null;}
         // Old Ignore keys erased grammatical articles. Preserve only that

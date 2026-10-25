@@ -1,5 +1,26 @@
 # Persistent contribution evidence
 
+## Next-release discovery and item-form follow-up
+
+The pending [kill/evidence PR #25](https://github.com/Maergoth/EQL-EOZ/pull/25)
+remains a required related change: it gates durable NPC journal intake to deaths,
+keeps the triggering log line in private captured evidence, and archives only
+untouched consider-only drafts while preserving edited/submitted work. This
+follow-up also closes the separate transient-discovery path: considers and nearby
+casting cannot create a monster notice; player/pet deaths are excluded. No local
+profile cleanup or production publication is implied by these source changes.
+
+Item review starts with its screenshot and adjacent Icon ID/paste box, reusing
+the compact picker from the pending [form PR #26](https://github.com/Maergoth/EQL-EOZ/pull/26).
+That PR still owns the multiselect and broader review simplification. This
+follow-up removes the extra fresh-live-matches checkbox directly; final page
+review covers those displayed results. Fraction maximum and socket counts stay internal, and new item
+wikicode no longer adds an Exaltation-capacity comment. Character sockets and
+User-page equipment output keep their existing contract. Missing SV Void defaults
+to editable `0` in item form text only; captured numeric evidence, contributor
+edits, and Character totals remain authoritative. The publish receipt links only
+pages with a confirmed applied result at the fixed wiki origin, for every kind.
+
 ## Current 0.9.8 candidate scope and owners
 
 0.9.7 is the released baseline. The source contracts below include the candidate

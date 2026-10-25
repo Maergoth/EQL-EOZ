@@ -22,10 +22,21 @@ assert.equal(consume({ type:'consider', target:{ name:'Unknown' } }, { live:fals
 assert.equal(consume({ type:'kill', victim:'Old Rat', at:clock - 10001 }), null, 'stale appended lines are never discoveries');
 assert.equal(consume({ type:'loot', item:'Future Item', at:clock + 3000 }), null);
 assert.equal(discovery.consume({ type:'kill', victim:'No time' }, { live:true }), null);
-let prompt = consume({ type:'consider', target:{ name:'a new synthetic rat' } });
+assert.equal(consume({ type:'consider', target:{ name:'a new synthetic rat' } }),null,'Considering an unknown monster does not create a discovery');
+assert.equal(consume({ type:'cast', source:'Nearby Caster', spell:'Synthetic spell',at:clock+1000 }),null,'Nearby casting does not create a discovery or advance its watermark');
+for(const event of [
+    {type:'kill',victim:'You'}, {type:'kill',victim:'yourself'},
+    {type:'kill',victim:'Synthetic player',isPlayer:true},
+    {type:'kill',victim:'Synthetic player',victimIsPlayer:true},
+    {type:'kill',victim:'Synthetic player',targetType:'player'},
+    {type:'kill',victim:'Synthetic pet',isPet:true}
+])assert.equal(consume(event),null,'Player and pet deaths do not become missing monsters');
+assert.equal(consume({type:'kill',victim:'sYnThEtIc HeRo'},{playerNames:['Synthetic Hero']}),null,'Known player names are compared case-insensitively');
+assert.equal(discovery.snapshot().pending.length,0,'Passive observations and player/pet deaths leave no discovery notices');
+let prompt = consume({ type:'kill', victim:'a new synthetic rat' });
 assert.deepEqual({ kind:prompt.kind, name:prompt.name, zone:prompt.zone }, { kind:'monster', name:'a new synthetic rat', zone:'Test Zone' });
 assert.ok(!JSON.stringify(prompt).includes('log-a'));
-assert.equal(consume({ type:'kill', victim:'A New Synthetic Rat' }), null, 'consider then kill and case variants dedupe');
+assert.equal(consume({ type:'kill', victim:'A New Synthetic Rat' }), null, 'Repeated kills and case variants dedupe');
 assert.equal(discovery.dismiss(prompt.id), true);
 assert.equal(consume({ type:'consider', target:{ name:'a new synthetic rat' } }), null, 'dismissed entity stays suppressed for the app session');
 assert.equal(consume({ type:'kill', victim:'a new synthetic rat' }, { logId:'log-b' }), null, 'entity suppression spans character/log switches');

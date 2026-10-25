@@ -27,6 +27,14 @@ Run this against a normal EverQuest Legends installation. Before testing, fully 
    resize; global Hidden retains the suspended layout. Record real compositor
    and foreground-game behavior separately from synthetic fixture results.
 
+5. In the native Map view, one `/loc` shows a dot. Move and emit another to show
+   a short arrow pointing in the actual map trajectory; stop and repeat `/loc`
+   to retain it. Check both axes, a turn, a zone/log switch and a large jump.
+   Arrow direction estimates movement, not a logged facing value. Set overlay
+   opacity to its low/high limits: empty 2D map areas must reveal the desktop,
+   with crisp map strokes. Top/First Person fade their entire native 3D surface.
+   The main embedded map and its existing directional Local Map stay independent.
+
 ## 0.9.8 targeted acceptance
 
 - Adjust equipped-hover tiers with pointer and keyboard. Keep the hover, focus

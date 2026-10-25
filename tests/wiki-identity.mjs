@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createWikiResolver,normalizeWikiIdentity,itemBaseIdentity,wikiIdentityKey,wikiPageTitleKey,itemExaltationBaseIdentity,itemExportBaseIdentity} from '../app/wiki-identity.js';
-import {isGeneratedPetName,classifyNpcEvidence} from '../app/generated-pets.js';
+import {isGeneratedPetName,isOwnedPetName,classifyNpcEvidence} from '../app/generated-pets.js';
 const pack={meta:{wikiEntitiesComplete:true},wikiEntities:{items:['Copperleaf Cloak'],npcs:["Keeper O'Wood"],titles:['Copperleaf Cloak',"Keeper O'Wood",'Plain Page']},items:[{name:'Copperleaf Cloak',wikiTitle:'Copperleaf Cloak',aliases:['Copperleaf Cape'],revisionId:12}],npcs:[{name:"Keeper O'Wood",wikiTitle:"Keeper O'Wood"}],zones:[{name:'Forest Glade',wikiTitle:'The Forest Glade'}]};
 const resolver=createWikiResolver(pack);
 for(const name of ['COPPERLEAF_CLOAK +5','Copperleaf Cloak+0','Copperleaf Cape +10'])assert.equal(resolver.resolve('item',name).canonicalTitle,'Copperleaf Cloak');
@@ -38,4 +38,9 @@ for(const name of ['Laser','Gektik','Ger','Gn','Jabektik','a Gtik','Gtik Guardia
 assert.equal(classifyNpcEvidence('Gtik',{membership:'missing'}).eligible,false);
 assert.equal(classifyNpcEvidence('Gtik',{membership:'present'}).eligible,true,'An actual canonical NPC overrides the name heuristic');
 assert.equal(classifyNpcEvidence('Gtik',{membership:'ambiguous'}).eligible,true,'Ambiguity needs review rather than pet-based deletion');
+for(const name of ["A Sampleowner's pet","Sampleowner's pet",'A Sampleowner’s PET!',"The corpse of Sampleowner's pet.","Sampleowner's pet's corpse",'Sampleowner’s pet (corpse)',"A Sampleowner&#39;s pet"]){
+    assert(isOwnedPetName(name),name);
+    for(const membership of ['missing','present','ambiguous'])assert.deepEqual(classifyNpcEvidence(name,{membership}),{eligible:false,reason:'owned-pet',heuristic:false},'Explicit owner labels override stale catalog membership');
+}
+for(const name of ["Captain's guard",'A pet goblin',"Sampleowner's pet guard",'Pet Rock',"The Captain's petkeeper","Sampleowner's petal",'pet',"'s pet"]){assert.equal(isOwnedPetName(name),false,name);assert.equal(classifyNpcEvidence(name,{membership:'missing'}).eligible,true,name);}
 console.log('Typed wiki identity: canonical aliases/tier/Unicode, grammatical articles, partial presence, collision refusal and pinned generated-pet exclusions passed.');

@@ -14,7 +14,7 @@ export function hasInferredBase(record={}) {
 }
 export function contributionReasons(candidate, resolver) {
     const resolved=resolver.resolve(candidate.kind,candidate.name),reasons=[];
-    if(candidate.kind==='npc'&&!classifyNpcEvidence(candidate.name,resolved).eligible)return {resolved,reasons,excluded:'generated-pet'};
+    if(candidate.kind==='npc'){const classification=classifyNpcEvidence(candidate.name,resolved);if(!classification.eligible)return {resolved,reasons,excluded:classification.reason};}
     if(resolved.membership==='missing')reasons.push('missing-page');
     if(resolved.membership==='unknown')reasons.push('catalog-unknown');
     if(resolved.membership==='ambiguous')reasons.push('identity-review');

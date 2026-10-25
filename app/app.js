@@ -21,7 +21,8 @@ import { mountCaptureWorkspace } from './capture-workspace.js';
 import { createCharacterStorage } from './character-storage.js';
 import { mountSystemFontSettings } from './system-font-settings.js';
 import { isItemStatModified } from './item-stat-presentation.js';
-import { catalogItemDetailsMarkup,characterCatalogDetails } from './character-item-card.js';
+import { characterCatalogDetails } from './character-item-card.js';
+import { catalogItemboxMarkup } from './catalog-itembox.js';
 import { collectDropObservation } from './drop-observations.js';
 import { createWikiResolver } from './wiki-identity.js';
 
@@ -615,7 +616,7 @@ function consumeText(text, allowTransientUi = true) {
         const freshTimerEvent = Number.isFinite(originalAt) && Math.abs(Date.now() - originalAt) <= 10000;
         let listedTarget = false;
         if (allowTransientUi && freshTimerEvent && ['consider','kill'].includes(event?.type)) listedTarget = focusIntelForConsider(event.type === 'consider' ? event.target : {name:event.victim});
-        if (!listedTarget && event?.type!=='kill') wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt});
+        if (!listedTarget && event?.type!=='kill') wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt,playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)});
         overlaySession.consume(event, { zone:parser.zone, character:parser.character, live:allowTransientUi && freshTimerEvent,
             text:line, at:parser.currentLineAt, logId:bridgeInfo?.logPath || 'current-log' });
         const observationCursor=++observedLogCursor;
@@ -1188,27 +1189,7 @@ function renderDropLog(s) {
 
 function tooltipHtml(item,target) {
     const tier = target?.closest('#map-loot-pane') ? mapLootTier : Number(settings.itemTier) || 0;
-    const stats = scaledItemStats(item, tier);
-    const statHtml = Object.entries(stats).slice(0, 64).map(([key, value]) => {
-        const base = Number(item?.stats?.[key]);
-        const changed = isItemStatModified(item?.stats?.[key],value,tier);
-        return `<div class="tooltip-stat ${changed ? 'is-scaled' : ''}"><span>${esc(key.replace(/_/g, ' '))}:</span><strong>${Number(value) > 0 ? '+' : ''}${formatNum(value)}${changed ? `<small> (${base > 0 ? '+' : ''}${formatNum(base)})</small>` : ''}</strong></div>`;
-    }
-    ).join('');
-    const sources = (item.dropSources || []).slice(0, 8)
-        .map(source => esc(`${source.zone ? `${source.zone} · ` : ''}${source.name}`))
-        .join('<br>');
-    const icon = itemIconSource(item);
-    const details = catalogItemDetailsMarkup(item);
-    return `<div class="itembox-title"><span>${esc(item.name)}</span>${tier > 0 ? `<span class="itembox-tier">Tier ${tier}</span>` : ''}</div>
-        <div class="itembox-body">
-            <div class="itembox-summary">${icon ? `<img class="itembox-icon" src="${esc(icon)}" alt="">` : '<span class="itembox-icon item-icon-placeholder">◇</span>'}<div>
-                ${details}
-            </div></div>
-            ${statHtml ? `<div class="tooltip-scale-label">${tier > 0 ? `Tier ${tier} adjusted stats <small>(base)</small>` : 'Base stats'}</div><div class="tooltip-stats">${statHtml}</div>` : ''}
-            ${sources ? `<div class="tooltip-source"><strong>Drops from</strong><br>${sources}</div>` : ''}
-            ${item.notes ? `<div class="tooltip-source">${esc(item.notes)}</div>` : ''}
-        </div>`;
+    return catalogItemboxMarkup(item,{stats:scaledItemStats(item,tier),baseStats:item.stats,tier,icon:itemIconSource(item),showSources:true});
 }
 
 function positionTooltip(event) {

@@ -79,8 +79,9 @@ const itemHover = renderItem({name:'Sword',tier:7,slots:['Primary'],stats:{HP:70
 assert.equal((itemHover.match(/data-item-hover/g)||[]).length,2,'Both item picture and name are stat-tooltip targets');
 assert.match(itemHover,/class="item-icon-button"[\s\S]*aria-label="Stats for Sword"/);
 const tooltip = renderItemTooltip({name:'Sword',tier:7,slots:['PRIMARY'],classes:['WAR'],stats:{HP:70,AC:15},baseStats:{HP:10,AC:15},notes:injection});
-assert.match(tooltip,/Tier 7/);assert.match(tooltip,/<div data-item-detail="Class"><dt>Class<\/dt><dd>WAR<\/dd>/);assert.match(tooltip,/<dt>HP<\/dt><dd class="is-scaled">70 <small>\(10\)<\/small>/);
-assert.match(tooltip,/<dt>AC<\/dt><dd>15<\/dd>/,'An unchanged stat does not acquire the green changed-value class.');
+assert.match(tooltip,/Sword \+7/);assert.match(tooltip,/<span data-item-detail="Class">Class: WAR<\/span>/);assert.match(tooltip,/data-item-stat="HP">HP: <span class="wiki-itembox-value is-scaled">\+70<\/span>/);
+assert.match(tooltip,/data-item-stat="AC">AC: <span class="wiki-itembox-value">15<\/span>/,'An unchanged stat does not acquire the green changed-value class.');
+assert.match(tooltip,/class="wiki-itembox"/);assert.doesNotMatch(tooltip,/<dl|<dt|<dd/,'Native Intel reuses the wiki inline Itembox rather than a separate stat grid.');
 assert.doesNotMatch(tooltip,/<img|<script/,'Stat blocks escape notes, names and stat values');
 assert.match(renderIntel({npcs:[{name:'Named',named:true,waypoint:'1,2,3',drops:[]}],canRoute:false}),/disabled title="Enable maps/);
 assert.doesNotMatch(renderIntel({npcs:[{name:'Named',waypoint:'1,2,3',drops:[]}],canRoute:true}),/disabled/);

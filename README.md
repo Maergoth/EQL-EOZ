@@ -106,6 +106,13 @@ back on, or Reset the overlay, to resume it. Missing height stays unknown. A
 nearby validated floor grounds the marker; otherwise its status identifies the
 logged-elevation fallback.
 
+The native 2D map marker becomes a small arrow after two distinct logged
+locations, estimating travel direction rather than actual character facing.
+It holds through stationary/jitter readings and resets on zone/source changes
+or a large position jump. Its background follows the overlay opacity setting;
+the native 3D surface fades as a whole, including its geometry. The main map
+viewer's styling remains independent.
+
 ![Native Top 3D player marker and Auto Z on synthetic geometry](app/assets/whats-new/0.9.0/map-autoz.png)
 
 Routing is an opt-in. A line appears only after collision checks approve it; a guarded Recast/Detour candidate may refine the established route after the same checks. An unreachable or unverified destination remains a marker. Static archives do not reveal live doors or actors. [Route validation](docs/ROUTE_REJECTION_AUDIT.md) records working detours and remaining limits.
@@ -426,6 +433,7 @@ before changing either side of that contract.
 | [Navigation architecture](docs/NAVMESH_EVALUATION.md) | Guarded worker routing and independent collision validation |
 | [Validation report](VALIDATION.md) and [Windows checklist](docs/WINDOWS_MANUAL_TEST.md) | Automated gates and remaining manual acceptance |
 | [Contributing](CONTRIBUTING.md), [security](SECURITY.md) and [signing](SIGNING.md) | Contribution and release boundaries |
+| [Overlay and item-form follow-ups](docs/OVERLAY_DRAG_DETACH_PLAN.md), [shared wiki item cards](docs/WIKI_ITEM_HOVERS_PLAN.md) | Next-release scope, source/native evidence, pending PR integration and remaining installer gates. |
 
 The main source areas are `app/` (UI, parsing, maps and local knowledge), `desktop/` (Electron, overlays and file bridge), `server/` (wiki export), `scripts/` (build/validation), `tests/` and `wiki/` (optional launcher integration).
 

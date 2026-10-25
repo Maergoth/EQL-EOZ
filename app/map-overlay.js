@@ -1,6 +1,36 @@
 import { worldToClientMap, formatWorldLocationForPlayer } from './coordinate-system.js';
 import { mountMapOverlay3D } from './map-overlay-3d.js';
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Logged movement estimates a trajectory, not the character's actual facing.
+// Panning/zooming and duplicate session snapshots do not supply new samples.
+export function createMapHeadingTracker({minStep=.75,teleportDistance=800}={}) {
+    let previous=null,heading=null,scope=null;
+    function reset(nextScope=scope){previous=null;heading=null;scope=nextScope;}
+    return {reset,sample(location,nextScope=''){
+        if(nextScope!==scope)reset(nextScope);
+        const valid=value=>(typeof value==='number'||typeof value==='string'&&value.trim()!=='')&&Number.isFinite(Number(value));
+        if(!location||!valid(location.x)||!valid(location.y)){reset(nextScope);return null;}
+        const current={x:Number(location.x),y:Number(location.y)};
+        if(!previous){previous=current;return null;}
+        const dx=current.x-previous.x,dy=current.y-previous.y,distance=Math.hypot(dx,dy);
+        if(distance>=teleportDistance){previous=current;heading=null;}
+        else if(distance>=minStep){heading={x:dx/distance,y:dy/distance};previous=current;}
+        return heading?{...heading}:null;
+    }};
+}
+export function mapPlayerArrow(point,heading,size=11){
+    if(!heading||![point?.x,point?.y,heading.x,heading.y].every(Number.isFinite))return null;
+    const length=Math.hypot(heading.x,heading.y);if(!length)return null;
+    // The client map negates both world axes. Its canvas Y increases downward.
+    const forward={x:-heading.x/length,y:-heading.y/length},right={x:-forward.y,y:forward.x};
+    return [[size,0],[-size*.55,size*.6],[-size*.3,0],[-size*.55,-size*.6]].map(([along,across])=>({x:point.x+forward.x*along+right.x*across,y:point.y+forward.y*along+right.y*across}));
+}
+export function drawMapPlayerMarker(context,point,heading){
+    const arrow=mapPlayerArrow(point,heading);context.fillStyle='#77d8f1';context.strokeStyle='#07101a';context.lineWidth=2;context.lineJoin='round';context.beginPath();
+    if(arrow){context.moveTo(arrow[0].x,arrow[0].y);for(const vertex of arrow.slice(1))context.lineTo(vertex.x,vertex.y);context.closePath();}
+    else context.arc(point.x,point.y,5,0,Math.PI*2);
+    context.fill();context.stroke();
+}
 export function mapBounds(lines) {
     let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
     for (const line of lines || []) for (const index of [0,3]) { minX=Math.min(minX,line[index]);maxX=Math.max(maxX,line[index]);minY=Math.min(minY,line[index+1]);maxY=Math.max(maxY,line[index+1]); }
@@ -96,7 +126,7 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
 .native-map-slice button{flex:0 0 auto;font:inherit;padding:2px 4px;white-space:nowrap}.native-map-slice button[aria-pressed=true]{color:#f0d77f;border-color:#c9ae60;background:#4b421f}
 @media(max-width:360px){.native-map-tools{gap:2px}.native-map-tools button{font-size:calc(10px * var(--font-scale,1));padding:1px 2px}.native-map-tools>[data-map-action=mode]{max-width:48px}.native-map-header .native-map-title{font-size:calc(11px * var(--font-scale,1))}}
 .native-map-stage{position:relative;min-height:0;flex:1;overflow:hidden;border:1px solid #ffffff14;border-radius:4px;touch-action:none}.native-map-stage canvas{display:block;width:100%;height:100%;cursor:grab}.native-map-stage canvas:active{cursor:grabbing}
-.native-map-3d-stage{position:absolute;inset:0;min-height:0}.native-map-3d-stage iframe{width:100%;height:100%;border:0}
+.native-map-3d-stage{position:absolute;inset:0;min-height:0;opacity:var(--panel-opacity,.85)}.native-map-3d-stage iframe{width:100%;height:100%;border:0}
 .native-map-message{position:absolute;inset:15px;pointer-events:none;color:#a6b4c8;font-size:calc(12px * var(--font-scale,1));line-height:1.5}
 .native-map-note,.native-map-3d-status,.native-map-action-status{font-size:calc(10px * var(--font-scale,1));color:#9ba8b8;padding:5px 0 1px;overflow-wrap:anywhere;flex:0 0 auto}.native-map-3d-status:empty,.native-map-action-status:empty{display:none}.native-map-route{color:#e8d18b;font-size:calc(11px * var(--font-scale,1));overflow-wrap:anywhere;flex:0 0 auto}
 .native-map-npc-links{position:absolute;inset:0;pointer-events:none}.native-map-npc-link{position:absolute;opacity:0;pointer-events:none;padding:0!important;border:0!important;font:calc(11px * var(--font-scale)) var(--ui-font-family,"Segoe UI",sans-serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -117,7 +147,8 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
     for(const button of tools.querySelectorAll('button'))if(!button.title)button.title=button.getAttribute('aria-label')||button.textContent;
     const actionStatus=document.createElement('div');actionStatus.className='native-map-action-status';actionStatus.setAttribute('role','status');$('.native-map').append(actionStatus);
     const autoZButton=document.createElement('button');autoZButton.type='button';autoZButton.textContent='Auto Z';autoZButton.dataset.mapAutoZ='1';autoZButton.setAttribute('aria-label','Follow logged player elevation automatically');slice.insertBefore(autoZButton,slice.firstChild);
-    let data=null,session={},zone='',dataVersion=null,generation=0,disposed=false,follow=true,autoZ=true,lastKnownPlayerZ=null,sliceCenter=null,sliceTolerance=25,zoom=1,center={x:0,y:0},baseScale=1,drag=null,targets=[],mode='map',three=null,threeMode=null,modeSerial=0,visible=true,lastFocus='',pendingFocus=null;
+    let data=null,session={},zone='',dataVersion=null,generation=0,disposed=false,follow=true,autoZ=true,lastKnownPlayerZ=null,sliceCenter=null,sliceTolerance=25,zoom=1,center={x:0,y:0},baseScale=1,drag=null,targets=[],mode='map',three=null,threeMode=null,modeSerial=0,visible=true,lastFocus='',pendingFocus=null,playerHeading=null;
+    const headingTracker=createMapHeadingTracker();
     const listeners=[],npcButtons=new Map();let headerCloseTimer=null;
     const listen=(node,event,callback,options)=>{node.addEventListener(event,callback,options);listeners.push(()=>node.removeEventListener(event,callback,options));};
     const headerKeyboardFocus=()=>header.matches(':focus-visible')||Boolean(header.querySelector(':focus-visible'));
@@ -173,7 +204,9 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
         update3D();if(mode!=='map'||!context)return;
         const rect=canvas.getBoundingClientRect(),width=rect.width,height=rect.height,dpr=globalThis.devicePixelRatio||1;if(!width||!height)return;
         if(canvas.width!==Math.round(width*dpr)||canvas.height!==Math.round(height*dpr)){canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);}
-        context.setTransform(dpr,0,0,dpr,0,0);context.clearRect(0,0,width,height);context.fillStyle='#080f19';context.fillRect(0,0,width,height);
+        // The shell owns the user's background opacity. An opaque canvas fill
+        // would hide the desktop even when that surrounding window is faded.
+        context.setTransform(dpr,0,0,dpr,0,0);context.clearRect(0,0,width,height);
         if(follow&&player)center={x:player.x,y:player.y};const onFloor=z=>mapSliceContainsZ(z,activeZ,sliceTolerance);context.lineWidth=1;
         for(const line of data?.lines||[]){const clipped=clipMapSegmentToSlice({x:line[0],y:line[1],z:line[2]},{x:line[3],y:line[4],z:line[5]},activeZ,sliceTolerance);if(!clipped)continue;const a=screen(clipped[0],width,height),b=screen(clipped[1],width,height);if((a.x<0&&b.x<0)||(a.x>width&&b.x>width)||(a.y<0&&b.y<0)||(a.y>height&&b.y>height))continue;context.strokeStyle=line[6]+line[7]+line[8]<90?'#8a98ac':`rgb(${line[6]},${line[7]},${line[8]})`;context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke();}
         if(map.route?.points?.length>1){context.strokeStyle='#f0d77f';context.lineWidth=3;for(let index=1;index<map.route.points.length;index++){const clipped=clipMapSegmentToSlice(map.route.points[index-1],map.route.points[index],activeZ,sliceTolerance);if(!clipped)continue;const a=screen(worldToClientMap(clipped[0]),width,height),b=screen(worldToClientMap(clipped[1]),width,height);context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke();}}
@@ -182,14 +215,15 @@ export function mountMapOverlay({ root, bridge, getSession, document = globalThi
         const markers=[];context.font=npcFont;
         for(const npc of map.npcs||[]){if(!Array.isArray(npc.loc)||npc.loc.length<2||!onFloor(npc.loc[2]))continue;const point=screen(worldToClientMap({x:npc.loc[0],y:npc.loc[1]}),width,height);if(point.x<0||point.x>width||point.y<0||point.y>height)continue;const selected=map.selectedNpcId===npc.id;context.fillStyle=npc.raidInstance?'#e79b9b':selected?'#fff0ad':'#d8b75c';context.beginPath();context.arc(point.x,point.y,selected?5:3,0,Math.PI*2);context.fill();markers.push({...npc,screen:point,selected});}
         const playerScreen=player?screen(player,width,height):null;
-        const placed=layoutMapLabels({npcs:markers,npcNames:(map.npcs||[]).map(npc=>npc.name),labels:(data?.labels||[]).filter(label=>onFloor(label.z)).map(label=>({...label,screen:screen(label,width,height)})),width,height,fontScale,blocked:playerScreen?[{x:playerScreen.x-7,y:playerScreen.y-7,width:14,height:14}]:[],measureText:(text,kind)=>{context.font=kind==='npcs'?npcFont:labelFont;return context.measureText(text).width;}});
+        const placed=layoutMapLabels({npcs:markers,npcNames:(map.npcs||[]).map(npc=>npc.name),labels:(data?.labels||[]).filter(label=>onFloor(label.z)).map(label=>({...label,screen:screen(label,width,height)})),width,height,fontScale,blocked:playerScreen?[{x:playerScreen.x-13,y:playerScreen.y-13,width:26,height:26}]:[],measureText:(text,kind)=>{context.font=kind==='npcs'?npcFont:labelFont;return context.measureText(text).width;}});
         context.textBaseline='top';for(const label of placed.labels){context.font=labelFont;context.fillStyle='#8595aa';context.fillText(label.text,label.x,label.y);}for(const label of placed.npcs){context.font=npcFont;context.fillStyle=label.raidInstance?'#e79b9b':label.selected?'#fff0ad':'#d8b75c';context.fillText(label.text,label.x,label.y);}context.textBaseline='alphabetic';
         targets=mapNpcHitTargets(markers,placed.npcs);renderNpcButtons();
-        if(player){const point=screen(player,width,height);context.fillStyle='#77d8f1';context.strokeStyle='#07101a';context.lineWidth=2;context.beginPath();context.arc(point.x,point.y,5,0,Math.PI*2);context.fill();context.stroke();}
+        if(player)drawMapPlayerMarker(context,screen(player,width,height),playerHeading);
         $('.native-map-message').textContent=!zone?'Waiting for a logged zone.':!data?'Loading local map…':data.status!=='ready'?data.message||'No map line data.':!player?'Type /loc in game to show your position.':'';
     }
     async function load(nextZone){const owner=++generation;data=null;draw();try{const result=await bridge.action('session:map-data',{zone:nextZone});if(disposed||owner!==generation)return;data=result;fit();draw();}catch(error){if(disposed||owner!==generation)return;data={status:'error',message:error.message||'Unable to load this map.',lines:[],labels:[]};draw();}}
     function render(next){session=next||getSession?.()||{};const nextZone=session.map?.zone||session.zone||'',nextVersion=session.map?.dataVersion??0;
+        playerHeading=headingTracker.sample(session.map?.location,JSON.stringify([nextZone,nextVersion]));
         if(nextZone!==zone||nextVersion!==dataVersion){const changedZone=nextZone!==zone;zone=nextZone;dataVersion=nextVersion;data=null;targets=[];pendingFocus=null;lastKnownPlayerZ=null;if(changedZone){zoom=1;autoZ=true;sliceCenter=defaultMapSliceCenter(zone,session.map?.viewerZone);sliceTolerance=25;$('[data-map-tolerance]').value='25';}generation++;release3D();if(zone)void load(zone);}
         const focus=session.map?.focus;if(focus&&focus.zone===zone&&focus.sequence!==undefined){const key=JSON.stringify([zone,focus.sequence]);if(key!==lastFocus){lastFocus=key;pendingFocus=focus;follow=false;autoZ=false;if(knownMapZ(focus.loc?.[2]))sliceCenter=Number(focus.loc[2]);setMode('first');}}
         draw();

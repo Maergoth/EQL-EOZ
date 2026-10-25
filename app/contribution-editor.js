@@ -6,11 +6,12 @@ export const editorEscape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'
 const e=editorEscape;
 const labels={statLines:'Item stat block',knownNPCs:'Monsters in this zone',whoName:'Zone name in /who',level:'Level',race:'Race',class:'Class',classes:'Classes',races:'Races',slots:'Equipment slots',location:'Spawn location (Y, X, Z)',respawnTime:'Respawn time',iconId:'Icon ID',focusEffect:'Focus effect',effectName:'Effect / proc spell',effectType:'Effect type',effectCastTime:'Effect cast time',effectLevel:'Effect required level',exaltationSlots:'Exaltation slots',augmentSlots:'Exaltation slots',special:'Special abilities',AC:'AC',HP:'HP'};
 const examples={statLines:'AC: 10\nHP: 50\nSTR: 5',knownNPCs:'A loathing lich\nLord of Loathing',whoName:'The Plane of Hate',location:'-60, 325, 120',respawnTime:'3h',level:'45',race:'Undead Iksar',class:'Warrior',classes:'WAR, CLR, PAL',races:'ALL',slots:'PRIMARY, SECONDARY',iconId:'5667',focusEffect:'Improved Healing I',effectName:'Rampage',effectType:'Combat',effectCastTime:'Instant',effectLevel:'45',exaltationSlots:'5',augmentSlots:'5',special:'Summons, Rampages',AC:'100',HP:'12000'};
-const internal=new Set(['name','tier','fraction','modified','augmented','augmentNames','effects','lootKinds','quantity','dynamicZoneSupported']);
+const internal=new Set(['name','tier','fraction','fractionMaximum','exaltationSlots','augmentSlots','augmentSlotCount','emptyAugmentSlots','modified','augmented','augmentNames','effects','lootKinds','quantity','dynamicZoneSupported']);
 const numeric=new Set(['ac','hp','mana','endurance','str','sta','agi','dex','wis','int','cha','resistPoison','resistMagic','resistDisease','resistFire','resistCold','resistCorruption','hpRegen','manaRegen','enduranceRegen','attackSpeed','weight','damage','damageBonus','delay','attack','haste']);
 export function contributionFieldMarkup(key,field,{kind,requireLocation=true}={}){
     if(internal.has(key)||key==='knownLoot'||kind==='item'&&numeric.has(key))return '';
     const array=Array.isArray(field.value),text=array?field.value.join(['statLines','knownNPCs'].includes(key)?'\n':', '):field.value??'',multiline=['statLines','knownNPCs'].includes(key),original=e(JSON.stringify({value:field.value,confirmed:field.confirmed===true}));
+    if(kind==='item'&&key==='iconId')return `<div class="contribution-field contribution-icon-field" data-field-key="iconId" data-original-field="${original}"><label>Icon ID<input data-field-value data-type="${typeof field.value}" type="number" min="0" max="9999999" step="1" value="${e(text)}" placeholder="ex. 5667"></label><div data-contribution-icons></div></div>`;
     return `<label class="contribution-field" data-field-key="${e(key)}" data-original-field="${original}"><span>${e(labels[key]||key.replace(/([a-z])([A-Z])/g,'$1 $2'))}</span>${multiline?`<textarea data-field-value data-array="${array}" rows="${key==='statLines'?7:3}" placeholder="${e('ex. '+(examples[key]||'?'))}">${e(text)}</textarea>`:`<input data-field-value data-type="${typeof field.value}" ${array?'data-array="true"':''} value="${e(text)}" placeholder="${e('ex. '+(examples[key]||'?'))}" ${kind==='npc'&&key==='location'&&requireLocation?'required':''}>`}</label>`;
 }
 export function contributionLootMarkup(candidate){
@@ -34,4 +35,16 @@ export function contributionMatchMarkup(candidate,matches=[]){
 export function contributionScreenshotMarkup(candidate){
     const attachment=candidate.attachment;
     return `<section class="contribution-image"><h3>Screenshot</h3><button type="button" class="contribution-image-drop" data-contribution-dropzone data-contribution-file aria-label="Select a screenshot or paste with Ctrl+V">${attachment?.thumbnail?`<img src="${e(attachment.thumbnail)}" alt="Selected contribution screenshot">`:'<span class="contribution-image-plus" aria-hidden="true">+</span><span>Select a screenshot or paste here</span>'}</button><div class="capture-actions"><button type="button" class="text-button" data-contribution-paste>Paste screenshot</button>${attachment?'<button type="button" class="text-button" data-remove-attachment>Remove screenshot</button>':''}</div><label>Image caption<input name="attachmentCaption" maxlength="1000" value="${e(attachment?.caption||'')}" placeholder="ex. A loathing lich at its spawn in Plane of Hate"></label><label>Image rights<select name="attachmentLicense"><option value="own-screenshot" ${!attachment?.license||attachment.license==='own-screenshot'?'selected':''}>My EverQuest screenshot</option><option value="permission" ${attachment?.license==='permission'?'selected':''}>I have permission to upload this image</option></select></label></section>`;
+}
+
+// Link only confirmed saved titles at the fixed wiki origin. Pending/error
+// results and result-provided URLs must never look like successful publication.
+export function contributionPublishReceiptMarkup(plan={}){
+    const links=(Array.isArray(plan.pages)?plan.pages:[]).flatMap(page=>{
+        if(page?.status!=='applied'||typeof page.title!=='string'||!page.title.trim())return [];
+        let titlePath;try{titlePath=encodeURIComponent(page.title);}catch{return [];}
+        return [`<a href="https://eqlwiki.com/${e(titlePath)}" target="_blank" rel="noopener noreferrer">View ${e(page.title)}</a>`];
+    });
+    const message=plan.status==='submitted'?'Contribution published. Thank you!':'Review the per-page results. Completed edits will not be repeated.';
+    return `${message}${links.length?' '+links.join(' · '):''}`;
 }

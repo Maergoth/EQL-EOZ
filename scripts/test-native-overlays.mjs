@@ -374,7 +374,7 @@ try {
                 name.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:list}));tooltip.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,relatedTarget:list}));
                 await new Promise(resolve=>setTimeout(resolve,220));const crossedGap=!tooltip.hidden;
                 const overflow=getComputedStyle(tooltip).overflowY,scrollable=tooltip.scrollHeight>tooltip.clientHeight;
-                tooltip.scrollTop=tooltip.scrollHeight;const scrolled=tooltip.scrollTop>0,note=tooltip.querySelector('.intel-tooltip-note').getBoundingClientRect(),box=tooltip.getBoundingClientRect(),endVisible=note.bottom<=box.bottom+1;
+                tooltip.scrollTop=tooltip.scrollHeight;const scrolled=tooltip.scrollTop>0,note=tooltip.querySelector('[data-item-detail="Notes"]').getBoundingClientRect(),box=tooltip.getBoundingClientRect(),endVisible=note.bottom<=box.bottom+1;
                 tooltip.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:list}));await new Promise(resolve=>setTimeout(resolve,220));const leftHidden=tooltip.hidden;
                 // Live snapshots can replace the row during the two dismissal
                 // waits. Exercise keyboard input on the current rendered item.
@@ -384,10 +384,11 @@ try {
             });
             assert(tooltipHover.icon.visible&&tooltipHover.text.visible&&tooltipHover.icon.fits&&tooltipHover.text.fits&&tooltipHover.keyboard&&tooltipHover.leftHidden&&tooltipHover.blurHidden,`Both item pictures/names reveal bounded stat blocks and dismiss on exit: ${JSON.stringify(tooltipHover)}`);
             assert(tooltipHover.crossedGap&&tooltipHover.overflow==='auto'&&tooltipHover.scrollable&&tooltipHover.scrolled&&tooltipHover.endVisible&&tooltipHover.keyboardScrolled,`Tall real stat-block markup remains fully readable by mouse and keyboard inside the native viewport: ${JSON.stringify(tooltipHover)}`);
-            assert.match(tooltipHover.text.text,/Tier 7[\s\S]*HP[\s\S]*\(/,'Tier-adjusted stat blocks include base values');
+            assert.match(tooltipHover.text.text,/\+7[\s\S]*HP/,'Tier-adjusted wiki Itemboxes show the selected tier');
+            assert.equal(await execute(intelWindow,()=>Boolean(document.querySelector('#intel-item-tooltip .wiki-itembox-value.is-scaled'))),true,'Tier-adjusted wiki values keep their green highlight');
             await execute(intelWindow,()=>document.querySelector('.item-name').dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse',clientX:70,clientY:150})));
             await action('intel','session:item-tier',{tier:0});
-            await until(async()=>execute(intelWindow,()=>{const tooltip=document.querySelector('#intel-item-tooltip');return !tooltip.hidden&&tooltip.querySelector('.intel-tooltip-title>span')?.textContent==='Base';}),'An already hovered item stat block updates to the latest tier without a new hover');
+            await until(async()=>execute(intelWindow,()=>{const tooltip=document.querySelector('#intel-item-tooltip');return !tooltip.hidden&&Boolean(tooltip.querySelector('.wiki-itembox-title strong'))&&!/\s\+\d+$/.test(tooltip.querySelector('.wiki-itembox-title strong').textContent)&&!tooltip.querySelector('.wiki-itembox-value.is-scaled');}),'An already hovered item stat block updates to the latest tier without a new hover');
             await screenshot(intelWindow,'intel-item-stats');
             await execute(intelWindow,()=>{document.querySelector('[data-intel-section-toggle="raid"]').click();});
             await action('map','session:select-npc',{npc:'Synthetic Keeper',zone:'Mistmoore Castle',raidInstance:true});
@@ -658,18 +659,18 @@ try {
                     // mouse moves can coalesce without a fresh pointerover.
                     await until(async()=>execute(owner,()=>window.__mainItemPointer.some(event=>event.trusted&&Math.abs(event.x-5)<=1&&Math.abs(event.y-5)<=1)),'Native pointer departure is delivered before entering the item');
                     owner.webContents.sendInputEvent({type:'mouseMove',x:target.x,y:target.y});
-                    await until(async()=>execute(owner,name=>{const tooltip=document.querySelector('#item-tooltip');return !tooltip.hidden&&tooltip.querySelector('.itembox-title>span')?.textContent===name&&window.__mainItemPointer.some(event=>event.type==='pointerover'&&event.trusted&&event.name===name);},target.name),`Trusted main hover exposes stats from ${selector}`);
+                    await until(async()=>execute(owner,name=>{const tooltip=document.querySelector('#item-tooltip');return !tooltip.hidden&&tooltip.querySelector('.wiki-itembox-title strong')?.textContent.replace(/\s\+\d+$/,'')===name&&window.__mainItemPointer.some(event=>event.type==='pointerover'&&event.trusted&&event.name===name);},target.name),`Trusted main hover exposes stats from ${selector}`);
                 }catch(error){
                     const diagnostic=await execute(owner,(selector,point)=>{
                         const describe=node=>node?{tag:node.tagName,id:node.id,className:node.className,name:node.closest?.('[data-item-title]')?.dataset.itemTitle||'',text:node.textContent?.slice(0,120),rect:node.getBoundingClientRect().toJSON()}:null;
                         const tooltip=document.querySelector('#item-tooltip');
-                        return{hasFocus:document.hasFocus(),viewport:{width:innerWidth,height:innerHeight},activeView:document.querySelector('.view.is-active')?.dataset.viewPanel,activeElement:describe(document.activeElement),target:describe(document.querySelector(selector)),hit:describe(document.elementFromPoint(point.x,point.y)),events:window.__mainItemPointer,tooltip:{hidden:tooltip.hidden,display:getComputedStyle(tooltip).display,title:tooltip.querySelector('.itembox-title>span')?.textContent,text:tooltip.textContent.slice(0,350)},scroll:document.querySelector('.content').scrollTop};
+                        return{hasFocus:document.hasFocus(),viewport:{width:innerWidth,height:innerHeight},activeView:document.querySelector('.view.is-active')?.dataset.viewPanel,activeElement:describe(document.activeElement),target:describe(document.querySelector(selector)),hit:describe(document.elementFromPoint(point.x,point.y)),events:window.__mainItemPointer,tooltip:{hidden:tooltip.hidden,display:getComputedStyle(tooltip).display,title:tooltip.querySelector('.wiki-itembox-title strong')?.textContent,text:tooltip.textContent.slice(0,350)},scroll:document.querySelector('.content').scrollTop};
                     },selector,target);
                     throw new Error(`${error.message}: ${JSON.stringify({selector,point:target,native:{visible:owner.isVisible(),focused:owner.isFocused(),bounds:owner.getContentBounds()},...diagnostic})}`);
                 }
                 return execute(owner,(selector,target)=>{
                     const tooltip=document.querySelector('#item-tooltip'),node=document.querySelector(selector),identity=node.closest('[data-item-title]');
-                    return{...target,stats:tooltip.querySelectorAll('.tooltip-stat').length,description:identity.getAttribute('aria-describedby'),tabbable:identity.tabIndex>=0,href:identity.getAttribute('href')};
+                    return{...target,stats:tooltip.querySelectorAll('[data-item-stat]').length,description:identity.getAttribute('aria-describedby'),tabbable:identity.tabIndex>=0,href:identity.getAttribute('href')};
                 },selector,target);
             };
             const mainItemName=await mainHover('#item-list h3[data-item-title]');
@@ -688,7 +689,7 @@ try {
             assert.equal(mainNpcName.name,mainNpcIcon.name);assert(mainNpcName.stats>0&&mainNpcIcon.stats>0&&/^https?:/.test(mainNpcName.href||''),'NPC loot names and pictures both expose real local stats while preserving their Wiki link');
             owner.focus();await until(async()=>execute(owner,()=>document.hasFocus()),'Main keyboard hover checks use the active CI document');
             await execute(owner,()=>{const target=document.querySelector('#npc-list .known-drops [data-item-title]');target.focus();});
-            assert.equal(await execute(owner,()=>!document.querySelector('#item-tooltip').hidden&&document.activeElement.dataset.itemTitle===document.querySelector('#item-tooltip .itembox-title>span').textContent),true,'Main NPC loot remains available to keyboard focus');
+            assert.equal(await execute(owner,()=>!document.querySelector('#item-tooltip').hidden&&document.activeElement.dataset.itemTitle===document.querySelector('#item-tooltip .wiki-itembox-title strong').textContent.replace(/\s\+\d+$/,'')),true,'Main NPC loot remains available to keyboard focus');
             await append(['Unknown Elevation Watcher scowls at you (Lvl: 30)']);
             await until(async()=>{const intel=(await state()).snapshot.session.intel;return intel.npcs.some(npc=>npc.id===intel.focusedNpcId&&npc.name==='Unknown Elevation Watcher');},'Prepare a real observed NPC before testing changed-level redraws');
             await execute(owner,()=>{document.activeElement?.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));const search=document.querySelector('#npc-search');search.value='';search.dispatchEvent(new Event('input'));});

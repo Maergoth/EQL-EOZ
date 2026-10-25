@@ -75,7 +75,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         let candidate=candidates.find(c=>c.key===key||c.aliasKeys?.includes(key));
         if(!force&&!candidate&&['submitted','ignored'].includes(suppression(kind,name,{zone}).reason))return null;
         const classified=contributionReasons({...candidate,kind,name,zone,instance,fields:{...candidate?.fields,...Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{value}]))},relations:[...(candidate?.relations||[]),...relations]},resolver());
-        if(classified.excluded&&!force)return null;
+        if(classified.excluded==='owned-pet'||classified.excluded&&!force)return null;
         if(present==='present'&&!classified.reasons.length&&!force&&!candidate)return null;
         if(!candidate){if(candidates.length>=200){onWarning('The contribution queue is full. Review or remove a draft to save another discovery.');return null;}candidate={id:`contribution-${++sequence}`,key,aliasKeys:[],kind,name:resolved.canonicalTitle||name,title:resolved.canonicalTitle||name,zone:clean(zone),instance:['normal','raid'].includes(instance)?instance:'unknown',era:'',playerText:'',fields:{},sources:[],relations:[],evidence:[],status:'needs-review',membership:present};candidates.push(candidate);}
         if(force)candidate.manual=true;
@@ -99,6 +99,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         if(observation?.owner==='character'||!['item','npc','zone'].includes(kind)){save();return null;}
         if(kind==='npc'&&!classifyNpcEvidence(observation.subject.name,resolver().resolve(kind,observation.subject.name)).eligible){save();return null;}
         const fields=Object.fromEntries((observation.fields||[]).filter(f=>f.key!=='name').map(f=>[f.key,f.value]));
+        if(Array.isArray(fields.knownNPCs))fields.knownNPCs=fields.knownNPCs.filter(name=>classifyNpcEvidence(name,resolver().resolve('npc',name)).eligible);
         const itemName=kind==='item'?itemIdentity(observation.subject.name).name:null;
         const zone=observation.input?.zone||'',instance=observation.input?.instance||'unknown',relations=[...(observation.relations||[])].filter(relation=>!['drop-source','mob-zone','zone-population'].includes(relation.type)||classifyNpcEvidence(relation.name,resolver().resolve('npc',relation.name)).eligible).map(relation=>relation.type==='zone-loot'?{...relation,name:itemIdentity(relation.name).name}:relation);
         // Older game-log journal records predate explicit relationship entries.
@@ -142,7 +143,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
             return {candidate:updated?structuredClone(candidate):null,prompt:null,locationCaptured:{candidateId:candidate.id,name:candidate.name,zone,location,display}};
         }
         const candidate=consume(observation);let prompt=null;
-        if(event.type==='kill'){
+        if(event.type==='kill'&&classifyNpcEvidence(observation.subject.name,resolver().resolve('npc',observation.subject.name)).eligible){
             const target=candidates.find(value=>value.kind==='npc'&&value.key===canonicalKey('npc',observation.subject.name,zone));
             if(target&&zone&&!target.spawnRequest&&target.fields.location?.confirmed!==true&&target.membership==='missing'&&!suppression('npc',target.name,{zone,purpose:'spawn-location'}).suppressed){
                 target.spawnRequest={status:'requested',requestedAt:observation.capturedAt,evidenceId:observation.id};const result=armSpawnLocation(target.id);if(result.ok){prompt={candidateId:target.id,name:target.name,zone,armed:true,expiresAt:result.expiresAt};rememberState('npc',target.name,'notified','spawn-location',zone);}save();
@@ -157,7 +158,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         for(const candidate of [...candidates]){
             const classification=contributionReasons(candidate,resolver()),resolved=classification.resolved,key=canonicalKey(candidate.kind,candidate.name,candidate.zone),protectedWork=protectedDraft(candidate),prior=seen.get(key),realGap=classification.reasons.some(reason=>['missing-source','missing-population','tier0-verification','identity-review'].includes(reason)),conflict=prior&&Object.entries(candidate.fields||{}).some(([field,value])=>prior.fields?.[field]&&!['knownLoot','knownNPCs'].includes(field)&&JSON.stringify(prior.fields[field].value)!==JSON.stringify(value.value)),duplicate=prior&&!protectedWork&&!protectedDraft(prior)&&!realGap&&!conflict;
             if(!prior)seen.set(key,candidate);
-            const obsolete=classification.excluded||resolved.membership==='present'&&!classification.reasons.length?'generated-pet'===classification.excluded?'generated-pet':'known-complete':duplicate?'duplicate':null;
+            const obsolete=classification.excluded||(resolved.membership==='present'&&!classification.reasons.length?'known-complete':duplicate?'duplicate':null);
             const reason=protectedWork?'protected-work':prior&&conflict?'duplicate-conflict':obsolete||classification.reasons[0]||'unresolved',action=obsolete&&!protectedWork&&archive.length<200?'archive':'keep';
             rows.push({id:candidate.id,name:candidate.name,kind:candidate.kind,classification:reason,reasons:classification.reasons,action,canonicalTitle:resolved.canonicalTitle,membership:resolved.membership,...(prior?{duplicateOf:prior.id}:{})});
             if(!apply)continue;

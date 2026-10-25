@@ -1,6 +1,6 @@
 // Pure contribution preparation. OCR observations are suggestions; only reviewed
 // fields enter wikicode. No network, account state, or narrative generation.
-import { validateItemBaseReview } from './item-base-review.js';
+import { validateItemBaseReview, proposeItemBaseReview, applyItemBaseReview } from './item-base-review.js';
 import { validateTierZeroVerification } from './contribution-tier-zero.js';
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 const TYPES = new Set(['item', 'npc', 'zone', 'spell']);
@@ -110,10 +110,15 @@ export function extractContributionBlueprints(source, revision = null) {
 }
 
 export function buildContributionDraft(input, blueprints) {
-    const candidate = normalizeContributionCandidate(input), { field } = candidate;
+    let candidate = normalizeContributionCandidate(input),proposalError='';
+    if(candidate.kind==='item'){
+        try{const proposals=proposeItemBaseReview(candidate);if(proposals)candidate=normalizeContributionCandidate({...candidate,...proposals});}
+        catch(error){proposalError=error.message;}
+    }
+    const { field } = candidate;
     const type = candidate.kind === 'npc' && candidate.instance === 'raid' ? 'raid' : candidate.kind;
     const blueprint = blueprints?.entries?.[type];
-    const warnings = [], blockers = [];
+    const warnings = [], blockers = proposalError?[proposalError]:[];
     if (!blueprint) blockers.push(`The current ${type} blueprint is unavailable.`);
     const expected = candidate.kind === 'item' ? /\{\{\s*Itempage\b/i : candidate.kind === 'npc' ? /\{\{\s*Namedmobpage\b/i : candidate.kind === 'spell' ? /\{\{\s*Spell(?:page|pagesmart)\b/i : /zoneTopTable/;
     if (blueprint && !expected.test(blueprint.text)) blockers.push('The live blueprint structure changed. Review it in the wiki before submitting.');
@@ -134,7 +139,10 @@ export function buildContributionDraft(input, blueprints) {
         const recovery=validateItemBaseReview(candidate),upgraded=Number(candidate.fields.tier?.value)>0||candidate.fields.augmented?.value===true||candidate.fields.modified?.value===true||candidate.fields.augmentNames?.value?.length>0;
         if(upgraded&&!recovery.ok){lines=lines.filter(line=>!/^\s*(?:AC|HP|Mana|MP|END|Endurance|STR|STA|AGI|DEX|WIS|INT|CHA|Strength|Stamina|Agility|Dexterity|Wisdom|Intelligence|Charisma|SV\s+\w+|Weight|WT|DMG|Damage|Delay|Haste|Attack(?: Speed)?|\w+ Regen)\s*[:=]/i.test(line));warnings.push('Tiered numeric observations are omitted until base proposals are selected. Unknown fields are shown as ?.');}
         if(candidate.baseRecovery&&!recovery.ok)blockers.push(recovery.reason);
-        if(recovery.ok)warnings.push('Base statistics are reviewed reverse-scaling inferences, not a base-item capture.',...recovery.warnings);
+        if(recovery.ok){
+            lines=applyItemBaseReview(candidate,recovery.review).fields.statLines.value.map(literalWikiText);
+            warnings.push('Base statistics are reviewed reverse-scaling inferences, not a base-item capture.',...recovery.warnings);
+        }
         const icon = field('iconId');
         if (icon !== undefined && (!Number.isInteger(Number(icon)) || Number(icon) < 0 || Number(icon) > 1000000)) blockers.push('Confirm a valid existing icon ID.');
         if (icon === undefined) warnings.push('No verified wiki icon ID; the icon field stays empty.');
@@ -151,10 +159,8 @@ export function buildContributionDraft(input, blueprints) {
         const normalDrops=sourceRows('normal'),raidDrops=sourceRows('raid'),drops=[normalDrops,raidDrops?`=== Raid Instance ===\n${raidDrops}`:''].filter(Boolean).join('\n\n');
         const effect=itemEffectWikicode(candidate);
         if(effect&&!lines.some(line=>/^Effect\s*:/i.test(line)))lines.push(effect);
-        const tier=Number(candidate.fields.tier?.value),recoveryNote=recovery.ok?`These stats are reverse calculated from a tier ${recovery.review?.tier??tier} item. Please confirm with a tier 0 item and remove this message`:'';
+        const tier=recovery.ok?recovery.review?.tier:Number(candidate.fields.tier?.value),recoveryNote=Number.isInteger(tier)&&tier>0&&tier<=10?`These stats are reverse calculated from a tier ${tier} item. Please confirm with a tier 0 item and remove this message`:'';
         text = `${era}<onlyinclude>{{Itempage\n|itemname = ${candidate.title}\n|lucy_img_ID = ${icon === undefined ? '?' : Number(icon)}\n|statsblock =\n${lines.join('<br>\n')||'?'}\n|focus_effect = ${literalWikiText(field('focusEffect') || '?')}\n|notes = ${[candidate.playerText,recoveryNote].filter(Boolean).join('\n\n')||'?'}\n|dropsfrom =\n${drops||'?'}\n}}</onlyinclude>\n`;
-        const capacity=field('exaltationSlots')??field('augmentSlots')??5;
-        if(Number.isInteger(Number(capacity))&&Number(capacity)>=0&&Number(capacity)<=8)text+=`\n<!-- EoZ Exaltation capacity: ${Number(capacity)} -->\n`;
     } else if (candidate.kind === 'npc') {
         if (!field('location') || !/^\s*\(?\s*[-+]?\d+(?:\.\d+)?\s*[, ]+\s*[-+]?\d+(?:\.\d+)?\s*[, ]+\s*[-+]?\d+(?:\.\d+)?\s*\)?\s*$/.test(String(field('location')))) blockers.push('Enter the monster spawn location as Y, X, Z.');
         if (!candidate.playerText) warnings.push('The NPC description is empty; add player-written details when known.');

@@ -1,4 +1,5 @@
 import { loggedLocationToWorld } from './coordinate-system.js';
+import { isOwnedPetName } from './generated-pets.js';
 
 const LINE_RE = /^\[([^\]]+)\]\s*(.*)$/;
 const AUTO_ATTACK_VERBS = new Set(['hit', 'slash', 'crush', 'pierce', 'punch', 'claw', 'bite', 'maul']);
@@ -254,7 +255,7 @@ export class EQLogParser {
 
     rememberNpc(name, fields = {}) {
         name = normalizeName(name);
-        if (!name) return;
+        if (!name || isOwnedPetName(name)) return;
         const key = `${this.zone.toLowerCase()}|${name.toLowerCase()}`;
         const previous = this.observed.get(key) || {
             name,

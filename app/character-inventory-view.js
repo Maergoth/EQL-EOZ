@@ -1,4 +1,4 @@
-import {characterItemDetailsMarkup} from './character-item-card.js';
+import {characterItemboxTitleMarkup,characterItemboxBodyMarkup} from './character-itembox.js';
 import { CHARACTER_SLOTS, characterBaseItemName, characterEquipmentEligibility, characterItemStats, characterStatLabel, safeCharacterIcon } from './character-model.js';
 import { isItemStatModified } from './item-stat-presentation.js';
 import { characterTotalGroups } from './character-totals.js';
@@ -63,15 +63,17 @@ export function characterStatSummaryMarkup(totals){
 }
 
 export function characterItemTitleMarkup(card){
-    return `<div class="character-item-detail-title">${itemIcon(card)}<div><strong>${escape(characterItemLabel(card))}</strong><small>${escape(card.slots.join(' / ')||'Slots unknown')}${card.level!==null?` · Level ${escape(card.level)}`:''}</small></div></div>`;
+    return characterItemboxTitleMarkup(characterItemLabel(card),{title:characterEquipmentEligibility(card).known?card.wikiTitle:''});
 }
 export function characterTierControlsMarkup(card){
-    return `<div class="character-tier-controls"><label>Item tier <output data-card-tier-value>+${card.tier??0}</output><input data-card-tier type="range" min="0" max="10" step="1" value="${card.tier??0}" aria-label="Selected item tier"></label>${Object.keys(card.observedStats).length?'<div class="capture-actions"><button class="text-button" type="button" data-card-observed-basis>Use captured stats</button></div>':''}</div>`;
+    return `<div class="character-tier-controls"><label><span>Item tier</span> <output data-card-tier-value>+${card.tier??0}</output><input data-card-tier type="range" min="0" max="10" step="1" value="${card.tier??0}" aria-label="Selected item tier"></label>${Object.keys(card.observedStats).length?'<div class="capture-actions"><button class="text-button" type="button" data-card-observed-basis>Use captured stats</button></div>':''}</div>`;
 }
 export function characterItemStatBodyMarkup(card){
     const read=characterItemStats(card),known=characterEquipmentEligibility(card).known;
     const raw=String(card.observedName||'').trim(),tierMatch=raw.match(/\+(\d+)\s*$/),tierConflict=tierMatch&&card.tier!==null&&Number(tierMatch[1])!==card.tier;
-    return `${known?'':'<p class="character-match-warning">! Match this item to the cached wiki catalog before equipping.</p>'}<dl class="character-item-stat-block">${Object.entries(read.stats).map(([key,value])=>`<div><dt>${escape(characterStatLabel(key))}</dt><dd class="${read.basis!=='observed-examine'&&isItemStatModified(card.baseStats[key],value,card.tier)?'is-scaled':''}">${number(value)}</dd></div>`).join('')||'<div><dt>Statistics</dt><dd>Not read</dd></div>'}</dl>${characterItemDetailsMarkup(card.details)}${characterAugmentSlotsMarkup(card)}${raw&&characterBaseItemName(raw)!==characterBaseItemName(card.name)?`<p class="settings-helper">Screen read: ${escape(raw)}</p>`:''}${tierConflict&&read.basis!=='catalog-tier-preview'?'<p class="character-match-warning">The screen-read tier differs from this card. Review its tier.</p>':''}<p class="settings-helper">${read.basis==='observed-examine'?'Captured values':read.basis==='catalog-tier-preview'?'Preview from wiki base stats':'Catalog values at this tier'}</p>${[card.previewWarning,card.slotReadWarning].filter(Boolean).map(message=>`<p class="character-match-warning">${escape(message)}</p>`).join('')}`;
+    const modifiedKeys=read.basis==='observed-examine'?[]:Object.keys(read.stats).filter(key=>isItemStatModified(card.baseStats[key],read.stats[key],card.tier));
+    const facts=characterItemboxBodyMarkup({stats:read.stats,baseStats:card.baseStats,details:card.details,icon:card.icon,slots:card.slots,modifiedKeys});
+    return `<div class="character-itembox-body">${known?'':'<p class="character-match-warning">! Match this item to the cached wiki catalog before equipping.</p>'}${facts}${characterAugmentSlotsMarkup(card)}${raw&&characterBaseItemName(raw)!==characterBaseItemName(card.name)?`<p class="settings-helper">Screen read: ${escape(raw)}</p>`:''}${tierConflict&&read.basis!=='catalog-tier-preview'?'<p class="character-match-warning">The screen-read tier differs from this card. Review its tier.</p>':''}<p class="settings-helper wiki-itembox-basis">${read.basis==='observed-examine'?'Captured values':read.basis==='catalog-tier-preview'?'Preview from wiki base stats':'Catalog values at this tier'}</p>${[card.previewWarning,card.slotReadWarning].filter(Boolean).map(message=>`<p class="character-match-warning">${escape(message)}</p>`).join('')}</div>`;
 }
 export function characterAugmentSlotsMarkup(card){
     const count=card.augmentSlots;
@@ -82,4 +84,4 @@ export function characterAugmentSlotsMarkup(card){
         return `<div class="character-augment-slot"><button type="button" data-augment-pick="${escape(card.id)}" data-augment-index="${index}" aria-label="${escape((augment?'Replace Exaltation: ':'Choose item for ')+name)}" title="${escape(augment?'Exaltation: '+name:name)}">${augment?itemIcon(augment):'<span aria-hidden="true">+</span>'}</button>${augment?`<button type="button" class="character-augment-remove" data-augment-remove="${escape(card.id)}" data-augment-index="${index}" aria-label="Remove ${escape(name)}">×</button>`:''}</div>`;
     }).join('')}</div></div>`;
 }
-export function characterItemTooltipMarkup(card){return characterItemTitleMarkup(card)+`<div data-tooltip-tier data-tooltip-card="${escape(card.id)}">${characterTierControlsMarkup(card)}</div>`+`<div data-tooltip-item-stats>${characterItemStatBodyMarkup(card)}</div>`;}
+export function characterItemTooltipMarkup(card){return '<section class="wiki-itembox">'+characterItemTitleMarkup(card)+`<div data-tooltip-tier data-tooltip-card="${escape(card.id)}">${characterTierControlsMarkup(card)}</div>`+`<div data-tooltip-item-stats>${characterItemStatBodyMarkup(card)}</div>`+'</section>';}

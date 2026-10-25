@@ -85,15 +85,15 @@ async function run({root,temporary,phase,screenshots}){
         assert(colors.some(entry=>entry.changed&&entry.color==='rgb(134, 220, 140)'));assert(colors.some(entry=>!entry.changed&&entry.color!=='rgb(134, 220, 140)'));
         await execute(owner,()=>{const target=document.querySelector('#item-list [data-item-title]');target.focus();target.dispatchEvent(new FocusEvent('focusin',{bubbles:true}));});
         await until(()=>execute(owner,()=>document.querySelector('#item-tooltip')&&!document.querySelector('#item-tooltip').hidden),'item tooltip');
-        assert.equal(await execute(owner,()=>getComputedStyle(document.querySelector('#item-tooltip .tooltip-stat.is-scaled strong')).color),'rgb(134, 220, 140)');
-        assert.notEqual(await execute(owner,()=>getComputedStyle(document.querySelector('#item-tooltip .tooltip-stat.is-scaled small')).color),'rgb(134, 220, 140)');
+        assert.equal(await execute(owner,()=>getComputedStyle(document.querySelector('#item-tooltip .wiki-itembox-value.is-scaled')).color),'rgb(85, 255, 85)');
+        assert.equal(await execute(owner,family=>getComputedStyle(document.querySelector('#item-tooltip .wiki-itembox')).fontFamily.includes(family),family),true,'Wiki-style tooltips preserve an explicit installed font');
         await capture(owner,'green-stats');
         const intel=panels.find(window=>/panel=intel$/.test(window.webContents.getURL()));
         await until(()=>execute(intel,()=>Boolean(document.querySelector('.item-stats .is-scaled'))),'Intel adjusted stats');
         assert.equal(await execute(intel,()=>getComputedStyle(document.querySelector('.item-stats .is-scaled')).color),'rgb(134, 220, 140)');
         await execute(intel,()=>{const target=document.querySelector('[data-item-hover]');target.focus();target.dispatchEvent(new FocusEvent('focusin',{bubbles:true}));});
-        await until(()=>execute(intel,()=>Boolean(document.querySelector('#intel-item-tooltip dd.is-scaled'))),'Intel adjusted tooltip');
-        assert.equal(await execute(intel,()=>getComputedStyle(document.querySelector('#intel-item-tooltip dd.is-scaled')).color),'rgb(134, 220, 140)');
+        await until(()=>execute(intel,()=>Boolean(document.querySelector('#intel-item-tooltip .wiki-itembox-value.is-scaled'))),'Intel adjusted tooltip');
+        assert.equal(await execute(intel,()=>getComputedStyle(document.querySelector('#intel-item-tooltip .wiki-itembox-value.is-scaled')).color),'rgb(85, 255, 85)');
         await capture(intel,'green-intel');
         // Reselect then reload in the same process to verify the cached frontend path.
         await execute(owner,()=>document.querySelector('[data-view="settings"]').click());owner.webContents.reload();
