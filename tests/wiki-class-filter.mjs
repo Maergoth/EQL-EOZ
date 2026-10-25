@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import * as browse from '../app/item-browse.js';
+import { catalogBaseStats } from '../app/item-scaling.js';
 import { JSDOM } from 'jsdom';
 
 const playable = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
@@ -90,7 +91,7 @@ Object.assign(window,{
     $:selector=>window.document.querySelector(selector),$$:selector=>[...window.document.querySelectorAll(selector)],
     state:()=>({classes:['MNK'],level:50,zone:''}),prefs:{save(value){saved=JSON.parse(JSON.stringify(value));}},
     eraAllowed:()=>true,itemMatchesProfile:(item,profile)=>matches(item,profile.classes),itemDropsInZone:()=>true,itemBrowsePriority:()=>0,
-    scaledItemStats:()=>({}),esc:String,formatNum:String,itemIconHtml:()=>'',itemHoverAttrs:()=>'',wikiUrl:()=> '#',isItemStatModified:()=>false,
+    scaledItemStats:()=>({}),catalogBaseStats,esc:String,formatNum:String,itemIconHtml:()=>'',itemHoverAttrs:()=>'',wikiUrl:()=> '#',isItemStatModified:()=>false,
     bindPathButtons(){},refreshItemTooltip(){},replaceItemList(host,markup){host.innerHTML=markup;return true;}
 });
 window.renderAll=()=>window.renderItems(window.state(),window.effectiveProfile(window.state()));
