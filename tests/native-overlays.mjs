@@ -404,6 +404,24 @@ test('automatic Triggers height survives native rounding; only explicit height e
     win.emit('will-resize',{preventDefault(){prevented=true;}},{...win.getBounds(),height:160});assert.equal(prevented,true);assert.equal(host.getState().panels.timers.manualHeight,false,'a blocked locked gesture does not change height policy');
 }));
 
+test('automatic Triggers native minimum can exceed computed height without becoming manual',()=>fixture(async({host,overlayEvent})=>{
+    await host.control('show','timers');const win=host.windows.get('timers'),nativeBounds=win.setBounds.bind(win);
+    win.setBounds=value=>nativeBounds({...value,height:Math.max(39,value.height)});
+    win.setBounds({...win.getBounds(),height:50});
+    await host.handleOverlayRequest(overlayEvent('timers'),'content-height',36);
+    const automatic=host.getState().panels.timers;
+    assert.equal(automatic.bounds.height,36,'The stored automatic request remains the measured content height');
+    assert.equal(win.getBounds().height,39,'The native platform can enforce a different minimum');
+    assert.equal(automatic.manualHeight,false);
+    assert.deepEqual([win.getBounds().x,win.getBounds().y,win.getBounds().width],[automatic.bounds.x,automatic.bounds.y,automatic.bounds.width]);
+    await host.control('lock','timers',false);
+    await host.handleOverlayRequest(overlayEvent('timers'),'resize',{deltaWidth:0,deltaHeight:20});
+    const manual=host.getState().panels.timers;
+    assert.equal(manual.manualHeight,true);assert.equal(manual.bounds.height,59);assert.equal(win.getBounds().height,59,'An explicit manual height still matches actual native bounds');
+    await host.handleOverlayRequest(overlayEvent('timers'),'content-height',36);
+    assert.equal(win.getBounds().height,59,'Later content fitting cannot replace the user-selected manual height');
+}));
+
 test('startup restores only the selected native panels with their independent lock and mouse state', () => fixture(async ({ host, nativeWindows }) => {
     assert.equal(nativeWindows.length, 1);
     assert.equal(host.windows.has('parse'), true);
