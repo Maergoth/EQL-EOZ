@@ -29,9 +29,9 @@ assert.deepEqual(defaults,{AC:16,HP:125,MP:91,END:91},'lower editable defaults s
 const auto=proposeItemBaseReview(gauntlets);assert(auto);assert.deepEqual(auto.baseRecovery.choices,defaults);assert.equal(gauntlets.fields.hp.value,143,'observed evidence stays unchanged');
 assert(validateItemBaseReview({...gauntlets,...auto}).ok,'fresh provisional proposals are immediately usable in the reviewed wiki preview');
 const blueprints={entries:{item:{text:'{{Itempage|statsblock=}}'}}},draft=buildContributionDraft(gauntlets,blueprints);
-assert.deepEqual(draft.blockers,[]);for(const line of ['AC: 16','HP: 125','Mana: 91','Endurance: 91'])assert(draft.text.includes(line),line+' survives preparing without Apply');
+assert.deepEqual(draft.blockers,[]);for(const line of ['AC: 16','HP: 125','MANA: 91','END: 91'])assert(draft.text.includes(line),line+' survives preparing without Apply using the wiki label');
 assert.doesNotMatch(draft.text,/SV Void: 0/,'Missing inverse evidence does not manufacture a zero');
-assert.doesNotMatch(draft.text,/statsblock =\s*\?/);assert.doesNotMatch(draft.text,/HP: 143|Mana: 104|Weight: 32|SV Void: 1/);
+assert.doesNotMatch(draft.text,/statsblock =\s*\?/);assert.doesNotMatch(draft.text,/HP: 143|(?:Mana|MANA): 104|(?:Endurance|END): 104|(?:Weight|WT): 32|SV Void: 1/);
 assert.match(draft.text,/These stats are reverse calculated from a tier 1 item\. Please confirm with a tier 0 item and remove this message/);
 assert.throws(()=>createItemBaseReview(gauntlets,{tier:1,fraction:null,reviewMode:'provisional',reviewed:true,choices:{...defaults,HP:130}}),/one possible item progress state/,'a different individually valid HP base cannot contradict mana/endurance progress');
 const invalid={...gauntlets,baseRecovery:{...auto.baseRecovery,sourceFingerprint:''}};

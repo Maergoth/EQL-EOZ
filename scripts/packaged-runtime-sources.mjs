@@ -4,6 +4,7 @@
 // bootstrap must also match the verified pack fetched for this build.
 import { RELEASE_HISTORY } from '../app/release-history.js';
 export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
+    'app/dot-cast-order.js',
     'app/appearance.js',
     'app/appearance-presets.json',
     'app/appearance-presets.generated.js',
@@ -156,6 +157,10 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/contribution-discovery-gate.js',
     'desktop/log-context-history.cjs',
     'app/viewer-zone-selection.js',
+    'app/viewer-archive-discovery.js',
+    'app/viewer-archive-header.js',
+    'app/viewer-gltf-images.js',
+    'app/viewer-terrain-indices.js',
     'app/minimap-controls.js',
     'app/zone-load-guard.js',
     'app/viewport-framing.js',

@@ -15,7 +15,8 @@ export const CHARACTER_EQUIPMENT_ROWS=Object.freeze([
 const SHORT_SLOT={ear1:'L ear',ear2:'R ear',finger1:'L finger',finger2:'R finger',wrist1:'L wrist',wrist2:'R wrist',shoulders:'Shoulder',primary:'Primary',secondary:'Second.',any1:'Any 1',any2:'Any 2'};
 const SLOT_MARK={ear1:'LE',ear2:'RE',head:'HD',face:'FC',neck:'NK',shoulders:'SH',arms:'AR',back:'BK',wrist1:'LW',wrist2:'RW',range:'RG',hands:'HN',primary:'1H',secondary:'2H',finger1:'LF',finger2:'RF',chest:'CH',legs:'LG',feet:'FT',waist:'WT',ammo:'AM',charm:'CM'};
 export function characterItemLabel(card){
-    const name=characterBaseItemName(card?.name)||'Unknown item';
+    let name=characterBaseItemName(card?.name)||'Unknown item';
+    if(card?.itemRole==='exaltation'&&!/\(Exaltation\)$/i.test(name))name+=' (Exaltation)';
     return `${name}${card?.tier===null||card?.tier===undefined?' · tier unknown':card.tier>0?` +${card.tier}`:''}`;
 }
 const tierBadge=card=>`<span class="character-tier" data-item-tier>${card.tier===null?'?':card.tier>0?`+${card.tier}`:'0'}</span>`;

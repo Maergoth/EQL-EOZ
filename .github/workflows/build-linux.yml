@@ -56,6 +56,7 @@ jobs:
             npm run test:window-lifecycle
             npm run test:map-location-latency -- --screenshots ci-screenshots/linux-map-location-latency
             npm run test:discovery-capture-workspace
+            npm run test:discovery-queue-stability
             npm run test:combatant-overview -- --screenshots ci-screenshots/linux-combatant-overview
             npm run test:screen-reading-master
             npm run test:chat-item-boundaries -- --screenshots ci-screenshots/linux-chat-boundaries

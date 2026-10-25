@@ -2,6 +2,35 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.1",
+  "title": "Stable discoveries, combat and maps",
+  "changes": [
+    "Match canonical item names within flattened chat instead of treating quoted sales prose as a new item. Genuine encoded item links retain their exact boundaries.",
+    "Keep Discovery rows, filter controls, scroll position and the selected draft stable during background updates and verification renewal. Previously unseen gaps still require live confirmation; publishing still requires fresh proof.",
+    "Reversibly archive proven untouched old chat-caption suggestions while preserving reviewed, edited, OCR-supported, loot and source-bearing work.",
+    "Generate item stat blocks in the wiki blueprint format, including canonical Atk Delay and WT labels, without inventing missing item values or flags.",
+    "Keep map-selection controls and their options readable against the application's dark background.",
+    "Attribute heal-over-time ticks and critical heals to their logged healer, and remove repetitive explanations below the Parse tables.",
+    "Count measured short heals, damage-shield retaliation, unnamed-caster DoT damage and nearby reave/smite attacks while retaining unknown sources and separate pet names.",
+    "Match a first unnamed DoT tick to the earliest pending cast of that exact spell. Explicit caster names take priority; unavailable or conflicting context remains unknown.",
+    "Restore Nektropos Castle and Undercrofts in both 3D map views, including their local support files and Castle's large terrain mesh.",
+    "Import bag contents separately from attached Exaltations, preserve genuine item sockets and keep loose Exaltations out of equipped gear."
+  ],
+  "steps": [
+    {
+      "title": "Keep discoveries steady while you review",
+      "image": "1.0.1/discovery-stability",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Review your item fields without the queue rebuilding around you. Already verified entries stay in place during a background check, while Preview and publishing wait for fresh evidence. Quoted sales text is matched to known item names instead of becoming a new title.",
+      "alt": "Actual isolated Electron Discovery workspace with multiple synthetic queue rows and an edited item form retained during live-proof renewal.",
+      "caption": "Actual production workspace rendered in isolated Electron Chromium with synthetic drafts and loopback-only wiki responses. The regression verifies stable DOM nodes, scroll, focus, typed values and fresh-proof action gates; no player profile or production wiki write.",
+      "imageSha256": "650bb71b2c699a042140cc87b3934066a3471eb549ef07a28146357c48385c3d"
+    }
+  ]
+},
+
+{
   "version": "1.0.0",
   "title": "Eye of Zomm 1.0",
   "changes": [

@@ -6,7 +6,10 @@
 <title>Eye of Zomm - Zone Viewer</title>
 <link rel="stylesheet" href="./ext.eqlZoneViewer.css">
 <style>
+html{color-scheme:dark}
 html,body{margin:0;height:100%;background:#08101b;overflow:hidden}
+.eqlzv-select{background:var(--eoz-control-background,#0b111a);color:var(--eoz-control-text,#e9edf3);border-color:var(--eoz-control-border,rgba(216,183,92,.28))}
+.eqlzv-select option,.eqlzv-select optgroup{background:var(--eoz-control-background,#0b111a);color:var(--eoz-control-text,#e9edf3)}
 .eqlzv-root{height:100%;min-height:0;margin:0;overflow:hidden}
 .eqlzv-app{height:100%;min-height:0;box-sizing:border-box;border:0;border-radius:0}
 .eqlzv-viewport{flex:1;min-height:0}
@@ -57,6 +60,9 @@ import { installEstablishedRouteGuard } from '../established-route-guard.js';
 import { deferHiddenViewportFit } from '../viewport-framing.js';
 import { installZoneLoadGuard } from '../zone-load-guard.js';
 import { selectViewerZoneOption } from '../viewer-zone-selection.js';
+import { installViewerArchiveDiscovery } from '../viewer-archive-discovery.js';
+import { installViewerGltfImageGuard } from '../viewer-gltf-images.js';
+import { installViewerTerrainCacheVersion } from '../viewer-terrain-indices.js';
 import { installMiniMapControls } from '../minimap-controls.js';
 import { installOverlayMode, installViewerTopPan } from './overlay-mode.js';
 import { installViewerPlayerState, knownViewerLocation } from './player-state.js';
@@ -77,6 +83,9 @@ const app = mountZoneViewer(root, {
 configureViewerMovement(app.fp);
 app.fp?.setFly?.(true);
 window.eqlZoneViewer = app;
+installViewerArchiveDiscovery(app);
+installViewerGltfImageGuard(app);
+installViewerTerrainCacheVersion(app);
 installMiniMapControls(app);
 const playerState=installViewerPlayerState({app,root,externalSlice:overlayMode});
 const topPan=installViewerTopPan(app);
@@ -802,6 +811,7 @@ window.eqlEyeOfZommViewer = {
                 if (select && !select.disabled && select.options.length > 1) {
                     return { ok:true, restored:true, name:configured.name || '', source:'settings' };
                 }
+                if(app.source?.archiveCandidates?.().length)return {ok:true,restored:true,name:configured.name||'',source:'settings',pendingArchive:true};
                 return { ok:false, reason:'no-zone-archives', name:configured.name || '', source:'settings' };
             }
             return { ok:false, reason:'folder-open-failed', name:configured.name || '', source:'settings' };
@@ -817,11 +827,19 @@ window.eqlEyeOfZommViewer = {
 
     async loadZone(zoneName) {
         if (!app) return { ok:false, reason:'viewer-not-mounted' };
+        app.eyeOfZommPrepareArchiveSource?.();
+        const sequence=app.eyeOfZommZoneRequest=(app.eyeOfZommZoneRequest||0)+1,source=app.source,folder=source?.directoryHandle;
+        const current=()=>app.eyeOfZommZoneRequest===sequence&&app.source===source&&source?.directoryHandle===folder;
         const select = app.els?.zoneSelect || await waitForZoneSelect();
+        if(!current())return{ok:false,reason:'superseded'};
         if (!select) return { ok:false, reason:'select-eq-folder-first' };
+        let option = selectViewerZoneOption(select.options, zoneName);
+        if(!option&&app.eyeOfZommDiscoverArchive){
+            try{await app.eyeOfZommDiscoverArchive(zoneName);}catch(error){if(!current())return{ok:false,reason:'superseded'};return{ok:false,reason:'load-failed',message:error.message};}
+            if(!current())return{ok:false,reason:'superseded'};
+            option=selectViewerZoneOption(select.options,zoneName);
+        }
         if (select.disabled || select.options.length <= 1) return { ok:false, reason:'select-eq-folder-first' };
-
-        const option = selectViewerZoneOption(select.options, zoneName);
         if (!option) return { ok:false, reason:'zone-not-found', zone:zoneName };
 
         if (select.value !== option.value) {
@@ -837,6 +855,7 @@ window.eqlEyeOfZommViewer = {
             const result = await app.loadSelectedZone();
             if (result?.reason === 'superseded') return { ok:false, reason:'superseded' };
         }
+        if(!current())return{ok:false,reason:'superseded'};
         if (!selected || !zoneLoadGuard.isReady(selected) || !app.currentZoneRecord ||
             app.currentZoneRecord.id !== selected.id || app.currentZoneRecord.format !== selected.format) {
             return {

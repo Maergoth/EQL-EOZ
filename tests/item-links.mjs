@@ -5,6 +5,7 @@ import {createContributionQueue} from '../app/contribution-queue.js';
 import {logContributionObservation} from '../app/contribution-evidence.js';
 import {collectDropObservation} from '../app/drop-observations.js';
 import {buildContributionDraft} from '../app/contribution-model.js';
+import {canonicalChatItemMatch} from '../app/chat-item-mentions.js';
 
 const escaped=(name,id=123)=>`\\aITEM ${id} 0:${name}\\/a`;
 const native=(name,id=123)=>'\x12'+'0'+id.toString(16).padStart(5,'0')+'0'.repeat(50)+name+'\x12';
@@ -82,7 +83,7 @@ for(const format of [escaped,native]){
 const noCatalog=new EQLogParser();
 for(const payload of ['Then Signet Ring of Lord Everling +3','Please Consider Synthetic Relic +3','Synthetic Relic +3','Thornstinger +5','Ring +3 These Are Stats','[HP +3]','[Strength +3]','[Synthetic Spell +3]','[Unknown Relic +30]','[Unknown Relic +3.5]','[<script> +3]'])assert.equal(noCatalog.parse(line(`Syntheticplayer tells General:1, '${payload}'`)),null,payload+' has no reliable new-item boundary');
 for(const payload of ['Look at [Uncatalogued Relic +3], please.','Look at "Uncatalogued Relic +3", please.','Then [Uncatalogued Relic] +3','Then "Uncatalogued Relic" +3']){
-    const event=noCatalog.parse(line(`Syntheticplayer tells General:1, '${payload}'`));assert.deepEqual(event?.items,['Uncatalogued Relic +3']);assert.equal(event.itemLinkFormat,'plain-tiered-chat');
+    assert.equal(noCatalog.parse(line(`Syntheticplayer tells General:1, '${payload}'`)),null,'Quoted/bracketed text cannot authenticate an unknown item');
 }
 for(const payload of [`${actual} +30`,`${actual} +3.5`,`${actual} +3foo`,`${actual} +3+4`,`${escaped('[Unknown Relic +3]',0)}`,`\\aPC 123 0:[Unknown Relic +3]\\/a`])assert.equal(anchored.parse(line(`Syntheticplayer tells General:1, '${payload}'`)),null,'Invalid rank/player/quest controls cannot fall through to a guessed identity: '+payload);
 const ambiguousCatalog={items:[{name:'Shared Relic',wikiTitle:'First Relic'},{name:'Shared Relic',wikiTitle:'Second Relic'}]};
@@ -90,4 +91,54 @@ assert.equal(new EQLogParser({getPack:()=>ambiguousCatalog}).parse(line("Synthet
 const reloaded=new EQLogParser();assert.equal(reloaded.parse(line(`Syntheticplayer tells General:1, 'Then ${actual} +3'`)),null);reloaded.setLogIdentityPack(catalog);assert.deepEqual(reloaded.parse(line(`Syntheticplayer tells General:1, 'Then ${actual} +3'`))?.items,[actual+' +3'],'Native automatic reader pack updates also anchor chat identities');
 const actualPrompts=[],knownDiscovery=createWikiDiscovery({storage:null,getPack:()=>catalog,now:()=>now,onMissing:prompt=>actualPrompts.push(prompt),verifyItem:()=>({status:'missing'})});
 knownDiscovery.consume(anchored.parse(line(`Syntheticplayer tells General:1, 'Then ${actual} +3'`)),context());assert.deepEqual(actualPrompts,[],'The reported known-item chat cannot manufacture a missing Then-prefixed item notice');
-console.log('Ranked chat boundaries: exact catalog names/aliases in prose, explicit unknown markers, authentic unknown links, ambiguous/unbounded/invalid negatives and native pack refresh passed.');
+console.log('Ranked chat boundaries: exact catalog names/aliases in prose, quiet unknown markers, authentic unknown links, ambiguous/unbounded/invalid negatives and native pack refresh passed.');
+
+// Regression from reported discovery names, reproduced synthetically. A screenshot
+// proves the bad name, not the original bytes or which log-link encoding ran.
+const salesItems=['Brown Chitin Protector','Chitin Protector','Rubicite Breastplate','Breastplate'];
+const salesPack={meta:{wikiEntitiesComplete:true,sample:false},items:salesItems.map(name=>({name,wikiTitle:name})),wikiEntities:{items:salesItems,npcs:[],titles:salesItems}};
+salesPack.items[0].aliases=['Brown Protector'];
+const salesParser=new EQLogParser({getPack:()=>salesPack});
+const salesChat=text=>salesParser.parse(line(`Syntheticplayer auctions, '${text}'`));
+for(const [label,canonical] of [['Free Brown Chitin Protector','Brown Chitin Protector'],['WTS FULL SET OF Rubicite Breastplate','Rubicite Breastplate'],['Please inspect Brown Protector','Brown Chitin Protector'],['Brown Chitin Protector available here','Brown Chitin Protector']]){
+    assert.deepEqual(canonicalChatItemMatch(label,salesPack),{state:'matched',name:canonical,exact:false},label);
+    for(const payload of [`[${label} +3]`,`"${label} +3"`,`[${label}] +3`,`"${label}" +3`])assert.deepEqual(salesChat(payload)?.items,[canonical+' +3'],payload);
+}
+for(const label of ['Brown Chitin Protector or Rubicite Breastplate','Rubicite Breastplate and Brown Protector']){
+    assert.deepEqual(canonicalChatItemMatch(label,salesPack),{state:'ambiguous'});
+    assert.equal(salesChat(`[${label} +3]`),null,'A marker containing distinct items must not arbitrarily choose the longest title');
+}
+const overlapping={items:[{name:'Shield of Fire'},{name:'Fire Walker'}]};
+assert.deepEqual(canonicalChatItemMatch('Shield of Fire Walker',overlapping),{state:'ambiguous'},'Partially overlapping known identities have no unique item boundary');
+assert.deepEqual(canonicalChatItemMatch('Earlier Shared Relic',ambiguousCatalog),{state:'ambiguous'},'An ambiguous longest alias cannot fall back to a shorter title');
+for(const label of ['NotBrown Chitin Protector','Brown Chitin Protectorate','Brown Chitin Protectorβ','βBrown Chitin Protector','\u{10400}Brown Chitin Protector','Brown Chitin Protector\u{10400}'])assert.deepEqual(canonicalChatItemMatch(label,{items:[{name:'Brown Chitin Protector'}]}),{state:'none'},'Unicode word boundaries: '+label);
+for(const payload of ['Free Brown Chitin Protector +3','WTS FULL SET OF Rubicite Breastplate +3'])assert.deepEqual(salesChat(payload)?.items,[payload.includes('Rubicite')?'Rubicite Breastplate +3':'Brown Chitin Protector +3']);
+assert.deepEqual(salesChat('Brown Chitin Protector +3 Rubicite Breastplate +4')?.items,['Brown Chitin Protector +3','Rubicite Breastplate +4'],'Separate rank suffixes bind their own items');
+assert.deepEqual(salesChat('Brown Chitin Protector +3 +4')?.items,['Brown Chitin Protector +3'],'An earlier rank token is not stripped to invent a second item boundary');
+assert.deepEqual(salesChat('Brown Chitin Protector +3 (Exaltation) +4')?.items,['Brown Chitin Protector +3'],'A decorated earlier rank is not reused for a later rank token');
+const genuineNames=['Free Brown Chitin Protector','Then Rubicite Breastplate','Free Spirit','Then and Now'];
+const genuinePack={items:[...salesPack.items,...genuineNames.map(name=>({name,wikiTitle:name}))]},genuineParser=new EQLogParser({getPack:()=>genuinePack});
+for(const name of genuineNames){
+    assert.deepEqual(canonicalChatItemMatch(name,genuinePack),{state:'matched',name,exact:true},'A full title beats contained shorter catalog names');
+    assert.deepEqual(canonicalChatItemMatch('Please inspect '+name+' here',genuinePack),{state:'matched',name,exact:false},'Surrounding prose never removes a genuine Free/Then title prefix');
+    assert.deepEqual(genuineParser.parse(line(`Syntheticplayer says, '[${name} +3]'`))?.items,[name+' +3']);
+    assert.deepEqual(genuineParser.parse(line(`Syntheticplayer says, '${name} +3'`))?.items,[name+' +3']);
+}
+const aliasOrderPack={items:[{name:'First Item',aliases:['A']},{name:'A Long Second Item',aliases:['Z']}]};
+assert.deepEqual(new EQLogParser({getPack:()=>aliasOrderPack}).parse(line("Syntheticplayer says, 'A +3 Z +4'"))?.items,['First Item +3','A Long Second Item +4'],'Canonical alias lengths do not change source display order');
+assert.deepEqual(canonicalChatItemMatch('Look: Staff of Elemental Mastery: Water, please',{items:[{name:'Staff of Elemental Mastery: Water'}]}),{state:'matched',name:'Staff of Elemental Mastery: Water',exact:false},'Punctuation inside a real item title stays intact');
+for(const format of [escaped,native]){
+    for(const name of ['Free Brown Chitin Protector','Then Rubicite Breastplate','Genuinely Uncatalogued Relic'])assert.deepEqual(salesChat(`Then ${format(name+' +3')} as promised.`)?.items,[name+' +3'],'Authentic encoded boundaries remain exact even when an unknown full title contains a known suffix');
+}
+for(const payload of ['[Uncatalogued Relic]','"Uncatalogued Relic"','Free Brown Chitin Protector','WTS FULL SET OF Rubicite Breastplate'])assert.equal(salesChat(payload),null,'Unranked flattened text does not invent an unknown item');
+for(const payload of ['[Free Genuinely Unknown Blade +3]','"WTS FULL SET OF Uncatalogued Hauberk +4"','[Genuinely Unknown Blade] +3','"Genuinely Unknown Blade" +3'])assert.equal(salesChat(payload),null,'Even explicit text delimiters cannot establish a missing unknown item');
+const salesPrompts=[],salesDiscovery=createWikiDiscovery({storage:null,getPack:()=>salesPack,now:()=>now,onMissing:prompt=>salesPrompts.push(prompt),verifyItem:()=>({status:'missing'})});
+for(const payload of ['[Free Brown Chitin Protector +3]','"WTS FULL SET OF Rubicite Breastplate +3"'])salesDiscovery.consume(salesChat(payload),context());
+assert.deepEqual(salesPrompts,[],'Reported marked sales prose resolves to known items, so it cannot create false missing-page notices');
+assert.deepEqual(canonicalChatItemMatch('Free Brown Protector',salesPack),{state:'matched',name:'Brown Chitin Protector',exact:false},'Aliases share the same canonical result for queue reconciliation');
+const plainProof=logContributionObservation({type:'item-link',item:'Example Gauntlets +5',itemLinkFormat:mention.itemLinkFormat,evidence:mention.evidence},mentionContext,{now});
+assert.equal(plainProof.input.itemLinkFormat,'plain-tiered-chat','Evidence retains the parser interpretation rather than claiming an authenticated game link');
+assert(mentionCandidate.evidence.some(e=>e.itemLinkFormat==='plain-tiered-chat'));
+assert(createContributionQueue(options).snapshot().find(row=>row.name==='Example Gauntlets')?.evidence.some(e=>e.itemLinkFormat==='plain-tiered-chat'),'The flattened origin flag survives storage/reload');
+assert(captured.candidates.every(candidate=>candidate.evidence.every(e=>e.itemLinkFormat===undefined)),'Authentic encoded links are not relabelled as flattened guesses');
+console.log('Sales prose boundaries: reported bracket/quote variants, longest bounded titles/aliases, exact genuine Free/Then titles, disjoint/overlap ambiguity, Unicode word boundaries, encoded unknown preservation and downstream no-notice regression passed.');

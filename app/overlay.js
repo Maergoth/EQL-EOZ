@@ -85,9 +85,7 @@ export function renderParseContent(view, expanded = new Set()) {
     }).join('')}</tbody></table>` + (!view.rows.length ? empty(view.available ? 'No recorded actions.' : 'Waiting for combat…') : '') + (view.truncated ? '<div class="meter-caption">Retained events</div>' : '') + (view.tab === 'healing' ? summaryRows([['Rune capacity granted',fmt(view.metrics.runeCapacity)]], 'Rune capacity granted') + '<div class="meter-caption">Logged capacity granted; damage absorbed is not measured. Excluded from healing and HPS.</div>' : '');
 }
 function combatantCaption(view) {
-    return '<div class="meter-caption">Logged combatants only; pets keep their own names. Damage given and damage taken describe the same hits; do not add them together.</div>' +
-        (view.scope === 'session' ? `<div class="meter-caption">Other combatant rates use ${durationLabel(view.combatantSeconds * 1000)} of observed combat. Your DPS keeps its existing outgoing-damage clock.</div>` : '<div class="meter-caption">Rates use this encounter’s duration. Overlapping disconnected fights have separate encounters.</div>') +
-        (view.stats.encounterHistoryLimited ? '<div class="meter-caption">Encounter history was regrouped from retained events. Older encounter details may be incomplete; whole-session combatant totals are retained.</div>' : '');
+    return view.stats.encounterHistoryLimited ? '<div class="meter-caption">Encounter history was regrouped from retained events. Older encounter details may be incomplete; whole-session combatant totals are retained.</div>' : '';
 }
 function renderCombatantDetails(view, expanded) {
     const metric = view.tab, rateKey = {damage:'dps',healing:'hps',taken:'dtps'}[metric], rateLabel = {damage:'DPS',healing:'HPS',taken:'DTPS'}[metric];

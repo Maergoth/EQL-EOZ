@@ -105,6 +105,16 @@ export function resolveInventoryCatalog(pack,name,{socket=false}={}){
     return {};
 }
 
+/** Exact parent facts classify storage relationships, never a child's name or
+ * the ambiguous raw Slots column. Presence-only records cannot prove sockets. */
+export function inventoryParentKind(pack,entry){
+    const {item}=resolveInventoryCatalog(pack,entry?.baseName||entry?.name||'');
+    if(!item)return 'unknown';
+    const lines=(Array.isArray(item.displayLines)?item.displayLines:[]).slice(0,64).map(line=>String(line).slice(0,1000));
+    if(lines.some(line=>/\b(?:Size Capacity|Weight Reduction)\s*:/i.test(line)||/\bCapacity\s*:\s*\d/i.test(line.replace(/\b(?:Exaltation|Augment(?:ation)?)\s+Capacity\s*:\s*\d+/gi,''))))return 'container';
+    return characterSlotKinds(item.slots).length?'equipment':'unknown';
+}
+
 /** A manual physical card from an explicitly selected catalog identity. The
  * selected tier is known; observedStats and capture evidence are empty.
  * Catalog stats remain base values. Augment state needs review unless explicit.

@@ -116,7 +116,10 @@ assert.equal(parsed.swingEligible, false, 'special attacks still count damage, b
 assert.equal(parser.totalDamage, 60);
 assert.equal(parser.parse('[Wed Oct 21 12:00:02 2026] You begin casting Heal.').type, 'cast-begin');
 assert.equal(parser.parse('[Wed Oct 21 12:00:03 2026] Your spell is interrupted.').type, 'cast-interrupt');
-assert.equal(parser.parse('[Wed Oct 21 12:00:03 2026] Someone begins casting Heal.'), null, 'another caster cannot hold the viewer swing bar');
+const nearbyCast=parser.parse('[Wed Oct 21 12:00:03 2026] Someone begins casting Heal.');
+assert.equal(nearbyCast.type,'combatant-cast-begin');
+const nearbySwing=freshSwing();nearbySwing.consume({...nearbyCast,at:clock},context());
+assert.equal(nearbySwing.swing.casting,false,'A separate nearby cast event cannot hold the viewer swing bar');
 
 const rateParser = new EQLogParser();
 rateParser.parse('[Wed Oct 21 12:00:00 2026] You slash a synthetic rat for 10 points of damage.');

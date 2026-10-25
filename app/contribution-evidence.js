@@ -33,7 +33,7 @@ export function logContributionObservation(event,context={}, {now=Date.now(),fre
     const id=`log-${source}-${at}-${cursor??'line'}-${identity}`;
     const capturedAt=new Date(at).toISOString();
     const instance=!linked&&['normal','raid'].includes(context.instance)?context.instance:'unknown';
-    const input={logId:source,cursor,event:event.type,zone,instance,live:true,...(linked?{purpose:'item-link'}:{})};
+    const input={logId:source,cursor,event:event.type,zone,instance,live:true,...(linked?{purpose:'item-link',...(event.itemLinkFormat==='plain-tiered-chat'?{itemLinkFormat:'plain-tiered-chat'}:{})}:{})};
     const logLine=contributionLogLine(context.logLine||(linked?event.evidence?.text:''));
     if(event.type==='location'){
         const location=Object.fromEntries(['x','y','z'].map(key=>[key,event.location?.[key]]));

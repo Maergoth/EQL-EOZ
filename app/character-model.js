@@ -51,7 +51,8 @@ function catalogIdentity(value) {
 }
 export function characterEquipmentEligibility(candidate) {
     const identity=catalogIdentity(candidate?.catalogIdentity),known=Boolean(identity&&identityName(candidate?.name)===identityName(identity.name)&&identityTitle(candidate?.wikiTitle)===identityTitle(identity.wikiTitle));
-    return {known,canEquip:known,reason:known?'':'Choose a known cached item match before equipping this copy.'};
+    const exaltation=candidate?.itemRole==='exaltation'||exportedExaltationOrigin(candidate?.inventoryOrigin);
+    return {known,canEquip:known&&!exaltation,reason:exaltation?'This exported Exaltation is a socket item, not equipment.':known?'':'Choose a known cached item match before equipping this copy.'};
 }
 
 const INVENTORY_SLOTS=new Set(CHARACTER_SLOTS.filter(slot=>slot.id!=='charm').map(slot=>slot.id));
@@ -60,6 +61,10 @@ function inventoryOrigin(value){
     if(!value||typeof value!=='object'||!INVENTORY_GROUPS.has(value.group)||typeof value.key!=='string'||!value.key||value.key.length>600||!Number.isSafeInteger(value.itemId)||value.itemId<=0||value.itemId>2147483647||!Number.isInteger(value.count)||value.count<1||value.count>1e9||fullTier(value.tier)===null)return null;
     const location=clean(value.location,180),name=clean(value.name),baseName=clean(value.baseName),slot=INVENTORY_SLOTS.has(value.slot)?value.slot:null;
     return location&&name&&baseName?{key:value.key,location,name,baseName,itemId:value.itemId,tier:value.tier,count:value.count,group:value.group,slot,importedAt:atTime(value.importedAt)}:null;
+}
+function exportedExaltationOrigin(value){
+    const origin=inventoryOrigin(value);
+    return Boolean(origin&&!origin.slot&&['inventory','bank','shared-bank','held','augment'].includes(origin.group)&&/\(Exaltation\)$/i.test(characterBaseItemName(origin.baseName||origin.name)));
 }
 function inventoryFile(value){
     if(!value||typeof value!=='object')return null;
@@ -169,7 +174,7 @@ function normalizeCandidate(value={}) {
     const block=rawStatBlock(value.rawStatBlock ?? value.statBlockText ?? list(value.statLines).join('\n')),sockets=parseItemAugmentSlots(block),augments=normalizeAugments(Array.isArray(value.augments)?value.augments:sockets.augments);
     const explicitCapacity=value.augmentSlots!==undefined?socketCount(value.augmentSlots):value.augmentSlotCount!==undefined?socketCount(value.augmentSlotCount):sockets.augmentSlotCount;
     const augmentSlots=explicitCapacity??Math.max(5,...augments.map(augment=>augment.index+1));
-    return { id:clean(value.id,100), instanceKey:clean(value.instanceKey,200), inventoryOrigin:inventoryOrigin(value.inventoryOrigin),name:characterBaseItemName(value.name), observedName:has(value,'observedName')?clean(value.observedName):list(value.evidence).some(record=>record?.observationId||record?.text)?clean(value.name):'', wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),
+    return { id:clean(value.id,100), instanceKey:clean(value.instanceKey,200), inventoryOrigin:inventoryOrigin(value.inventoryOrigin),itemRole:value.itemRole==='exaltation'||exportedExaltationOrigin(value.inventoryOrigin)?'exaltation':'',name:characterBaseItemName(value.name), observedName:has(value,'observedName')?clean(value.observedName):list(value.evidence).some(record=>record?.observationId||record?.text)?clean(value.name):'', wikiTitle:clean(value.wikiTitle),catalogIdentity:catalogIdentity(value.catalogIdentity),
         origin:['automatic','manual'].includes(value.origin)?value.origin:captured?'automatic':'manual',legacyManualStats:value.legacyManualStats===true||!has(value,'origin')&&!captured,lastObservedAt:atTime(value.lastObservedAt)??evidence.reduce((latest,record)=>record.at!==null?Math.max(latest??0,record.at):latest,null),lastObservedSequence:journalSequence(value.lastObservedSequence),
         observedTier,observedFraction:tierFraction(has(value,'observedFraction')?value.observedFraction:value.fraction,observedTier),statBasis:value.statBasis==='catalog-tier-preview'?'catalog-tier-preview':'observed',previewWarning:clean(value.previewWarning,300),slotReadWarning:clean(value.slotReadWarning,300),
         wikiMatch:['confirmed','suggested','unmatched'].includes(value.wikiMatch) ? value.wikiMatch : 'unmatched',
@@ -491,8 +496,9 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
                 if(!slot&&group!=='augment'&&group!=='keyring'){const locationKey=group+'|'+entry.location;if(locations.has(locationKey))throw Error('The inventory export repeats a storage location.');locations.add(locationKey);}
                 const identity=JSON.stringify([slot||group,entry.location,entry.itemId,entry.tier]),occurrence=occurrences.get(identity)||0;occurrences.set(identity,occurrence+1);
                 const result={...entry,group,slot,key:JSON.stringify([slot||group,entry.location,entry.itemId,entry.tier,occurrence])};
+                if(entry.contentsSeparate!==undefined&&(!['container','unverified'].includes(entry.contentsSeparate)||entry.augments!==undefined||entry.augmentSlots!==undefined))throw Error('The inventory export contains conflicting contents and socket relationships.');
                 if(entry.augments!==undefined||entry.augmentSlots!==undefined){
-                    if(!Array.isArray(entry.augments)||entry.augments.length>CHARACTER_LIMITS.augments||entry.augmentSlots!==entry.augments.length)throw Error('The inventory export contains an unsupported Exaltation layout.');
+                    if(!Array.isArray(entry.augments)||entry.augments.length>CHARACTER_LIMITS.augments||entry.augmentSlots!==entry.augments.length)throw Error(`The inventory export contains an unsupported Exaltation layout for ${entry.name} at ${entry.location} (maximum ${CHARACTER_LIMITS.augments} observed sockets).`);
                     const used=new Set();result.augments=entry.augments.map((child,index)=>{
                         if(child?.index!==index||!Number.isInteger(child.sourceSlot)||child.sourceSlot<1||child.sourceSlot>1e6||used.has(child.sourceSlot)||child.augments!==undefined)throw Error('The inventory export contains an invalid Exaltation location.');used.add(child.sourceSlot);
                         validate(child,'augment','socket');return {...child,group:'augment',slot:null,key:JSON.stringify([result.key,'socket',child.sourceSlot,child.itemId,child.tier])};
@@ -515,19 +521,31 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
                 return item&&[item.name,item.wikiTitle].some(name=>exact(name)===exactName||socketAlias&&exact(name)===socketAlias||exportAlias&&exact(name)===exportAlias)?catalogPatch(item,{match:'exact',icon:resolution.icon}):null;
             };
             const reject=(entry,reason='wiki-item-missing',slot=entry.slot)=>rejectedItems.push({name:entry.name,baseName:entry.baseName,tier:entry.tier,itemId:entry.itemId,location:entry.location,...(slot?{slot}:{}),reason});
+            // Earlier imports gave loose Exaltations an ordinary storage key.
+            // Reuse only a unique exact physical binding when its role changes.
+            for(const entry of entries)if(entry.group==='augment'&&!byKey.has(entry.key)){
+                const prior=draft.candidates.filter(candidate=>{const origin=candidate.inventoryOrigin;return origin&&['inventory','bank','shared-bank','held'].includes(origin.group)&&origin.location===entry.location&&origin.itemId===entry.itemId&&origin.tier===entry.tier&&origin.baseName===entry.baseName;});
+                if(prior.length===1)byKey.set(entry.key,prior[0]);
+            }
             const resolvedEntries=entries.map(entry=>({entry,patch:resolve(entry)}));
             const missing=resolvedEntries.filter(({entry,patch})=>patch&&!byKey.has(entry.key)).length;
             if(draft.candidates.length+missing>CHARACTER_LIMITS.candidates)return fail(`This export exceeds the ${CHARACTER_LIMITS.candidates}-card inventory bound. Existing cards were kept; clear unused inventory before importing.`);
             for(const {entry,patch} of resolvedEntries){
                 const prior=byKey.get(entry.key);
+                const socketPatch={};
+                if(entry.contentsSeparate){
+                    const manual=(prior?.augments||[]).filter(augment=>!augment.inventoryOrigin);
+                    const provenEmpty=entry.contentsSeparate==='container'&&!manual.length;
+                    const capacity=manual.length||prior?.editedFields.includes('augmentSlots')?prior?.augmentSlots??5:5;
+                    Object.assign(socketPatch,{augments:manual,augmentSlots:provenEmpty?0:capacity,emptyAugmentSlots:provenEmpty?0:null,augmentStatus:provenEmpty?'none':'unknown',augmentBaseline:null});
+                }
                 if(!patch){
                     reject(entry);for(const child of entry.augments||[])if(!child.empty)reject(child,'parent-item-missing',entry.slot);
-                    if(prior){prior.catalogIdentity=null;prior.wikiTitle='';prior.wikiMatch='unmatched';}
+                    if(prior){prior.catalogIdentity=null;prior.wikiTitle='';prior.wikiMatch='unmatched';Object.assign(prior,socketPatch);}
                     continue;
                 }
                 const origin={...entry,importedAt:at},slot=entry.slot?SLOT_BY_ID.get(entry.slot):null;
                 let id=prior?.id;if(!id){do{id=`character-${++draft.sequence}`;}while(draft.candidates.some(candidate=>candidate.id===id));}
-                const socketPatch={};
                 if(entry.augments){
                     socketPatch.augmentSlots=entry.augmentSlots;socketPatch.augments=[];
                     for(const child of entry.augments.filter(child=>!child.empty)){
@@ -600,10 +618,10 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         const editedStatKeys=has(patch,'observedStats')?[...current.editedStatKeys,...Object.keys(current.observedStats),...Object.keys(normalizeCharacterStats(patch.observedStats))]:current.editedStatKeys;
         const editedFields=[...current.editedFields,...Object.keys(patch).filter(key=>EDITABLE_CAPTURE_FIELDS.has(key))];
         if(has(patch,'tier')||has(patch,'fraction'))editedFields.push('tier','fraction');
-        const next=normalizeCandidate({...current,...patch,origin:current.origin,lastObservedAt:current.lastObservedAt,lastObservedSequence:current.lastObservedSequence,observedTier:current.observedTier,observedFraction:current.observedFraction,catalogIdentity:current.catalogIdentity,observedName:current.observedName,editedStatKeys,editedFields,id:current.id,instanceKey:current.instanceKey,createdAt:current.createdAt,evidence:current.evidence,updatedAt:timestamp()});
+        const next=normalizeCandidate({...current,...patch,itemRole:current.itemRole,origin:current.origin,lastObservedAt:current.lastObservedAt,lastObservedSequence:current.lastObservedSequence,observedTier:current.observedTier,observedFraction:current.observedFraction,catalogIdentity:current.catalogIdentity,observedName:current.observedName,editedStatKeys,editedFields,id:current.id,instanceKey:current.instanceKey,createdAt:current.createdAt,evidence:current.evidence,updatedAt:timestamp()});
         if (!next.name) return {ok:false,error:'An item name is required.'};
         if(has(patch,'slots')){next.slotReadWarning='';if(Object.entries(state.equipment).some(([slot,assigned])=>assigned===id&&!characterSlotCompatibility(next,slot).compatible))detach(id);}
-        if(!characterEquipmentEligibility(next).canEquip){next.catalogIdentity=null;detach(id);}
+        const eligibility=characterEquipmentEligibility(next);if(!eligibility.known)next.catalogIdentity=null;if(!eligibility.canEquip)detach(id);
         state.candidates[state.candidates.indexOf(current)]=next; return result(next);
     }
     function setTierPreview(id,{tier}={}) {

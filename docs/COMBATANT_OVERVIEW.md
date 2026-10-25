@@ -19,14 +19,52 @@ recipient. Those describe the same hit; adding the columns together counts it
 twice. A heal credits the logged healer, using the effective amount before the
 optional parenthesized amount. Rune capacity stays separate from healing. Names
 do not imply NPC/player classification; pets retain their logged names, and
-unattributed non-melee damage retains an Unknown attacker. No owner credit,
-overheal, absorption or unseen actions are inferred. Results depend on the game's
+unattributed non-melee damage retains an Unknown attacker. No pet-owner merges,
+overheal, absorption or unlogged damage amounts are inferred. Results depend on the game's
 combat message filters and range; an incomplete game log is not a raid-wide parse.
-Server messages that misidentify an actor are displayed as logged; the app does
-not guess a correction from a nearby spell or timing coincidence.
+Explicit actor names are preserved as logged. The cast-order assumption below
+applies only when a DoT tick omits its caster.
 Names containing combat verbs can create multiple valid attacker/recipient
 splits. An established exact name can disambiguate them; otherwise that line is
 left uncredited instead of inventing actor names.
+
+Direct heals and heal-over-time ticks use the same actor and recipient rules.
+The phrase `over time` is a tick modifier, never part of a combatant's name.
+Exact reflexive recipients such as `herself` resolve to the logged healer;
+`you` and `yourself` resolve to the selected character. Each tick contributes
+only its logged effective amount at its logged time. Critical heal endings are
+accepted without adding their marker to the ability name. A cast or regeneration
+message without a measured heal cannot imply future ticks or healing credit.
+
+Measured short heal messages retain their named healer and recipient even when
+no ability is given. DoT messages without a caster retain the measured damage
+and recipient, with ownership inferred from cast order when usable context is
+available. Otherwise their attacker remains unknown. An unknown-attacker
+placeholder cannot connect otherwise unrelated encounters. Damage-shield retaliation credits the owner
+explicitly named in the message, without guessing who originally cast the buff.
+Its damage and the recipient's damage taken represent the same retaliation hit.
+
+Cast-order matching assumes the earliest pending cast of the exact same spell
+produced the first eligible anonymous tick. Spell ranks remain distinct, and
+the tick supplies the target rather than a guessed current target. A retained
+pairing can identify later ticks while its context remains fresh. Explicit
+caster names always take priority. Competing casters on the same target and
+spell remain ambiguous instead of being assigned by last caster or round robin.
+Cast starts do not themselves count as damage or create encounters; inferred
+ownership is recorded separately from directly named ticks and does not create
+wiki discovery evidence.
+
+Pending starts expire after 30 seconds. A retained target/spell pairing expires
+after the configured encounter inactivity gap; this is a correlation window,
+not a measured spell duration. Session, source, zone-visit and gap-setting
+changes clear the context. A target's death clears its pairings, and any death
+retires starts whose targets are still unknown. A caster's death does not remove
+already paired effects on other targets. Exact logged interruptions, resists,
+protected-target failures and wear-off messages invalidate applicable context.
+Limits retain 128 pending starts, 256 target/spell pairs and eight owners per
+pair. Overflow falls back to unknown rather than assigning the next remaining
+caster. Retired unresolved competitors remain ambiguous until that effect's
+context ends; long identities are rejected rather than truncated into matches.
 
 Own damage, healing, taken, DPS clocks, kills, loot and trigger inputs keep their
 existing meanings. Nearby actions have separate event types and cannot inflate
@@ -35,7 +73,9 @@ encounter duration for encounter rates. Whole-session other-combatant rates use
 the span from the first to last observed combat action; own DPS retains the
 existing outgoing-damage clock. A per-name row always uses only that name's
 damage, even when a log/profile switch preserves combined legacy session totals.
-The panel explains the clock distinction.
+Routine attribution and clock explanations remain in this guide rather than
+appearing below each parse. A limited encounter history still displays its
+warning in the panel.
 
 Encounter grouping retains the configured inactivity gap, zone and log-source
 boundaries. Within that window, events connect through a shared actor/recipient.

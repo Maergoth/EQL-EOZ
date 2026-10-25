@@ -1,5 +1,7 @@
 # Eye of Zomm Windows/game-client acceptance test
 
+Current `v1.0.1` hotfix: procedural chat identities, reversible untouched-caption cleanup, stable Discovery rows during proof renewal, and canonical outgoing wiki item formatting. The existing fresh-proof and protected-draft boundaries remain in force.
+
 ## 1.0.0 release checks
 
 Release candidate: `v1.0.0`. Confirm desktop/installer eye artwork; live `/loc` marker updates and source/reset clears; shared Crawl defeat/collapse and zone reset; all logged combatants, per-name breakdowns and AA Gained; Live retains a completed fight. Check tier-eight explicit Backstab 21 and weight 0.7 for the documented Torturer's Signature bases. Verify unchecked Screen Reading denies every capture/OCR path, and checked Contribute starts reading an existing log-backed item. New Item Found selects its exact structured form, blank statistics stay omitted, manual edits survive OCR/proof refresh, and fresh proof is required for publication. These installed-game checks remain separate from synthetic CI.

@@ -5,6 +5,7 @@ import { contributionReasons } from './contribution-reasons.js';
 import { classifyNpcEvidence } from './generated-pets.js';
 import { collectTierZeroEvidence, tierZeroVerificationPreview, confirmTierZeroVerification } from './contribution-tier-zero.js';
 import { automaticSourceReceiptKey } from './automatic-source-results.js';
+import { canonicalChatItemMatch, rankedChatItemMentions } from './chat-item-mentions.js';
 
 const KEY=CONTRIBUTION_QUEUE_KEY;
 const clean=(value,max=240)=>String(value??'').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim().slice(0,max);
@@ -17,6 +18,25 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
     const canonicalKey=(kind,name,zone='')=>{const resolved=resolver().resolve(kind,name);return candidateKey(kind,resolved.canonicalTitle||name,zone);};
     const spawnEligible=candidate=>candidate?.kind==='npc'&&[candidate.name,candidate.title||candidate.name].every(name=>classifyNpcEvidence(name,resolver().resolve('npc',name)).eligible);
     const protectedDraft=candidate=>Boolean(candidate.planId||candidate.baseRecovery||candidate.baseVerification||candidate.attachment||candidate.manual===true||candidate.spawnRequest?.status==='captured'||candidate.matchesReviewed===true||candidate.reviewed===true||candidate.submittedAt||!['needs-review',''].includes(candidate.status||'')||candidate.playerText||candidate.title&&contributionNameKey(candidate.title)!==contributionNameKey(candidate.name)||Object.values(candidate.fields||{}).some(field=>field?.confirmed===true||field?.edited===true)||[...(candidate.sources||[]),...(candidate.relations||[])].some(relation=>relation?.confirmed===true||relation?.type==='spawn-location'));
+    function coveredChatCaption(candidate){
+        // Recheck only untouched, chat-only legacy suggestions. A known name
+        // inside a real encoded unknown item, loot, OCR or reviewed work does
+        // not establish that the longer name was a parser error.
+        if(candidate.kind!=='item'||protectedDraft(candidate)||(candidate.sources||[]).length||(candidate.relations||[]).length||Object.keys(candidate.fields||{}).some(key=>!['name','tier'].includes(key)))return null;
+        const evidence=(candidate.evidence||[]).filter(entry=>entry.kind!=='draft-migration');
+        if(!evidence.length||evidence.some(entry=>entry.kind!=='game-log'||entry.event&&entry.event!=='item-link'))return null;
+        const match=canonicalChatItemMatch(candidate.name,pack());
+        if(match.state!=='matched'||match.exact||contributionNameKey(match.name)===contributionNameKey(candidate.name))return null;
+        for(const entry of evidence){
+            const text=entry.logLine||entry.text||'';
+            // Old journals replaced native delimiters with spaces. A retained
+            // hex body is enough to preserve that uncertain evidence intact.
+            if(/[\x12]|\\a(?:ITEM|PC)\b|[a-f0-9]{56}/i.test(text)||!contributionNameKey(text).includes(contributionNameKey(candidate.name)))return null;
+            const body=text.replace(/^\[[^\]]+\]\s*/,''),names=rankedChatItemMentions(body,pack());
+            if(names.length!==1||contributionNameKey(itemIdentity(names[0]).name)!==contributionNameKey(match.name))return null;
+        }
+        return match.name;
+    }
     const passivePopulation=relation=>['mob-zone','zone-population'].includes(relation?.type)&&relation.evidence==='consider';
     function passiveFacts(candidate){
         const relations=candidate.relations||[],evidence=candidate.evidence||[];
@@ -112,7 +132,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
             if(['knownLoot','knownNPCs'].includes(key)&&Array.isArray(value)){const previous=Array.isArray(candidate.fields[key]?.value)?candidate.fields[key].value:[],combined=[...new Map([...previous,...value].map(item=>[contributionNameKey(item),item])).values()].slice(0,100);if(JSON.stringify(combined)!==JSON.stringify(previous))candidate.fields[key]={...candidate.fields[key],value:combined,confirmed:false};}
             else if(!candidate.fields[key]?.confirmed&&!(key==='level'&&candidate.fields[key]?.edited===true))candidate.fields[key]={...candidate.fields[key],value,confirmed:false};}
         if(evidence?.levelEvidence&&Object.hasOwn(fields,'level')&&candidate.fields.level?.confirmed!==true&&candidate.fields.level?.edited!==true)candidate.fields.level={...candidate.fields.level,source:'same-zone-consider',provenance:structuredClone(evidence.levelEvidence)};
-        if(evidence&&!candidate.evidence.some(e=>e.id===evidence.id)){const text=evidence.evidence?.text||(evidence.kind==='game-log'?`Observed ${clean(evidence.subject?.kind)}: ${clean(evidence.subject?.name)}${(Array.isArray(evidence.relations)?evidence.relations:[]).filter(relation=>relation.type==='drop-source').map(relation=>`\nReported source: ${clean(relation.name)} in ${clean(relation.zone)} (${clean(relation.evidence)})`).join('')}`:'');candidate.evidence.push({id:clean(evidence.id),at:clean(evidence.capturedAt),kind:clean(evidence.kind),text:clean(text,6000),...(evidence.kind==='game-log'?{event:clean(evidence.input?.event,40),logLine:contributionLogLine(evidence.evidence?.logLine)}:{}),confidence:Math.min(100,Number(evidence.confidence??evidence.fields?.[0]?.confidence)||0)});const logProof=candidate.evidence.findLast(entry=>entry.kind==='game-log');candidate.evidence=candidate.evidence.slice(-6);if(logProof&&!candidate.evidence.some(entry=>entry.kind==='game-log'))candidate.evidence=[logProof,...candidate.evidence.slice(-5)];}
+        if(evidence&&!candidate.evidence.some(e=>e.id===evidence.id)){const text=evidence.evidence?.text||(evidence.kind==='game-log'?`Observed ${clean(evidence.subject?.kind)}: ${clean(evidence.subject?.name)}${(Array.isArray(evidence.relations)?evidence.relations:[]).filter(relation=>relation.type==='drop-source').map(relation=>`\nReported source: ${clean(relation.name)} in ${clean(relation.zone)} (${clean(relation.evidence)})`).join('')}`:'');candidate.evidence.push({id:clean(evidence.id),at:clean(evidence.capturedAt),kind:clean(evidence.kind),text:clean(text,6000),...(evidence.kind==='game-log'?{event:clean(evidence.input?.event,40),logLine:contributionLogLine(evidence.evidence?.logLine),...(evidence.input?.itemLinkFormat==='plain-tiered-chat'?{itemLinkFormat:'plain-tiered-chat'}:{})}:{}),confidence:Math.min(100,Number(evidence.confidence??evidence.fields?.[0]?.confidence)||0)});const logProof=candidate.evidence.findLast(entry=>entry.kind==='game-log');candidate.evidence=candidate.evidence.slice(-6);if(logProof&&!candidate.evidence.some(entry=>entry.kind==='game-log'))candidate.evidence=[logProof,...candidate.evidence.slice(-5)];}
         for(const relation of (Array.isArray(relations)?relations:[]).filter(r=>r?.type==='drop-source'))if(!candidate.sources.some(s=>contributionNameKey(s.npc)===contributionNameKey(relation.name)&&contributionNameKey(s.zone)===contributionNameKey(relation.zone)&&s.sourceEvidence===relation.evidence&&(s.instance||'unknown')===(relation.instance||'unknown')))candidate.sources.push({npc:clean(relation.name),zone:clean(relation.zone),instance:relation.instance||'unknown',confirmed:false,sourceEvidence:clean(relation.evidence)});
         for(const relation of (Array.isArray(relations)?relations:[]).slice(0,100))rememberRelation(candidate,relation,evidence);
         if(kind==='item'&&evidence)collectTierZeroEvidence(candidate,evidence,{now:now()});
@@ -206,8 +226,8 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         const rows=[],seen=new Map(),before=apply?{candidates:structuredClone(candidates),archive:structuredClone(archive),armed:structuredClone(armed)}:null;let changed=false;
         for(const candidate of [...candidates]){
             const passive=passiveFacts(candidate),reviewCandidate=passive&&!passive.archive?{...candidate,fields:passive.fields,relations:passive.relations}:candidate;
-            const classification=contributionReasons(reviewCandidate,resolver(),{pack:pack()}),resolved=classification.resolved,key=canonicalKey(candidate.kind,candidate.name,candidate.zone),protectedWork=protectedDraft(candidate),prior=seen.get(key),realGap=classification.reasons.some(reason=>['missing-source','missing-population','tier0-verification','identity-review'].includes(reason)),conflict=prior&&Object.entries(candidate.fields||{}).some(([field,value])=>prior.fields?.[field]&&!['knownLoot','knownNPCs'].includes(field)&&JSON.stringify(prior.fields[field].value)!==JSON.stringify(value.value)),duplicate=prior&&!protectedWork&&!protectedDraft(prior)&&!realGap&&!conflict;
-            if(!prior)seen.set(key,candidate);
+            const chatTitle=coveredChatCaption(candidate),classification=chatTitle?{excluded:'chat-caption-covered',reasons:[],resolved:resolver().resolve('item',chatTitle)}:contributionReasons(reviewCandidate,resolver(),{pack:pack()}),resolved=classification.resolved,key=canonicalKey(candidate.kind,candidate.name,candidate.zone),protectedWork=protectedDraft(candidate),prior=seen.get(key),realGap=classification.reasons.some(reason=>['missing-source','missing-population','tier0-verification','identity-review'].includes(reason)),conflict=prior&&Object.entries(candidate.fields||{}).some(([field,value])=>prior.fields?.[field]&&!['knownLoot','knownNPCs'].includes(field)&&JSON.stringify(prior.fields[field].value)!==JSON.stringify(value.value)),duplicate=prior&&!protectedWork&&!protectedDraft(prior)&&!realGap&&!conflict;
+            if(!prior&&!chatTitle)seen.set(key,candidate);
             const obsolete=passive?.archive?'passive-monster-observation':classification.excluded||(resolved.membership==='present'&&!classification.reasons.length?'known-complete':duplicate?'duplicate':null);
             const reason=protectedWork?'protected-work':prior&&conflict?'duplicate-conflict':obsolete||(passive?'passive-monster-observation':classification.reasons[0]||'unresolved'),action=obsolete&&!protectedWork&&archive.length<200?'archive':passive&&!passive.archive&&archive.length<200?'prune-passive-observations':'keep';
             rows.push({id:candidate.id,name:candidate.name,kind:candidate.kind,classification:reason,reasons:classification.reasons,action,canonicalTitle:resolved.canonicalTitle,membership:resolved.membership,...(prior?{duplicateOf:prior.id}:{})});

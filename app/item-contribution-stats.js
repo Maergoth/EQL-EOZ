@@ -48,3 +48,52 @@ export function itemContributionStatLines(values={},retained=[],fields={}){
     }
     return [...ITEM_CONTRIBUTION_STATS.flatMap(({field,label})=>finite(values[field])?[`${label}: ${values[field]}`]:[]),...text].slice(0,60);
 }
+
+// Presentation for reviewed outgoing wikicode only. Keep the saved observation
+// and reverse-scaling text unchanged: they are part of the evidence fingerprint.
+const wikiStatGroups=[
+    ['slots'],['skills','delay'],['damage','ac','backstabDamage','damageBonus'],['range'],
+    ['str','sta','int','wis','agi','dex','cha','hp','mana','endurance'],
+    ['resistFire','resistDisease','resistCold','resistMagic','resistPoison','resistCorruption'],
+    ['attack','hpRegen','manaRegen','haste','attackSpeed','enduranceRegen'],
+    ['weight','size'],['classes'],['races']
+];
+const wikiStatLabels={slots:'Slot',skills:'Skill',delay:'Atk Delay',damage:'DMG',backstabDamage:'BACKSTAB',damageBonus:'DMG Bonus',range:'Range',mana:'MANA',endurance:'END',haste:'Haste',weight:'WT',classes:'Class',races:'Race',size:'Size'};
+const wikiStatPosition=new Map(wikiStatGroups.flatMap((group,index)=>group.map((field,order)=>[field,{group:index,order}])));
+const wikiNumericAliases=new Map([...aliases,...Object.entries({atkdelay:'delay',dmgbon:'damageBonus',backstab:'backstabDamage'})]);
+const explicitFlags=/^(?:(?:MAGIC ITEM|LORE ITEM|LORE EQUIPPED|ATTUNABLE|NO TRADE|NO DROP|PLACEABLE|QUEST(?: ITEM)?|HEIRLOOM|FREE STORAGE|NO DESTROY|TEMPORARY|ARTIFACT|SUMMONED)\b[\s,]*)+$/i;
+function wikiStatAtom(text){
+    const identity=text.match(/^\s*(Slot|Skill|Class|Race|Size)\s*:\s*(\S.*?)\s*$/i);
+    if(identity){const field={slot:'slots',skill:'skills',class:'classes',race:'races',size:'size'}[identity[1].toLowerCase()];return {field,text:`${wikiStatLabels[field]}: ${identity[2]}`};}
+    const numeric=text.match(/^\s*([^:=\r\n]{1,60})\s*[:=]\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))(\s*%?)\s*$/);
+    const field=numeric&&wikiNumericAliases.get(labelKey(numeric[1]));
+    if(!field||!Number.isFinite(Number(numeric[2])))return null;
+    const label=wikiStatLabels[field]||ITEM_CONTRIBUTION_STATS.find(stat=>stat.field===field)?.label;
+    return {field,text:`${label}: ${numeric[2]}${numeric[3].includes('%')?'%':''}`};
+}
+export function itemContributionWikiStatLines(lines=[]){
+    const rows=(Array.isArray(lines)?lines:[]).filter(line=>typeof line==='string'&&line.trim()).map(line=>{
+        const parts=line.trim().split(/[ \t]{2,}/),atoms=parts.map(wikiStatAtom);
+        return {line,atoms:atoms.every(Boolean)?atoms:null};
+    });
+    const counts=new Map();for(const row of rows)for(const atom of row.atoms||[])counts.set(atom.field,(counts.get(atom.field)||0)+1);
+    const groups=new Map(),extra=[];
+    const add=(key,order,text)=>{const group=groups.get(key)||[];group.push({order,text});groups.set(key,group);};
+    for(const row of rows){
+        // Duplicate or compound unsupported lines remain intact instead of
+        // choosing a value, dropping a modifier, or interpreting contributor prose.
+        if(!row.atoms||row.atoms.some(atom=>counts.get(atom.field)>1)){
+            const priority=explicitFlags.test(row.line.trim())?-2:/^\s*(?:(?:Combat|Click|Worn|Focus|Proc)\s+)?Effect\s*:/i.test(row.line)?6.5:6.75;
+            extra.push({priority,text:row.line});continue;
+        }
+        for(const atom of row.atoms){
+            const position=wikiStatPosition.get(atom.field);
+            // Itembox's default Backstab reads the entire standalone DMG row
+            // as a number; another labelled value on that row breaks its expr.
+            if(position)add(position.group===2?2+position.order/10:position.group,position.order,atom.text);
+            else extra.push({priority:6.6,text:atom.text});
+        }
+    }
+    const result=[...groups].map(([priority,values])=>({priority,text:values.sort((a,b)=>a.order-b.order).map(value=>value.text).join('  ')}));
+    return [...result,...extra].sort((a,b)=>a.priority-b.priority).map(row=>row.text);
+}
