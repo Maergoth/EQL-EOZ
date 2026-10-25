@@ -249,10 +249,18 @@ restores automatic content fitting. Global Unlock restores mouse input on every 
 
 Logs remain the source for supported kills, loot, zone and character events.
 **Settings → Screen reading** adds optional local OCR for visible examine
-windows and character statistics. Enable the controls, choose a window or
-display, then press **Start contribution capture**. Pause or Stop releases
+windows and character statistics. The checkbox is a master permission, saved on
+this device and disabled by default. When unchecked, native code stops active
+readers and OCR, discards pending screen results, and blocks manual/automatic
+Contribute reading, Character stats, source screenshots, and file/clipboard OCR.
+Logs, text entry and inventory-file imports keep working. While checked, opening
+**Contribute** starts item reading automatically; enabling it while Contribute is
+open does the same. One recommended game window is selected automatically; an
+ambiguous source requires your choice. OCR fills existing chat/log discoveries
+only, including a uniquely matched small reading typo; it never creates discoveries
+from screenshots alone. Pause or Stop releases
 capture work; status shows which workspace owns it. **Read a screenshot** imports
-one image without starting continuous capture. Screen reading starts disabled.
+one image without starting continuous capture, while the master permission is enabled.
 The main app and both new tabs retain the selected fonts and text size.
 
 Observed text and evidence remain in a bounded local journal. OCR values are

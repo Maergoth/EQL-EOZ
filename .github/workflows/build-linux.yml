@@ -55,6 +55,7 @@ jobs:
             npm run test:desktop-worker
             npm run test:window-lifecycle
             npm run test:discovery-capture-workspace
+            npm run test:screen-reading-master
             if [ "$EXTENDED_UI_CHECKS" = "true" ]; then
             npm run test:map-layout
             npm run test:map-loot -- --screenshots ci-screenshots/linux-map-loot

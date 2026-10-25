@@ -52,3 +52,18 @@ hints=createContributionQueue({storage:hintStorage,getPack:()=>hintPack});assert
     const before=queue.snapshot().find(value=>value.id===candidate.id);assert.equal(before.fields.notable.value,true);
     console.log('Notable choice: explicit Yes/No, unanswered state, exact candidate/evidence guards, durable queue and preserved edited/reviewed work passed.');
 }
+
+{
+    const data=new Map(),storage={getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value)},getPack=()=>({meta:{wikiEntitiesComplete:true},wikiEntities:{items:[],npcs:[],titles:[]},items:[],npcs:[],zones:[]});
+    let queue=createContributionQueue({storage,getPack});
+    const image=(name,kind='ocr',index=1)=>({id:'image-'+index,kind,owner:'contribution',subject:{kind:'item',name},input:{zone:'Screenshot Invented Zone'},fields:[{key:'hp',value:index},{key:'knownNPCs',value:['Screenshot Invented Mob']}],relations:[{type:'drop-source',name:'Screenshot Invented Mob',zone:'Screenshot Invented Zone',evidence:'explicit-corpse'}]});
+    for(const kind of ['ocr','manual','screen-read'])assert.equal(queue.consume(image('Screenshot Only Blade',kind)),null,'Image input must not create a new item, including journal replay');
+    assert.equal(queue.snapshot().length,0);
+    const item=queue.consume({id:'origin-log',kind:'game-log',owner:'contribution',subject:{kind:'item',name:'Logged Great Blade'},input:{event:'item-link'},fields:[],evidence:{text:'Chat linked Logged Great Blade',logLine:'Synthetic chat link'}});
+    for(let index=1;index<=12;index++)assert.equal(queue.consume(image('Logged Great Blade',index%2?'ocr':'manual',index)).id,item.id);
+    const updated=queue.snapshot().find(row=>row.id===item.id);assert.equal(updated.fields.hp.value,12);assert.equal(updated.fields.knownNPCs,undefined);assert.deepEqual(updated.sources,[]);assert.deepEqual(updated.relations,[]);assert.equal(updated.evidence.length,6);assert(updated.evidence.some(entry=>entry.kind==='game-log'&&entry.id==='origin-log'));
+    assert.equal(queue.snapshot().length,1,'Image-provided zone and corpse references cannot create any related identity');
+    queue=createContributionQueue({storage,getPack});assert(queue.snapshot()[0].evidence.some(entry=>entry.kind==='game-log'&&entry.id==='origin-log'),'Original chat/log origin survives image churn and restart');
+    assert.equal(queue.consume({...image('Screenshot Mob'),subject:{kind:'monster',name:'Screenshot Mob'}}),null);
+    console.log('Image enrichment queue: existing identities only, no derived relationships, bounded durable log origin and restart passed.');
+}

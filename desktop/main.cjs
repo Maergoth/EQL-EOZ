@@ -200,6 +200,7 @@ async function readConfig() {
         logPath: '',
         logSelection: 'automatic',
         ...current,
+        screenReadingEnabled:saved.screenReadingEnabled === true,
         minimizeToTray:saved.minimizeToTray === true,
         startMinimized:saved.startMinimized === true
     };
@@ -930,13 +931,14 @@ async function bootstrap() {
         warn:message=>console.warn('[Eye of Zomm]',message)});
     await characterStorage.initialize();
     inventoryFileHost = new InventoryFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig});
-    captureHost = new CaptureHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
+    captureHost = new CaptureHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readingEnabled:config.screenReadingEnabled,
+        onReadingDisabled:()=>discoveryHost?.cancelScreenshot(),onReadingEnabledChange:enabled=>updateConfig({screenReadingEnabled:enabled})});
     contributionIgnoresHost=new ContributionIgnoresHost({ipcMain,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,store:getContributionIgnores(),
         onChanged:snapshot=>{automaticLootSources?.cancel();void discoveryHost?.reconcileIgnores().catch(()=>{});if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send(CONTRIBUTION_IGNORES_CHANGED,snapshot);}});
     wikiHost = new WikiHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
         stateDir:path.join(userDataDir(),'wiki-contributions'),version:APP_VERSION,
         onStatus:status=>{void observationHost?.accountChanged(status);if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:wiki-state',status);},
-        onAttachmentPrepared:({png})=>captureHost.importPng(png,{mode:'contribution'}),
+        onAttachmentPrepared:({png})=>captureHost.readingEnabled?captureHost.importPng(png,{mode:'contribution'}):{records:[],cancelled:true},
         onCaptureEvidence:proof=>captureHost.getItemEvidence(proof),
         onItemCatalog:automaticWikiCatalog,
         isContributionIgnored:(target,catalog)=>getContributionIgnores().isIgnored(target,catalog),
@@ -956,6 +958,7 @@ async function bootstrap() {
     rendererDrain = new RendererDrain({ipcMain,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     shareHost = new ShareHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
+        isScreenReadingEnabled:()=>captureHost.readingEnabled,
         verifyDiscovery:value=>wikiHost.verifyDiscovery(value),isContributionIgnored:target=>getContributionIgnores().isIgnored(target),
         itemExistence:new WikiItemExistence({getPack:automaticWikiCatalog,entryVerifier:wikiHost.discoveryVerifier,fetchImpl:(url,options)=>electron.net.fetch(url,{...options,credentials:'omit',useSessionCookies:false})})});
     createWindow(config,await readJson(windowPlacementPath(),{}));

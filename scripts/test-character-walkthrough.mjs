@@ -67,7 +67,7 @@ async function run({root,temporary,screenshots}){
         await execute(async()=>{
             const {mountCaptureWorkspace}=await import('/app/capture-workspace.js');
             let statusListener=()=>{},observationListener=()=>{},sequence=0;
-            let state={enabled:false,phase:'disabled',owner:null,source:null,sessionId:'',hasPreview:false,generation:0,generationStartedAt:0};
+            let state={readingEnabled:true,enabled:false,phase:'disabled',owner:null,source:null,sessionId:'',hasPreview:false,generation:0,generationStartedAt:0};
             const source={id:'window:synthetic-game',name:'EverQuest · Synthetic Fixture',label:'EverQuest · Synthetic Fixture',type:'window',recommended:true};
             const starts=[],stops=[],notices=[],reads=[],imports=[],fileReads=[],navigations=[],saves=[];
             const emit=patch=>{state={...state,...patch};statusListener(state);};

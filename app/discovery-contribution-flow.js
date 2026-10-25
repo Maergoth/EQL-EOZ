@@ -1,4 +1,5 @@
 import { itemExaltationBaseIdentity, normalizeWikiIdentity } from './wiki-identity.js';
+import { contributionReaderTarget } from './contribution-reader.js';
 
 export const discoveryItemIdentity = name => normalizeWikiIdentity(itemExaltationBaseIdentity(name));
 const validRequest = value => value && typeof value.id === 'string' && value.id.length > 0 && value.id.length <= 240 &&
@@ -33,22 +34,36 @@ export function createDiscoveryContributionFlow({begin, cancel, status, dismiss 
         requests.delete(record.request.id);
         await cleanup(record.request,{completed:true});
     }
-    function itemMatches(record, observation) {
+    function itemMatch(record, observation, match) {
         const proof = record.capture, at = Date.parse(observation?.capturedAt || '');
-        return proof && observation?.kind === 'ocr' && observation.owner === 'contribution' && observation.subject?.kind === 'item' &&
+        const currentProof=proof && observation?.kind === 'ocr' && observation.owner === 'contribution' && observation.subject?.kind === 'item' &&
             observation.parser?.name === 'item-examine' && Number.isFinite(at) && at >= record.startedAt && at <= now() &&
             observation.sessionId === proof.sessionId && observation.input?.captureGeneration === proof.generation &&
-            observation.input?.sourceId === proof.sourceId && discoveryItemIdentity(observation.subject.name) === discoveryItemIdentity(record.request.name);
+            observation.input?.sourceId === proof.sourceId;
+        if(!currentProof)return null;
+        if(discoveryItemIdentity(observation.subject.name)===discoveryItemIdentity(record.request.name))return observation.subject.name;
+        // A corrected name is a separate proposal, never a rewritten native
+        // observation. Bind it to this ready draft and independently check the
+        // same narrow typo against every pending linked request.
+        if(!record.candidateId||match?.candidateId!==record.candidateId||match.observedName!==observation.subject.name||
+            discoveryItemIdentity(match.name)!==discoveryItemIdentity(record.request.name))return null;
+        const candidates=[...new Map([...requests.values()].filter(value=>value.request.purpose==='item-link').map(value=>{
+            const id=value.candidateId||value.request.candidateId||value.request.id;
+            return[id,{id,kind:'item',name:value.request.name,title:value.request.name,status:'needs-review'}];
+        })).values()];
+        const target=contributionReaderTarget(observation,candidates,{linkedIds:candidates.map(value=>value.id)});
+        return target?.id===record.candidateId?record.request.name:null;
     }
-    function recordItem(observation) {
+    function recordItem(observation, match=null) {
         let handled = false;
         for (const record of requests.values()) {
             if (record.request.purpose !== 'item-link' || record.finishing) continue;
-            if (itemMatches(record,observation)) {handled = true; void finish(record,{matchedName:observation.subject.name});}
+            const matchedName=itemMatch(record,observation,match);
+            if (matchedName) {handled = true; void finish(record,{matchedName});}
             // The first frame can arrive while start's IPC reply is in flight.
             // Buffer a few originals, then validate against the returned proof.
             else if (!record.capture && observation?.kind === 'ocr' && observation.owner === 'contribution' && observation.parser?.name === 'item-examine' && Date.parse(observation.capturedAt) >= record.startedAt) {
-                record.buffer.push(observation); if (record.buffer.length > 4) record.buffer.shift();
+                record.buffer.push({observation,match}); if (record.buffer.length > 4) record.buffer.shift();
             }
         }
         return handled;
@@ -58,17 +73,21 @@ export function createDiscoveryContributionFlow({begin, cancel, status, dismiss 
         if (!record || record.request.captureRequest !== request.captureRequest || !current(record)) return;
         if (!result?.ok || result.cancelled) {void fail(record,result?.error || 'Item reading was cancelled. Try Contribute again.'); return;}
         if (request.purpose !== 'item-link' || result.needsSource) return;
+        if(typeof result.candidateId==='string'&&result.candidateId&&result.candidateId.length<=240){
+            if(record.candidateId&&record.candidateId!==result.candidateId){void fail(record,'The linked item draft changed. Try Contribute again.');return;}
+            record.candidateId=result.candidateId;
+        }
         const capture = result.capture;
         if (capture?.owner !== 'contribution' || capture.phase !== 'running' || !capture.sessionId || !Number.isSafeInteger(capture.generation) || !capture.source?.id) return;
         record.capture = {sessionId:capture.sessionId,generation:capture.generation,sourceId:capture.source.id};
-        for (const observation of record.buffer.splice(0)) if (itemMatches(record,observation)) {void finish(record,{matchedName:observation.subject.name}); break;}
+        for (const {observation,match} of record.buffer.splice(0)) {const matchedName=itemMatch(record,observation,match);if(matchedName){void finish(record,{matchedName});break;}}
     }
     async function request(value) {
         if (disposed || !validRequest(value)) return {ok:false,error:'Invalid discovery contribution request.'};
         const prior = requests.get(value.id);
         if (prior?.request.captureRequest === value.captureRequest) return {ok:true};
         if (requests.size >= 20 && !prior) return {ok:false,error:'Finish or dismiss another discovery request first.'};
-        const record = {request:{...value},startedAt:now(),capture:null,buffer:[],finishing:false};
+        const record = {request:{...value},candidateId:value.candidateId||null,startedAt:now(),capture:null,buffer:[],finishing:false};
         requests.set(value.id,record);
         if (prior) await cleanup(prior.request);
         if (!current(record)) return {ok:false,cancelled:true};

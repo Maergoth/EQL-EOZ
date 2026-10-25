@@ -59,7 +59,8 @@
     "test:zone-creation-workspace": "node scripts/test-zone-creation-workspace.mjs",
     "test:workspace-099": "node scripts/test-099-workspace.mjs",
     "sync:item-scaling": "node scripts/sync-item-scaling.mjs",
-    "check:item-scaling": "node scripts/sync-item-scaling.mjs --check"
+    "check:item-scaling": "node scripts/sync-item-scaling.mjs --check",
+    "test:screen-reading-master": "node scripts/test-screen-reading-master.mjs"
   },
   "devDependencies": {
     "@tesseract.js-data/eng": "1.0.0",

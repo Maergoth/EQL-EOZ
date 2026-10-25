@@ -27,7 +27,7 @@ async function run({root,temporary,packagedRoot,hoverHtml,baselineHtml,scaleFact
     const ocr=new (require(path.join(sourceRoot,'desktop','ocr-service.cjs')).OcrService)({packaged:Boolean(packagedRoot),resourcesPath:packagedRoot?path.dirname(packagedRoot):process.resourcesPath});
     const recognize=ocr.recognize.bind(ocr),ocrTimes=[],ocrReads=[],records=[],admissions=[],submissions=[],stages=[];let gateNext=false,releaseGate,gateStarted,captureStages=false,frameRate=null,renderGeometry=null,lastSubmittedPng=null,lastRejectedPng=null;
     ocr.recognize=async(...args)=>{if(gateNext){gateNext=false;await new Promise(resolve=>{releaseGate=resolve;gateStarted?.();});}const started=Date.now();try{const read=await recognize(...args);if(captureStages){ocrReads.push({layout:args[1]?.layout||'sparse',size:electron.nativeImage.createFromBuffer(args[0]).getSize(),text:read.text?.slice(0,600),words:read.words?.slice(0,12)});if(ocrReads.length>12)ocrReads.shift();}return read;}finally{ocrTimes.push(Date.now()-started);}};
-    const host=new CaptureHost({electron,ocr,origin,getMainWindow:()=>main,onObservation:value=>{records.push(value);resolveObservation(value);}});
+    const host=new CaptureHost({readingEnabled:true,electron,ocr,origin,getMainWindow:()=>main,onObservation:value=>{records.push(value);resolveObservation(value);}});
     // A synthetic two-color strip outside the tooltip acknowledges the pixels
     // that crossed the actual native stream. It is never supplied to OCR as a
     // name/result, and a previous frame's heartbeat cannot satisfy a new stage.
