@@ -71,6 +71,7 @@ try {
         const writer=createAtomicWriteJson({platform:'win32',io:{...fs,async writeFile(file,text,...args){writes.push(JSON.parse(text));return fs.writeFile(file,text,...args);},async rename(...args){attempts++;if(attempts<=(failCompletely?6:1))throw renameError;return fs.rename(...args);}},async sleep(){entered();await paused;}});
         const context=vm.createContext({fsp:fs,writeJsonAtomically:writer,configPath:()=>f.file,configWriteQueue:Promise.resolve(),desktopSettings:{},automaticLogReader:null,logContextHistory:{reset(){}},servedLogPath:'',windowSettings:value=>({minimizeToTray:value.minimizeToTray,startMinimized:value.startMinimized})});
         vm.runInContext(source,context);
+        const initial={...await context.readConfig()};assert.equal(initial.keep,old.keep);
         const first=context.updateConfig({minimizeToTray:true}),second=context.updateConfig({startMinimized:true});
         // Attach rejection observation before releasing the deliberately failed
         // first write, so an expected terminal error is never unhandled.
@@ -78,7 +79,7 @@ try {
         await sleeping;await tick();assert.equal(writes.length,1,'The second config update waits through the first rename retry');assert.deepEqual(await json(f.file),old);release();
         const result=await firstResult;await second;
         if(failCompletely)assert.equal(result.error,renameError);else assert.equal(result.value.minimizeToTray,true);
-        assert.deepEqual(await json(f.file),{eqRootPath:'',logPath:'',logSelection:'automatic',...old,minimizeToTray:!failCompletely,startMinimized:true},'Serialized updates merge the last durable settings, including after a terminal failure');
+        assert.deepEqual(await json(f.file),{...initial,minimizeToTray:!failCompletely,startMinimized:true},'Serialized updates preserve the initial normalized defaults and merge the last durable settings, including after a terminal failure');
         assert.equal(writes.length,2);assert.equal(attempts,failCompletely?7:3);await f.clean();
     }
     console.log('Atomic JSON: Windows-only bounded rename recovery, original errors, destination preservation, unique temp cleanup and actual serialized config updates passed.');
