@@ -696,8 +696,8 @@ function state() {
 }
 
 function crawlContext(s=state()) {
-    const context=parser.logContextSnapshot(),profile=effectiveProfile(s);
-    return {zone:s.zone,character:s.character,source:bridgeInfo?.logPath||'current-log',profile:JSON.stringify([profile.level,profile.classes.slice().sort()]),session:s.sessionNumber,
+    const context=parser.logContextSnapshot();
+    return {zone:s.zone,character:s.character,source:bridgeInfo?.logPath||'current-log',session:s.sessionNumber,
         visit:context.visit,instanceId:context.instanceId,instance:context.instance};
 }
 function crawlCandidate(source) {

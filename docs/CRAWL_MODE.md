@@ -14,9 +14,10 @@ Defeated mobs remain dimmed for the rest of the visit. Further considerations,
 session heartbeats and late drop-loading responses cannot reopen their drops.
 Unchecking Crawl clears the defeated presentation and restores the normal
 previews. Entering or re-entering a zone also clears defeated mobs, while
-leaving the checkbox checked. A source/log/root replacement, character or
-class-profile change, explicit session split, log reset or main-app restart
+leaving the checkbox checked. A source/log/root replacement, character change,
+explicit session split, log reset or main-app restart
 clears the visit state. The checkbox itself is not saved to disk.
+Level gains and class browsing retain defeats within the same visit.
 
 Only newly ingested, recent kills participate. Opening a panel or enabling
 Crawl never replays historical kills. Player characters, explicit pet labels

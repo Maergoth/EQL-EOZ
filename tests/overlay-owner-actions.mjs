@@ -10,6 +10,15 @@ import {createCrawlMode} from '../app/crawl-mode.js';
 // Execute the actual main owner's action handler. These fixtures prove camera
 // preview cannot become a logged player position or choose a different source.
 const source=readFileSync(new URL('../app/app.js',import.meta.url),'utf8');
+const crawlFrom=source.indexOf('function crawlContext('),crawlTo=source.indexOf('function crawlCandidate(',crawlFrom);
+let crawlPlayer={zone:'Synthetic Zone',character:'Fixture',level:50,classes:['WAR'],sessionNumber:1};
+const crawlContextVm=vm.createContext({state:()=>crawlPlayer,parser:{logContextSnapshot:()=>({visit:1})},bridgeInfo:{logPath:'fixture-log'},effectiveProfile:s=>({level:s.level,classes:s.classes})});
+vm.runInContext(source.slice(crawlFrom,crawlTo)+';this.context=crawlContext;',crawlContextVm);
+const visitCrawl=createCrawlMode(),visitMob={name:'Synthetic Keeper',zone:'Synthetic Zone',raidInstance:false,loc:[1,2]};
+visitCrawl.setEnabled(true);visitCrawl.consume({type:'kill',victim:visitMob.name},{...crawlContextVm.context(),live:true,at:Date.now()},[visitMob]);
+assert(visitCrawl.isDefeated(visitMob));
+crawlPlayer={...crawlPlayer,level:51,classes:['WIZ']};visitCrawl.context(crawlContextVm.context());
+assert(visitCrawl.isDefeated(visitMob),'Level gains and class browsing cannot revive Crawl mobs within the same zone visit');
 const from=source.indexOf('async function handleOverlayCommand('),to=source.indexOf('function currentEraIndex()',from);
 assert(from>=0&&to>from);
 const normal={name:'Synthetic Keeper',zone:'Synthetic Zone',loc:[10,20],raidInstance:false};
@@ -48,16 +57,6 @@ assert.equal(context.settings.itemTier,10,'Invalid overlay values cannot corrupt
 await context.handle({action:'session:crawl-mode',payload:{enabled:true}});
 assert.equal(context.crawlMode.snapshot().enabled,true);
 
-// Exercise the real context adapter too: explicit profile overrides must
-// invalidate a visit even when the detected log character has not changed.
-const crawlFrom=source.indexOf('function crawlContext('),crawlTo=source.indexOf('function startNewSession(',crawlFrom);
-let effective={level:26,classes:['MNK']};
-const crawlOwner=vm.createContext({parser:{logContextSnapshot:()=>({visit:1,instanceId:'',instance:'unknown'})},
-    bridgeInfo:{logPath:'fixture'},state:()=>({...normal,character:'Fixture',sessionNumber:1}),effectiveProfile:()=>effective});
-vm.runInContext(source.slice(crawlFrom,crawlTo)+';this.context=crawlContext;',crawlOwner);
-const beforeProfile=crawlOwner.context();effective={level:26,classes:['WAR']};
-assert.notEqual(crawlOwner.context().profile,beforeProfile.profile,'A manual class-profile change is a context reset');
-effective={level:27,classes:['MNK']};assert.notEqual(crawlOwner.context().profile,beforeProfile.profile,'Effective level changes are tracked too');
 await assert.rejects(context.handle({action:'session:crawl-mode',payload:{enabled:'true'}}),/whether Crawl/);
 assert.equal(context.crawlMode.snapshot().enabled,true);
 
