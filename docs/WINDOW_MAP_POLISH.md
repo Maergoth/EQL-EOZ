@@ -43,6 +43,14 @@ an alternate itinerary is not proof that every route through a zone is blocked.
 Physical Windows DPI changes, a disconnected physical monitor and moving in
 the live game remain distinct from synthetic display/layout and archive tests.
 
+Map selector styling belongs to the EOZ iframe wrapper, alongside the main
+app's palette tokens. Both the selected control and its native options use an
+opaque paired foreground/background; `inheritViewerAppearance` transfers the
+parent's computed color scheme and control palette without changing the viewer
+bundle or scene. The appearance unit and actual Electron fixture check dark
+and synthetic light palettes in the real main Map tab/iframe. Captures show the
+closed control; OS popup-menu compositing is separate from computed style proof.
+
 ## Results
 
 The initial focused window/layout checks passed. Actual decoded Mistmoore wall

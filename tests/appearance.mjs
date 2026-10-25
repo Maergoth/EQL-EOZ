@@ -26,7 +26,7 @@ assert.deepEqual(normalizeAppearance(),DEFAULT_APPEARANCE);
 
 const fakeDocument=()=>{
     const values=new Map([['--gold','#d8b75c']]),styles=new Map();
-    return {values,styles,documentElement:{dataset:{},style:{setProperty:(key,value)=>values.set(key,value)}},
+    return {values,styles,documentElement:{dataset:{},style:{setProperty:(key,value)=>values.set(key,value),removeProperty:key=>values.delete(key)}},
         getElementById:id=>styles.get(id),createElement:()=>({}),head:{append:style=>styles.set(style.id,style)}};
 };
 const main=fakeDocument(),viewer=fakeDocument();
@@ -37,6 +37,22 @@ assert.match(main.values.get('--ui-font-family'),/Georgia/);
 inheritViewerAppearance(main,viewer);assert.equal(Number(viewer.values.get('--font-scale')),2);
 assert.match(viewer.values.get('--ui-font-family'),/Georgia/);
 inheritViewerAppearance(main,viewer);assert.equal(viewer.styles.size,1,'Repeated 3D updates reuse one bounded typography stylesheet');
+const palette=new Map([['--bg2','#0b111a'],['--text','#e9edf3'],['--line','#d8b75c47']]);
+let scheme='dark';
+main.defaultView={getComputedStyle:()=>({colorScheme:scheme,color:'#e9edf3',getPropertyValue:key=>palette.get(key)||''})};
+inheritViewerAppearance(main,viewer);
+assert.equal(viewer.values.get('color-scheme'),'dark');
+assert.equal(viewer.values.get('--eoz-control-background'),'#0b111a');
+assert.equal(viewer.values.get('--eoz-control-text'),'#e9edf3');
+scheme='light';palette.set('--bg2','#f7f4ed');palette.set('--text','#17212d');palette.set('--line','#58534a');
+inheritViewerAppearance(main,viewer);
+assert.equal(viewer.values.get('color-scheme'),'light','Native menus inherit the actual parent scheme instead of forcing dark');
+assert.equal(viewer.values.get('--eoz-control-background'),'#f7f4ed');
+assert.equal(viewer.values.get('--eoz-control-text'),'#17212d','Light/custom palettes keep a readable paired foreground and background');
+palette.clear();scheme='dark';inheritViewerAppearance(main,viewer);
+assert.equal(viewer.values.has('--eoz-control-background'),false,'Overlay parents without main-app palette tokens clear a previous transferred background');
+assert.equal(viewer.values.has('--eoz-control-border'),false);
+assert.equal(viewer.values.get('--eoz-control-text'),'#e9edf3','Native overlays use their actual inherited foreground when the main text token is absent');
 applyAppearance(main,{fontFamily:'<style>bad</style>',fontSize:NaN},{panelScale:Infinity});
 assert.equal(main.documentElement.dataset.fontFamily,'theme');assert.equal(Number(main.values.get('--font-scale')),1);
 assert(![...main.values.values()].some(value=>String(value).includes('<style>')),'Untrusted font strings never become CSS values');

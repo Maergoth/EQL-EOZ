@@ -11,7 +11,8 @@ export async function discoveryQueueStabilityScenario({document,mountCaptureWork
     const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
     const wiki={status:async()=>({authenticated:false}),onStatus:()=>()=>{},blueprints:async()=>({eras:['Classic Era']}),matches:async()=>({matches:[]}),verifyDiscovery:request=>new Promise((resolve,reject)=>checks.push({request,resolve,reject})),preparePlan:async()=>{calls.prepare++;throw Error('No plan should use stale proof');},submitPlan:async()=>{calls.submit++;throw Error('No synthetic publication');}};
     const capture={status:async()=>({readingEnabled:false,enabled:false,phase:'disabled'}),read:async()=>({records:[],lastSequence:0}),onStatus:()=>()=>{},onObservation:()=>()=>{}};
-    const view=mountCaptureWorkspace({document,storage,characterStorage:storage,contributionStorage:storage,wiki,capture,share:null,inventory:null,getPack:()=>pack});
+    const options={document,storage,characterStorage:storage,contributionStorage:storage,wiki,capture,share:null,inventory:null,getPack:()=>pack};
+    let view=mountCaptureWorkspace(options);
     const row=name=>[...document.querySelectorAll('[data-contribution-row-id]')].find(node=>node.querySelector('strong')?.textContent===name);
     const add=name=>view.consumeLog({type:'item-links',items:[name],at},{live:true,at,cursor:++sequence,logId:'stable-log'});
     const answer=(entry,state='missing')=>entry.resolve({state,canonicalTitle:entry.request.name,checkedAt:new Date(at).toISOString(),reasons:state==='missing'?entry.request.reasons:[],confirmedRelations:state==='missing'?entry.request.relations:[]});
@@ -78,6 +79,24 @@ export async function discoveryQueueStabilityScenario({document,mountCaptureWork
         view.refresh();await flush();for(const check of checks.slice(-3))answer(check);await flush();
         assert(row('Stable Bronze'),'New source proof can admit stored rows again');
         pack={...pack,meta:{...pack.meta,version:'stable-list-new-pack'}};view.refresh();await flush();assert(document.querySelectorAll('[data-contribution-row-id]').length===0,'A new dataset invalidates retained old proof');
-        return{verifiedRows:3,unchangedRefreshes:17,pendingAndUnavailableStable:true,equivalentPackWrapperStable:true,selectableReviewOnly:true,newRowsRequireProof:true,coveredRetiresOnlyAffected:true,sourceAndPackInvalidate:true,calls};
+        // Legacy prose captions can become recognized after a catalog refresh.
+        // A full archive preserves their raw record but clears the false gap;
+        // that must also retire any previously verified display receipt.
+        view.dispose();values.clear();
+        pack={meta:{schemaVersion:3,version:'caption-stability',sample:false,wikiEntitiesComplete:true},items:[],npcs:[],zones:[],wikiEntities:{items:[],npcs:[],titles:[]}};
+        const legacy=(id,name)=>({id,kind:'item',name,title:name,zone:'',status:'needs-review',fields:{name:{value:name,confirmed:false},tier:{value:3,confirmed:false}},sources:[],relations:[],evidence:[{id:'log-'+id,kind:'game-log',event:'item-link',text:`Marketvoice tells General:1, '[${name} +3]'`,logLine:`[Sun Oct 25 18:00:00 2026] Marketvoice tells General:1, '[${name} +3]'`}]});
+        const caption=legacy('old-caption','Free Brown Chitin Protector'),unrelated=legacy('untouched-gap','Stable Untouched Relic');
+        const archive=Array.from({length:200},(_,index)=>({...legacy('archived-'+index,'Archived Unknown '+index),archive:{reason:'old'}}));
+        storage.setItem('eql-eye-of-zomm-contributions-v1',JSON.stringify({schemaVersion:1,candidates:[caption,unrelated],archive}));
+        const beforeCaption=checks.length;view=mountCaptureWorkspace(options);await flush();view.refresh();await flush();
+        for(const check of checks.slice(beforeCaption))answer(check);await flush();
+        const captionRow=row(caption.name),unrelatedRow=row(unrelated.name);
+        assert(captionRow&&unrelatedRow,'Both historical suggestions were previously verified and displayed');
+        pack={...pack,items:[{name:'Brown Chitin Protector',wikiTitle:'Brown Chitin Protector'}],wikiEntities:{...pack.wikiEntities,items:['Brown Chitin Protector']}};view.refresh();await flush();
+        assert(!row(caption.name)&&row(unrelated.name)===unrelatedRow,'A raw gap cleared by caption cleanup retires only its retained display row even when the archive is full');
+        assert(document.querySelector('[data-candidate-form]')?.querySelector('h2')?.textContent!==caption.name,'The retired false caption cannot retain an active editor lease');
+        const retained=JSON.parse(storage.getItem('eql-eye-of-zomm-contributions-v1'));
+        assert(retained.archive.length===200&&retained.candidates.find(candidate=>candidate.id===caption.id)?.reasons.length===0,'The quiet legacy record and complete full archive remain saved');
+        return{verifiedRows:3,unchangedRefreshes:17,pendingAndUnavailableStable:true,equivalentPackWrapperStable:true,selectableReviewOnly:true,newRowsRequireProof:true,coveredRetiresOnlyAffected:true,sourceAndPackInvalidate:true,fullArchiveCaptionRetired:true,calls};
     }finally{view.dispose();Date.now=saved.dateNow;globalThis.setTimeout=saved.setTimeout;globalThis.clearTimeout=saved.clearTimeout;}
 }

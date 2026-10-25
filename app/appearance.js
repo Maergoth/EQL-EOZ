@@ -43,11 +43,22 @@ export function applyAppearance(document,value,{panelScale=1}={}) {
     return appearance;
 }
 // The same-origin 3D viewer keeps its geometry/camera unchanged. Its rem-based
-// controls inherit the selected typography without changing the vendor bundle.
+// controls inherit the selected typography and native-control palette without
+// changing the vendor bundle. Native option menus need an opaque background.
 export function inheritViewerAppearance(parentDocument,viewerDocument) {
     if (!viewerDocument?.documentElement || !parentDocument?.documentElement) return;
     const source = parentDocument.documentElement;
     applyAppearance(viewerDocument,{fontFamily:source.dataset.fontFamily,localFontFamily:source.dataset.localFontFamily,fontSize:Number(source.dataset.fontSize)},{panelScale:Number(source.dataset.fontMultiplier)||1});
+    const palette = parentDocument.defaultView?.getComputedStyle(source);
+    if (palette) {
+        const target = viewerDocument.documentElement.style;
+        target.setProperty('color-scheme',palette.colorScheme);
+        for (const [local,parent] of [['--eoz-control-background','--bg2'],['--eoz-control-text','--text'],['--eoz-control-border','--line']]) {
+            const value = palette.getPropertyValue(parent).trim() || (parent === '--text' ? palette.color : '');
+            if (value) target.setProperty(local,value);
+            else target.removeProperty(local);
+        }
+    }
     let style = viewerDocument.getElementById('eoz-viewer-appearance');
     if (!style) {
         style = viewerDocument.createElement('style'); style.id = 'eoz-viewer-appearance';

@@ -20,6 +20,10 @@ try {
     await mkdir(join(profile,'data'),{recursive:true}); await mkdir(join(game,'Logs'),{recursive:true}); await mkdir(join(game,'Maps')); await mkdir(screenshots,{recursive:true});
     await writeFile(log,'[Thu Oct 22 01:00:00 2026] Synthetic font smoke starts.\n');
     await writeFile(join(game,'Maps','mistmoore.txt'),'L -100,-100,0,100,100,0,150,160,180\nP -20,-10,0,216,183,92,2,Synthetic_Keeper\n');
+    // A valid empty PFS directory exposes the real enabled zone selector; it
+    // contains no game geometry, artwork or proprietary archive contents.
+    const emptyPfs=Buffer.alloc(16);emptyPfs.writeUInt32LE(12,0);emptyPfs.write('PFS ',4,'ascii');emptyPfs.writeUInt32LE(0x20000,8);
+    await writeFile(join(game,'mistmoore.s3d'),emptyPfs);
     await writeFile(join(profile,'eye-of-zomm-config.json'),JSON.stringify({eqRootPath:game,logPath:log,logSelection:'manual'}));
     await writeFile(join(profile,'data','eye-of-zomm-pack.json'),JSON.stringify({
         meta:{schemaVersion:3,version:'appearance-synthetic',sample:true,currentEra:'Classic'},
@@ -56,6 +60,41 @@ try {
             const image=await window.capturePage();assert(!image.isEmpty());
             await fs.writeFile(path.join(screenshots,`${phase}-${name}.png`),image.toPNG());
             if(!wasVisible)window.hide();
+        };
+        const mapSelectPalette=async()=>{
+            await execute(owner,()=>document.querySelector('[data-view="map"]').click());
+            await until(()=>execute(owner,()=>{const select=document.querySelector('#zone-viewer')?.contentDocument?.querySelector('.eqlzv-select');return select&&!select.disabled&&select.options.length>1;}),'real enabled Map iframe selector');
+            const sample=async palette=>execute(owner,async palette=>{
+                const root=document.documentElement,frame=document.querySelector('#zone-viewer');
+                for(const [property,value] of Object.entries(palette||{}))root.style.setProperty(property,value);
+                const {inheritViewerAppearance}=await import('./appearance.js');
+                inheritViewerAppearance(document,frame.contentDocument);
+                const describe=(document,selector)=>{const element=document.querySelector(selector),style=document.defaultView.getComputedStyle(element);return {color:style.color,background:style.backgroundColor,image:style.backgroundImage,scheme:style.colorScheme};};
+                const viewer=frame.contentDocument;
+                return {main:describe(document,'#settings-font-family'),mainOption:describe(document,'#settings-font-family option'),viewer:describe(viewer,'.eqlzv-select'),viewerOption:describe(viewer,'.eqlzv-select option')};
+            },palette);
+            const luminance=value=>{const rgb=value.match(/[\d.]+/g).slice(0,3).map(Number).map(channel=>{const x=channel/255;return x<=.04045?x/12.92:((x+.055)/1.055)**2.4;});return .2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];};
+            const check=(samples,scheme)=>{
+                for(const [label,style] of Object.entries(samples)){
+                    assert.equal(style.scheme,scheme,`${label} native menu follows the ${scheme} scheme`);
+                    assert.equal(style.image,'none',`${label} has an opaque control palette instead of a gradient-only native menu`);
+                    assert(!/rgba\([^)]*,\s*0\)$/.test(style.background),`${label} has a real option/control background`);
+                    const a=luminance(style.color),b=luminance(style.background),contrast=(Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+                    assert(contrast>=4.5,`${label} ${scheme} selected text/options contrast is ${contrast.toFixed(2)}:1: ${JSON.stringify(style)}`);
+                }
+                assert.equal(samples.viewer.color,samples.main.color);
+                assert.equal(samples.viewer.background,samples.main.background,'Map selector and the app use the same control palette');
+            };
+            const dark=await sample();check(dark,'dark');
+            await capture(owner,'map-select-dark');
+            const light=await sample({'--bg2':'#f7f4ed','--text':'#17212d','--line':'#58534a','color-scheme':'light'});check(light,'light');
+            await capture(owner,'map-select-light');
+            await execute(owner,async()=>{
+                for(const property of ['--bg2','--text','--line','color-scheme'])document.documentElement.style.removeProperty(property);
+                const {inheritViewerAppearance}=await import('./appearance.js');inheritViewerAppearance(document,document.querySelector('#zone-viewer').contentDocument);
+            });
+            check(await sample(),'dark');
+            return {dark,light};
         };
         const geometry=async(size,panelScale)=>{
             const main=await execute(owner,()=>{document.querySelector('#appearance-settings').scrollIntoView({block:'start'});const viewport=document.querySelector('.content').getBoundingClientRect();return [...document.querySelectorAll('#settings-font-family,#settings-font-size,#reset-appearance')].map(element=>{const rect=element.getBoundingClientRect();return {id:element.id,inside:rect.width>0&&rect.height>0&&rect.left>=viewport.left&&rect.top>=viewport.top&&rect.right<=viewport.right+1&&rect.bottom<=viewport.bottom+1};});});
@@ -99,6 +138,8 @@ try {
                 await until(async()=>{const value=(await state()).appearance;return value.fontFamily==='theme'&&value.fontSize===13;},'reset defaults');
                 return {ok:true,persistedAcrossProcess:true,reset:true,packagedSources:root.endsWith('.asar')};
             }
+            const mapPalettes=await mapSelectPalette();
+            await controls();
             await execute(owner,()=>window.eyeOfZommOverlays.control('show-all'));
             await until(()=>Object.keys(panels()).length===4,'all four native panels');
             for(const window of Object.values(panels()))await until(async()=>execute(window,()=>Boolean(document.querySelector('#panel-content')?.children.length)),'native panel renderer');
@@ -146,7 +187,7 @@ try {
             await until(async()=>(await appearance(owner)).family==='georgia','main reload preserves font');
             await until(async()=>{const current=await state();return current.snapshot.sessionId!==sessionId&&current.snapshot.session.parse.totalDamage===9;},'One replacement owner rebuilds the synthetic log tail after main reload');
             await capture(owner,'main-persisted');
-            return {ok:true,nativePanels:4,liveFontSizes:[10,20],computedLabelSizes:[small.labelSize,large.labelSize],family:true,mapCanvas:true,modal:true,reload:true,sharedSession:true,packagedSources:root.endsWith('.asar')};
+            return {ok:true,nativePanels:4,liveFontSizes:[10,20],computedLabelSizes:[small.labelSize,large.labelSize],mapPalettes,family:true,mapCanvas:true,modal:true,reload:true,sharedSession:true,packagedSources:root.endsWith('.asar')};
         };
         let started=false;app.on('browser-window-created',()=>{if(started)return;started=true;inspect().then(result=>{console.log('EOZ_APPEARANCE_SMOKE='+JSON.stringify(result));app.exit(0);}).catch(error=>{console.error(error.stack);app.exit(1);});});
         setTimeout(()=>{console.error('Appearance smoke exceeded 60 seconds');app.exit(2);},60000).unref();
