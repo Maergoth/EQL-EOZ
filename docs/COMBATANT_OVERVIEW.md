@@ -28,6 +28,22 @@ Names containing combat verbs can create multiple valid attacker/recipient
 splits. An established exact name can disambiguate them; otherwise that line is
 left uncredited instead of inventing actor names.
 
+Direct heals and heal-over-time ticks use the same actor and recipient rules.
+The phrase `over time` is a tick modifier, never part of a combatant's name.
+Exact reflexive recipients such as `herself` resolve to the logged healer;
+`you` and `yourself` resolve to the selected character. Each tick contributes
+only its logged effective amount at its logged time. Critical heal endings are
+accepted without adding their marker to the ability name. A cast or regeneration
+message without a measured heal cannot imply future ticks or healing credit.
+
+Measured short heal messages retain their named healer and recipient even when
+no ability is given. DoT messages without a caster retain the measured damage
+and recipient under an unknown attacker; they cannot become the selected
+character's outgoing damage. An unknown-attacker placeholder cannot connect
+otherwise unrelated encounters. Damage-shield retaliation credits the owner
+explicitly named in the message, without guessing who originally cast the buff.
+Its damage and the recipient's damage taken represent the same retaliation hit.
+
 Own damage, healing, taken, DPS clocks, kills, loot and trigger inputs keep their
 existing meanings. Nearby actions have separate event types and cannot inflate
 those player totals or create wiki discovery evidence. All names share the
@@ -35,7 +51,9 @@ encounter duration for encounter rates. Whole-session other-combatant rates use
 the span from the first to last observed combat action; own DPS retains the
 existing outgoing-damage clock. A per-name row always uses only that name's
 damage, even when a log/profile switch preserves combined legacy session totals.
-The panel explains the clock distinction.
+Routine attribution and clock explanations remain in this guide rather than
+appearing below each parse. A limited encounter history still displays its
+warning in the panel.
 
 Encounter grouping retains the configured inactivity gap, zone and log-source
 boundaries. Within that window, events connect through a shared actor/recipient.

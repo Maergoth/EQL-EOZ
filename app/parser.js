@@ -1,7 +1,7 @@
 import { loggedLocationToWorld } from './coordinate-system.js';
 import { isOwnedPetName } from './generated-pets.js';
 import {LogContext} from './log-context.js';
-import { createCombatants, accumulateCombatants, combatantSnapshot } from './combatants.js';
+import { createCombatants, accumulateCombatants, combatantSnapshot, combatantRecipient } from './combatants.js';
 import { rankedChatItemMentions } from './chat-item-mentions.js';
 
 const LINE_RE = /^\[([^\]]+)\]\s*(.*)$/;
@@ -11,12 +11,16 @@ const AUTO_ATTACK_VERBS = new Set(['hit', 'slash', 'crush', 'pierce', 'punch', '
 // slices, stings and smashes need no outgoing swing-eligibility whitelist.
 const INCOMING_MELEE_RE = /^(.+) ([a-z]{3,24}) (?:on )?(\S+) for ([\d,]+) points? of damage\.?(?:\s*\([^)]+\))?$/i;
 // Explicit verbs fix the boundary between two potentially multiword names.
-const NEARBY_MELEE_RE = /^(.+?) (hits?|slashes?|crush(?:es)?|pierces?|punch(?:es)?|claws?|bites?|mauls?|kicks?|bashes?|backstabs?|strikes?|smashes?|cleaves?|slices?|stings?|shoots?|frenz(?:y|ies)) (?:on )?(.+?) for ([\d,]+) points? of damage\.?(?:\s*\([^)]+\))?$/i;
+const NEARBY_MELEE_RE = /^(.+?) (hits?|slashes?|crush(?:es)?|pierces?|punch(?:es)?|claws?|bites?|mauls?|kicks?|bashes?|backstabs?|strikes?|smashes?|cleaves?|slices?|stings?|shoots?|reaves?|smites?|frenz(?:y|ies)) (?:on )?(.+?) for ([\d,]+) points? of damage\.?(?:\s*\([^)]+\))?$/i;
 const NEARBY_MELEE_LAST_RE = new RegExp(NEARBY_MELEE_RE.source.replace('^(.+?)','^(.+)'),'i');
 const NEARBY_SPELL_RE = /^(.+?) hits? (.+?) for ([\d,]+) points? of ([\w-]+) damage by (.+?)\.(?:\s*\([^)]+\))?$/i;
 const NEARBY_SPELL_LAST_RE = new RegExp(NEARBY_SPELL_RE.source.replace('^(.+?)','^(.+)'),'i');
-const NEARBY_HEAL_RE = /^(.+?) healed (.+?) for ([\d,]+)(?: \([\d,]+\))? hit points? by (.+?)\.$/i;
+// "over time" describes this logged tick, not part of the recipient's name.
+// Observed critical heals omit the period and end with (Critical).
+const NEARBY_HEAL_RE = /^(.+?) healed (.+?)( over time)? for ([\d,]+)(?: \([\d,]+\))? hit points? by (.+?)(?:\.(?:\s*\(Critical\))?|\s+\(Critical\))$/i;
 const NEARBY_HEAL_LAST_RE = new RegExp(NEARBY_HEAL_RE.source.replace('^(.+?)','^(.+)'),'i');
+const BARE_HEAL_RE = /^(.+?) healed (.+?) for ([\d,]+) hit points?\.$/i;
+const BARE_HEAL_LAST_RE = new RegExp(BARE_HEAL_RE.source.replace('^(.+?)','^(.+)'),'i');
 const combatName = value => {
     const name = normalizeName(value);
     return name.length <= 180 && /^[\p{L}\p{N}][\p{L}\p{N}\s'’`_.-]*$/u.test(name) ? name : '';
@@ -251,9 +255,9 @@ export class EQLogParser {
         const self = event.character || this.character || 'You';
         const resolve = name => this.isPlayerTarget(name) ? self : normalizeName(name);
         if (event.type === 'damage') return [self,resolve(event.victim)];
-        if (event.type === 'taken') return [self,resolve(event.attacker)];
-        if (event.type === 'heal') return [self,resolve(event.target)];
-        if (event.type === 'combatant-damage' || event.type === 'combatant-heal') return [resolve(event.actor),/^(?:itself|himself|herself|themselves)$/i.test(event.target) ? resolve(event.actor) : resolve(event.target)];
+        if (event.type === 'taken') return event.attackerKnown === false ? [self] : [self,resolve(event.attacker)];
+        if (event.type === 'heal') return [self,combatantRecipient(self,event.target,self)];
+        if (event.type === 'combatant-damage' || event.type === 'combatant-heal') return [...(event.actorKnown === false ? [] : [resolve(event.actor)]),combatantRecipient(resolve(event.actor),event.target,self)];
         return [self,resolve(event.victim || event.target)];
     }
 
@@ -389,19 +393,22 @@ export class EQLogParser {
         return target === 'you' || Boolean(this.character && target === this.character.toLowerCase());
     }
 
-    noteOtherCombat(actor, target, amount, source, kind, healing = false) {
+    noteOtherCombat(actor, target, amount, source, kind, healing = false, { actorKnown = true } = {}) {
         actor = combatName(actor); target = combatName(target);
         const n = parseNumber(amount);
         if (!actor || !target || !Number.isFinite(n) || n < 0) return null;
+        target = combatantRecipient(actorKnown ? this.isPlayerTarget(actor) ? this.character || 'You' : actor : '',target,this.character || 'You');
+        if (!target) return null;
         if (this.isPlayerTarget(actor)) {
             if (!healing) return this.noteDamage(target, n, source, kind);
             this.totalHealing += n;
-            return this.rememberCombatEvent({type:'heal', target, amount:n, source});
+            return this.rememberCombatEvent({type:'heal', target, amount:n, source, kind});
         }
-        if (!healing && this.isPlayerTarget(target)) return this.noteTaken(actor,n,source,kind,target);
+        if (!healing && this.isPlayerTarget(target)) return this.noteTaken(actorKnown ? actor : '',n,source,kind,target);
         return this.rememberCombatEvent({type:healing ? 'combatant-heal' : 'combatant-damage', actor,
             target:this.isPlayerTarget(target) ? this.character || 'You' : target, amount:n, source, kind,
-            encounterTarget:healing ? '' : `${actor} → ${target}`});
+            ...(!actorKnown ? {actorKnown:false} : {}),
+            encounterTarget:healing ? '' : actorKnown ? `${actor} → ${target}` : target});
     }
 
     namedCombatMatch(first, last, targetIndex) {
@@ -423,11 +430,13 @@ export class EQLogParser {
         this.lastTakenAt = at;
         this.totalTaken += n;
         this.totalTakenHits += 1;
+        const attackerKnown = Boolean(normalizeName(attacker));
         attacker = normalizeName(attacker) || 'Unknown attacker';
         // Incoming activity joins the encounter, but never touches outgoing
         // damage/currentFight/session-DPS clocks or NPC damageDone observations.
         return this.rememberCombatEvent({ type:'taken', attacker, target:this.character || 'You',
-            encounterTarget:attacker, amount:n, source:normalizeName(source) || 'Unknown ability', kind });
+            encounterTarget:attacker, amount:n, source:normalizeName(source) || 'Unknown ability', kind,
+            ...(!attackerKnown ? {attackerKnown:false} : {}) });
     }
 
     parse(rawLine, { recordSession = true } = {}) {
@@ -581,24 +590,28 @@ export class EQLogParser {
             return this.rememberEvent({ type:'cast-interrupt' });
         }
 
-        // Healing performed by the player.
-        x = text.match(/^You healed (.+?) for ([\d,]+)(?: \([\d,]+\))? hit points? by (.+?)\.$/i);
-        if (x) {
-            const n = parseNumber(x[2]);
-            this.totalHealing += n;
-            return this.rememberCombatEvent({ type: 'heal', target: normalizeName(x[1]), amount: n, source: x[3] });
-        }
-
         // Nearby actions retain their logged actors and recipients. The own
         // paths above run first, so a single line never earns damage twice.
         x = this.namedCombatMatch(text.match(NEARBY_SPELL_RE),text.match(NEARBY_SPELL_LAST_RE),2);
         if (x) return this.noteOtherCombat(x[1],x[2],x[3],x[5],'spell');
         x = text.match(/^(.+?) ha(?:s|ve) taken ([\d,]+) damage from (.+?) by (.+?)\.(?:\s*\([^)]+\))?$/i);
         if (x) return this.noteOtherCombat(x[4],x[1],x[2],x[3],'dot');
+        // Caster-omitting DoTs supply an amount and recipient, not evidence of
+        // who cast them. The shared Unknown label cannot connect fights.
+        x = text.match(/^You have taken ([\d,]+) damage from (.+?)\.$/i);
+        if (x) return this.noteTaken('',x[1],x[2],'dot');
+        x = text.match(/^(.+?) has taken ([\d,]+) damage by (.+?)\.$/i);
+        if (x) return this.noteOtherCombat('Unknown attacker',x[1],x[2],x[3],'dot',false,{actorKnown:false});
+        // The possessive names the shield wearer. It does not name the
+        // original buff caster or authorize merging a pet with its owner.
+        x = text.match(/^(.+?) (?:is|are) (burned|pierced|tormented) by (.+)['’]s (flames|thorns|frost) for ([\d,]+) points? of non-melee damage[.!]$/i);
+        if (x && ({burned:'flames',pierced:'thorns',tormented:'frost'})[x[2].toLowerCase()] === x[4].toLowerCase()) return this.noteOtherCombat(x[3],x[1],x[5],`Damage shield: ${x[4].toLowerCase()}`,'damage-shield');
         x = this.namedCombatMatch(text.match(NEARBY_MELEE_RE),text.match(NEARBY_MELEE_LAST_RE),3);
         if (x) return this.noteOtherCombat(x[1],x[3],x[4],x[2].toLowerCase(),'melee');
         x = this.namedCombatMatch(text.match(NEARBY_HEAL_RE),text.match(NEARBY_HEAL_LAST_RE),2);
-        if (x) return this.noteOtherCombat(x[1],x[2],x[3],x[4],'spell',true);
+        if (x) return this.noteOtherCombat(x[1],x[2],x[4],x[5],x[3] ? 'hot' : 'spell',true);
+        x = this.namedCombatMatch(text.match(BARE_HEAL_RE),text.match(BARE_HEAL_LAST_RE),2);
+        if (x && !/ over time$/i.test(x[2])) return this.noteOtherCombat(x[1],x[2],x[3],'Unknown ability','heal',true);
 
         x = text.match(/^You gain a rune for ([\d,]+) points? of absorption\.$/i);
         if (x) {

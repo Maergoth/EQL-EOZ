@@ -43,7 +43,8 @@ async function run({root,temporary,screenshots}) {
             const parser = new EQLogParser(), at = Date.now() - 60000;
             parser.setCharacterFromFilename('eqlog_Synthetic_example.txt');
             const add = (second,body) => parser.parse(`[${new Date(at + second*1000).toISOString()}] ${body}`);
-            ['You hit a synthetic keeper for 120 points of damage.', 'Ally hits a synthetic keeper for 80 points of damage.', 'a synthetic keeper punches YOU for 30 points of damage.', 'a synthetic keeper hits Ally for 10 points of damage.', 'Ally healed Synthetic for 20 hit points by Synthetic Heal.', 'You healed Yourself for 15 hit points by Mend.', "Ally's pet hits a synthetic keeper for 40 points of damage.", 'You have gained an ability point! You now have 3 ability points.'].forEach((body,index) => add(index,body));
+            ['You hit a synthetic keeper for 120 points of damage.', 'Ally hits a synthetic keeper for 80 points of damage.', 'a synthetic keeper punches YOU for 30 points of damage.', 'a synthetic keeper hits Ally for 10 points of damage.', 'Ally healed Synthetic for 20 hit points by Synthetic Heal.', 'You healed Yourself for 15 hit points by Mend.', "Ally's pet hits a synthetic keeper for 40 points of damage.", 'You have gained an ability point! You now have 3 ability points.', 'You healed herself over time for 55 hit points by Synthetic Recovery.', 'Ally healed himself over time for 25 hit points by Synthetic Recovery (Critical)', 'You gain a rune for 1,000 points of absorption.'].forEach((body,index) => add(index,body));
+            ['You healed Synthetic for 4 hit points.', 'You have taken 7 damage from Synthetic Unknown Rot.', 'a synthetic keeper has taken 3 damage by Synthetic Unknown Rot.', 'a distant synthetic target has taken 2 damage by Synthetic Unknown Rot.', "a synthetic keeper is burned by Synthetic's flames for 6 points of non-melee damage.", 'Ally reaves a synthetic keeper for 5 points of damage.'].forEach(body=>add(10,body));
             add(30,'You hit a synthetic shaman for 50 points of damage.'); add(31,'a synthetic shaman hits YOU for 5 points of damage.');
             window.fixture = {parser,compactParseSnapshot,add};
             fixture.state = {preferences:{visible:true,locked:true,fontScale:1,backgroundOpacity:1},sessionAvailable:true,snapshot:{session:{parse:compactParseSnapshot(parser.snapshot())}}};
@@ -54,6 +55,9 @@ async function run({root,temporary,screenshots}) {
         });
         const names = await execute(() => [...document.querySelectorAll('.overview-table .meter-label')].map(node=>node.textContent));
         for (const name of ['Synthetic','Ally','a synthetic keeper',"Ally's pet",'a synthetic shaman']) assert(names.includes(name),name);
+        assert(!names.some(name=>/^(?:himself|herself|itself|themselves|yourself)(?: over time)?$| over time$|Critical/.test(name)),'HoT recipient modifiers never become native Overview rows');
+        assert.deepEqual(await execute(()=>{const parse=fixture.state.snapshot.session.parse;return {own:parse.totalHealing,ally:parse.combatants.find(row=>row.name==='Ally').healing,runes:parse.totalRuneCapacity,damage:parse.totalDamage,taken:parse.totalTaken,unknownDamage:parse.combatants.find(row=>row.name==='Unknown attacker').damage};}),{own:74,ally:45,runes:1000,damage:176,taken:42,unknownDamage:12},'Actual parser→transport→native renderer retains direct/tick/bare healing, shield-wearer credit, unknown-source damage and separate rune capacity');
+        assert.doesNotMatch(await execute(()=>document.querySelector('#parse-body').textContent),/Logged combatants only; pets keep their own names\.|Other combatant rates use|Your DPS keeps its existing outgoing-damage clock/,'Routine captions stay out of native Whole-session Overview');
         assert.equal(await execute(() => document.querySelector('.overview-table').getAttribute('aria-label')),'Logged combatants overview');
         await capture('whole-session-combatants');
         await execute(() => { document.querySelector('[data-tab="damage"]').click(); const details=[...document.querySelectorAll('.combatant-details')].find(node=>node.querySelector('.combatant-name').textContent==='Ally');details.open=true; });
@@ -69,6 +73,7 @@ async function run({root,temporary,screenshots}) {
         for (const tab of ['healing','taken']) {
             await execute(tab => {document.querySelector(`[data-tab="${tab}"]`).click();document.querySelector('.combatant-details').open=true;},tab);
             assert(await execute(() => document.querySelector('.combatant-details[open] .meter-table')!==null));
+            if(tab==='healing')assert.match(await execute(()=>document.querySelector('#parse-body').textContent),/Rune capacity granted[\s\S]*1,000[\s\S]*Excluded from healing and HPS/,'The useful rune-capacity explanation remains visible');
             await capture('combatant-'+tab+'-dropdown');
         }
         await execute(() => document.querySelector('[data-tab="session"]').click());

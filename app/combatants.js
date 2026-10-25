@@ -7,6 +7,11 @@ const OTHER = 'Other combatants (grouped)';
 export const COMBATANT_LIMIT = 256;
 const ABILITY_LIMIT = 32;
 export const createCombatants = () => ({ rows:[], startedAt:null, lastAt:null });
+export function combatantRecipient(actor, target, character = 'You') {
+    const recipient = label(target);
+    if (/^you(?:rself)?$/i.test(recipient)) return label(character) || 'You';
+    return /^(?:itself|himself|herself|themselves)$/i.test(recipient) ? label(actor) : recipient;
+}
 const blank = name => ({ name, damage:0, healing:0, taken:0, damageHits:0, healingHits:0, takenHits:0, breakdowns:{ damage:[], healing:[], taken:[] } });
 function rowFor(state, name) {
     name = label(name) || 'Unknown combatant';
@@ -36,10 +41,9 @@ export function accumulateCombatants(state, event, character = 'You') {
     let actor, recipient, metric;
     if (event.type === 'damage') { actor = self; recipient = resolve(event.victim); metric = 'damage'; }
     else if (event.type === 'taken') { actor = resolve(event.attacker) || 'Unknown attacker'; recipient = resolve(event.target) || self; metric = 'damage'; }
-    else if (event.type === 'heal') { actor = self; recipient = resolve(event.target); metric = 'healing'; }
+    else if (event.type === 'heal') { actor = self; recipient = combatantRecipient(actor,event.target,self); metric = 'healing'; }
     else if (event.type === 'combatant-damage' || event.type === 'combatant-heal') {
-        actor = resolve(event.actor) || 'Unknown combatant'; recipient = resolve(event.target);
-        if (/^(?:itself|himself|herself|themselves)$/i.test(recipient)) recipient = actor;
+        actor = resolve(event.actor) || 'Unknown combatant'; recipient = combatantRecipient(actor,event.target,self);
         metric = event.type === 'combatant-heal' ? 'healing' : 'damage';
     } else if (event.type === 'kill') { if (event.victim) rowFor(state, resolve(event.victim)); return; }
     else return;
