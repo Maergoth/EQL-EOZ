@@ -125,6 +125,14 @@ creates one draft prerelease and publishes only after both builds pass. A
 version tag must match `package.json`; an existing published tag/assets are
 immutable and cannot be replaced from another source commit.
 
+Release packaging uses `extended_ui_checks: false` after the owner's request
+to avoid repeated broad UI acceptance runs. Dependency audit, the full source
+suite, CSP/browser-worker and window-launch checks, focused discovery ownership,
+catalog validation, exact ASAR/source/image checks, packaged launch/OCR resources,
+signing policy, checksums and both-platform publication gates remain. Extended
+native interaction, layout and form checks still run in normal CI; reusable and
+manual build workflows default to the full UI suite.
+
 The required prepare-bootstrap step downloads the **already published**
 `dataset/manifest.json` and referenced compressed pack once, verifies its SHA-256
 and schema, and shares identical bytes with Windows/Linux. This is packaging

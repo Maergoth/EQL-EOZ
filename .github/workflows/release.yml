@@ -58,6 +58,7 @@ jobs:
     uses: ./.github/workflows/build-windows.yml
     with:
       bootstrap_artifact: EoZ-release-bootstrap
+      extended_ui_checks: false
     secrets: inherit
 
   release-linux:
@@ -65,6 +66,7 @@ jobs:
     uses: ./.github/workflows/build-linux.yml
     with:
       bootstrap_artifact: EoZ-release-bootstrap
+      extended_ui_checks: false
 
   publish:
     needs: [ prepare-bootstrap, release-windows, release-linux ]

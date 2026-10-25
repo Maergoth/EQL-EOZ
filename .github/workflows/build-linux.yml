@@ -2,11 +2,19 @@ name: Linux packages
 
 on:
   workflow_dispatch:
+    inputs:
+      extended_ui_checks:
+        description: Run the extended native UI acceptance suite
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       bootstrap_artifact:
         type: string
         default: ''
+      extended_ui_checks:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -30,11 +38,15 @@ jobs:
       - name: Test full source suite
         run: npm test
       - name: Test actual Linux native windows and shared application session
+        env:
+          EXTENDED_UI_CHECKS: ${{ inputs.extended_ui_checks && 'true' || 'false' }}
         run: |
           dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' bash -euc '
             openbox >/tmp/eoz-openbox.log 2>&1 &
             npm run test:desktop-worker
             npm run test:window-lifecycle
+            npm run test:discovery-capture-workspace
+            if [ "$EXTENDED_UI_CHECKS" = "true" ]; then
             npm run test:map-layout
             npm run test:map-loot -- --screenshots ci-screenshots/linux-map-loot
             npm run test:character-storage
@@ -52,10 +64,10 @@ jobs:
             npm run test:hover-ocr
             npm run test:capture-calibration -- --screenshots ci-screenshots/linux-capture-calibration
             npm run test:capture-workspace -- --screenshots ci-screenshots/linux-capture-workspace
-            npm run test:discovery-capture-workspace
             npm run test:workspace-099
             npm run test:character-walkthrough -- --screenshots ci-screenshots/linux-character-walkthrough
             npm run test:system-fonts -- --screenshots ci-screenshots/linux-system-fonts
+            fi
           '
       - name: Fetch production bootstrap data
         if: inputs.bootstrap_artifact == ''
@@ -73,13 +85,17 @@ jobs:
       - name: Verify exact Linux ASAR sources and shared bootstrap bytes
         run: npm run test:artifact -- --platform linux
       - name: Test actual packaged renderer appearance and shared session
+        env:
+          EXTENDED_UI_CHECKS: ${{ inputs.extended_ui_checks && 'true' || 'false' }}
         run: |
           dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' bash -euc '
             openbox >/tmp/eoz-packaged-openbox.log 2>&1 &
             node scripts/test-linux-package.mjs
+            if [ "$EXTENDED_UI_CHECKS" = "true" ]; then
             npm run test:appearance -- --packaged-root dist/linux-unpacked/resources/app.asar --screenshots ci-screenshots/linux-packaged
             npm run test:capture-native -- --packaged-root dist/linux-unpacked/resources/app.asar
             npm run test:system-fonts -- --packaged-root dist/linux-unpacked/resources/app.asar --screenshots ci-screenshots/linux-packaged-system-fonts
+            fi
           '
       - name: Hash release assets
         run: node scripts/release-assets.mjs linux
