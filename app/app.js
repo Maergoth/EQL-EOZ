@@ -63,6 +63,7 @@ let partialLine = '';
 let observedLogCursor = 0;
 let viewerReady = false;
 let pollTimer = null;
+let pollInFlight = false, pollPending = false, logCatchupBurst = 0;
 let packRefreshTimer = null;
 let selectedEncounterId = '';
 let fightExpiryTimer = null;
@@ -541,19 +542,27 @@ function mapSourceContextMatches(context) {
     return context.logPath === String(bridgeInfo?.logPath || '') && context.root === String(bridgeInfo?.eqRootPath || '') && context.revision === mapDataRevision;
 }
 
+function retireViewerLocation() {
+    pendingViewerLocation = null;
+    mapDataRevision++;
+    try { viewerApi()?.clearPlayerLocation?.(); } catch { /* The viewer may be reloading. */ }
+}
+
 function clearSourceLocation() {
     cancelDiscoveryChecks();
     void discoveryContributionFlow?.cancelWhere(() => true,{close:true});
     captureWorkspace.cancelSource();
     parser.resetSourceContext();
     clearActiveRoute({clearViewer:false});
-    pendingViewerLocation = null;
     partialLine = '';
-    mapDataRevision++;
-    try { viewerApi()?.clearPlayerLocation?.(); } catch { /* The viewer may be reloading. */ }
+    retireViewerLocation();
+    logCatchupBurst = 0;
+    overlaySession.requestPublish();
 }
 
 async function pollLog() {
+    if (pollInFlight) { pollPending = true; return; }
+    pollInFlight = true;
     const requestSource = mapSourceContext();
     try {
         const data = await api(`/api/log?offset=${encodeURIComponent(logOffset)}`);
@@ -561,6 +570,7 @@ async function pollLog() {
         if(data.stale){schedulePoll(0);return;}
         if (!mapSourceContextMatches(requestSource)) { schedulePoll(0); return; }
         let changed = false;
+        let sourceReplaced = false;
         let requiresFullRender = false;
         const previousLogReady = Boolean(bridgeInfo?.logExists);
         if (data.logPath && (!bridgeInfo || data.logPath !== bridgeInfo.logPath)) {
@@ -568,6 +578,7 @@ async function pollLog() {
             bridgeInfo = bridgeInfo || {};
             bridgeInfo.logPath = data.logPath;
             clearSourceLocation();
+            sourceReplaced = true;
             parser.setCharacterFromFilename(data.logPath);
             $('#settings-log-path').textContent = data.logPath;
             changed = true;
@@ -580,7 +591,12 @@ async function pollLog() {
             requiresFullRender = true;
         }
         if (data.reset) {
+            // Truncation/rotation at the same path retires awaited coordinates
+            // too. An already-cleared/empty source needs no repeated reset.
+            if (!sourceReplaced && (logOffset > 0 || parser.zone || parser.location)) clearSourceLocation();
             parser.resetSourceContext();
+            logCatchupBurst = 0;
+            overlaySession.requestPublish();
             if(data.logPath)parser.setCharacterFromFilename(data.logPath);
             if(data.logContext)parser.seedLogContext(data.logContext);
             logOffset = Number(data.startOffset) || 0;
@@ -607,19 +623,25 @@ async function pollLog() {
             if (requiresFullRender) renderAll();
             else renderLiveLocation();
         }
+        const backlog = Number.isFinite(data.length) && Number.isFinite(data.newOffset) && data.newOffset < data.length && data.newOffset > Number(data.startOffset);
         schedulePoll(locationPollDelay({
             mapVisible:nativeMapVisible || document.body.classList.contains('map-active'),
-            routeActive:Boolean(activeRoute)
+            routeActive:Boolean(activeRoute), backlog, catchupBurst:logCatchupBurst
         }));
+        logCatchupBurst = backlog ? (logCatchupBurst + 1) % 4 : 0;
     } catch (error) {
         if (!mapSourceContextMatches(requestSource)) { schedulePoll(0); return; }
         $('#bridge-status').textContent = 'Reconnecting';
         $('#bridge-status').className = 'status-pill status-warn';
         schedulePoll(1800);
+    } finally {
+        pollInFlight = false;
+        if (pollPending) { pollPending = false; if (!sessionDraining) schedulePoll(0); }
     }
 }
 
 function consumeText(text, allowTransientUi = true) {
+    const previousLocation = parser.location;
     const combined = partialLine + text;
     const lines = combined.split(/\n/);
     partialLine = lines.pop() || '';
@@ -634,6 +656,7 @@ function consumeText(text, allowTransientUi = true) {
             const canonicalZone = loggedZoneName(pack.zones,event.zone,event.zoneShortName);
             event.zone = canonicalZone;
             parser.zone = canonicalZone;
+            if (event.source !== 'who' || !parser.location) retireViewerLocation();
             if (zoneKey(previousZone) !== zoneKey(canonicalZone)) parser.location = null;
             if (activeRoute && zoneKey(activeRoute.zone) !== zoneKey(event.zone)) clearActiveRoute({ clearViewer:false });
             zoneChanged = true;
@@ -662,6 +685,7 @@ function consumeText(text, allowTransientUi = true) {
         if(captureLogResult?.prompt)void discoveryContributionFlow?.cancelWhere(request=>request.purpose==='spawn-location'&&request.candidateId!==captureLogResult.prompt.candidateId,{close:true});
     }
     overlaySession.flush();
+    if (zoneChanged || latestLocation && (!previousLocation || ['x','y','z'].some(key => previousLocation[key] !== latestLocation[key]))) overlaySession.requestPublish();
     if (zoneChanged) {
         pendingViewerLocation = null;
         const sourceContext = mapSourceContext(), requestedZone = zoneKey(parser.zone);
@@ -2451,12 +2475,15 @@ window.eyeOfZommDiscovery?.onAction?.(event=>{
     }
     void overlaySession.publish();
 });
+let initialOverlayStateCurrent = true;
 window.eyeOfZommOverlays?.onState?.(next => {
+    initialOverlayStateCurrent = false;
     if (next.appearance && !appearancePending && !appearanceDraft) acceptAppearance(next.appearance);
     nativeMapVisible = Boolean(next.panels?.map?.visible);
 });
 const initialAppearanceGeneration = appearanceGeneration;
 Promise.resolve(window.eyeOfZommOverlays?.getState?.()).then(next => {
+    if (next && initialOverlayStateCurrent) nativeMapVisible = Boolean(next.panels?.map?.visible);
     if (next?.appearance && appearanceGeneration === initialAppearanceGeneration) acceptAppearance(next.appearance);
 }).catch(() => {});
 const overlayController = mountOverlayController({ root:document.getElementById('overlay-controller'), api:window.eyeOfZommOverlays });

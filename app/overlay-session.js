@@ -114,7 +114,8 @@ export function fitOverlaySnapshot(snapshot) {
 }
 
 export function createOverlaySession({ api, storage = globalThis.localStorage, getSession, onCommand = () => {}, onCues = () => {}, notify = () => {}, now = Date.now,
-    setInterval = globalThis.setInterval, clearInterval = globalThis.clearInterval } = {}) {
+    setInterval = globalThis.setInterval, clearInterval = globalThis.clearInterval,
+    setTimeout = globalThis.setTimeout, clearTimeout = globalThis.clearTimeout } = {}) {
     let saved = null;
     try {
         const raw = storage?.getItem(STORAGE_KEY);
@@ -122,12 +123,23 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
     } catch { /* Invalid local preferences should not stop log parsing. */ }
     const engine = new TimerEngine({ now, state:saved });
     const sessionId = `session-${now()}-${Math.random().toString(36).slice(2)}`;
-    let sequence = 0, disposed = false, busy = false, lastSaved = '', storageWarning = false, notice = null, flushQueued = false;
+    let sequence = 0, disposed = false, busy = false, publishPending = false, lastSaved = '', storageWarning = false, notice = null, flushQueued = false;
+    let requestTimer = null, lastPublishedAt = -Infinity;
     function cues() { const pending = engine.drainCues(); if (pending.length) { try { onCues(pending); } catch { /* A device failure cannot interrupt parsing. */ } } }
     function scheduleFlush() {
         if (disposed || flushQueued) return;
         flushQueued = true;
         queueMicrotask(() => { flushQueued=false; if (!disposed) { cues(); void publish(); } });
+    }
+    // Location batches share the ordinary bounded snapshot. Coalesce bursts
+    // before constructing it, with at most ten prompt snapshots per second.
+    // The normal one-second heartbeat and explicit actions remain unchanged.
+    function requestPublish() {
+        if (disposed || flushQueued || requestTimer !== null) return;
+        if (busy) { publishPending = true; return; }
+        const delay = Math.min(100, Math.max(0, 100 - (now() - lastPublishedAt)));
+        if (!delay) { scheduleFlush(); return; }
+        requestTimer = setTimeout(() => { requestTimer = null; scheduleFlush(); }, delay);
     }
     const timerListeners = new Set();
     function emitTimers(snapshot) {
@@ -149,8 +161,11 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
         }
     }
     async function publish() {
-        if (disposed || busy) return;
+        if (disposed) return;
+        if (busy) { publishPending = true; return; }
         busy = true;
+        clearTimeout(requestTimer); requestTimer = null;
+        lastPublishedAt = now();
         try {
             const timers = engine.snapshot(now());
             cues();
@@ -158,7 +173,7 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
             emitTimers(timers);
             if (api?.publish) await api.publish(fitOverlaySnapshot({ schemaVersion:1, sessionId, sequence:++sequence, at:now(), session:{ ...getSession(), timers, notice } }));
         } catch { /* A closing renderer or unavailable panel cannot stop the owner. */ }
-        finally { busy = false; }
+        finally { busy = false; if (publishPending && !disposed) { publishPending = false; requestPublish(); } }
     }
     const unsubscribe = api?.onAction?.(async command => {
         if (disposed || !command || typeof command.action !== 'string') return;
@@ -181,7 +196,7 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
     });
     const interval = setInterval(() => { void publish(); }, 1000);
     return {
-        engine, publish,
+        engine, publish, requestPublish,
         getTimers:() => engine.snapshot(now()),
         onTimers(listener) {
             if (typeof listener !== 'function' || disposed) return () => {};
@@ -203,6 +218,6 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
             if (result?.then) void result.then(scheduleFlush).catch(scheduleFlush);
         },
         flush:persist,
-        dispose() { if (disposed) return; persist(); disposed = true; engine.close(); timerListeners.clear(); clearInterval(interval); unsubscribe?.(); }
+        dispose() { if (disposed) return; persist(); disposed = true; engine.close(); timerListeners.clear(); clearTimeout(requestTimer); requestTimer = null; clearInterval(interval); unsubscribe?.(); }
     };
 }

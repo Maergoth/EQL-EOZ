@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { EQLogParser } from '../app/parser.js';
 import { formatWorldLocationForGameMap, formatWorldLocationForPlayer } from '../app/coordinate-system.js';
 import { resolveZoneRecord, viewerZoneName,viewerZoneTarget,loggedZoneName } from '../app/zone-identity.js';
+import {locationPollDelay} from '../app/movement-tracking.js';
 
 const source = readFileSync(new URL('../app/app.js', import.meta.url), 'utf8');
 const wrapper = readFileSync(new URL('../app/zoneviewer/viewer.html', import.meta.url), 'utf8');
@@ -57,7 +58,7 @@ function harness() {
         settings:{ mapMode:'top' }, bridgeInfo:{ eqRootExists:true, logExists:true,eqRootPath:'synthetic-root-a',logPath:'eqlog_Synthetic_example.txt' },mapDataRevision:0,
         viewerFolderStatus:'ready', viewerZoneState:{ zone:'', status:'idle', message:'' },
         partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,latestLocationSync:null,
-        overlaySession:{ inputs:[], consume(event, context) { this.inputs.push({ event, context }); }, flush() {} },
+        overlaySession:{ inputs:[], requests:0, consume(event, context) { this.inputs.push({ event, context }); }, flush() {}, requestPublish(){this.requests++;} },
         wikiDiscovery:{consume() {}},cancelDiscoveryChecks(){},
         discoveryContributionFlow:{cancelled:0,cancelWhere(){this.cancelled++;return Promise.resolve();}},
         observationPreference:false,sessionDraining:false,
@@ -90,12 +91,52 @@ function harness() {
 // location sync across the preparation awaits instead of copying their guards.
 function sourceOwners(h){
     const polls=[];
-    Object.assign(h.context,{logOffset:0,nativeMapVisible:false,viewerFolderPath:'synthetic-root-a',
+    Object.assign(h.context,{logOffset:0,pollInFlight:false,pollPending:false,logCatchupBurst:0,nativeMapVisible:false,viewerFolderPath:'synthetic-root-a',
         whatsNew:{refresh(){}},mapDataLoader:{invalidations:0,invalidate(){this.invalidations++;}},
         document:{body:{classList:{contains(){return false;}}}},
         locationPollDelay:()=>100,schedulePoll:delay=>polls.push(delay),renderAll(){},renderLiveLocation(){},updateViewerFolderStatus(){}});
     vm.runInContext(between(source,'async function pollLog(', 'function consumeText(')+between(source,'async function applyLogSelection(', 'async function chooseEqFolder('),h.context);
     return polls;
+}
+// A batch requests one newest native position. Timestamp-only duplicates leave
+// the one-second heartbeat in charge rather than rebuilding every native panel.
+{
+    const h=harness();h.context.logCatchupBurst=0;
+    await h.consume('Your Location is 1, 2, 3');assert.equal(h.context.overlaySession.requests,1);
+    await h.consume(Array.from({length:100},()=> 'Your Location is 1, 2, 3').join('\n'));assert.equal(h.context.overlaySession.requests,1);
+    await h.consume('Your Location is 4, 5, 6\nYour Location is 7, 8, 9');assert.equal(h.context.overlaySession.requests,2);
+    assert.deepEqual([h.parser.location.x,h.parser.location.y,h.parser.location.z],[8,7,9]);
+    await h.consume('You have entered Befallen.');assert.equal(h.context.overlaySession.requests,3,'Zoning promptly clears the old native marker even without a new /loc');
+}
+{
+    const h=harness(),polls=sourceOwners(h);let calls=0;const blocked=deferred();
+    h.context.api=()=>{calls++;return blocked.promise;};
+    const first=h.context.pollLog();await h.context.pollLog();assert.equal(calls,1,'Only one renderer log request may be in flight');
+    blocked.resolve({logPath:h.context.bridgeInfo.logPath,logExists:true,text:'',newOffset:1,length:1,startOffset:1});await first;
+    assert.equal(polls.at(-1),0,'A request arriving during a read gets one trailing poll');
+    assert.equal(h.context.pollInFlight,false);assert.equal(h.context.pollPending,false);
+}
+{
+    const h=harness(),polls=sourceOwners(h);h.context.nativeMapVisible=true;h.context.locationPollDelay=locationPollDelay;
+    let offset=100;
+    h.context.api=async()=>({logPath:h.context.bridgeInfo.logPath,logExists:true,text:'',startOffset:offset,newOffset:++offset,length:200});
+    for(let index=0;index<8;index++)await h.context.pollLog();
+    assert.deepEqual(polls,[25,25,25,250,25,25,25,250],'Known unread tails use bounded three-read bursts with ordinary cadence yields');
+    h.context.api=async()=>({logPath:h.context.bridgeInfo.logPath,logExists:true,text:'',startOffset:offset,newOffset:offset,length:offset});await h.context.pollLog();
+    assert.equal(polls.at(-1),250);assert.equal(h.context.logCatchupBurst,0,'Catching up never changes subsequent empty-file cadence');
+    h.context.api=async()=>({logPath:h.context.bridgeInfo.logPath,logExists:true,text:'',startOffset:offset,newOffset:offset,length:offset+1});await h.context.pollLog();
+    assert.equal(polls.at(-1),250,'No-progress reads never spin on an unread tail');
+}
+// Initial getState restores the map's cadence. A later event wins over an old
+// initial promise, so hiding the panel cannot be undone by stale visibility.
+for(const changed of [false,true]){
+    const initial=deferred();let listener;
+    const context=vm.createContext({nativeMapVisible:false,appearanceGeneration:0,appearancePending:false,appearanceDraft:false,acceptAppearance(){},
+        window:{eyeOfZommOverlays:{onState(fn){listener=fn;},getState(){return initial.promise;}}}});
+    vm.runInContext(between(source,'let initialOverlayStateCurrent = true;','const overlayController ='),context);
+    if(changed)listener({panels:{map:{visible:false}}});
+    initial.resolve({panels:{map:{visible:true}}});for(let index=0;index<10;index++)await Promise.resolve();
+    assert.equal(context.nativeMapVisible,!changed,'Restored visibility respects newer native state events');
 }
 for(const field of ['logPath','eqRootPath','mapDataRevision'])for(const phase of ['api','zone']){
     const h=harness(),blocked=deferred(),arrived=deferred();
@@ -109,6 +150,20 @@ for(const field of ['logPath','eqRootPath','mapDataRevision'])for(const phase of
     blocked.resolve(phase==='api'?h.viewer:true);
     assert.equal(await syncing,false,`${phase}/${field}: an old source sample is rejected in the same zone`);
     assert.equal(h.viewer.locations.length,0);
+}
+for(const boundary of ['same-path-reset','same-zone-entry']){
+    const h=harness(),blocked=deferred(),arrived=deferred();sourceOwners(h);
+    h.parser.zone='Mistmoore Castle';h.parser.location={x:12,y:34,z:56};h.viewer.zone='Mistmoore Castle';h.context.logOffset=100;
+    h.context.viewerZoneState={zone:'mistmoore castle',status:'ready'};
+    h.context.waitForViewerApi=()=>{arrived.resolve();return blocked.promise;};
+    const syncing=h.context.syncLocationToViewer(false,{...h.parser.location});await arrived.promise;
+    const oldRevision=h.context.mapDataRevision;
+    if(boundary==='same-path-reset'){
+        h.context.api=async()=>({logPath:h.context.bridgeInfo.logPath,logExists:true,reset:true,startOffset:0,newOffset:50,length:50,text:'You have entered The Castle of Mistmoore.\n'});
+        await h.context.pollLog();
+    }else h.context.consumeText('You have entered The Castle of Mistmoore.\n');
+    assert(h.context.mapDataRevision>oldRevision,'A '+boundary+' retires the awaited map sample even though zone/path names match');
+    blocked.resolve(h.viewer);assert.equal(await syncing,false);assert.equal(h.viewer.locations.length,0);assert.equal(h.parser.location,null);
 }
 for(const change of ['log','root','both','mode-only']){
     const h=harness();sourceOwners(h);
@@ -127,8 +182,8 @@ for(const change of ['log','root','both','mode-only']){
     assert.equal(h.context.mapDataLoader.invalidations,change==='root'||change==='both'?1:0);
 }
 {
-    const h=harness();sourceOwners(h);h.parser.location={x:12,y:34,z:56};h.context.pendingViewerLocation={...h.parser.location};h.context.partialLine='Old source fragment';
-    h.context.api=async()=>({logPath:'eqlog_Another_example.txt',logExists:true,text:'',newOffset:20});await h.context.pollLog();
+    const h=harness();sourceOwners(h);h.context.logOffset=100;h.parser.location={x:12,y:34,z:56};h.context.pendingViewerLocation={...h.parser.location};h.context.partialLine='Old source fragment';
+    h.context.api=async()=>({logPath:'eqlog_Another_example.txt',logExists:true,reset:true,startOffset:0,text:'',newOffset:20});await h.context.pollLog();
     assert.equal(h.parser.character,'Another');assert.equal(h.parser.location,null);assert.equal(h.context.pendingViewerLocation,null);assert.equal(h.context.partialLine,'');assert.equal(h.context.mapDataRevision,1);assert.equal(h.viewer.clears,1,'automatic newest-log following clears the displayed player');
 }
 {

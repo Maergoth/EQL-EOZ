@@ -167,6 +167,10 @@ verified package download and manual installation handoff.
 
 The native Map reads your client text maps and shares the logged position, named destinations and validated route with the main app. Hover the full zone-title row for **Reset**, Follow, zoom and a button cycling **Map → Top → First person** beside its name. A separate grip moves the unlocked window. Its 3D scene loads only when used. Use Z controls to inspect another elevation; monster names and markers share interactive pointer targets. The complete main **Map Explorer** keeps its own views and zoomable Local Map.
 
+Changed logged coordinates update the native map promptly after reading, with
+bounded burst coalescing. A stationary repeated `/loc` uses the normal heartbeat.
+See [location timing and verification](docs/MAP_LOCATION_LATENCY.md).
+
 Both 3D views mark your latest logged location with a cyan ground ring and add
 a movement-direction arrow once later locations establish travel direction,
 even when camera Follow is off. The marker keeps a visible minimum size when

@@ -63,6 +63,8 @@ jobs:
         run: npm run test:intel-stability
       - name: Test main window placement and startup
         run: npm run test:window-lifecycle
+      - name: Test logged location latency through the actual native map
+        run: npm run test:map-location-latency
       - name: Test map sizing and zoom
         if: inputs.extended_ui_checks
         run: npm run test:map-layout

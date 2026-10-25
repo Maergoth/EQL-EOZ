@@ -54,6 +54,7 @@ jobs:
             openbox >/tmp/eoz-openbox.log 2>&1 &
             npm run test:desktop-worker
             npm run test:window-lifecycle
+            npm run test:map-location-latency -- --screenshots ci-screenshots/linux-map-location-latency
             npm run test:discovery-capture-workspace
             if [ "$EXTENDED_UI_CHECKS" = "true" ]; then
             npm run test:map-layout

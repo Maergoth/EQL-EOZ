@@ -125,6 +125,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'THIRD_PARTY/PNUT/MIT.txt',
     'THIRD_PARTY/PNUT/THIRD_PARTY_NOTICES.md',
     'app/overlay-session.js',
+    'app/movement-tracking.js',
     'app/overlay-controller.js',
     'app/overlay.html',
     'app/overlay-map.html',

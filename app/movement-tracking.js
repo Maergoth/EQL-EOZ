@@ -78,7 +78,10 @@ export class LocationHeadingTracker {
     }
 }
 
-export function locationPollDelay({ mapVisible = false, routeActive = false } = {}) {
+export function locationPollDelay({ mapVisible = false, routeActive = false, backlog = false, catchupBurst = 0 } = {}) {
+    // Drain a known unread tail promptly, yielding after three bounded reads.
+    // Empty/current files retain the ordinary map/route/hidden cadence.
+    if (backlog && catchupBurst < 3) return 25;
     if (routeActive) return 180;
     return mapVisible ? 250 : 650;
 }
