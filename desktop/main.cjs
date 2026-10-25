@@ -809,6 +809,7 @@ function createWindow(config = {}, savedPlacement = {}) {
         minWidth: Math.min(1024,placement.bounds.width),
         minHeight: Math.min(700,placement.bounds.height),
         title:`EQLWiki - Eye of Zomm v${APP_VERSION}`,
+        icon: path.join(__dirname, '../app/assets/eye-of-zomm.png'),
         backgroundColor: '#08101b',
         frame: true,
         autoHideMenuBar: true,
