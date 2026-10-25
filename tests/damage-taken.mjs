@@ -34,7 +34,7 @@ test('observed Legends melee, direct spell, DoT and classic non-melee become onl
     assert.equal(state.encounters[0].damage, 0); assert.equal(state.observed.length, 0);
 });
 
-test('named targets require the selected character and reject nearby players and pets', () => {
+test('named targets require the selected character for own Taken; nearby players and pets retain their own events', () => {
     const parser = player();
     const ignored = [
         'a synthetic rat hits Other for 7 points of damage.',
@@ -44,7 +44,7 @@ test('named targets require the selected character and reject nearby players and
         'Other has taken 9 damage from Synthetic Rot by a synthetic shaman.',
         'Your pet has taken 9 damage from Synthetic Rot by a synthetic shaman.'
     ];
-    ignored.forEach((text, seconds) => assert.equal(parser.parse(line(seconds, text)), null));
+    ignored.forEach((text, seconds) => assert.equal(parser.parse(line(seconds, text)).type, 'combatant-damage'));
     assert.equal(parser.snapshot().totalTaken, 0);
     for (const text of [
         'a synthetic rat hits sYnThEtIc for 7 points of damage.',
@@ -53,7 +53,7 @@ test('named targets require the selected character and reject nearby players and
     ]) assert.equal(parser.parse(line(10, text)).type, 'taken');
     assert.equal(parser.snapshot().totalTaken, 24);
     const unknown = new EQLogParser();
-    assert.equal(unknown.parse(line(1, 'a synthetic rat hits Synthetic for 7 points of damage.')), null);
+    assert.equal(unknown.parse(line(1, 'a synthetic rat hits Synthetic for 7 points of damage.')).type, 'combatant-damage');
     assert.equal(unknown.parse(line(2, 'a synthetic rat hits YOU for 7 points of damage.')).type, 'taken');
 });
 
@@ -75,7 +75,7 @@ test('character switches preserve existing session history but immediately chang
     const parser = player();
     parser.parse(line(0, 'a synthetic rat hits Synthetic for 3 points of damage.'));
     parser.setCharacterFromFilename('eqlog_Second_example.txt');
-    assert.equal(parser.parse(line(1, 'a synthetic rat hits Synthetic for 7 points of damage.')), null);
+    assert.equal(parser.parse(line(1, 'a synthetic rat hits Synthetic for 7 points of damage.')).type, 'combatant-damage');
     parser.parse(line(2, 'a synthetic rat hits Second for 5 points of damage.'));
     assert.equal(parser.snapshot().character, 'Second'); assert.equal(parser.snapshot().totalTaken, 8);
     assert.equal(parser.snapshot().totalTakenHits, 2);

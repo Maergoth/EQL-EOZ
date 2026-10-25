@@ -42,6 +42,7 @@ jobs:
       - run: npm run test:main-cache
       - run: npm run test:map-overlay-3d
       - run: npm run test:native-overlays -- --screenshots ci-screenshots
+      - run: npm run test:combatant-overview -- --screenshots ci-screenshots/combatant-overview
       - run: npm run test:overlay-resize
       - run: npm run test:intel-stability
       - run: npm run test:discovery-notices
