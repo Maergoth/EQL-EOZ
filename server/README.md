@@ -15,6 +15,12 @@ repositories; merging an EoZ PR alone does not install a wiki exporter or
 publish a new dataset. EQLWiki contribution PRs target `staging`, and promotion
 of those reviewed commits to production is a separate owner action.
 
+The queued tier-stat correction mirrors [EQLWiki PR 102](https://github.com/Maergoth/EQLWiki/pull/102):
+literal Backstab, delay and damage bonus values become numeric base fields,
+including explicit zero. A producer deployment and filtered dataset rebuild are
+needed to publish those additions. The app also hydrates explicit weapon fields
+from existing snapshot text; see [tier-stat corrections](../docs/TIER_STAT_CORRECTIONS.md).
+
 Copy to MediaWiki `maintenance/`:
 
 - `BuildEyeOfZommPack.php`

@@ -1,5 +1,5 @@
 import {characterCatalogDetails,normalizeCharacterItemDetails} from './character-item-card.js';
-import { scaledItemStats } from './item-scaling.js';
+import { catalogBaseStats, scaledItemStats } from './item-scaling.js';
 import { parseItemAugmentSlots } from './screen-read-parser.js';
 
 // Local, versioned data only. This module has no DOM, capture, network or wiki
@@ -444,7 +444,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     function catalogPatch(item,{match='manual',icon}={}) {
         const identity=catalogIdentity({...item,match});
         if(!identity)return null;
-        const baseStats=normalizeCharacterStats(item.stats);
+        const baseStats=normalizeCharacterStats(catalogBaseStats(item));
         return {name:identity.name,wikiTitle:identity.wikiTitle,catalogIdentity:identity,wikiMatch:match==='fuzzy'?'suggested':'confirmed',
             baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,details:characterCatalogDetails(item),
             unscaledStatKeys:[],accuracyPercent:item.accuracyPercent===true,iconId:clean(item.iconId,120),icon:safeCharacterIcon(icon)};
@@ -468,7 +468,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         state.candidates=state.candidates.map((candidate,index)=>{
             const resolution=resolutions[index],patch=resolution?.status==='exact'&&resolution.item?catalogPatch(resolution.item,{match:candidate.catalogIdentity?.match||'exact',icon:resolution.icon}):null;
             if(!patch){const next=normalizeCandidate({...candidate,catalogIdentity:null,wikiMatch:'unmatched'});if(!characterEquipmentEligibility(next).canEquip)detach(candidate.id);return next;}
-            exact.add(candidate.id);return normalizeCandidate({...candidate,...patch,...(Object.keys(candidate.baseStats).length?{baseStats:candidate.baseStats,baseStatsComplete:candidate.baseStatsComplete,unscaledStatKeys:candidate.unscaledStatKeys}:{}),slots:candidate.slots.length?candidate.slots:resolution.item.slots});
+            exact.add(candidate.id);return normalizeCandidate({...candidate,...patch,...(Object.keys(candidate.baseStats).length?{baseStats:catalogBaseStats(resolution.item,candidate.baseStats),baseStatsComplete:candidate.baseStatsComplete,unscaledStatKeys:candidate.unscaledStatKeys}:{}),slots:candidate.slots.length?candidate.slots:resolution.item.slots});
         });
         for(const [slot,id]of Object.entries(state.pendingEquipment))if(exact.has(id)&&characterSlotCompatibility(get(id),slot).compatible&&!state.equipment[slot]&&!Object.values(state.equipment).includes(id))state.equipment[slot]=id;
         state.pendingEquipment={};return {ok:true,saved:save()};
@@ -709,7 +709,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         if(wiki&&typeof wiki==='object') {
             const identity=catalogPatch(wiki,{match:options.catalogMatch||'exact',icon:options.icon}),protectedIdentity=editedFields.has('name')||editedFields.has('wikiTitle')||current.catalogIdentity?.match==='manual';
             if(identity&&(!protectedIdentity||identityName(current.name)===identityName(identity.name)&&identityTitle(current.wikiTitle)===identityTitle(identity.wikiTitle))){
-                if(Object.keys(current.baseStats).length){delete identity.baseStats;delete identity.baseStatsComplete;delete identity.unscaledStatKeys;}
+                if(Object.keys(current.baseStats).length){identity.baseStats=catalogBaseStats(wiki,current.baseStats);delete identity.baseStatsComplete;delete identity.unscaledStatKeys;}
                 Object.assign(patch,identity);
             }
         }

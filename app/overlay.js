@@ -1,8 +1,9 @@
 // A lightweight native-window renderer. Session ownership and all log reads stay
 // in the main app; opening or reloading a panel cannot create another parser.
 import { applyAppearance } from './appearance.js';
-import { isItemStatModified } from './item-stat-presentation.js';
+import { isItemStatModified, itemAccuracyIsPercent } from './item-stat-presentation.js';
 import { catalogItemboxMarkup } from './catalog-itembox.js';
+import { characterItemboxStatLabel } from './character-itembox.js';
 import { mountOverlayDrag } from './overlay-drag.js';
 import { createTooltipHover } from './tooltip-delay.js';
 const PANELS = Object.freeze({ parse:'Parse', intel:'Zone & loot', timers:'Triggers', map:'Map' });
@@ -102,8 +103,9 @@ export function intelMobAction(command,npc,zone) {
 export function renderItem(item = {}, index = 0, context = '') {
     const icon = itemIcon(item.icon);
     const stats = Object.entries(item.stats || {}).filter(([,value]) => ['string', 'number'].includes(typeof value)).slice(0, 18);
+    const statText=(key,value)=>key==='ACCURACY'&&itemAccuracyIsPercent(item)?`${Number(value)>0?'+':''}${value}%`:value;
     const hoverAttrs = `data-item-hover data-item-index="${index}" data-item-context="${attr(context)}" data-item-name="${attr(item.name || 'Unknown item')}" aria-describedby="intel-item-tooltip"`;
-    return `<div class="item-card"><div class="item-heading"><button type="button" class="item-icon-button" ${hoverAttrs} aria-label="${attr(`Stats for ${item.name || 'Unknown item'}`)}">${icon ? `<img class="item-icon" src="${attr(icon)}" alt="">` : '<span class="item-icon item-icon-placeholder" aria-hidden="true">◇</span>'}</button><div><button type="button" class="item-name" ${hoverAttrs}>${escapeHtml(item.name || 'Unknown item')}</button><div class="item-meta">${escapeHtml((item.slots || []).join(' · ') || 'Item')}${number(item.tier) ? ` · Tier ${number(item.tier)}` : ' · Base'}</div></div></div>${stats.length ? `<div class="item-stats">${stats.map(([key,value]) => `<span${isItemStatModified(item.baseStats?.[key],value,item.tier)?' class="is-scaled"':''}>${escapeHtml(key)} ${escapeHtml(value)}</span>`).join(' · ')}</div>` : ''}</div>`;
+    return `<div class="item-card"><div class="item-heading"><button type="button" class="item-icon-button" ${hoverAttrs} aria-label="${attr(`Stats for ${item.name || 'Unknown item'}`)}">${icon ? `<img class="item-icon" src="${attr(icon)}" alt="">` : '<span class="item-icon item-icon-placeholder" aria-hidden="true">◇</span>'}</button><div><button type="button" class="item-name" ${hoverAttrs}>${escapeHtml(item.name || 'Unknown item')}</button><div class="item-meta">${escapeHtml((item.slots || []).join(' · ') || 'Item')}${number(item.tier) ? ` · Tier ${number(item.tier)}` : ' · Base'}</div></div></div>${stats.length ? `<div class="item-stats">${stats.map(([key,value]) => `<span${isItemStatModified(item.baseStats?.[key],value,item.tier)?' class="is-scaled"':''}>${escapeHtml(characterItemboxStatLabel(key))} ${escapeHtml(statText(key,value))}</span>`).join(' · ')}</div>` : ''}</div>`;
 }
 export function renderItemTooltip(item = {}) {
     return catalogItemboxMarkup(item);

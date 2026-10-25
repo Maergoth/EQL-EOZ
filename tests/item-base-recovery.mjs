@@ -58,8 +58,8 @@ const baseWeight=recoverItemBaseStat('WT',2.3,{tier:0,fraction:0,augmentStatus:'
 assert.equal(isItemBaseCandidate('WT',2.3,2.3,{tier:0,fraction:0,augmentStatus:'none'}),true);
 assert.equal(recoverItemBaseStat('WT',0.25,options).reason,'observation-outside-weight-grid');
 assert.equal(recoverItemBaseStat('HP',2.5,options).reason,'observation-outside-integer-stat-grid');
-const liveWeightCeil=Math.max(0,Math.ceil(1*(1-0.09*(Math.log(2**10)/Math.LN2))*10)/10);
-assert.equal(scaleItemStat('WT',1,10,{fraction:0}),liveWeightCeil);assert.equal(liveWeightCeil,0.2,'the wiki floating ceiling is shared exactly, without a private app epsilon');
+assert.equal(scaleItemStat('WT',1,10,{fraction:0}),0.1,'The shared wiki kernel rounds mathematical tenths without binary floating-point inflation');
+assert.equal(recoverItemBaseStat('WT',0.1,{tier:10,fraction:0,augmentStatus:'none'}).reason,'weight-inverse-not-certified','Correct forward rounding does not certify inverse weight recovery');
 
 for(const state of [{tier:null,fraction:0,augmentStatus:'none'},{tier:4,fraction:null,augmentStatus:'none'},{tier:4,augmentStatus:'none'},
     {tier:4,fraction:16,augmentStatus:'none'},{tier:10,fraction:1,augmentStatus:'none'},{tier:4,fraction:0,augmentStatus:'included'},

@@ -7,6 +7,7 @@ const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 const own=(value,key)=>Object.hasOwn(value||{},key),finite=value=>typeof value==='number'&&Number.isFinite(value);
 const number=value=>!finite(value)?'?':Number.isInteger(value)?String(value):String(Math.round(value*1000)/1000);
 const labels={MP:'MANA',END:'END',ATK:'ATK',ACCURACY:'Accuracy',DMG_BONUS:'DMG Bonus',BACKSTAB_DMG:'BACKSTAB',SV_MAGIC:'SV MAGIC',SV_FIRE:'SV FIRE',SV_COLD:'SV COLD',SV_POISON:'SV POISON',SV_DISEASE:'SV DISEASE',SV_CORRUPTION:'SV VOID',HP_REGEN:'HP Regen',MANA_REGEN:'Mana Regen',END_REGEN:'End Regen',ATTACK_SPEED:'Attack Speed %'};
+export const characterItemboxStatLabel=key=>labels[key]||characterStatLabel(key);
 const attributeOrder=['STR','DEX','STA','AGI','WIS','INT','CHA','AC','HP','MP','END','ATK','HP_REGEN','MANA_REGEN','END_REGEN','HASTE','ATTACK_SPEED'];
 const resistOrder=['SV_FIRE','SV_COLD','SV_MAGIC','SV_DISEASE','SV_POISON'];
 const handModifiers={'1H BLUNT':.8,'1H SLASHING':.8,'PIERCING':.8,'1H PIERCING':.8,'HAND TO HAND':.8,'2H BLUNT':1.1,'2H SLASHING':1.1,'2H PIERCING':1.1};
@@ -18,7 +19,7 @@ export function characterItemboxBodyMarkup({stats={},baseStats={},details=[],ico
     const facts=normalizeCharacterItemDetails(details),first=label=>facts.find(fact=>fact.label===label)?.value||'',used=new Set(),modified=new Set(modifiedKeys);
     const metaValue=detail=>{if(!detail.linkTitle)return e(detail.value);const link=`<a href="https://eqlwiki.com/${encodeURIComponent(detail.linkTitle)}" target="_blank" rel="noopener">${e(detail.linkTitle)}</a>`;return detail.value.startsWith(detail.linkTitle)?link+e(detail.value.slice(detail.linkTitle.length)):`<a href="https://eqlwiki.com/${encodeURIComponent(detail.linkTitle)}" target="_blank" rel="noopener">${e(detail.value)}</a>`;};
     const line=(section,body)=>body?`<div class="wiki-itembox-line" data-itembox-section="${section}">${body}</div>`:'';
-    const stat=(key,{value=stats[key],signed=false,derived=false,suffix=''}={})=>{used.add(key);return `<span class="wiki-itembox-stat${key==='SV_CORRUPTION'?' is-void':''}" data-item-stat="${e(key)}"${derived?' data-itembox-derived="true"':''}>${e(labels[key]||characterStatLabel(key))}: <span class="wiki-itembox-value${modified.has(key)&&!derived?' is-scaled':''}">${signed&&finite(value)&&value>0?'+':''}${e(number(value))}</span>${e(suffix)}</span>`;};
+    const stat=(key,{value=stats[key],signed=false,derived=false,suffix=''}={})=>{used.add(key);return `<span class="wiki-itembox-stat${key==='SV_CORRUPTION'?' is-void':''}" data-item-stat="${e(key)}"${derived?' data-itembox-derived="true"':''}>${e(characterItemboxStatLabel(key))}: <span class="wiki-itembox-value${modified.has(key)&&!derived?' is-scaled':''}">${signed&&finite(value)&&value>0?'+':''}${e(number(value))}</span>${e(suffix)}</span>`;};
     const metadata=(label,prefix=label)=>facts.filter(fact=>fact.label===label).map(fact=>`<span data-item-detail="${e(label)}">${prefix?e(prefix)+': ':''}${metaValue(fact)}</span>`).join(' ');
     const flags=line('flags',metadata('Flags',''));
     const slotText=first('Slot')||(Array.isArray(slots)?slots.join(' '):'');

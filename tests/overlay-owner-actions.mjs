@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {wikiLocationToWorld} from '../app/coordinate-system.js';
 import {EQLogParser} from '../app/parser.js';
-import {scaledItemStats} from '../app/item-scaling.js';
+import {catalogBaseStats,scaledItemStats} from '../app/item-scaling.js';
 import {characterCatalogDetails} from '../app/character-item-card.js';
 
 // Execute the actual main owner's action handler. These fixtures prove camera
@@ -90,7 +90,7 @@ assert.equal(contributionCalls.at(-1)[1].cursor,2,'each consumed line has a dist
 // comparisons at the shared tier, without granting another file/network API.
 const itemFrom=source.indexOf('function overlayItemSummary('),itemTo=source.indexOf('const mapDataLoader',itemFrom);
 assert(itemFrom>=0&&itemTo>itemFrom);
-const itemContext=vm.createContext({settings:{itemTier:7},scaledItemStats,characterCatalogDetails,itemIconSource:()=>'',});
+const itemContext=vm.createContext({settings:{itemTier:7},catalogBaseStats,scaledItemStats,characterCatalogDetails,itemIconSource:()=>'',});
 vm.runInContext(`${source.slice(itemFrom,itemTo)};this.summarize=overlayItemSummary;`,itemContext);
 const summary=itemContext.summarize({name:'Synthetic Sword',slots:['PRIMARY'],classes:['WAR'],displayLines:['MAGIC ITEM','Class: WAR'],
     stats:{HP:20,DMG:10,WT:1,INVALID:Infinity},notes:'Synthetic note',privatePath:'C:\\Private\\fixture'}, {remaining:1000});

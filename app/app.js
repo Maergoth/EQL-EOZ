@@ -1,6 +1,6 @@
 import { EQLogParser } from './parser.js';
 import { conForLevel } from './con-colors.js';
-import { scaledItemStats } from './item-scaling.js';
+import { catalogBaseStats, scaledItemStats } from './item-scaling.js';
 import { itemHasClassStats, itemHasZoneSource, itemMatchesClasses, scoreItemForBrowse } from './item-browse.js';
 import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
@@ -716,15 +716,17 @@ function overlayItemSummary(item, budget) {
     let icon = itemIconSource(item);
     if (icon.length > 12000 || icon.length > budget.remaining) icon = '';
     budget.remaining -= icon.length;
-    const boundedStats = stats => Object.fromEntries(Object.entries(stats || {}).slice(0,24)
-        .filter(([,value]) => typeof value === 'number' && Number.isFinite(value) || typeof value === 'string')
+    const weaponKeys=['DMG','BACKSTAB_DMG','DELAY','DMG_BONUS','WT','ACCURACY','SV_CORRUPTION'];
+    const boundedStats = stats => Object.fromEntries(Object.entries(stats || {})
+        .filter(([,value]) => value === null || typeof value === 'number' && Number.isFinite(value) || typeof value === 'string')
+        .sort(([a],[b])=>Number(weaponKeys.includes(b))-Number(weaponKeys.includes(a))).slice(0,24)
         .map(([key,value]) => [key.slice(0,40), typeof value === 'string' ? value.slice(0,80) : value]));
     return { name:String(item.name || '').slice(0,240), icon,
         slots:(item.slots || []).slice(0,8).map(slot => String(slot).slice(0,60)),
         classes:(Array.isArray(item.classes) ? item.classes : []).slice(0,20).map(value => String(value).slice(0,40)),
         displayLines:(Array.isArray(item.displayLines) ? item.displayLines : []).slice(0,32).map(value => String(value).slice(0,400)),
         details:characterCatalogDetails(item),
-        notes:String(item.notes || '').slice(0,1200), baseStats:boundedStats(item.stats),
+        notes:String(item.notes || '').slice(0,1200), baseStats:boundedStats(catalogBaseStats(item)),
         stats:boundedStats(scaledItemStats(item,settings.itemTier)), tier:Number(settings.itemTier) || 0 };
 }
 const mapDataLoader = createMapDataLoader({ getManifest:() => api('/api/eq-files'),
@@ -911,10 +913,10 @@ function renderMapLootPane(s,profile) {
         <div class="map-loot-controls"><label>Item tier <input type="range" min="0" max="10" step="1" value="${mapLootTier}" data-map-loot-tier><output>${mapLootTier?`Tier ${mapLootTier}`:'Base'}</output></label>
         <div class="card-actions"><button type="button" class="mini-button" data-map-loot-route>Route</button>${location?`<button type="button" class="mini-button" data-map-loot-waypoint>Copy /waypoint</button>`:''}<a class="mini-button" href="${wikiUrl(npc.wikiTitle||npc.name)}" target="_blank" rel="noopener">Monster wiki</a></div></div>
         <div class="map-loot-items">${drops.map(item => {
-            const stats = scaledItemStats(item,mapLootTier);
+            const stats = scaledItemStats(item,mapLootTier),baseStats=catalogBaseStats(item);
             return `<article class="data-card map-loot-item" data-item-tooltip-source="map-loot:${esc(item.wikiTitle||item.name)}"><div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ')||'Unknown slot')}</div></div></div>
                 <div class="pill-row">${(item.classes||[]).map(c=>`<span class="pill">${esc(c)}</span>`).join('')}${item.era?`<span class="pill">${esc(item.era)}</span>`:''}</div>
-                <div class="stats">${Object.entries(stats).map(([key,value])=>`<div class="stat ${isItemStatModified(item.stats?.[key],value,mapLootTier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(value)}</strong></div>`).join('')||'<span class="sub">Stats have not been recorded on the wiki.</span>'}</div>
+                <div class="stats">${Object.entries(stats).map(([key,value])=>`<div class="stat ${isItemStatModified(baseStats[key],value,mapLootTier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(value)}</strong></div>`).join('')||'<span class="sub">Stats have not been recorded on the wiki.</span>'}</div>
                 ${item.notes?`<p class="sub">${esc(item.notes)}</p>`:''}<a class="mini-button" href="${wikiUrl(item.wikiTitle||item.name)}" target="_blank" rel="noopener">Item wiki</a></article>`;
         }).join('')||'<div class="empty-state">No drops recorded in the current wiki dataset.</div>'}</div>`;
     host.hidden = false;
@@ -1221,7 +1223,7 @@ function renderDropLog(s) {
 
 function tooltipHtml(item,target) {
     const tier = target?.closest('#map-loot-pane') ? mapLootTier : Number(settings.itemTier) || 0;
-    return catalogItemboxMarkup(item,{stats:scaledItemStats(item,tier),baseStats:item.stats,tier,icon:itemIconSource(item),showSources:true});
+    return catalogItemboxMarkup(item,{stats:scaledItemStats(item,tier),baseStats:catalogBaseStats(item),tier,icon:itemIconSource(item),showSources:true});
 }
 
 function positionTooltip(event) {
@@ -1356,8 +1358,8 @@ function renderItems(s, profile) {
     const rankingLabel = sortMode === 'recommended' ? ' · useful gear and named drops first' : ' · sorted by name';
     $('#item-context').innerHTML = `${total.toLocaleString()} item${total === 1 ? '' : 's'} for <strong>${esc(classLabel)}</strong> ${scopeLabel} through <strong>${esc(settings.era)}</strong>${slotLabel}${query ? ` matching “${esc($('#item-search').value.trim())}”` : ''}${rankingLabel}.`;
     let markup = visible.map(item => {
-        const stats = scaledItemStats(item, tier);
-        const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat ${isItemStatModified(item?.stats?.[key],val,tier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
+        const stats = scaledItemStats(item, tier),baseStats=catalogBaseStats(item);
+        const statHtml = Object.entries(stats).map(([key,val]) => `<div class="stat ${isItemStatModified(baseStats[key],val,tier)?'is-scaled':''}"><span>${esc(key.replace(/_/g,' '))}</span><strong>${formatNum(val)}</strong></div>`).join('');
         return `<article class="data-card" data-item-tooltip-source="${esc(`item:${item.wikiTitle || item.name}`)}">
             <div class="card-top">
                 <div class="item-card-heading">${itemIconHtml(item)}<div><h3 ${itemHoverAttrs(item)}>${esc(item.name)}</h3><div class="sub">${esc((item.slots||[]).join(' · ') || 'Unknown slot')}${tier ? ` · Tier ${tier}` : ''}</div></div></div>
