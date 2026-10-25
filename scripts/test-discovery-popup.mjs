@@ -18,7 +18,7 @@ async function run({root,profile,output}){
  const {DiscoveryHost}=require(path.join(root,'desktop/discovery-host.cjs'));
  const host=new DiscoveryHost({electron:{BrowserWindow,ipcMain,screen,desktopCapturer:{getSources(){captures++;throw Error('No desktop capture allowed in this informational fixture.');}}},origin,getMainWindow:()=>main,itemExistence:{async check(){lookups++;return{status:'missing',source:'live'};},clear(){},dispose(){}}});
  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
- const until=async(predicate,label)=>{for(let i=0;i<100;i++){try{const value=await predicate();if(value)return value;}catch{}await wait(50);}throw Error('Timed out: '+label);};
+ const until=async(predicate,label,timeout=5000)=>{const end=Date.now()+timeout;while(Date.now()<end){try{const value=await predicate();if(value)return value;}catch{}await wait(50);}throw Error('Timed out: '+label);};
  const execute=(window,fn,...args)=>window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
  try{
   await main.loadURL(origin+'/');const focused=BrowserWindow.getFocusedWindow();
@@ -36,9 +36,9 @@ async function run({root,profile,output}){
   await until(()=>host.noticeState().length===1,'Ignore removes one card');assert.equal(mainFocus,0);assert.equal(captures,0);
   await assert.rejects(execute(popup,()=>window.eyeOfZommDiscoveryNotices.action('capture-status',{id:'synthetic-linked',status:'captured'})),/unavailable/);
   await execute(popup,()=>document.querySelector('[data-discovery-command="contribute"]').click());await until(()=>host.noticeState()[0]?.captureState==='waiting','explicit Contribute');assert.equal(mainFocus,1);assert.equal(captures,0,'The notice itself never captures before the main contribution workflow');
-  const request=host.noticeState()[0].captureRequest;await execute(main,request=>window.eyeOfZommDiscovery.action('capture-status',{id:'synthetic-linked',purpose:'item-link',captureRequest:request,status:'captured',matchedName:'Synthetic Missing Blade +5'}),request);
-  await until(()=>execute(popup,()=>Boolean(document.querySelector('.is-complete'))),'green capture receipt');await until(()=>host.noticeState().length===0,'completion expires');assert(!popup.isVisible());
-  const receipt={verifiedAt:new Date().toISOString(),nativeWindow:true,isolatedSyntheticProfile:true,timersWindows:0,foregroundPreservedOnNotice:true,mainFocusOnlyAfterContribute:true,noAutomaticCapture:true,bounds,workArea:work,stackedCards:2,ignore:true,contribute:true,completionExpiry:true,exactNoticeFrame:true};
+  const request=host.noticeState()[0].captureRequest,completedAt=Date.now();await execute(main,request=>window.eyeOfZommDiscovery.action('capture-status',{id:'synthetic-linked',purpose:'item-link',captureRequest:request,status:'captured',matchedName:'Synthetic Missing Blade +5'}),request);
+  await until(()=>execute(popup,()=>Boolean(document.querySelector('.is-complete'))),'green capture receipt');await wait(1100);assert.equal(host.noticeState().length,1,'Completion survives the former subsecond expiry');await until(()=>host.noticeState().length===0,'completion expires after 15 seconds',20000);const completionLifetimeMs=Date.now()-completedAt;assert(completionLifetimeMs>=14500);assert(!popup.isVisible());
+  const receipt={verifiedAt:new Date().toISOString(),nativeWindow:true,isolatedSyntheticProfile:true,timersWindows:0,foregroundPreservedOnNotice:true,mainFocusOnlyAfterContribute:true,noAutomaticCapture:true,bounds,workArea:work,stackedCards:2,ignore:true,contribute:true,completionExpiry:true,completionLifetimeMs,exactNoticeFrame:true};
   if(output)await fs.writeFile(path.join(output,'receipt.json'),JSON.stringify(receipt,null,2)+'\n');console.log(JSON.stringify(receipt));
  }finally{host.dispose();if(!main.isDestroyed())main.destroy();await new Promise(resolve=>server.close(resolve));}
  app.exit(0);

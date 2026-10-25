@@ -9,7 +9,7 @@ const npcNames=Array.from({length:6},(_,index)=>'Synthetic Guardian '+index);
 function pack(count,{complete=true,modern=true}={}){
     const names=npcNames.slice(0,count),item={name:'Synthetic Shared Powder',wikiTitle:'Synthetic Shared Powder',dropSources:names.flatMap(name=>[{name,zone:'First Vale',instance:'normal'},{name,zone:'Second Vale',instance:'raid'}])};
     if(modern)Object.assign(item,{lootSourceCount:names.length,lootSourceCountComplete:complete,lootSourceNpcs:names});
-    return {meta:{version:'synthetic-count-v1',generatedAt:'2026-10-25T12:00:00Z',sample:false,wikiEntitiesComplete:true,...(modern?{lootSourceCountsVersion:1}:{})},wikiEntities:{items:[item.name,'Powder Alias'],npcs:[...npcNames,'Guardian Alias'],titles:[item.name,'Powder Alias',...npcNames,'Guardian Alias']},items:[{...item,aliases:['Powder Alias']}],npcs:npcNames.map((name,index)=>({name,wikiTitle:name,aliases:index===0?['Guardian Alias']:[]}))};
+    return {meta:{version:'synthetic-count-v1',generatedAt:'2026-10-25T12:00:00Z',sample:false,wikiEntitiesComplete:true,...(modern?{lootSourceCountsVersion:2}:{})},wikiEntities:{items:[item.name,'Powder Alias'],npcs:[...npcNames,'Guardian Alias'],titles:[item.name,'Powder Alias',...npcNames,'Guardian Alias']},items:[{...item,aliases:['Powder Alias']}],npcs:npcNames.map((name,index)=>({name,wikiTitle:name,aliases:index===0?['Guardian Alias']:[]}))};
 }
 let proof=classifyCachedLoot(pack(5),'Synthetic Shared Powder');
 assert.deepEqual(contributionZoneLootEntries('<nowiki>{| class="zoneTopTable"\n! Unique Items\n| {{:Ignored Example}}\n|}</nowiki>\n{| class="zoneTopTable"\n! Unique Items\n| {{:Synthetic Unique}}\n|-\n! Common Loot\n| [[Synthetic Common]]\n|}\n== Raid Instance ==\n{| class="zoneTopTable"\n! Common Loot\n| {{:Synthetic Raid Common}}\n|}'),[{itemTitle:'Synthetic Unique',kind:'unique',card:'zone:0',sourceKind:'zone'},{itemTitle:'Synthetic Common',kind:'common',card:'zone:0',sourceKind:'zone'},{itemTitle:'Synthetic Raid Common',kind:'common',card:'zone:1',sourceKind:'zone'}],'Only active zone summary loot cells classify items, including separate raid tables');
@@ -19,10 +19,16 @@ assert.equal(proof.kind,'common');assert.equal(proof.count,6,'The new sixth sour
 proof=classifyCachedLoot(pack(5),'Synthetic Shared Powder',['Guardian Alias','Synthetic_Guardian_0']);
 assert.equal(proof.kind,'unique');assert.equal(proof.count,5,'Aliases, zones and normal/raid variants do not inflate distinct monster count');
 proof=classifyCachedLoot(pack(6),'Synthetic Shared Powder');assert.equal(proof.kind,'common');
-proof=classifyCachedLoot(pack(5,{complete:false}),'Synthetic Shared Powder');assert.equal(proof.kind,null);assert.match(proof.reason,/Sync with Wiki/);
+proof=classifyCachedLoot(pack(5,{complete:false}),'Synthetic Shared Powder');assert.equal(proof.kind,null);assert.match(proof.reason,/source coverage or sync newer data/);
 proof=classifyCachedLoot(pack(6,{complete:false}),'Synthetic Shared Powder');assert.equal(proof.kind,'common','Six verified canonical sources establish a Common lower bound');
 proof=classifyCachedLoot(pack(5,{modern:false}),'Synthetic Shared Powder');assert.equal(proof.kind,null);assert.equal(proof.count,5,'An older dataset proves positive sources but cannot establish complete absence');
 proof=classifyCachedLoot(pack(6,{modern:false}),'Synthetic Shared Powder');assert.equal(proof.kind,'common');assert.equal(proof.count,6,'Older rich canonical NPC records still support a Common lower bound');
+const legacyCounts=pack(5);legacyCounts.meta.lootSourceCountsVersion=1;
+assert.equal(classifyCachedLoot(legacyCounts,'Synthetic Shared Powder').kind,null,'Version 1 canonical names cannot establish complete Unique proof');
+const legacyRedlinks=pack(6);legacyRedlinks.meta.lootSourceCountsVersion=1;legacyRedlinks.npcs=[];
+assert.equal(classifyCachedLoot(legacyRedlinks,'Synthetic Shared Powder').count,0,'Old count names without actual rich NPC identity cannot establish a Common lower bound');
+const legacyVerified=pack(6);legacyVerified.meta.lootSourceCountsVersion=1;
+assert.equal(classifyCachedLoot(legacyVerified,'Synthetic Shared Powder').kind,'common','Version 1 positives remain a lower bound when actual rich NPC identities verify every name');
 const inconsistent=pack(5);inconsistent.items[0].lootSourceCount=4;assert.equal(classifyCachedLoot(inconsistent,'Synthetic Shared Powder').kind,null);
 const repeated=pack(5);repeated.items[0].lootSourceNpcs.push('Guardian Alias');repeated.items[0].lootSourceCount=6;assert.equal(classifyCachedLoot(repeated,'Synthetic Shared Powder').kind,null,'Duplicate aliases cannot turn five monsters into six');
 const sample=pack(6);sample.meta.sample=true;assert.equal(classifyCachedLoot(sample,'Synthetic Shared Powder').kind,null,'Sample records are not wiki source evidence');

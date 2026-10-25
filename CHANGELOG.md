@@ -2,6 +2,8 @@
 
 ## 0.9.14 - Contribution history and safer loot discovery
 
+- Skip routine automatic source backfill for known common materials only when cached records positively prove weight-only, unequippable metadata and at least six existing monster sources. Keep unknown entities, gear, effects, uncommon drops, incomplete metadata and manual contribution drafts available; no item-name exceptions or live material lookups are added.
+- Ask `Is <monster> notable?` in the new-monster popup. Save explicit Yes/No choices for the exact draft without moving game focus; preserve unanswered location drafts and expose the choice in Contribute. Stale popup choices cannot replace edited or already reviewed/published work.
 - Bring Discoveries and Contribution History into one Contribute section with shared account controls. Compact the reader toolbar and replace the repeated three-receipt feed with one latest-result summary linking to History. Preserve draft edits, visible failure reasons and reader ownership when switching tabs.
 - Make Pause reading stop the Contribute-owned reader even with a pending item request or late start. Refresh or view re-entry cannot restart it; explicit Start or Contribute can resume using the selected source. Log processing continues separately.
 - Add **Any** immediately before **Auto** in Items. It disables only the Items class filter and preserves the detected/profile classes used elsewhere.

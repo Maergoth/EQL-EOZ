@@ -7,13 +7,20 @@ releases' notes, screenshots and hashes remain unchanged.
 
 ## Scope and ownership
 
+- **Notable monster choice:** the new-monster popup asks `Is <monster> notable?`
+  and saves explicit Yes/No for that exact draft without opening the main app.
+  Unanswered stays separate from No and never discards the location draft.
+  Contribute exposes the same editable choice. Native exact-frame, current
+  candidate/evidence and acknowledgement guards reject stale requests; edited
+  classification, saved reviews and partial/submitted work remain protected.
+  The historical `Namedmobpage` template does not imply notable classification.
 - **Contribute → History:** native metadata receipts for manual/automatic plans,
   account/origin filtering, local status filters and pagination, confirmed
   revision/diff links, partial/uncertain results, and safe bounded persistence.
   See [the native contract](CONTRIBUTION_HISTORY.md).
 - **Contribute layout:** keep Discoveries and Contribution History inside one
   section beneath shared account controls. The compact reader toolbar and one
-  latest-result summary replace the repeated three-receipt feed. History keeps
+  latest-attention summary replace the repeated three-receipt feed. History keeps
   full receipts; tab changes preserve draft edits and pause the reader owned by
   this section. Keyboard tab navigation and immediate logout clearing remain.
   Explicit Pause also stops an owned pending-item reader or late start;
@@ -26,6 +33,22 @@ releases' notes, screenshots and hashes remain unchanged.
 - **Cached global loot placement:** six distinct monsters means Common; fewer
   means Unique only with complete native cached count provenance. There are no
   live count requests. See [the contract](CONTRIBUTION_LOOT_CLASSIFICATION.md).
+- **Authored coverage before publication:** use the typed affected-field
+  contract in [the accepted research plan](AUTOMATIC_CONTRIBUTION_COVERAGE.md).
+  Positive cached either-side sources need zero HTTP; exact unscoped sources
+  and complete finite collections already count. A useful new supported source
+  is authored once on the NPC, with independently eligible existing zone
+  summaries only. Broad/qualified intent never becomes guessed membership or
+  reciprocal item-page mirror writes. Quiet decisions are separate from
+  publication History and retain manual/population/partial work.
+- **Routine common materials:** suppress only automatic source-gap/backfill
+  work for positively identified cached materials with WT-only statistics,
+  explicitly empty equipment slots, recognized metadata-only display lines and
+  at least six already recorded monster sources. Unknown/ambiguous entities,
+  missing metadata, gear, effects, uncommon drops and manual contribution drafts
+  retain their existing workflows. Native suppression occurs before account or
+  live page resolution; authored generic source text is not treated as an exact
+  monster identity. The shared helper has no hardcoded item/species names.
 - **Weight regression:** retain the existing formula and check that base weight
   2.5 at rank ten displays as 0.3.
 - **Shared rules revision 2:** floor positive primary-stat gains above ten,
@@ -49,8 +72,9 @@ releases' notes, screenshots and hashes remain unchanged.
 - **Documented item sets:** use only explicit complete producer membership to
   recognize a member already covered by an authored NPC/zone loot set in the
   selected instance. Preserve the set and its authored loot kind. An individual
-  item-page source can still be filled without appending redundant NPC/zone
-  entries. Native preparation and saved-plan validation share this rule;
+  explicitly reviewed manual item-page source can still be filled without
+  appending redundant NPC/zone entries. Automatic publication never repairs a
+  covered source by copying its reverse field. Native preparation and saved-plan validation share this rule;
   title similarity never establishes membership.
 - **Hover timing and Intel scrolling:** use one 350 ms pointer delay for rich
   item previews in the main app, Character and Intel. Keyboard focus remains
@@ -86,6 +110,12 @@ reader ownership, source choices, fresh evidence, automatic result processing,
 manual edits and History pausing. The native popup fixture checks exact-frame
 IPC, work-area placement, closed Timers, initial focus preservation, explicit
 actions and completion expiry using a disposable synthetic profile.
+The native spawn-prompt fixture also checks literal monster text, explicit Yes
+and keyboard No through the sandboxed preload/native acknowledgement and real
+durable queue, an unanswered default, retained keyboard focus, a replacement
+question's visible scroll position, current-candidate protection and matched
+location completion. The actual workspace fixture verifies the same choice in
+the editor and rejects an older popup choice after an editor correction.
 
 The tooltip scheduler fixture covers the full delay, updated pointer position,
 adjacent-target cancellation, stale sources and disposal. The Intel interaction
@@ -103,7 +133,7 @@ No installed player profile or production wiki write is part of these fixtures.
 App publication and the separate dataset exporter/pack refresh have independent
 receipts; this document does not claim that an exporter change is installed.
 
-Local integration on October 25, 2026 passed the complete `npm test` source
+Earlier integration on October 25, 2026 passed the complete `npm test` source
 suite with the isolated local PHP runtime, including the shared-rules and
 mirrored producer fixtures, exact packaged runtime/bootstrap contracts,
 navigation worker validation, release surfaces and the 43-version/77-image
@@ -115,11 +145,35 @@ the crash recovery, including the pending-item/late-start Pause regression.
 Windows/Linux package CI, exact published commit/assets and the independent
 live dataset rebuild still require their own final receipts.
 
-Three version-owned screenshots in `app/assets/whats-new/0.9.14/` show the actual
+The final coverage revision adds native zero-request/no-write regressions,
+separate quiet decisions, colon namespace proof, failed-attempt History
+retention and independently validated optional zone-summary retries. The full
+native manual workspace, discovery workspace and overlay suites pass locally.
+Final source/parser/exporter checks and refreshed dataset verification remain
+release gates. Genuine unbounded Research-component groups cannot currently
+prove finite membership; small global counts can remain incomplete and must
+withhold Unique placement rather than invent a proof. This limitation does not
+invalidate positive coverage or a verified Common lower bound of six.
+
+Four version-owned screenshots in `app/assets/whats-new/0.9.14/` show the actual
 implemented UI and styles: `contribute.png`, `contribution-history.png` and
-`wiki-discovery.png`. They are isolated Electron Chromium captures with
+`wiki-discovery.png`, plus `new-monster-notable.png`. They are isolated Electron Chromium captures with
 synthetic data; the first uses generated screenshot pixels, the second expands
 a partial history outcome, and the third comes from the real native popup
-fixture. They are visually reviewed and contain no game/player pixels,
+fixture. The fourth shows the real new-monster prompt and its unanswered
+notable question. They are visually reviewed and contain no game/player pixels,
 installed profiles, live wiki requests or production wiki submissions. Reviewed
 SHA-256 values are recorded in the release history.
+
+Zone contribution follow-up: local `zoneScope: various` includes the current zone
+within the same NPC instance. Native previews preserve the literal Various field.
+Separate `categoryZones` proof recognizes category-backed normal dynamic-list
+membership even when an explicit NPC spawn field names another zone; the map/stat
+record keeps its existing authoritative zone and raid scope.
+DynamicZoneList is populated by the zone/NPC category intersection; normal mobs
+update that NPC source rather than the manual Notable NPCs summary. A confirmed
+Notable choice is required for the summary. Existing formatted/nested zone tables
+are supported. Automatic zone Unique Items additions retain the global count
+rule, require numeric gear stats beyond weight, and skip absent summary rows
+(including Plane of Sky). Native preview and saved-plan retry validate these
+boundaries; source-only fixtures do not make any production wiki edits.

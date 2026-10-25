@@ -12,7 +12,7 @@ export function automaticSourceReceiptKey(value,{pack={},resolver=createWikiReso
     return identities.every(Boolean)?JSON.stringify([...identities,value.instance]):null;
 }
 export function automaticSourceDraftKeys(candidate,{pack={},resolver=createWikiResolver(pack)}={}){
-    if(candidate?.membership!=='present'||candidate.intent==='create'||candidate.manual||candidate.planId||candidate.playerText||candidate.attachment||candidate.baseRecovery||candidate.baseVerification||candidate.spawnRequest||
+    if(candidate?.membership!=='present'||candidate.intent==='create'||candidate.manual||candidate.planId||candidate.playerText||candidate.attachment||candidate.baseRecovery||candidate.baseVerification||candidate.spawnRequest||candidate.matchesReviewed===true||candidate.reviewed===true||candidate.submittedAt||candidate.title&&normalizeWikiIdentity(candidate.title)!==normalizeWikiIdentity(candidate.name)||
         !['needs-review',''].includes(candidate.status||'')||candidate.reasons?.length!==1||candidate.reasons[0]!=='missing-source'||
         Object.values(candidate.fields||{}).some(field=>field?.edited===true||field?.confirmed===true)||
         (candidate.sources||[]).some(source=>source.edited===true||source.confirmed===true))return null;

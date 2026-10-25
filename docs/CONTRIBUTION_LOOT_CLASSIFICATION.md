@@ -13,15 +13,20 @@ the new reviewed source. It does not count only the selected zone.
   becomes Unique Loot.
 
 `app/loot-classification.js` resolves item/NPC identity and deduplicates canonical
-source names. Modern exporter records use `meta.lootSourceCountsVersion: 1` and
+source names. Modern exporter records use `meta.lootSourceCountsVersion: 2` and
 top-level `lootSourceCounts[canonicalWikiTitle]` entries containing
 `lootSourceNpcs`, `lootSourceCount`, and `lootSourceCountComplete`. This index
 includes statless materials and missing item titles referenced by authored NPC
 loot; it does not depend on an item having a browse/stat record. Rich item records
 mirror the same three fields. Rich NPC records retain public redirect aliases.
 Completeness also requires the supported complete entity catalog and consistent
-counts. Older source rows may establish a lower bound when canonical NPC identity
-is available, but cannot establish a complete small count. Ambiguous identities,
+counts. Version 2 names require a current public canonical NPC/Merchant card;
+an arbitrary existing page ID, collection title, pet, or NPC redlink cannot
+inflate the verified monster lower bound. An authored redlink remains positive
+relationship evidence and makes the affected item count incomplete. Version 1
+and older source rows may establish a lower bound only when actual rich NPC
+records independently verify their identities; they cannot prove a complete
+small count. Ambiguous identities,
 malformed records and explicit owner-labelled pets cannot establish completeness.
 
 The renderer can show a proposal from its cached data. Publication recalculates
@@ -43,6 +48,23 @@ preparation/publication still uses its existing authenticated wiki operations.
 The separate wiki dataset exporter supplies the count fields; publishing this
 desktop app does not itself run the exporter or change wiki pages.
 
+Routine automatic source backfill skips a positively identified common material
+when the native cached record already proves at least six distinct monsters and
+explicitly contains only a finite weight statistic, no equipment slots, and
+recognized metadata-only display lines. Weight must agree with its display line.
+Missing metadata, meaningful statistics, effects, instrument properties and
+unrecognized lines cannot prove this policy. The source count is evaluated before
+adding the newly observed monster. No item or monster names are hardcoded.
+
+`app/automatic-source-policy.js` applies this narrow rule to automatic item,
+monster and zone source-gap proposals. The native automatic publisher checks the
+same policy before account or live page resolution, so an ordinary common
+material drop creates neither a backfill request nor an attention notification.
+Unknown item and monster discoveries, uncommon materials, gear, and explicit
+manual contribution drafts remain available. This is an automatic workflow
+policy; it does not assert that a generic source description identifies each
+individual monster or rewrite authored wiki loot.
+
 The normal verified gzip installer and build-time bootstrap fetch preserve the
 whole pack, adding only their existing cache/build metadata. Renderer fallback
 loading also retains the full index. The native catalog provider reads the raw
@@ -50,21 +72,50 @@ installed pack, falls back to the bundled pack offline, and reloads when the
 installed file generation changes. `node tests/dataset-sync.mjs` checks these
 paths with synthetic statless/material entries, incomplete records and aliases.
 
-The build-time catalog relevance gate requires version 1, a nonempty bounded
+The build-time catalog relevance gate requires version 2, a nonempty bounded
 global index, consistent count/name arrays and matching rich-item mirrors. It
 rejects an older bootstrap without these fields; it makes no live wiki requests.
 
-`meta.lootSetsVersion: 1` and `lootSets[setTitle] = {items, complete}` document
-explicit set membership in the native pack. Only a complete, bounded list of
+`meta.lootSetsVersion: 1` and `lootSets[setTitle] = {items, complete, source}`
+document public explicit Gear Set and approved unconditional list-pool membership
+in the native pack. `source` records its public page and revision. Only a
+complete, bounded list of
 valid canonical members can establish coverage. Similar names and prefixes do
 not establish membership. `app/loot-set-coverage.js` and the contribution model
 recognize a listed set in an authored monster or zone loot section, scoped to
 the selected normal/raid instance. They preserve the set and its authored loot
-kind instead of appending individual members. A missing source on the member's
-own item page can still be added. The same native preparation and saved-plan
-guards reject redundant member additions, including manually edited wikicode.
+kind instead of appending individual members. Automatic publication treats either
+authored direction and complete collection membership as the same covered
+relationship; it does not add a missing reciprocal Itempage mirror. Explicitly
+reviewed manual source work remains available. Native preparation and saved-plan
+guards reject redundant member additions in automatic plans.
 This coverage check uses the trusted pack and the page source already loaded
 for Preview; it does not introduce live membership/count queries.
+
+Conditional tables and qualified group descriptions do not establish a member
+cross-product. When their possible public members can be bounded, the producer
+exports `possibleItems` and `possibleItemsComplete` and marks those item counts
+incomplete without adding NPC edges. Unknown expansion or membership remains
+incomplete. Safe positive sources remain available independently of that
+uncertainty.
+
+An undefined group whose possible members cannot be bounded leaves the global
+scan incomplete. This can withhold automatic Unique classification for every
+item even in a freshly rebuilt dataset. A sync cannot resolve an intentionally
+broad or broken source definition. Existing exact/finite-set relationship
+coverage still prevents redundant contributions, six verified monsters still
+prove Common, and important unresolved work remains available for review.
+
+`meta.wikiRelationshipCoverageVersion: 1` identifies the title-keyed
+`wikiRelationshipCoverage` map, including pages omitted by rich stat filtering.
+Each entry retains public page/revision provenance, its item/NPC/zone kind,
+affected field and normal/raid scopes, exact positive edges, verified collection
+references, and separate `state`/`complete` capability metadata. `broad`,
+`unsupported`, and `variant` describe the affected authored field; incidental
+description, location, merchant, or zone prose does not opt an entire page out.
+Existing DynamicZoneList categories and optional pre-existing zone summary cells
+are independent capabilities. A missing or unsupported summary does not veto a
+new supported NPC loot fact. See [the accepted coverage plan](AUTOMATIC_CONTRIBUTION_COVERAGE.md).
 
 `node tests/loot-classification.mjs` covers synthetic global counts, the exact
 six-monster boundary, canonical duplicates, missing/incomplete data and pet

@@ -1,4 +1,4 @@
-// Native submission receipts only. This view never prepares or publishes edits.
+// Native submission receipts. Corrections open the current page's wiki editor.
 const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 const statuses = Object.freeze({pending:'Pending',submitted:'Published','partly-submitted':'Partly published','needs-attention':'Needs attention'});
 const pageStatuses = Object.freeze({pending:'Pending',applied:'Saved',unknown:'Not confirmed',failed:'Failed'});
@@ -14,6 +14,10 @@ function link(label, value, origin) {
     const url = safeLink(value, origin);
     return url ? `<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(label)}</a>` : '';
 }
+function editLink(page, origin) {
+    if (!safeLink(page.url,origin) || typeof page.title !== 'string' || !page.title.trim() || page.title.length > 300) return '';
+    return link('Edit on wiki',`${origin}/index.php?${new URLSearchParams({title:page.title,action:'edit'})}`,origin);
+}
 function timeMarkup(value) {
     const date = new Date(value);
     if (!Number.isFinite(date.getTime())) return '';
@@ -24,14 +28,14 @@ export function contributionHistoryEntriesMarkup(entries = [], filter = 'all') {
     return rows.map(entry => {
         const pages = Array.isArray(entry.pages) ? entry.pages.slice(0, 13) : [];
         const title = entry.title || pages[0]?.title || 'Wiki contribution';
-        return `<details class="contribution-history-entry" data-history-entry="${escape(entry.id)}"><summary><strong>${escape(title)}</strong><span class="contribution-history-status is-${escape(entry.status)}">${statuses[entry.status]}</span></summary><div class="contribution-history-meta">${timeMarkup(entry.updatedAt || entry.createdAt)}<span>${entry.mode === 'automatic' ? 'Automatic' : 'Reviewed submission'}</span>${entry.account?.name ? `<span>${escape(entry.account.name)}</span>` : ''}</div><ul class="contribution-history-pages">${pages.map(page => `<li><div><strong>${escape(page.title)}</strong><span>${page.operation === 'create' ? 'Create page' : page.operation === 'upload' ? 'Upload screenshot' : 'Update page'} · ${pageStatuses[page.status] || 'Not confirmed'}</span></div><nav aria-label="Links for ${escape(page.title)}">${[link('Page',page.url,entry.origin),link('Saved revision',page.revisionUrl,entry.origin),link('Diff',page.diffUrl,entry.origin)].filter(Boolean).join(' · ')}</nav></li>`).join('')}</ul>${entry.status === 'needs-attention' ? '<p class="settings-helper">Some results could not be confirmed. Check the page history before retrying from the discovery queue.</p>' : ''}</details>`;
+        return `<details class="contribution-history-entry" data-history-entry="${escape(entry.id)}"><summary><strong>${escape(title)}</strong><span class="contribution-history-status is-${escape(entry.status)}">${statuses[entry.status]}</span></summary><div class="contribution-history-meta">${timeMarkup(entry.updatedAt || entry.createdAt)}<span>${entry.mode === 'automatic' ? 'Automatic' : 'Reviewed submission'}</span>${entry.account?.name ? `<span>${escape(entry.account.name)}</span>` : ''}</div><ul class="contribution-history-pages">${pages.map(page => `<li><div><strong>${escape(page.title)}</strong><span>${page.operation === 'create' ? 'Create page' : page.operation === 'upload' ? 'Upload screenshot' : 'Update page'} · ${pageStatuses[page.status] || 'Not confirmed'}</span></div><nav aria-label="Links for ${escape(page.title)}">${[link('Page',page.url,entry.origin),link('Saved revision',page.revisionUrl,entry.origin),link('Diff',page.diffUrl,entry.origin),editLink(page,entry.origin)].filter(Boolean).join(' · ')}</nav></li>`).join('')}</ul>${entry.status === 'needs-attention' ? '<p class="settings-helper">Some results could not be confirmed. Check the page history before retrying from the discovery queue.</p>' : ''}</details>`;
     }).join('');
 }
 export function mountContributionHistory({host, wiki} = {}) {
     if (!host) return {setActive(){},setAccount(){},markChanged(){},refresh:async()=>{},dispose(){}};
     let entries = [], knownAccount = null, filter = 'all', nextCursor = null;
     let active = false, dirty = true, loading = false, disposed = false, epoch = 0, warning = '', error = '';
-    host.innerHTML = `<div class="contribution-history-heading"><div><h3>Contribution History</h3><p class="settings-helper">Saved on this device for the signed-in wiki account. Includes automatic and reviewed submissions.</p></div><button class="secondary-button" data-history-refresh>Refresh history</button></div><div class="contribution-history-tools"><label>Show<select data-history-filter aria-label="Filter contribution history"><option value="all">All submissions</option>${Object.entries(statuses).map(([value,label])=>`<option value="${value}">${label}</option>`).join('')}</select></label><span data-history-count></span></div><p data-history-status role="status"></p><div data-history-entries></div><button class="secondary-button" data-history-more hidden>Load older contributions</button>`;
+    host.innerHTML = `<div class="contribution-history-heading"><div><h3>Contribution History</h3><p class="settings-helper">Automatic additions and reviewed submissions saved on this device for the signed-in wiki account. Open an entry to view its changes or edit the current page on the wiki.</p></div><button class="secondary-button" data-history-refresh>Refresh history</button></div><div class="contribution-history-tools"><label>Show<select data-history-filter aria-label="Filter contribution history"><option value="all">All submissions</option>${Object.entries(statuses).map(([value,label])=>`<option value="${value}">${label}</option>`).join('')}</select></label><span data-history-count></span></div><p data-history-status role="status"></p><div data-history-entries></div><button class="secondary-button" data-history-more hidden>Load older contributions</button>`;
     const find = selector => host.querySelector(selector);
     function render() {
         if (disposed) return;

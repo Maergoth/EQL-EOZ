@@ -145,6 +145,13 @@ client also understands exclusions in legacy packs while that rebuild is pending
 Recognized explicit NPC template zones take precedence and retain every listed
 zone. Categories and article-title suffixes are fallbacks; newly recognized
 categories must not override a field or remove a second spawn zone.
+The optional `zones[].viewerId` records a reviewed primary archive for the four
+catalog display labels shared by multiple supported client archives. A verified
+logged short name wins, including an alternate supported ID. Unknown/conflicting
+short names and missing requested archives must not fall back to another map.
+The exact client filename aliases `oceanoftears` and `newsebexp` join their
+existing canonical zones; they do not create new zone records. See the
+[map identity contract and full-alias regression](../docs/MAP_ZONE_ALIASES.md).
 
 Drop-source names use wiki-link destinations rather than display labels or
 revamp notes. The producer unwraps `VeliousGray` presentation, removes `Era`
@@ -241,3 +248,19 @@ failure. The gzip is downloaded only when the manifest version changes or a
 matching local copy is invalid. A verified pack replaces the cache atomically.
 Settings distinguishes check/success/download times from the dataset's own
 generation time. Offline or invalid downloads retain the last valid pack.
+
+An exact literal NPC `zone = Various` exports `zoneScope: various` on its scoped
+record. Concrete category-derived zone rows remain available for map and
+DynamicZoneList membership; the marker does not invent coordinates or cross
+separate normal/raid templates.
+NPC `categoryZones` independently retains concrete zone-category membership for
+normal DynamicZoneList presence checks. It does not replace an explicit spawn
+field or provide raid-instance membership or coordinates.
+The additive version-1 `wikiContributionPolicies` map stores public page opt-outs
+before rich stats are parsed; rich NPC/item/zone records mirror them as
+`automaticContributions`. Markers contain only the schema version, blocked flag,
+`various` reason and public revision ID. Various is a case-insensitive whole word
+in unexpanded authored source after underscore normalization and HTML comment
+removal. Literal nowiki/pre words count. Cached markers stop automatic work;
+existing facts remain usable and absence of a marker does not replace the native
+last check of already-fetched current source before an automatic write.

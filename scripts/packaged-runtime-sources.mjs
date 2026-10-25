@@ -23,6 +23,8 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/contribution-reader.js',
     'app/automatic-item-contribution.js',
     'app/automatic-source-results.js',
+    'app/automatic-source-policy.js',
+    'app/contribution-coverage.js',
     'desktop/automatic-log-reader.cjs',
     'desktop/automatic-loot-sources.cjs',
     'app/contribution-editor.js',

@@ -919,7 +919,7 @@ async function bootstrap() {
         onIconRequest:(action,value)=>iconFinderHost.handle(action,value)});
     const sourceReceipt=result=>{if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:automatic-source-result',{
         ...result,itemTitle:result.item||'',npcTitle:result.npc||'',zoneTitle:result.zone||''});};
-    automaticLootSources=new AutomaticLootSources({client:wikiHost.client,onResult:sourceReceipt,onDeferred:sourceReceipt});
+    automaticLootSources=new AutomaticLootSources({client:wikiHost.client,onResult:sourceReceipt,onDeferred:sourceReceipt,onDecision:sourceReceipt});
     automaticLogReader=new AutomaticLogReader({getPack:automaticWikiCatalog,onReset:()=>automaticLootSources.cancel(),
         onObservation:record=>automaticLootSources.observe(record)});
     iconFinderHost = new IconFinderHost({session:wikiHost.session,stateDir:path.join(userDataDir(),'wiki-icons'),nativeImage:electron.nativeImage});

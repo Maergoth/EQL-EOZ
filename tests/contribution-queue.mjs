@@ -35,3 +35,20 @@ hints.update(hinted.id,{sources:[{...sources[0],confirmed:false,sourceEvidence:'
 hints.update(hinted.id,{sources:[{...sources[0],confirmed:false,sourceEvidence:'explicit-corpse'}]});assert.deepEqual(hints.sourceItemHints(mobHint),['Canonical Synthetic Gem']);
 const rawHints=JSON.parse([...hintValues.values()][0]);rawHints.archive=[rawHints.candidates[0]];rawHints.candidates=[];hintStorage.setItem('eql-eye-of-zomm-contributions-v1',JSON.stringify(rawHints));
 hints=createContributionQueue({storage:hintStorage,getPack:()=>hintPack});assert.deepEqual(hints.sourceItemHints(mobHint),['Canonical Synthetic Gem'],'Archived evidence can supply a lookup hint without re-creating a draft');
+
+{
+    const saved=new Map(),local={getItem:key=>saved.get(key),setItem:(key,value)=>saved.set(key,value)},catalog={meta:{wikiEntitiesComplete:true},wikiEntities:{items:[],npcs:[],zones:[],titles:[]},items:[],npcs:[],zones:[]};
+    let now=Date.now(),queue=createContributionQueue({storage:local,getPack:()=>catalog,now:()=>now});
+    const killed=queue.consumeLog({type:'kill',victim:'A synthetic notable guardian'},{live:true,at:now,cursor:1,zone:'Synthetic Vale',logId:'notable-log'}),candidate=killed.candidate;
+    assert(killed.prompt?.spawnEvidenceId);assert.equal(candidate.fields.notable,undefined);
+    const request={id:'spawn-'+candidate.id,candidateId:candidate.id,name:candidate.name,zone:candidate.zone,spawnEvidenceId:killed.prompt.spawnEvidenceId,previousNotable:null,notable:true};
+    for(const patch of [{candidateId:'other'},{id:'spawn-other'},{name:'Other guardian'},{zone:'Other vale'},{spawnEvidenceId:'old'},{notable:'true'}])assert.equal(queue.setNpcNotable({...request,...patch}).ok,false);
+    assert.equal(queue.setNpcNotable(request).ok,true);assert.equal(queue.spawnStatus().candidateId,candidate.id,'Choosing notable does not disarm /loc');
+    queue=createContributionQueue({storage:local,getPack:()=>catalog,now:()=>now});let restored=queue.snapshot().find(value=>value.id===candidate.id);assert.deepEqual(restored.fields.notable,{value:true,confirmed:true,edited:true,source:'player'},'Explicit Yes survives queue reload');
+    assert.equal(queue.setNpcNotable({...request,notable:false}).ok,false,'An old popup state cannot overwrite a newer confirmed choice');
+    assert.equal(queue.setNpcNotable({...request,previousNotable:true,notable:false}).ok,true);restored=queue.snapshot().find(value=>value.id===candidate.id);assert.equal(restored.fields.notable.value,false,'No is an explicit saved classification');
+    queue.update(candidate.id,{playerText:'Keep my edited notes',fields:{...restored.fields,HP:{value:900,confirmed:true,edited:true}}});assert.equal(queue.setNpcNotable({...request,previousNotable:false,notable:true}).ok,true);restored=queue.snapshot().find(value=>value.id===candidate.id);assert.equal(restored.playerText,'Keep my edited notes');assert.equal(restored.fields.HP.value,900,'The popup preserves other edited fields');
+    for(const patch of [{planId:'saved-plan'},{planId:null,status:'partial'},{planId:null,status:'submitted'}]){queue.update(candidate.id,patch);assert.equal(queue.setNpcNotable({...request,previousNotable:true,notable:false}).ok,false,'Saved review and published work cannot be overwritten by a popup');}
+    const before=queue.snapshot().find(value=>value.id===candidate.id);assert.equal(before.fields.notable.value,true);
+    console.log('Notable choice: explicit Yes/No, unanswered state, exact candidate/evidence guards, durable queue and preserved edited/reviewed work passed.');
+}

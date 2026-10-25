@@ -7,15 +7,19 @@ submit, retry, upload, reconcile wiki pages, or start capture.
 
 Discoveries and Contribution History are tabs inside the same Contribute
 section, below shared wiki account controls. Discoveries keeps a compact item
-reader toolbar and one latest source-result summary linking to History; full
-receipts are retained in the native list. Opening History pauses only the
+reader toolbar and entries that still need attention. Confirmed automatic
+items and covered source gaps leave the queue; their receipts appear only in
+History. A compact warning links unfinished source work to its history result. Opening History pauses only the
 reader owned by Contribute and preserves the current editable discovery.
 Pause reading also stops that owned reader when a missing-item request remains
 pending, including a late start. Refreshing or returning to Discoveries cannot
 restart it; an explicit Start or new Contribute action can resume the workflow.
 This control affects screen reading, not ordinary log processing.
 Arrow keys, Home and End move between tabs. Logging out clears visible history
-immediately before any asynchronous refresh can finish.
+immediately before any asynchronous refresh can finish. Each recorded page
+has an **Edit on wiki** link that opens the current page editor, alongside
+its saved revision and diff links. Corrections use the wiki account and current
+page; opening an editor never republishes an old contribution plan.
 
 `WikiClient.persist()` records sanitized plan metadata, including automatic item
 and loot-source plans that use the same native client. The submission boundary

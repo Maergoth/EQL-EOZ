@@ -5,16 +5,19 @@ export const RELEASE_HISTORY = freeze([
   "version": "0.9.14",
   "title": "Contribution history and safer loot discovery",
   "changes": [
-    "Keep Discoveries and Contribution History inside one Contribute section with shared account controls. Use a compact reader toolbar and one latest-result summary; complete receipts stay in History while draft edits and errors remain available.",
+    "Ask whether each newly discovered monster is notable. Save explicit Yes/No for its exact draft without opening the main app, keep unanswered location drafts, and edit the choice in Contribute. Stale popup actions cannot replace a newer choice or saved review.",
+    "Check existing authored sources on either side before proposing loot edits. Cached positive coverage stays quiet without a live request; exact unscoped sources and verified complete item sets or pools already count. Preserve broad, conditional and unsupported source descriptions for useful review instead of expanding them into redundant individual drops.",
+    "Skip routine source enumeration only for positively identified common materials with at least six verified monster sources and no gear, binding, lore, effects or special modifiers. Unknown monsters and potentially important quest or effect items stay available for review; missing metadata cannot prove an item is routine.",
+    "Keep Discoveries and Contribution History inside one Contribute section with shared account controls. Use a compact reader toolbar and keep published automatic additions only in History. The discovery queue retains unfinished work and draft edits.",
     "Pause the Contribute-owned screen reader even with pending item requests or a late start. Refresh and view re-entry keep it stopped until an explicit Start or Contribute action; ordinary log processing continues.",
-    "Open Contribution History inside Contribute for this device's automatic and reviewed submissions, including partial and unconfirmed outcomes. Filter locally, load older receipts and open confirmed saved-page, revision and diff links.",
+    "Open Contribution History inside Contribute for this device's automatic and reviewed submissions, including partial and unconfirmed outcomes. Filter locally, load older receipts and open saved-page, revision and diff links, or edit the current page on the wiki.",
     "Keep native receipt metadata separate from editable plans, scoped to the signed-in account and bounded on disk. History cannot retry or publish work and excludes raw evidence and credentials.",
     "Exclude explicit owner-labelled pets from monster discoveries and contribution plans while preserving ordinary monster names and existing edited or submitted work.",
     "Choose Common Loot at six or more distinct monsters across the cached wiki dataset. Choose Unique below six only with complete count provenance; incomplete counts stay for review. Native pack verification makes no live counter requests.",
     "Correct positive primary-stat flooring with shared wiki rules revision 2. Base HP 50 shows 75 at rank 5 with 4/32 progress; reverse recovery uses the same corrected formula and older saved recovery reviews require review.",
     "Count AC, HP, Mana, Endurance and regeneration toward the two-stat requirement for rank-based Void. Weapon damage, Backstab, Haste and Attack remain outside the qualifying stat list.",
     "Add Any immediately before Auto in Items. Browse every class without changing the detected character classes or the other class-filtered panels.",
-    "Treat a documented item set as covering its listed members in the same monster or zone loot section and instance. Preserve that authored set and its Common/Unique placement; missing item-page sources can still be filled without adding each member again.",
+    "Publish a genuinely new supported loot fact once on the existing monster page, with no reciprocal item-page mirror. Independently summarize verified Unique gear only in a supported existing zone Unique Items row. Preserve Normal/Raid boundaries, curated sets and broad descriptions; uncertain saved writes retain truthful partial History.",
     "Use the same 350 ms pointer-hover delay for item previews in Items, Character and Intel. Keyboard focus stays immediate; moving away, scrolling or changing the source cancels a pending preview.",
     "Keep the Intel list intact on unrelated session heartbeats and update distance labels in place. Avoid repeated row geometry reads during ordinary scrolling while preserving focus and anchors when displayed loot changes.",
     "Restore native Map startup by allowing its two bundled shared item-scaling scripts through the local request policy.",
@@ -36,20 +39,30 @@ export const RELEASE_HISTORY = freeze([
       "image": "0.9.14/contribution-history",
       "view": "contribute",
       "action": "Open Contribute",
-      "copy": "Open History inside Contribute to see this device's submissions for your signed-in wiki account. Inspect saved pages, partial work and unconfirmed results, filter locally, or load older receipts. Page, saved revision and diff links show confirmed results. History never publishes or retries an edit.",
-      "alt": "Contribute History with synthetic Published, Partly published and Needs attention receipts, local filters, and an expanded partial result with saved-page links.",
+      "copy": "Open History inside Contribute to see this device's submissions for your signed-in wiki account. Inspect saved pages, partial work and unconfirmed results, filter locally, or load older receipts. Page, saved revision and diff links show confirmed results. Edit on wiki opens the current page editor for a correction. Published automatic additions leave the discovery queue; History never retries an old plan.",
+      "alt": "Contribute History with synthetic Published, Partly published and Needs attention receipts, local filters, and an expanded partial result with page, saved revision, diff and Edit on wiki links.",
       "caption": "Actual isolated Electron Chromium capture of the integrated Contribute section and embedded History tab with synthetic receipts and isolated wiki/storage APIs. No game/player pixels, installed profiles or production wiki submissions.",
-      "imageSha256": "d964c2ae33d8ebc0bf2e1d350dd58a2833be8b831fc735faaade92b27073f149"
+      "imageSha256": "a04f625bee8bf20cf1e314236206007aad3eade1a3b8e171f9884776830ed393"
     },
     {
       "title": "Act on wiki suggestions outside Timers",
       "image": "0.9.14/wiki-discovery",
       "view": "contribute",
       "action": "Open Contribute",
-      "copy": "Verified missing-item suggestions stack in a separate lower-right desktop popup. Timers can stay closed. Ignore a suggestion or choose Contribute to open its reader workflow; receiving a notice does not start capture or move focus.",
+      "copy": "Verified missing-item suggestions stack in a separate lower-right desktop popup. Timers can stay closed. Notices stay for 15 seconds of visible time; completed capture also has a full 15-second confirmation. Ignore a suggestion or choose Contribute to open its reader workflow; receiving a notice does not start capture or move focus.",
       "alt": "Two standalone wiki suggestion cards for synthetic missing items, each with Contribute, Ignore and dismiss controls.",
       "caption": "Actual isolated Electron native-window capture of the current notice modules and styles with synthetic data. Native fixture receipts verify work-area placement, no initial focus change, no Timers window, explicit actions and expiry. No installed player profile, game pixels, live wiki requests or production edits.",
       "imageSha256": "0da34ad25e5cefe28584286551f08d07e7dcbe231c15877a124705f2f830afb2"
+    },
+    {
+      "title": "Choose whether a new monster is notable",
+      "image": "0.9.14/new-monster-notable",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "The new-monster popup asks whether that monster is notable. Choose Yes or No to save the answer for its draft without opening the main app. Leave it unanswered to keep collecting its spawn location, or revise the choice in Contribute. A page template never decides the answer automatically.",
+      "alt": "Actual native new-monster popup for a synthetic guardian with an unanswered notable question, explicit Yes and No buttons, spawn-location guidance and Contribute, Ignore and dismiss controls.",
+      "caption": "Actual isolated Electron native-window capture with synthetic monster text. The sandboxed fixture checks literal names, no initial focus change, native Yes and keyboard No with durable queue acknowledgement, stale-request protection, hover expiry and the next-/loc flow. No installed profile, game pixels, live wiki requests or production edits.",
+      "imageSha256": "daf2fd0fd5eb3a2952824c0a8cd0b1ec1fa337bf7e2e9bb3c0d8a8bbe464b41f"
     }
   ]
 },

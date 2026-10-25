@@ -65,6 +65,9 @@ class Title {
     public static function makeTitle($namespace, string $text) { return new self($text); }
     public static function newFromText(string $text, $namespace = 0) { return new self($text); }
     public function getText() { return $this->text; }
+    public function getNamespace() { return preg_match('/^(?:File|Template|User|Talk|Category):/i', $this->text) ? 1 : 0; }
+    public function isExternal() { return false; }
+    public function getFragment() { return ''; }
 }
 class ZoneAliasHarness {
     private array $zoneCatalog = [];

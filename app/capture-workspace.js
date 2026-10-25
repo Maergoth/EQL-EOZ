@@ -104,7 +104,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     const filterKey='eql-eye-of-zomm-contribution-filters-v1';
     let enabledGaps=CONTRIBUTION_FILTERS.map(value=>value.key);
     try{const saved=JSON.parse(storage?.getItem(filterKey)||'null');if(Array.isArray(saved))enabledGaps=saved.filter(key=>CONTRIBUTION_FILTERS.some(filter=>filter.key===key));}catch{/* Optional browsing preferences never block drafts. */}
-    const visibleQueueCandidates=()=>{const candidates=queue.snapshot(),receipts=queue.sourceReceiptKeys();if(!receipts.length)return candidates;const resolver=contributionResolver();return candidates.filter(candidate=>manuallyEditedContributions.has(candidate.id)||!automaticSourceDraftComplete(candidate,receipts,{resolver}));};
+    const visibleQueueCandidates=()=>{const candidates=queue.snapshot().filter(candidate=>candidate.status!=='submitted'),decisions=queue.sourceDecisionKeys();if(!decisions.length)return candidates;const resolver=contributionResolver();return candidates.filter(candidate=>manuallyEditedContributions.has(candidate.id)||!automaticSourceDraftComplete(candidate,decisions,{pack:getPack(),resolver}));};
     const queueRows=()=>visibleContributionQueue(visibleQueueCandidates(),enabledGaps);
     selectedId=queueRows()[0]?.id||'';
     let inventoryTimer=null,inventoryPolling=false,inventoryWatchEpoch=0,inventoryMessage='',statsStarting=false,spawnArmedId='',iconPage=0;
@@ -165,13 +165,13 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         for(const row of form.querySelectorAll('[data-field-key]')){
             const key=row.dataset.fieldKey,input=row.querySelector('[data-field-value]');if(!input)continue;const picker=row.querySelector('[data-choice-picker]');let value=picker?readContributionChoicePicker(picker):input.value;
             if(!picker&&input.dataset.array==='true')value=value.split(['statLines','knownLoot','knownNPCs'].includes(key)?/\n/:/[,\n]/).map(s=>s.trim()).filter(Boolean);
-            else if(input.dataset.type==='boolean')value=value==='true';
+            else if(input.dataset.type==='boolean')value=value===''?'':value==='true';
             else if(input.dataset.type==='number'&&value.trim()!==''&&Number.isFinite(Number(value)))value=Number(value);
             if(!picker&&value==='?')value='';
             const original=row.dataset.originalField?JSON.parse(row.dataset.originalField):null,unchanged=original&&JSON.stringify(value)===JSON.stringify(original.value);
             if(unchanged&&(!reviewFields||row.closest('[data-additional-contribution]')?.open===false))continue;
             const previous=candidate.fields[key],nonblank=Array.isArray(value)?value.length>0:value!==''&&value!==null;
-            fields[key]={value,confirmed:reviewFields?nonblank:previous?.confirmed===true,edited:previous?.edited===true||!unchanged};
+            fields[key]={value,confirmed:key==='notable'?typeof value==='boolean':reviewFields?nonblank:previous?.confirmed===true,edited:previous?.edited===true||!unchanged,...(key==='notable'&&typeof value==='boolean'?{source:'player'}:{})};
         }
         const sources=candidate.sources.map((source,index)=>{const button=form.querySelector(`[data-source-toggle="${index}"]`);return {...source,confirmed:button?button.getAttribute('aria-pressed')==='true':source.confirmed,...(button&&button.getAttribute('aria-pressed')!==String(contributionSourceIncluded(source))?{edited:true}:{})};});
         const patch={...Object.fromEntries(['name','title','zone','era','playerText'].map(key=>[key,data.get(key)===String(originalCandidate[key]??'')?candidate[key]:data.get(key)])),intent:data.get('intent')||candidate.intent||'create',instance:form.elements.raid.checked?'raid':'normal',matchesReviewed:reviewFields||candidate.matchesReviewed===true,fields,sources};
@@ -205,7 +205,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         itemBaseUi?.dispose();itemBaseUi=null;contributionIcons?.dispose();contributionIcons=null;contributionChoices?.dispose();contributionChoices=null;const candidate=selected(),host=$('[data-contribution-editor]');
         if(!candidate){host.innerHTML='<p class="empty-state">Choose a discovery or add a page to review.</p>';return;}
         const fields=candidate.kind==='item'?withDefaultItemStatLines(candidate.fields):{...candidate.fields};
-        const keys=candidate.kind==='npc'?['level','race','class','location','respawnTime','AC','HP','special','knownLoot']:candidate.kind==='zone'?['whoName','knownNPCs','knownLoot']:candidate.kind==='spell'?['castTime','duration','effect','mana']:['classes','slots','races','iconId','effectName','effectType','effectCastTime','effectLevel'];
+        const keys=candidate.kind==='npc'?['notable','level','race','class','location','respawnTime','AC','HP','special','knownLoot']:candidate.kind==='zone'?['whoName','knownNPCs','knownLoot']:candidate.kind==='spell'?['castTime','duration','effect','mana']:['classes','slots','races','iconId','effectName','effectType','effectCastTime','effectLevel'];
         const effects=contributionItemEffects({fields:Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{...value,confirmed:true}]))}),effect=effects[0];
         for(const key of keys)if(!fields[key])fields[key]={value:key==='effectName'?effect?.name||'':key==='effectType'?effect?.type||'':key==='effectCastTime'?effect?.castTime||'':key==='effectLevel'?effect?.level||'':['knownLoot','knownNPCs','classes','slots','races'].includes(key)?[]:'',confirmed:false};
         const displayCandidate={...candidate,fields},localMatches=matches?.candidateId===candidate.id?matches.matches:queue.matches(candidate),summary=contributionUpdateSummary(candidate);
@@ -400,6 +400,11 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         record.candidateId=candidate.id;discoveryRequests.set(record.id,record);selectContribution(candidate.id);navigate('contribute');loadWiki();
         try{const prepared=await prepareDiscoveryCapture('',{explicit:true});if(disposed||discoveryRequests.get(record.id)!==record)return discoveryResult(record,{cancelled:true});const result=discoveryResult(record,prepared);if(!prepared.needsSource&&!prepared.cancelled)discoveryCaptureReady(record,result);return result;}
         catch(error){discoveryMessage=error.message||'Item reading could not start.';renderDiscoveryCapture();return discoveryResult(record,{ok:false,error:discoveryMessage});}
+    }
+    function setDiscoveryNotable(request={}){
+        if(disposed||publishing)return{ok:false,error:disposed?'Contribute has closed.':'Finish the current wiki submission first.'};
+        const result=queue.setNpcNotable(request);if(!result.ok)return result;
+        if(selectedId===request.candidateId){invalidatePlan();renderCandidate();}renderQueue();return{ok:true,notable:result.notable};
     }
     async function cancelDiscoveryContribution(request={}){
         const record=discoveryRequests.get(request.id);
@@ -898,8 +903,13 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     if(wiki?.onAutomaticSourceResult){
         const receipt=document.createElement('div');receipt.className='contribution-latest-result';receipt.hidden=true;receipt.setAttribute('aria-live','polite');discoveryPicker.after(receipt);
         unsubscribers.push(wiki.onAutomaticSourceResult(result=>{
+            if(!disposed&&result?.status==='quiet'){
+                if(queue.recordAutomaticSourceDecision(result)){renderQueue();if(!busy&&!publishing&&selectedId&&!queueRows().some(candidate=>candidate.id===selectedId)){selectedId=queueRows()[0]?.id||'';renderCandidate();}}
+                return;
+            }
             if(disposed||!['submitted','deferred','needs-attention'].includes(result?.status))return;
-            contributionHistory.markChanged();
+            const hasAttempt=result.status==='submitted'||result.plan?.pages?.some(page=>['applied','unknown','failed'].includes(page.status));
+            if(hasAttempt)contributionHistory.markChanged();
             const source={...result,itemTitle:result.itemTitle||result.item,npcTitle:result.npcTitle||result.npc,zoneTitle:result.zoneTitle||result.zone};
             if([source.itemTitle,source.npcTitle,source.zoneTitle].some(value=>typeof value!=='string'||!value.trim()||value.length>240))return;
             const key=automaticSourceReceiptKey(source,{resolver:contributionResolver()});
@@ -914,8 +924,8 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             const link=title=>`<a href="https://eqlwiki.com/${encodeURIComponent(title)}" target="_blank" rel="noopener noreferrer">${escape(title)}</a>`;
             const label=result.status==='submitted'?'Drop source recorded':'Drop source needs review';
             const summary=`<strong>${label}</strong> · ${link(source.itemTitle)} → ${link(source.npcTitle)}`;
-            receipt.hidden=false;receipt.classList.toggle('capture-warning',result.status!=='submitted');
-            receipt.innerHTML=`<div><p>${summary}</p>${result.reason?`<p class="settings-helper">${escape(String(result.reason).slice(0,600))}</p>`:''}</div><button type="button" class="text-button" data-open-contribution-history>View history</button>`;renderQueue();
+            receipt.hidden=result.status==='submitted';receipt.classList.toggle('capture-warning',result.status!=='submitted');
+            receipt.innerHTML=`<div><p>${summary}</p>${result.reason?`<p class="settings-helper">${escape(String(result.reason).slice(0,600))}</p>`:''}</div>${hasAttempt?'<button type="button" class="text-button" data-open-contribution-history>View history</button>':'<span class="settings-helper">Review this item in Discoveries.</span>'}`;renderQueue();
             if(!busy&&!publishing&&selectedId&&!queueRows().some(candidate=>candidate.id===selectedId)){selectedId=queueRows()[0]?.id||'';renderCandidate();}
             notify(`${label}: ${source.itemTitle} → ${source.npcTitle} (${source.zoneTitle}).`,{tone:result.status==='submitted'?'success':'warning'});
         })||(()=>{}));
@@ -927,7 +937,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         onResult(candidate,result){
             contributionHistory.markChanged();
             if(!result)return;queue.update(candidate.id,{planId:result.id,status:result.status||'needs-attention'});renderQueue();
-            if(selectedId===candidate.id){plan=result;renderPlan();renderCandidate();}
+            if(selectedId===candidate.id){if(result.status==='submitted'){selectedId=queueRows()[0]?.id||'';plan=null;}else plan=result;renderPlan();renderCandidate();}
             if(result.status==='submitted'){discoveryMessage='Contribution published. Thank you!';notify('Contribution published. Thank you!',{tone:'success'});}
             else{discoveryMessage='The wiki has not confirmed this item. Review the saved result before retrying.';warning(discoveryMessage);}renderDiscoveryCapture();
         },
@@ -968,11 +978,11 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     }
     function loadWiki(){if(wikiLoaded||!wiki)return;wikiLoaded=true;void wiki.blueprints().then(blueprints=>{if(Array.isArray(blueprints.eras)&&blueprints.eras.length){eras=blueprints.eras;const select=$('[name=era]');if(select){const value=select.value;select.innerHTML='<option value="">Confirm era</option>'+eras.map(era=>`<option>${escape(era)}</option>`).join('');select.value=value;}}}).catch(()=>{});unsubscribers.push(wiki.onStatus?.(applyAccountStatus)||(()=>{}));void refreshAccount().catch(()=>{$('[data-account-status]').textContent='Wiki unavailable; local review remains saved.';contributionHistory.setAccount(null);});}
     renderQueue();renderCandidate();renderCharacter();renderCapture();
-    return{beginDiscoveryContribution,cancelDiscoveryContribution,consumeLog(event,context){
+    return{beginDiscoveryContribution,cancelDiscoveryContribution,setDiscoveryNotable,consumeLog(event,context){
         if(disposed||!event||context?.live!==true)return;
         if(['zone','profile'].includes(event.type)){if(spawnArmedId)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+spawnArmedId}).catch(()=>{});spawnArmedId='';}
         const result=queue.consumeLog(event,context);if(result.candidate){if(!selectedId)selectedId=result.candidate.id;renderQueue();if(!root.contains(document.activeElement))renderCandidate();}
-        if(result.prompt){const prompt=result.prompt;spawnArmedId=prompt.candidateId;void globalThis.eyeOfZommDiscovery?.show({id:'spawn-'+prompt.candidateId,kind:'monster',name:prompt.name,zone:prompt.zone,purpose:'spawn-location',hint:'Stand at its spawn point and type /loc now. The next location will be saved automatically.'}).catch(()=>{});notify('Stand at '+prompt.name+'’s spawn and type /loc. Recording is armed.',{duration:15000,actionLabel:'Contribute',onAction:()=>void Promise.resolve().then(()=>{if(!globalThis.eyeOfZommDiscovery?.action)throw Error('Discovery contribution controls are unavailable. Restart Eye of Zomm and try again.');return globalThis.eyeOfZommDiscovery.action('contribute',{id:'spawn-'+prompt.candidateId});}).catch(error=>warning(error.message||'The discovery request could not be opened.'))});}
+        if(result.prompt){const prompt=result.prompt;spawnArmedId=prompt.candidateId;void globalThis.eyeOfZommDiscovery?.show({id:'spawn-'+prompt.candidateId,candidateId:prompt.candidateId,kind:'monster',name:prompt.name,zone:prompt.zone,purpose:'spawn-location',spawnEvidenceId:prompt.spawnEvidenceId,...(typeof prompt.notable==='boolean'?{notable:prompt.notable}:{}),hint:'Stand at its spawn point and type /loc now. The next location will be saved automatically.'}).catch(()=>{});notify('Stand at '+prompt.name+'’s spawn and type /loc. Recording is armed.',{duration:15000,actionLabel:'Contribute',onAction:()=>void Promise.resolve().then(()=>{if(!globalThis.eyeOfZommDiscovery?.action)throw Error('Discovery contribution controls are unavailable. Restart Eye of Zomm and try again.');return globalThis.eyeOfZommDiscovery.action('contribute',{id:'spawn-'+prompt.candidateId});}).catch(error=>warning(error.message||'The discovery request could not be opened.'))});}
         if(result.locationCaptured){let handled=false;try{handled=onDiscoveryLocation(result.locationCaptured,{...context,at:event.at||context?.at})===true;}catch(error){warning(error.message||'The discovery location could not be updated.');}if(!handled)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+result.locationCaptured.candidateId}).catch(()=>{});spawnArmedId='';if(selectedId===result.locationCaptured.candidateId)renderCandidate();notify('Spawn location saved for '+result.locationCaptured.name+'. Review it in Contribute.',{tone:'success'});}
         if(capture&&['loot','kill','zone','profile'].includes(event.type))void capture.observeLog({event,context}).catch(()=>{});
         return result;

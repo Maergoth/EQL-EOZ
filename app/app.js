@@ -6,7 +6,7 @@ import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
 import { routeDistanceLabel } from './route-guidance.js';
 import { formatWorldLocationForPlayer, waypointCommandForWorldLocation, wikiLocationToWorld } from './coordinate-system.js';
-import { resolveZoneRecord } from './zone-identity.js';
+import { resolveZoneRecord, viewerZoneTarget } from './zone-identity.js';
 import { mountAppUpdates } from './app-update-ui.js';
 import { compactParseSnapshot, createOverlaySession } from './overlay-session.js';
 import { mountOverlayController } from './overlay-controller.js';
@@ -732,7 +732,7 @@ function overlaySessionSnapshot() {
         parse:compactParseSnapshot(s), intel:{ npcs, zone:s.zone, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
             packVersion:pack.meta?.manifestVersion || pack.meta?.version || '', profileKey:JSON.stringify([profile.classes.slice().sort(),settings.itemTier,settings.era]),
             focusedNpcId:selected?.id || '', focusSequence:intelFocusSequence },
-        map:{ zone:s.zone, viewerZone:zoneRecord(s.zone)?.viewerName || zoneRecord(s.zone)?.name || s.zone, dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
+        map:{ zone:s.zone, viewerZone:viewerZoneTarget(pack.zones,s.zone,parser.zoneShortName), dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
             focus:overlayMapFocus && overlayMapFocus.dataVersion === mapDataRevision && zoneKey(overlayMapFocus.zone) === zoneKey(s.zone) ? overlayMapFocus : null,
             npcs:sources.filter(source => source.loc?.length >= 2).map(source => ({id:intelIdentity(source),name:source.name,loc:source.loc,raidInstance:raidVariant(source)})),
             route:{ points:navigation?.points || [], message:activeRoute && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? activeRoute.message : '' } } };
@@ -1817,14 +1817,14 @@ async function syncZoneToViewer(showFeedback = true) {
         if (!isCurrent()) return false;
         if (!folderReady) return fail('The current zone could not load because its local map files are unavailable.');
         $('#map-subtitle').textContent = request.message;
-        const record = zoneRecord(s.zone);
-        let result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
+        const target = viewerZoneTarget(pack.zones,s.zone,parser.zoneShortName);
+        let result = await apiObj.loadZone(target);
         if (!isCurrent()) return false;
         if (result?.reason === 'select-eq-folder-first') {
             const reconnected = await ensureViewerFolderConnected(false, true);
             if (!isCurrent()) return false;
             if (reconnected) {
-                result = await apiObj.loadZone(record?.viewerName || record?.name || s.zone);
+                result = await apiObj.loadZone(target);
                 if (!isCurrent()) return false;
             }
         }
@@ -2293,7 +2293,10 @@ function wireUi() {
     $('#settings-start-minimized').addEventListener('change', event => { void saveWindowSetting('startMinimized', event.target.checked); });
     document.addEventListener('pointerover', event => {
         const target = event.target.closest?.('[data-item-title]');
-        if (target && !target.contains(event.relatedTarget)) { hideItemTooltip(); itemTooltipHover.queue(target,event); }
+        if (target && !target.contains(event.relatedTarget)) {
+            if(activeTooltipMode==='focus'&&document.activeElement?.closest?.('[data-item-title]')===target)return;
+            hideItemTooltip();itemTooltipHover.queue(target,event);
+        }
     });
     document.addEventListener('pointermove', event => {
         const target = event.target.closest?.('[data-item-title]');
@@ -2303,7 +2306,13 @@ function wireUi() {
     });
     document.addEventListener('pointerout', event => {
         const target = event.target.closest?.('[data-item-title]');
-        if (target && !target.contains(event.relatedTarget) && document.activeElement !== target) hideItemTooltip();
+        if (target && !target.contains(event.relatedTarget)) {
+            itemTooltipHover.cancel();
+            // Removing a hovered row can deliver pointerout after keyboard
+            // focus has already been restored to its replacement control.
+            if(activeTooltipMode==='focus'&&document.activeElement?.closest?.('[data-item-title]'))return;
+            if(document.activeElement!==target)hideItemTooltip();
+        }
     });
     document.addEventListener('focusin', event => {
         const target = event.target.closest?.('[data-item-title]');
@@ -2313,7 +2322,15 @@ function wireUi() {
         const target = event.target.closest?.('[data-item-title]');
         if (target && !target.contains(event.relatedTarget)) hideItemTooltip();
     });
-    document.addEventListener('scroll',hideItemTooltip,true);
+    document.addEventListener('scroll',()=>{
+        itemTooltipHover.cancel();
+        // Browser scroll anchoring can run after a focused row is restored.
+        // Keep keyboard help attached to that exact focused control while
+        // dismissing pointer previews and every pending hover on scroll.
+        const focused=document.activeElement?.closest?.('[data-item-title]');
+        if(activeTooltipMode==='focus'&&focused?.closest('.view.is-active'))showItemTooltip(focused);
+        else hideItemTooltip();
+    },true);
     window.addEventListener('blur',hideItemTooltip);
     window.addEventListener('pagehide',()=>itemTooltipHover.dispose());
     document.addEventListener('keydown', event => {
@@ -2396,7 +2413,10 @@ function cancelDiscoveryChecks(){
 }
 window.eyeOfZommDiscovery?.onAction?.(event=>{
     const {action,id,candidateId,purpose,captureRequest,captureState,captureMessage}=event;
-    if(action==='contribute'&&['item-link','spawn-location'].includes(purpose)){
+    if(action==='set-notable'&&purpose==='spawn-location'){
+        let result;try{result=captureWorkspace.setDiscoveryNotable?.(event)||{ok:false,error:'Contribute is not ready. Try again.'};}catch(error){result={ok:false,error:error.message||'The notable choice could not be saved.'};}
+        void window.eyeOfZommDiscovery.action('notable-status',{id,candidateId,notableChoiceId:event.notableChoiceId,...result}).catch(()=>{});
+    }else if(action==='contribute'&&['item-link','spawn-location'].includes(purpose)){
         discoveryCaptureStates.set(id,{captureRequest,captureState:'waiting',captureMessage});
         void discoveryContributionFlow?.request(event);
     }else if(action==='capture-status'){

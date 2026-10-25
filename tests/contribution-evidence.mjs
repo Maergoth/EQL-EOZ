@@ -24,7 +24,7 @@ assert(parser.snapshot().observed.some(npc=>npc.name==='a copper watcher'&&npc.l
 let npc,zone=find('Hidden Vale');assert.equal(zone.fields.knownNPCs,undefined);
 
 parser.location={x:999,y:888,z:777};
-const killed=consume('You have slain a copper watcher!');npc=find('a copper watcher');assert.deepEqual(killed.prompt,{candidateId:npc.id,name:'a copper watcher',zone:'Hidden Vale',armed:true,expiresAt:clock+300000});
+const killed=consume('You have slain a copper watcher!');npc=find('a copper watcher');assert.deepEqual(killed.prompt,{candidateId:npc.id,name:'a copper watcher',zone:'Hidden Vale',spawnEvidenceId:npc.spawnRequest.evidenceId,armed:true,expiresAt:clock+300000});
 assert.equal(npc.evidence[0].event,'kill');assert.equal(npc.evidence[0].logLine,`[${new Date(clock).toISOString()}] You have slain a copper watcher!`);
 zone=find('Hidden Vale');assert.deepEqual(zone.fields.knownNPCs,{value:['a copper watcher'],confirmed:false});
 assert(npc.relations.some(relation=>relation.type==='mob-zone'&&relation.evidence==='kill'&&!relation.confirmed));

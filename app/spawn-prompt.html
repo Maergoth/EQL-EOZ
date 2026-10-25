@@ -3,6 +3,6 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'">
 <link rel="stylesheet" href="./spawn-prompt.css"></head><body>
 <main id="prompt" aria-live="polite"><header><span>Contribute · Spawn location</span><button id="dismiss" type="button" aria-label="Dismiss spawn prompt">×</button></header>
-<h1 id="name"></h1><p id="zone"></p><p>Stand at this monster’s spawn, then type <strong>/loc</strong> in EverQuest. The next location will be saved for review.</p>
+<h1 id="name"></h1><p id="zone"></p><fieldset id="notable-choice"><legend id="notable-question"></legend><div class="notable-actions"><button id="notable-yes" type="button" aria-pressed="false">Yes</button><button id="notable-no" type="button" aria-pressed="false">No</button><span id="notable-status" role="status">Optional · unanswered</span></div></fieldset><p>Stand at this monster’s spawn, then type <strong>/loc</strong> in EverQuest. The next location will be saved for review.</p>
 <footer><button id="contribute" type="button">Contribute</button><button id="ignore" type="button">Ignore</button><span id="remaining"></span></footer><p id="status" role="status"></p></main>
 <script type="module" src="./spawn-prompt.js"></script></body></html>

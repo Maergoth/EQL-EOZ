@@ -35,6 +35,8 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
         if(disposed||mode==='map'||task)return;
         const zone=session.map?.zone||session.zone;
         if(!zone){report('Waiting for a logged zone.');return;}
+        const target=typeof session.map?.viewerZone==='string'?session.map.viewerZone:zone;
+        if(!target){release();report('The logged zone short name has no verified matching archive. Check the selected zone and dataset.');return;}
         const currentTask={};const cancelled=new Promise((_,reject)=>{currentTask.cancel=()=>reject(Error('The 3D view was released.'));});cancelled.catch(()=>{});
         task=currentTask;dirty=false;const owner=epoch,key=contextKey(session);
         const wait=value=>Promise.race([value,cancelled]);
@@ -46,7 +48,7 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
             if(loaded!==key){
                 const folder=await wait(api.useConfiguredFolder());if(!current())return;
                 if(!folder?.ok)throw Error('Choose an EverQuest folder with zone archives in the main Settings.');
-                const result=await wait(api.loadZone(session.map?.viewerZone||session.map?.zone||session.zone));if(!current())return;
+                const result=await wait(api.loadZone(target));if(!current())return;
                 if(!result?.ok)throw Error(result?.message||'No matching local 3D archive was found for this zone.');
                 loaded=key;
             }

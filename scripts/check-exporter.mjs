@@ -12,16 +12,26 @@ const parser = readFileSync(parserPath, 'utf8');
 assert(source.includes("require_once __DIR__ . '/ItemLootSourceCounts.php';"), 'Producer requires its global-count collector.');
 assert(collector.includes("require_once __DIR__ . '/../extensions/DynamicZoneList/NpcLootWikitext.php';"), 'Collector retains its deployed wiki parser path.');
 assert(parser.includes('final class EqlNpcLootWikitext'), 'The matching source parser is mirrored.');
-assert(source.includes("'lootSourceCountsVersion' => 1"), 'The producer marks cached count metadata.');
+assert(parser.includes('static function contributionCoverage'), 'Producer and parser share affected-field coverage.');
+assert(parser.includes('static function authoredPageKind'), 'Actual entity identity is independent from field capability.');
+assert(source.includes("'lootSourceCountsVersion' => 2"), 'The producer marks verified real-NPC count metadata.');
 assert(source.includes("'lootSourceCounts' => (object)$lootSourceCounts"), 'The catalog includes statless item counts, preserving an empty JSON object.');
 assert(source.includes("'lootSetsVersion' => 1"), 'The producer versions explicit set membership.');
 assert(source.includes("'lootSets' => (object)$this->lootSets"), 'Set membership preserves an empty JSON object.');
 const schema = JSON.parse(readFileSync(new URL('../server/eye-of-zomm-pack.schema.json', import.meta.url), 'utf8'));
-assert.equal(schema.properties.meta.properties.lootSourceCountsVersion.const, 1);
+assert.equal(schema.properties.meta.properties.lootSourceCountsVersion.const, 2);
 assert.equal(schema.properties.lootSourceCounts.additionalProperties.$ref, '#/$defs/lootSourceCount');
 assert.deepEqual(schema.$defs.lootSourceCount.required, ['lootSourceCount', 'lootSourceCountComplete', 'lootSourceNpcs']);
 assert.equal(schema.properties.npcs.items.properties.aliases.type, 'array');
+assert.equal(schema.properties.npcs.items.properties.zoneScope.const, 'various');
+assert.equal(schema.properties.npcs.items.properties.categoryZones.type, 'array');
+assert.equal(schema.properties.zones.items.properties.viewerId.pattern,'^[a-z0-9][a-z0-9_]*$');
+assert(source.includes("$record['zoneScope'] = 'various';"), 'Literal Various scope survives the source projection.');
 assert.equal(schema.properties.meta.properties.lootSetsVersion.const, 1);
+assert.equal(schema.properties.meta.properties.wikiRelationshipCoverageVersion.const, 1);
+assert.equal(schema.properties.wikiRelationshipCoverage.additionalProperties.$ref, '#/$defs/relationshipCoverage');
+assert(source.includes("'wikiRelationshipCoverage' => (object)$this->wikiRelationshipCoverage"), 'Statless affected-field facts remain in the top-level map.');
+assert(!source.includes('automaticContributionPolicies'),'Whole-page lexical prototypes are absent from the final producer.');
 assert.equal(schema.properties.lootSets.additionalProperties.$ref, '#/$defs/lootSet');
 assert.deepEqual(schema.$defs.lootSet.required, ['items', 'complete']);
 assert.equal(schema.$defs.lootSet.properties.items.maxItems, 1000);
@@ -71,6 +81,10 @@ class MediaWikiServices {
 class CandidateIdentityHarness {
     private EqlItemLootSourceCounts $lootCounts;
     private array $lootTitleMemo = [];
+    private array $lootSourceKinds = [];
+    private array $wikiRelationshipCoverage = [];
+    private array $lootSets = [];
+    private array $lootCollectionMemo = [];
     public function __construct() { $this->lootCounts = new EqlItemLootSourceCounts(); }
     private function publicLootText($title, $page) { return '{{Namedmobpage}}'; }
 ${candidateMethod}

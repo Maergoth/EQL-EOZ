@@ -12,7 +12,7 @@ export function createAutomaticItemContribution({prepare,submit,cancel,onBusy=()
                 const prepared=await prepare({candidate:request.candidate,captureEvidence:request.observation.input.captureEvidence});
                 record.planId=prepared?.plan?.id||null;
                 if(!current(record)){await revoke(record);return false;}
-                if(!prepared?.ok){onDeferred(request.candidate,prepared?.reason||'This item needs review before publishing.',prepared?.plan);return false;}
+                if(!prepared?.ok){if(!prepared?.skipped)onDeferred(request.candidate,prepared?.reason||'This item needs review before publishing.',prepared?.plan);return false;}
                 if(!record.planId||!prepared.plan.reviewDigest)throw Error('The automatic item review was incomplete. Use Preview wiki changes.');
                 onPlan(request.candidate,prepared.plan);
                 if(!current(record)){await revoke(record);return false;}
@@ -20,7 +20,7 @@ export function createAutomaticItemContribution({prepare,submit,cancel,onBusy=()
                 // Always retain a confirmed publication receipt even if the user
                 // navigated while the final native request was completing.
                 if(result?.ok)onResult(request.candidate,result.plan);
-                else if(!record.cancelled)onDeferred(request.candidate,result?.reason||'This item needs review before publishing.',result?.plan||prepared.plan);
+                else if(!record.cancelled&&!result?.skipped&&!result?.plan?.automaticOptOut)onDeferred(request.candidate,result?.reason||'This item needs review before publishing.',result?.plan||prepared.plan);
                 return result?.ok===true;
             }catch(error){if(!record.cancelled)onError(request.candidate,error);return false;}
             finally{if(active===record)active=null;onBusy(false);}

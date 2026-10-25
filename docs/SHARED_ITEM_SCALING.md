@@ -82,3 +82,20 @@ Attack, delay and weight stay outside that whitelist.
 Focused checks cover canonical math/wiki DOM behavior, Character/cards/recovery,
 release snapshot integrity and the shared Windows/Linux artifact contract.
 Synthetic checks do not constitute new game calibration or live-site testing.
+
+## Calibration limits
+
+The current wiki statistics are treated as tier-zero values, as requested.
+The supplied Lustrous Russet Vambraces +3 screenshot remains an AC outlier:
+wiki base AC 15 predicts 19 under the shared rule, while the screenshot shows
+16. Its Strength and Dexterity agree with rank three. No item-specific
+exception or silent change to the wiki base was added. Another unmodified
+examine of that item at tier zero and a known higher rank would resolve this
+disagreement more reliably than fitting an exception to one image.
+
+Backstab here is the listed weapon Backstab Dmg field, not final combat damage.
+The rule is `base + floor(base × effectiveRank / 20)`. Whole ranks alone cannot
+distinguish linear accuracy from logarithmic progress; the supplied fractional
+Thornstinger, bow and staff readings provide that additional evidence.
+Weight follows the requested screenshot rule: subtract nine percent of base
+weight per logarithmic rank, then round upward to one decimal place.

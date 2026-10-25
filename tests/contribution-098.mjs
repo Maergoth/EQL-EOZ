@@ -12,11 +12,11 @@ const event=(type,fields,zone='Forest Glade',instance='normal')=>{clock+=1000;re
 assert.equal(event('loot',{item:'KNOWN_CLOAK +5'}).candidate,null,'A bare known item is not a new contribution');
 assert.equal(event('loot',{item:'Known Cloak',source:'FOREST WARDEN',sourceEvidence:{kind:'explicit-corpse'}}).candidate,null,'Existing normal source membership is canonical');
 let gap=event('loot',{item:'Known Cloak',source:'a new warden',sourceEvidence:{kind:'explicit-corpse'}}).candidate;
-assert.equal(gap.kind,'item');assert(gap.reasons.includes('missing-source'));assert.equal(gap.intent,'update');assert.equal(gap.canonicalTitle,'Known Cloak');assert.equal(gap.revisionId,12);
+assert.equal(gap.kind,'npc');assert(gap.reasons.includes('missing-page'));assert(!q.snapshot().some(candidate=>candidate.kind==='item'&&candidate.reasons.includes('missing-source')),'Unknown NPC is one discovery, without a duplicate item redlink task');
 assert(q.snapshot().some(candidate=>candidate.kind==='zone'&&candidate.reasons.includes('missing-population')));
 assert(q.snapshot().some(candidate=>candidate.kind==='npc'&&candidate.name==='a new warden'));
 const questCount=q.snapshot().length;event('loot',{item:'Quest Token',source:'Quest',sourceEvidence:{kind:'explicit-source'}});assert.equal(q.snapshot().length,questCount,'Intentional quest/provider text is not converted to a missing NPC source');
-assert(event('loot',{item:'Quest Token',source:'a different corpse',sourceEvidence:{kind:'explicit-corpse'}}).candidate.reasons.includes('missing-source'),'A genuinely distinct corpse remains reviewable');
+assert(event('loot',{item:'Quest Token',source:'a different corpse',sourceEvidence:{kind:'explicit-corpse'}}).candidate.reasons.includes('missing-page'),'A genuinely distinct unknown corpse remains a monster discovery');
 event('loot',{item:'Known Cloak',source:'Forest Warden',sourceEvidence:{kind:'explicit-corpse'}},'Forest Glade','raid');
 gap=q.snapshot().find(candidate=>candidate.kind==='item'&&candidate.name==='Known Cloak');assert(gap.relations.some(relation=>relation.instance==='raid'));
 
@@ -80,7 +80,7 @@ const legacy=[{id:'false-positive',kind:'item',name:'Known Cloak +5',title:'Know
     {id:'pet',kind:'npc',name:'Zabekn',title:'Zabekn',zone:'Forest Glade',fields:{},sources:[],relations:[],evidence:[],spawnRequest:{status:'requested'},status:'needs-review'},
     {id:'edited',kind:'item',name:'Quest Token',title:'Quest Token',fields:{notes:{value:'Contributor-authored text',edited:true}},sources:[],relations:[],status:'needs-review'},
     {id:'inflight',kind:'item',name:'Known Cloak',title:'Known Cloak',fields:{},sources:[],relations:[],status:'partial',planId:'partial-plan'},
-    {id:'real-gap',kind:'item',name:'Known Cloak',title:'Known Cloak',fields:{},sources:[],relations:[{type:'drop-source',name:'New corpse',zone:'Forest Glade',evidence:'explicit-corpse',instance:'normal'}],status:'needs-review'}];
+    {id:'real-gap',manual:true,kind:'item',name:'Known Cloak',title:'Known Cloak',fields:{},sources:[],relations:[{type:'drop-source',name:'New corpse',zone:'Forest Glade',evidence:'explicit-corpse',instance:'normal'}],status:'needs-review'}];
 const disk=new Map([[CONTRIBUTION_QUEUE_KEY,JSON.stringify({schemaVersion:1,candidates:legacy})]]),archiveStore={getItem:key=>disk.get(key),setItem:(key,value)=>disk.set(key,value)};
 let clean=createContributionQueue({...options,storage:archiveStore,autoReconcile:false});const before=disk.get(CONTRIBUTION_QUEUE_KEY),dry=clean.reconcile();assert.equal(disk.get(CONTRIBUTION_QUEUE_KEY),before);assert.equal(dry.rows.find(row=>row.id==='real-gap').action,'keep');
 clean.reconcile({apply:true});assert.deepEqual(clean.archived().map(candidate=>candidate.id),['false-positive','pet']);assert(clean.archived()[0].evidence.some(entry=>entry.id==='original'));assert.deepEqual(clean.snapshot().map(candidate=>candidate.id),['edited','inflight','real-gap']);const once=disk.get(CONTRIBUTION_QUEUE_KEY);clean=createContributionQueue({...options,storage:archiveStore});assert.equal(clean.reconcile({apply:true}).changed,false);assert.equal(disk.get(CONTRIBUTION_QUEUE_KEY),once);

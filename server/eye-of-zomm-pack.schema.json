@@ -33,9 +33,13 @@
           "type": "boolean"
         },
         "lootSourceCountsVersion": {
-          "const": 1
+          "const": 2,
+          "description": "Verified real public NPC identities only; redlinks and non-monster pages cannot inflate the lower bound."
         },
         "lootSetsVersion": {
+          "const": 1
+        },
+        "wikiRelationshipCoverageVersion": {
           "const": 1
         }
       }
@@ -53,6 +57,11 @@
           },
           "viewerName": {
             "type": "string"
+          },
+          "viewerId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "description": "Explicit preferred archive ID for a display label shared by multiple supported zone archives. A verified logged short name takes precedence."
           },
           "wikiTitle": {
             "type": "string"
@@ -80,6 +89,19 @@
           },
           "zone": {
             "type": "string"
+          },
+          "zoneScope": {
+            "const": "various",
+            "description": "Exact literal Various zone field on this scoped NPC template; does not create map coordinates."
+          },
+          "categoryZones": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 200,
+            "items": {
+              "type": "string"
+            },
+            "description": "Verified zone categories that drive the normal DynamicZoneList; not spawn/stat or raid identity."
           },
           "levelMin": {
             "type": "number"
@@ -237,6 +259,13 @@
         "type": "string",
         "pattern": "^data:image/"
       }
+    },
+    "wikiRelationshipCoverage": {
+      "type": "object",
+      "maxProperties": 100000,
+      "additionalProperties": {
+        "$ref": "#/$defs/relationshipCoverage"
+      }
     }
   },
   "$defs": {
@@ -258,6 +287,18 @@
           }
         },
         "complete": {
+          "type": "boolean"
+        },
+        "source": {
+          "$ref": "#/$defs/relationshipSource"
+        },
+        "possibleItems": {
+          "type": "array",
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+        },
+        "possibleItemsComplete": {
           "type": "boolean"
         }
       },
@@ -290,6 +331,306 @@
         }
       },
       "additionalProperties": false
+    },
+    "relationshipSource": {
+      "type": "object",
+      "required": [
+        "wikiTitle",
+        "revisionId"
+      ],
+      "properties": {
+        "wikiTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "revisionId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "section": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "instance": {
+          "enum": [
+            "normal",
+            "raid"
+          ]
+        }
+      }
+    },
+    "relationshipScope": {
+      "type": "object",
+      "required": [
+        "field",
+        "instance",
+        "state"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "instance": {
+          "enum": [
+            "normal",
+            "raid"
+          ]
+        },
+        "state": {
+          "enum": [
+            "exact",
+            "broad",
+            "unsupported",
+            "variant"
+          ]
+        },
+        "zone": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "section": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 96
+        },
+        "card": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "relationshipEdge": {
+      "type": "object",
+      "required": [
+        "field",
+        "instance",
+        "source"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "instance": {
+          "enum": [
+            "normal",
+            "raid"
+          ]
+        },
+        "zone": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "npc": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "item": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "precision": {
+          "enum": [
+            "npc",
+            "zone-npc"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/relationshipSource"
+        },
+        "collection": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "collectionSource": {
+          "$ref": "#/$defs/relationshipSource"
+        },
+        "verifiedNpc": {
+          "type": "boolean"
+        },
+        "ambiguous": {
+          "type": "boolean"
+        },
+        "section": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "lootKind": {
+          "enum": [
+            "known",
+            "common"
+          ]
+        }
+      }
+    },
+    "relationshipCollectionRef": {
+      "type": "object",
+      "required": [
+        "title",
+        "field",
+        "instance",
+        "complete",
+        "source"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "instance": {
+          "enum": [
+            "normal",
+            "raid"
+          ]
+        },
+        "zone": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "section": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "source": {
+          "$ref": "#/$defs/relationshipSource"
+        },
+        "collectionSource": {
+          "$ref": "#/$defs/relationshipSource"
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          }
+        }
+      }
+    },
+    "relationshipCoverage": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "kind",
+        "wikiTitle",
+        "revisionId",
+        "state",
+        "complete",
+        "edges",
+        "scopes",
+        "collectionRefs"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "enum": [
+            "item",
+            "npc",
+            "zone"
+          ]
+        },
+        "wikiTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "revisionId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "state": {
+          "enum": [
+            "exact",
+            "broad",
+            "unsupported",
+            "variant"
+          ]
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 96
+        },
+        "edges": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/relationshipEdge"
+          }
+        },
+        "scopes": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/relationshipScope"
+          }
+        },
+        "collectionRefs": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/relationshipCollectionRef"
+          }
+        },
+        "dynamicLists": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "required": [
+              "zone",
+              "instance",
+              "field"
+            ],
+            "properties": {
+              "zone": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              },
+              "instance": {
+                "enum": [
+                  "normal",
+                  "raid"
+                ]
+              },
+              "field": {
+                "const": "dynamic_population"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

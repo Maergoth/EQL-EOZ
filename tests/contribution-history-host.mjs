@@ -12,7 +12,7 @@ const at='2026-10-25T12:00:00.000Z',hash=value=>crypto.createHash('sha256').upda
 const directory=await fs.mkdtemp(path.join(os.tmpdir(),'eoz-contribution-history-'));
 function plan(id,{user=A,status='submitted',mode='manual',origin=ORIGIN,pages=null}={}){
     const value={id,wikiOrigin:origin,expectedUser:user,createdAt:at,blueprintRevision:1,blockers:[],matchesReviewed:true,status,
-        pages:pages||[{title:`Synthetic ${id}`,role:'primary',operation:'update',baseRevision:1,beforeHash:hash('before'),afterHash:hash('PRIVATE_AFTER_WIKICODE'),beforeText:'PRIVATE_BEFORE_WIKICODE',afterText:'PRIVATE_AFTER_WIKICODE',status:'applied',result:{revision:2,message:'PRIVATE_SERVER_ERROR',token:'PRIVATE_TOKEN'}}],
+        pages:pages||[{title:`Synthetic ${id}`,role:'primary',operation:'replace-reviewed',baseRevision:1,beforeHash:hash('before'),afterHash:hash('PRIVATE_AFTER_WIKICODE'),beforeText:'PRIVATE_BEFORE_WIKICODE',afterText:'PRIVATE_AFTER_WIKICODE',status:'applied',result:{revision:2,message:'PRIVATE_SERVER_ERROR',token:'PRIVATE_TOKEN'}}],
         request:{rawLog:'PRIVATE_RAW_LOG',ocr:'PRIVATE_OCR',token:'PRIVATE_TOKEN'}};
     if(mode==='automatic')value.automaticSource={observation:'PRIVATE_RAW_LOG'};
     return value;
@@ -35,7 +35,7 @@ function fixture({stateDir=null,user=A}={}){
     client.page=async title=>({title,missing:false,revision:1,content:'before',startTimestamp:at});
     return {client,calls,state};
 }
-async function submit(client,value){value.reviewDigest=client.digest(value);client.plans.set(value.id,value);return client.submitPlan({planId:value.id,reviewDigest:value.reviewDigest});}
+async function submit(client,value,options){value.reviewDigest=client.digest(value);client.plans.set(value.id,value);return client.submitPlan({planId:value.id,reviewDigest:value.reviewDigest},options);}
 try{
     const stateDir=path.join(directory,'retention'),f=fixture({stateDir});await f.client.load();
     assert.equal(f.calls.length,0,'Loading/backfilling receipts performs no wiki requests');
@@ -53,7 +53,7 @@ try{
     assert.equal(last.hasMore,false);assert.equal(last.nextCursor,null);
     assert(first.entries.some(entry=>entry.mode==='automatic'));assert(first.entries.some(entry=>entry.mode==='manual'));
     const entry=first.entries[0],page=entry.pages[0];
-    assert.equal(entry.status,'submitted');assert.equal(entry.createdAt,at);assert.equal(entry.updatedAt,at,'Legacy metadata keeps its original timestamp');
+    assert.equal(entry.status,'submitted');assert.equal(page.operation,'update','Native replace-reviewed operations become stable update receipts');assert.equal(entry.createdAt,at);assert.equal(entry.updatedAt,at,'Legacy metadata keeps its original timestamp');
     for(const url of [page.url,page.revisionUrl,page.diffUrl])assert.equal(new URL(url).origin,ORIGIN);
     assert.equal(new URL(page.revisionUrl).searchParams.get('oldid'),'2');assert.equal(new URL(page.diffUrl).searchParams.get('oldid'),'1');
     const historyText=await fs.readFile(path.join(stateDir,FILE_NAME),'utf8');
@@ -77,6 +77,9 @@ try{
     assert.equal((await submit(attempts.client,successful)).status,'submitted');
     let receipt=(await attempts.client.contributionHistory()).entries.find(value=>value.id===successful.id);assert.equal(receipt.status,'submitted');assert.equal(receipt.pages[0].revision,2);
     const partial=plan('partial-attempt',{status:'prepared',mode:'automatic'});partial.pages=Array.from({length:2},(_,index)=>({...successful.pages[0],title:`Synthetic Partial ${index}`,status:'pending',result:undefined}));attempts.state.outcomes=['success','failed'];
+    delete partial.automaticSource;partial.automaticItem={candidateId:'synthetic-captured-history',title:partial.pages[0].title,evidenceId:'PRIVATE_OCR',frameId:'synthetic-frame'};
+    // General automatic history can include an item and its effect page. Loot
+    // source plans use their own stricter one-author fixture separately.
     assert.equal((await submit(attempts.client,partial)).status,'partial');receipt=(await attempts.client.contributionHistory()).entries.find(value=>value.id===partial.id);
     assert.equal(receipt.status,'partly-submitted');assert.equal(receipt.mode,'automatic');assert.deepEqual(receipt.pages.map(value=>value.status),['applied','failed']);assert.equal(receipt.pages[1].revisionUrl,undefined);
     const uncertain=plan('uncertain-attempt',{status:'prepared'});uncertain.pages[0].status='pending';delete uncertain.pages[0].result;attempts.state.outcomes=['unknown'];

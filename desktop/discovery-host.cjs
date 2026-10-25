@@ -13,7 +13,7 @@ class DiscoveryHost {
         this.electron = electron; this.origin = origin; this.getMainWindow = getMainWindow; this.itemExistence=itemExistence;this.now=now;this.noticeGeneration=0;
         this.showMain = showMain; this.spawnWindow = null; this.spawnReady = null; this.spawnGeneration = 0;
         this.queue = []; this.disposed = false; this.capturing = false; this.captureId = null; this.captureGeneration = 0; this.contributionSequence = 0;
-        this.pendingNotices=new Map();this.retiredNotices=new Set();
+        this.pendingNotices=new Map();this.retiredNotices=new Set();this.notableSequence=0;
         this.notices=new DiscoveryNoticeWindow({electron,origin,getMainWindow,getState:()=>this.noticeState()});
         electron.ipcMain.handle(CHANNEL, (event, action, value) => this.handle(event, action, value));
         electron.ipcMain.handle(SPAWN_CHANNEL, (event, action, value) => this.handleSpawn(event, action, value));
@@ -35,7 +35,7 @@ class DiscoveryHost {
         return Boolean(window && !window.isDestroyed() && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && event.senderFrame?.url === `${this.origin}/spawn-prompt.html`);
     }
     contributionDetails(item) {
-        return {id:item.id,purpose:item.purpose,name:item.name,...(item.candidateId?{candidateId:item.candidateId}:{}),...(item.captureRequest?{captureRequest:item.captureRequest,captureState:item.captureState}:{}),...(item.captureMessage?{captureMessage:item.captureMessage}:{})};
+        return {id:item.id,purpose:item.purpose,name:item.name,...(item.candidateId?{candidateId:item.candidateId,zone:item.zone,...(item.spawnEvidenceId?{spawnEvidenceId:item.spawnEvidenceId}:{}),...(typeof item.notable==='boolean'?{notable:item.notable}:{})}:{}),...(item.captureRequest?{captureRequest:item.captureRequest,captureState:item.captureState}:{}),...(item.captureMessage?{captureMessage:item.captureMessage}:{})};
     }
     startContribution(item) {
         const main = this.getMainWindow();
@@ -52,9 +52,18 @@ class DiscoveryHost {
     async handleSpawn(event, action, value) {
         if (this.disposed || !this.isSpawn(event)) throw new Error('The spawn prompt is unavailable.');
         if (action === 'get-state') return this.spawnState();
-        if (!['contribute','ignore','dismiss'].includes(action)) throw new Error('Unknown spawn prompt action.');
+        if (!['contribute','ignore','dismiss','set-notable'].includes(action)) throw new Error('Unknown spawn prompt action.');
         const item = this.queue.find(item => item.purpose === 'spawn-location' && item.id === value?.id);
         if (!item) throw new Error('This spawn prompt has expired.');
+        if(action==='set-notable'){
+            if(value.candidateId!==item.candidateId||typeof value.notable!=='boolean')throw Error('This notable choice does not match the current monster.');
+            if(item.notablePending)throw Error('Wait for the current notable choice to be saved.');
+            const main=this.getMainWindow();if(!main||main.isDestroyed())throw Error('Open the main app and try again.');
+            const previousNotable=typeof item.notable==='boolean'?item.notable:null;
+            item.notable=value.notable;item.notablePending=true;item.notableChoiceId=`notable-${++this.notableSequence}`;delete item.notableMessage;
+            main.webContents.send('eye-of-zomm:discovery-action',{action:'set-notable',...this.contributionDetails(item),previousNotable,notableChoiceId:item.notableChoiceId});
+            this.publishSpawn();return{ok:true,pending:true,...this.contributionDetails(item)};
+        }
         if (action === 'contribute') return this.startContribution(item);
         this.queue = this.queue.filter(entry => entry.id !== item.id);
         const main = this.getMainWindow();
@@ -73,7 +82,7 @@ class DiscoveryHost {
         let window = this.spawnWindow;
         if (!window || window.isDestroyed()) {
             const generation = ++this.spawnGeneration;
-            window = new this.electron.BrowserWindow({title:'Eye of Zomm · Spawn location',width:380,height:218,show:false,frame:false,transparent:false,resizable:false,minimizable:false,maximizable:false,fullscreenable:false,skipTaskbar:true,alwaysOnTop:true,backgroundColor:'#101722',autoHideMenuBar:true,
+            window = new this.electron.BrowserWindow({title:'Eye of Zomm · Spawn location',width:400,height:300,show:false,frame:false,transparent:false,resizable:false,minimizable:false,maximizable:false,fullscreenable:false,skipTaskbar:true,alwaysOnTop:true,backgroundColor:'#101722',autoHideMenuBar:true,
                 webPreferences:{preload:path.join(__dirname,'spawn-prompt-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,allowRunningInsecureContent:false,devTools:false,partition:'eoz-spawn-prompt'}});
             this.spawnWindow = window;
             const session = window.webContents.session;
@@ -94,7 +103,7 @@ class DiscoveryHost {
         if(this.spawnReady)await this.spawnReady;
         if (!this.spawnState().length || this.disposed || this.spawnWindow!==window || window.isDestroyed()) return;
         const screen=this.electron.screen,point=screen.getCursorScreenPoint?.(),display=point&&screen.getDisplayNearestPoint?.(point)||screen.getPrimaryDisplay?.()||screen.getAllDisplays()[0],work=display?.workArea||{x:0,y:0,width:800,height:600};
-        const width=Math.max(1,Math.min(380,work.width-24)),height=Math.max(1,Math.min(218,work.height-24));
+        const width=Math.max(1,Math.min(400,work.width-24)),height=Math.max(1,Math.min(300,work.height-24));
         window.setBounds({x:Math.round(work.x+work.width-width-12),y:Math.round(work.y+work.height-height-12),width,height});
         window.setAlwaysOnTop?.(true,'pop-up-menu');this.publishSpawn();window.showInactive();
     }
@@ -105,6 +114,15 @@ class DiscoveryHost {
             return this.itemExistence?this.itemExistence.check(value):{status:'unknown',source:'cache'};
         }
         if(action==='cancel-item-checks'){if(!this.isMain(event))throw Error('Wiki item lookup is unavailable.');this.noticeGeneration++;this.pendingNotices.clear();this.itemExistence?.clear();return{ok:true};}
+        if(action==='notable-status'){
+            if(!this.isMain(event))throw Error('Notable choice confirmation is unavailable.');
+            const item=this.queue.find(item=>item.purpose==='spawn-location'&&item.id===value?.id);
+            if(!item||!item.notablePending||value.candidateId!==item.candidateId||value.notableChoiceId!==item.notableChoiceId)throw Error('This notable choice is no longer active.');
+            if(typeof value.ok!=='boolean'||value.ok&&value.notable!==item.notable)throw Error('Invalid notable choice confirmation.');
+            item.notablePending=false;
+            if(!value.ok){if(typeof value.notable==='boolean')item.notable=value.notable;else delete item.notable;item.notableMessage=String(value.error||'Review the notable choice in Contribute.').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,240);}
+            this.publishSpawn();return{ok:true};
+        }
         if (action === 'show') {
             if (!this.isMain(event)) throw new Error('Wiki discovery registration is unavailable.');
             if (!value || !['item', 'monster'].includes(value.kind) || typeof value.id !== 'string' || !value.id.trim() || value.id.length > 512 ||
@@ -113,6 +131,7 @@ class DiscoveryHost {
             const itemLink = value.purpose === 'item-link';
             if (itemLink && value.kind !== 'item') throw new Error('Invalid item link request.');
             if (spawn && (value.kind !== 'monster' || typeof value.candidateId !== 'string' && !value.id.startsWith('spawn-') || typeof value.candidateId==='string'&&(!value.candidateId.trim()||value.candidateId.length>240) || !value.candidateId&&!value.id.slice(6).trim())) throw new Error('Invalid spawn location request.');
+            if(spawn&&(value.spawnEvidenceId!==undefined&&(typeof value.spawnEvidenceId!=='string'||!value.spawnEvidenceId||value.spawnEvidenceId.length>240)||value.notable!==undefined&&typeof value.notable!=='boolean'))throw Error('Invalid spawn classification request.');
             const generation=this.noticeGeneration,startedAt=this.now();let expiresAt=startedAt+15000;
             if(value.kind==='item'&&(value.createdAt!==undefined||value.expiresAt!==undefined)){
                 if(!Number.isSafeInteger(value.createdAt)||!Number.isSafeInteger(value.expiresAt)||value.createdAt>startedAt+1000||value.expiresAt<=value.createdAt||value.expiresAt-value.createdAt>60000)throw Error('Invalid wiki notice lifetime.');
@@ -133,7 +152,7 @@ class DiscoveryHost {
             // old, inactive prompt after the new one expires.
             if (spawn) this.queue = this.queue.filter(item => item.purpose !== 'spawn-location');
             if (this.queue.length >= 20) return { ok:false, queued:false, error:'The wiki suggestion list is full.' };
-            this.queue.push({ id:value.id, kind:value.kind, name:value.name, zone:String(value.zone || '').slice(0, 240),...(typeof value.hint==='string'?{hint:value.hint.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,400)}:{}),...(spawn?{purpose:'spawn-location',candidateId:String(value.candidateId||value.id.slice(6)).slice(0,240)}:itemLink?{purpose:'item-link'}:{}) });
+            this.queue.push({ id:value.id, kind:value.kind, name:value.name, zone:String(value.zone || '').slice(0, 240),...(typeof value.hint==='string'?{hint:value.hint.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,400)}:{}),...(spawn?{purpose:'spawn-location',candidateId:String(value.candidateId||value.id.slice(6)).slice(0,240),...(value.spawnEvidenceId?{spawnEvidenceId:value.spawnEvidenceId}:{}),...(typeof value.notable==='boolean'?{notable:value.notable}:{})}:itemLink?{purpose:'item-link'}:{}) });
             if (spawn) try { await this.showSpawn(); } catch { this.queue=this.queue.filter(item=>item.id!==value.id);return {ok:false,queued:false,error:'The spawn prompt could not open. The request remains in Contribute.'}; }
             else try{await this.notices.show();}catch{this.queue=this.queue.filter(item=>item.id!==value.id);return{ok:false,queued:false,error:'The wiki suggestion popup could not open.'};}
             return { ok:true, queued:true };

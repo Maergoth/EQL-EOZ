@@ -13,7 +13,7 @@ function recordKeys(record,title){
 
 export function assertGlobalLootCountContract(pack){
     const counts=pack?.lootSourceCounts;
-    if(pack?.meta?.lootSourceCountsVersion!==1||!counts||typeof counts!=='object'||Array.isArray(counts))throw Error('Production bootstrap requires global loot count metadata version 1; rebuild and publish the reviewed wiki dataset.');
+    if(pack?.meta?.lootSourceCountsVersion!==2||!counts||typeof counts!=='object'||Array.isArray(counts))throw Error('Production bootstrap requires global loot count metadata version 2; rebuild and publish the reviewed wiki dataset.');
     const rows=Object.entries(counts);if(!rows.length||rows.length>MAX_RECORDS)throw Error('Production bootstrap requires a nonempty, bounded global loot count index.');
     const indexed=new Map();let complete=0,common=0;
     for(const [title,record]of rows){const key=titleKey(title);if(indexed.has(key))throw Error('Global loot count index repeats a canonical item title.');const keys=recordKeys(record,title);indexed.set(key,{record,keys});if(record.lootSourceCountComplete)complete++;if(record.lootSourceCount>=6)common++;}

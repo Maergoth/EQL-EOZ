@@ -28,9 +28,9 @@ function planReceipt(plan,now){
     if(!attempted)return null;
     const pages=[];
     for(const page of plan.pages){
-        if(!text(page?.title,300)||!['create','update'].includes(page.operation))return null;
+        if(!text(page?.title,300)||!['create','update','replace-reviewed'].includes(page.operation))return null;
         const status=['applied','unknown','failed'].includes(page.status)?page.status:'pending';
-        pages.push({title:page.title,operation:page.operation,status,...(text(page.role,64)?{role:page.role}:{}),
+        pages.push({title:page.title,operation:page.operation==='replace-reviewed'?'update':page.operation,status,...(text(page.role,64)?{role:page.role}:{}),
             ...(status==='applied'&&revision(page.result?.revision)?{revision:page.result.revision}:{}),
             ...(revision(page.baseRevision)?{baseRevision:page.baseRevision}:{}),
             ...(code(page.result?.code)?{code:code(page.result.code)}:{})});

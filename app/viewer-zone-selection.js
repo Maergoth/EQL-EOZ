@@ -1,4 +1,4 @@
-import { viewerZoneName } from './zone-identity.js';
+import { viewerZoneName,viewerArchiveIds } from './zone-identity.js';
 
 function normalized(value) {
     return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -32,5 +32,7 @@ export function selectViewerZoneOption(options, value) {
     if (fullIdentity) return fullIdentity.option;
     const byId = uniqueZone(entries.filter(entry => normalized(entry.id) === wanted || normalized(entry.id) === canonical));
     if (byId) return byId;
+    const equivalents=viewerArchiveIds(wanted).slice(1);
+    for(const id of equivalents){const equivalent=uniqueZone(entries.filter(entry=>normalized(entry.id)===id));if(equivalent)return equivalent;}
     return uniqueZone(entries.filter(entry => entry.names.includes(wanted) || entry.names.includes(canonical)));
 }

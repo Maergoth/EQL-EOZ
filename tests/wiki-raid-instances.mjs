@@ -101,6 +101,9 @@ class Title {
     public static function makeTitle($namespace, string $value) { return new self($value); }
     public static function newFromText(string $value, $namespace = 0) { return new self($value); }
     public function getText() { return $this->text; }
+    public function getNamespace() { return preg_match('/^(?:File|Template|User|Talk|Category):/i', $this->text) ? 1 : 0; }
+    public function isExternal() { return false; }
+    public function getFragment() { return ''; }
     public function exists() { return isset($GLOBALS['fixtures'][$this->text]); }
 }
 define('NS_MAIN', 0);

@@ -34,7 +34,7 @@ export function createDiscoveryNoticeQueue({now = Date.now, durationMs = 15000, 
         entry.error = state === 'retry';
         if (state === 'captured') {
             entry.holds.delete('contribution');
-            if (changed) {entry.remainingMs = 900; entry.startedAt = entry.visible ? now() : null;}
+            if (changed) {entry.remainingMs = durationMs; entry.startedAt = entry.visible ? now() : null;}
         } else entry.holds.add('contribution');
     }
     return {
