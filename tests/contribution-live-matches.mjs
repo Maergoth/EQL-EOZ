@@ -19,7 +19,7 @@ lookup.dispose();failed.dispose();
 const dom=new JSDOM('<form><input name="title" value="Synthetic Blade"><input name="hp" value=""><div data-live-matches-status></div><div data-results></div></form>');
 const form=dom.window.document.querySelector('form'),status=form.querySelector('[data-live-matches-status]'),pending=[],results=[];
 let active=false;
-const auto=createContributionMatchLookup({lookup:request=>new Promise(done=>pending.push({request,done}))});
+const auto=createContributionMatchLookup({lookup:request=>new Promise((done,fail)=>pending.push({request,done,fail}))});
 const view=mountContributionLiveMatches({form,candidate:{kind:'item',id:'item-1'},lookup:auto,isActive:()=>active,delayMs:5,onResult(result,request){results.push(request.name);form.querySelector('[data-results]').textContent=result.matches.map(row=>row.title).join(', ');}});
 await tick();assert.equal(pending.length,0,'Hidden Contribute does not start live matching');
 active=true;view.refresh();await tick();assert.equal(pending.length,1,'Entering Contribute checks the selected entry automatically');
@@ -33,6 +33,9 @@ view.refresh();await tick();assert.equal(pending.length,2,'Regular app refresh d
 form.elements.title.value='Synthetic Other Blade';form.elements.title.dispatchEvent(new dom.window.Event('input',{bubbles:true}));await new Promise(done=>setTimeout(done,15));assert.equal(pending.length,3);
 active=false;pending[2].done({matches:[{title:'Synthetic Other Blade'}]});await tick();assert.equal(results.length,1,'Leaving Contribute suppresses late result updates');
 active=true;view.refresh();await tick();assert.equal(pending.length,3,'Returning reuses the completed lookup');assert.equal(results.at(-1),'Synthetic Other Blade');
+form.elements.title.value='Synthetic Failed Blade';form.elements.title.dispatchEvent(new dom.window.Event('input',{bubbles:true}));await new Promise(done=>setTimeout(done,15));assert.equal(pending.length,4);
+active=false;pending[3].fail(Error('offline'));await tick();active=true;view.refresh();await tick();
+assert.match(status.textContent,/unavailable/,'A failure while hidden cannot leave the returning editor stuck Checking');assert.equal(pending.length,4,'Returning reuses failure backoff instead of immediately requesting again');
 view.dispose();auto.dispose();dom.window.close();
 console.log('Automatic contribution matching: active-only selection, coalescing/cache/backoff, title debounce, stale-result and hidden-view guards, preserved stat form and no polling passed.');
 

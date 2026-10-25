@@ -47,7 +47,8 @@ export function mountContributionLiveMatches({form,candidate,lookup,isActive=()=
             if(!current(request,epoch)){if(!disposed&&epoch===version)checkedKey='';return;}
             onResult(result,request);status.textContent='Live wiki checked. Preview verifies the page again before publishing.';
         }).catch(()=>{
-            if(current(request,epoch))status.textContent='Live wiki matching is unavailable. Preview will retry the live checks.';
+            if(!current(request,epoch)){if(!disposed&&epoch===version)checkedKey='';return;}
+            status.textContent='Live wiki matching is unavailable. Preview will retry the live checks.';
         });
     }
     const input=event=>{
