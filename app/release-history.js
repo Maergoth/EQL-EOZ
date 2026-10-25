@@ -3,13 +3,17 @@ const freeze = value => { if(value && typeof value === "object") { Object.values
 export const RELEASE_HISTORY = freeze([
 {
   "version": "1.0.1",
-  "title": "Stable discoveries and item pages",
+  "title": "Stable discoveries, combat and maps",
   "changes": [
     "Match canonical item names within flattened chat instead of treating quoted sales prose as a new item. Genuine encoded item links retain their exact boundaries.",
     "Keep Discovery rows, filter controls, scroll position and the selected draft stable during background updates and verification renewal. Previously unseen gaps still require live confirmation; publishing still requires fresh proof.",
     "Reversibly archive proven untouched old chat-caption suggestions while preserving reviewed, edited, OCR-supported, loot and source-bearing work.",
     "Generate item stat blocks in the wiki blueprint format, including canonical Atk Delay and WT labels, without inventing missing item values or flags.",
-    "Keep map-selection controls and their options readable against the application's dark background."
+    "Keep map-selection controls and their options readable against the application's dark background.",
+    "Attribute heal-over-time ticks and critical heals to their logged healer, and remove repetitive explanations below the Parse tables.",
+    "Count measured short heals, damage-shield retaliation, unnamed-caster DoT damage and nearby reave/smite attacks while retaining unknown sources and separate pet names.",
+    "Match a first unnamed DoT tick to the earliest pending cast of that exact spell. Explicit caster names take priority; unavailable or conflicting context remains unknown.",
+    "Restore Nektropos Castle and Undercrofts in both 3D map views, including their local companion files and Castle's large terrain mesh."
   ],
   "steps": [
     {

@@ -1,6 +1,6 @@
 # EQLWiki — Eye of Zomm
 
-**1.0.1: Stable discoveries and item pages.** Canonical chat item matching, protected legacy-caption cleanup, a Discovery queue that keeps its rows and edits in place, blueprint-style item stat blocks, and readable map selectors. See [queue stability](docs/DISCOVERY_QUEUE_STABILITY.md) and [item formatting](docs/ITEM_CONTRIBUTION_FORM.md).
+**1.0.1: Stable discoveries, combat and maps.** Canonical chat item matching, stable Discovery rows and edits, blueprint-style item pages, corrected healing and DoT attribution, and restored Nektropos 3D maps. See [queue stability](docs/DISCOVERY_QUEUE_STABILITY.md), [item formatting](docs/ITEM_CONTRIBUTION_FORM.md) and [combat attribution](docs/COMBATANT_OVERVIEW.md).
 
 **1.0.0: Eye of Zomm.** Responsive logged-location maps, shared Crawl progress, per-combatant parsing and AA, retained Live encounters, explicit weapon-base previews, a structured contribution form and one Screen Reading master switch. Native desktop and installer icons use the eye. See [the release record](docs/RELEASE_1_0_PLAN.md).
 
