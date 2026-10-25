@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {mountMapOverlay3D} from '../app/map-overlay-3d.js';
-import {installOverlayMode} from '../app/zoneviewer/overlay-mode.js';
+import {installOverlayMode,installViewerTopPan} from '../app/zoneviewer/overlay-mode.js';
 
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
@@ -41,6 +41,12 @@ try{
     unverified.session.map.viewerZone='';await unverified.controller.setMode('top');
     assert.equal(unverified.frames.length,0,'An explicitly unverified short name cannot fall back to a different display-name archive');assert.match(unverified.statuses.at(-1),/no verified matching archive/);
 }finally{unverified.controller.dispose();}
+const retryApi={useConfiguredFolder:async()=>({ok:true}),loadZone:async()=>({ok:true}),setView(){},setRareMobs(){},setOverlayRoute(){},resize(){},syncLocation(){return ++this.attempts===1?{ok:false,reason:'load-zone-first'}:{ok:true};},attempts:0},retrying=fixture([retryApi]);
+try{await retrying.controller.setMode('top');assert.equal(retryApi.attempts,1);retrying.controller.render(retrying.session);await tick();assert.equal(retryApi.attempts,2,'an initial rejected location sample must be retried even when coordinates did not change');}finally{retrying.controller.dispose();}
+
+const createdControls=[],factory={orbit:{mouseButtons:{LEFT:0,RIGHT:2}},createOrbitControls(camera,mapOnly){const controls={camera,mapOnly,mouseButtons:{LEFT:mapOnly?2:0,RIGHT:2},noRotate:false};createdControls.push(controls);return controls;}};
+const originalFactory=factory.createOrbitControls,pan=installViewerTopPan(factory);assert.deepEqual(factory.orbit.mouseButtons,{LEFT:2,RIGHT:0});
+const topControls=factory.createOrbitControls({},false),flatControls=factory.createOrbitControls({},true);assert.equal(topControls.mouseButtons.LEFT,2,'Top 3D left drag uses the pinned MOUSE.PAN action');assert.equal(topControls.mouseButtons.RIGHT,0,'explicit right drag retains perspective rotation');assert.equal(topControls.noRotate,false);assert.deepEqual(flatControls.mouseButtons,{LEFT:2,RIGHT:2},'flat-map controls retain their established mapping');pan.dispose();assert.equal(factory.createOrbitControls,originalFactory);
 
 const oldLoad=deferred(),newLoad=deferred();let oldCalls=0,newCalls=0,newModes=[];
 const oldApi={useConfiguredFolder:async()=>({ok:true}),loadZone:()=>{oldCalls++;return oldLoad.promise;}};

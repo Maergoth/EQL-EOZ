@@ -38,6 +38,23 @@ async function run({root,temporary,fixtureWorkArea,scaleFactor}){
         window.__fixturePointerTarget=expected;return{count:window.__fixturePointerNoiseCount||0,events:window.__fixturePointerNoise||[]};
     },point);
     const until=async(fn,label)=>{for(let n=0;n<100;n++){if(await fn())return;await wait(30);}throw Error(label);};
+    const seedResizeBounds=async(id,win,bounds)=>{
+        // Fixture placement changes position and size together. X11 may emit
+        // the move before the resize; treating that setup as a native drag
+        // can persist/reapply the old size before the requested size arrives.
+        // Match seedLayout below: guard only setup, then restore the real
+        // handlers before any trusted pointer gesture is sent.
+        const wasSync=host.dockingSync;host.cancelPanelMove(id);host.dockingSync=true;
+        let changedAt=Date.now();const changed=()=>{changedAt=Date.now();};win.on('move',changed);win.on('resize',changed);
+        try{
+            host.preferences.panels[id].bounds={...bounds};host.apply(id);
+            await until(async()=>{
+                const current=win.getBounds(),saved=host.getState().panels[id].bounds;
+                if(Date.now()-changedAt<350||!['x','y','width','height'].every(key=>Math.abs(current[key]-bounds[key])<=1&&Math.abs(saved[key]-current[key])<=1))return false;
+                return execute(win,expected=>Math.abs(document.documentElement.clientWidth-expected.width)<=1&&Math.abs(document.documentElement.clientHeight-expected.height)<=1,current);
+            },'native, saved and renderer bounds settle after fixture positioning');
+        }finally{host.cancelPanelMove(id);win.off('move',changed);win.off('resize',changed);host.dockingSync=wasSync;}
+    };
     const watchdog=setTimeout(()=>{console.error('Overlay resize/drag native watchdog');app.exit(1);},75000),results=[];
     try{
         await host.initialize();const cycles=[host.getState().globalMode];for(const expected of ['locked','hidden','unlocked']){await host.control('cycle-all');assert.equal(host.getState().globalMode,expected);cycles.push(expected);}for(const [id,win]of host.windows){
@@ -53,7 +70,7 @@ async function run({root,temporary,fixtureWorkArea,scaleFactor}){
                 nativeHits=JSON.parse((await execFile('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(ps,'utf16le').toString('base64')],{encoding:'utf8',windowsHide:true,timeout:10000})).stdout);assert.equal(nativeHits.thickFrame,false);for(const hit of nativeHits.hits)assert.equal(hit.hit,1,`${id}/${hit.edge} is native client input, not a denied frame border`);
             }
             for(const edge of ['se','e','s','w','n','nw','ne','sw']){
-                const requested={x:workArea.x+300,y:workArea.y+220,width:400,height:id==='timers'?120:260};win.setBounds(requested);try{await until(()=>execute(win,expected=>Math.abs(document.documentElement.clientWidth-expected.width)<=1&&Math.abs(document.documentElement.clientHeight-expected.height)<=1,requested),'both viewport dimensions ready after positioning');}catch(error){throw Error(`${id}/${edge}: ${error.message}; native=${JSON.stringify({bounds:win.getBounds(),contentBounds:win.getContentBounds(),minimum:win.getMinimumSize(),maximum:win.getMaximumSize(),ozone:app.commandLine.getSwitchValue('ozone-platform'),workAreas:fixtureScreen.getAllDisplays().map(display=>display.workArea),preferences:host.getState().panels})}; renderer=${JSON.stringify(await execute(win,()=>({width:document.documentElement.clientWidth,height:document.documentElement.clientHeight,innerWidth,innerHeight,devicePixelRatio,handles:document.querySelectorAll('.overlay-resize-edge:not([hidden])').length})))}`);}
+                const requested={x:workArea.x+300,y:workArea.y+220,width:400,height:id==='timers'?120:260};try{await seedResizeBounds(id,win,requested);}catch(error){throw Error(`${id}/${edge}: ${error.message}; native=${JSON.stringify({bounds:win.getBounds(),contentBounds:win.getContentBounds(),minimum:win.getMinimumSize(),maximum:win.getMaximumSize(),ozone:app.commandLine.getSwitchValue('ozone-platform'),workAreas:fixtureScreen.getAllDisplays().map(display=>display.workArea),preferences:host.getState().panels})}; renderer=${JSON.stringify(await execute(win,()=>({width:document.documentElement.clientWidth,height:document.documentElement.clientHeight,innerWidth,innerHeight,devicePixelRatio,handles:document.querySelectorAll('.overlay-resize-edge:not([hidden])').length})))}`);}
                 await execute(win,()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
                 const before=win.getBounds(),point=await execute(win,edge=>{const handle=document.querySelector(`[data-resize-edge="${edge}"]`),rect=handle.getBoundingClientRect();window.__resizeTrusted=false;window.__resizePointer=[];if(!window.__resizeTraceInstalled){window.__resizeTraceInstalled=true;for(const type of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture'])document.addEventListener(type,event=>{if(window.__resizePointer.length<20)window.__resizePointer.push({type,trusted:event.isTrusted,edge:event.target.dataset?.resizeEdge,screenX:event.screenX,screenY:event.screenY,clientX:event.clientX,clientY:event.clientY,pointerId:event.pointerId,viewport:{width:document.documentElement.clientWidth,height:document.documentElement.clientHeight}});},true);}handle.addEventListener('pointerdown',event=>{window.__resizeTrusted=event.isTrusted;},{once:true});return{x:Math.round(rect.left+rect.width/2),y:Math.round(rect.top+rect.height/2)};},edge),dx=edge.includes('w')?-20:edge.includes('e')?20:0,dy=edge.includes('n')?-12:edge.includes('s')?12:0;
                 const start={...point,globalX:before.x+point.x,globalY:before.y+point.y},moved={x:point.x+dx,y:point.y+dy,globalX:before.x+point.x+dx,globalY:before.y+point.y+dy};

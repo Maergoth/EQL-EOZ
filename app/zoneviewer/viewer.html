@@ -57,7 +57,7 @@ import { deferHiddenViewportFit } from '../viewport-framing.js';
 import { installZoneLoadGuard } from '../zone-load-guard.js';
 import { selectViewerZoneOption } from '../viewer-zone-selection.js';
 import { installMiniMapControls } from '../minimap-controls.js';
-import { installOverlayMode } from './overlay-mode.js';
+import { installOverlayMode, installViewerTopPan } from './overlay-mode.js';
 import { installViewerPlayerState, knownViewerLocation } from './player-state.js';
 
 const overlayMode=new URLSearchParams(window.location.search).get('overlay')==='1';
@@ -78,6 +78,7 @@ app.fp?.setFly?.(true);
 window.eqlZoneViewer = app;
 installMiniMapControls(app);
 const playerState=installViewerPlayerState({app,root,externalSlice:overlayMode});
+const topPan=installViewerTopPan(app);
 const viewportFraming = deferHiddenViewportFit(app, () => {
     if (lastSyncedGround) focusTopViewAt(lastSyncedGround);
 });
@@ -864,7 +865,10 @@ window.eqlEyeOfZommViewer = {
 
         // Logged locations are world X/Y/Z. Client map files have a separate
         // signed basis and use eqMapToThree instead.
-        const observation=playerState.observe(location);
+        const sample={x:Number(location.x),y:Number(location.y),z:Number(location.z)};
+        const movement = headingTracker.push(sample, Number(options.timestamp) || Date.now());
+        if(movement.teleported){headingTracker.reset();headingTracker.push(sample,Number(options.timestamp)||Date.now());movement.heading=null;}
+        const observation=playerState.observe(sample,{heading:movement.heading});
         if(!observation.ok)return observation;
         const worldLocation = observation.world;
         const point = app.eqWorldToThree(worldLocation.x, worldLocation.y, worldLocation.z);
@@ -874,7 +878,6 @@ window.eqlEyeOfZommViewer = {
         // tolerance configured for player movement.
         const ground = observation.ground;
         lastSyncedGround = ground.clone();
-        const movement = headingTracker.push(worldLocation, Number(options.timestamp) || Date.now());
         const previousForward = app.lastFirstPersonPose?.forward?.clone?.();
         let forward = previousForward;
         if (movement.heading) {
@@ -1128,6 +1131,7 @@ if(overlayMode){
 
 window.addEventListener('beforeunload', resetSpatialRouteState, { once:true });
 window.addEventListener('beforeunload',()=>playerState.dispose(),{once:true});
+window.addEventListener('beforeunload',()=>topPan.dispose(),{once:true});
 window.parent?.postMessage({ type:'eoz-viewer-ready' }, window.location.origin);
 </script>
 </body>

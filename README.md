@@ -4,6 +4,8 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
+**0.9.15: verified discoveries, zones and map controls.** Automatic discoveries stay hidden until a live public wiki check confirms the gap. Known cached facts avoid network requests; failed or inconclusive checks remain quiet. Red × dismisses a discovery, and ∞× permanently ignores its NPC/item until restored in Contribution History. New zone pages use one normal/raid blueprint with overview and Map placeholders. Log zone anchoring and same-visit numeric /con suggestions preserve evidence, while the top 3D map supports visible player markers and left-drag pan. See [release verification](docs/RELEASE_0915_PLAN.md).
+
 **0.9.14: contribution history and safer loot discovery.** Open
 **Contribute → Contribution History** to see this device's automatic and reviewed submissions
 for your signed-in wiki account, including partly saved and unconfirmed results.
@@ -165,8 +167,11 @@ verified package download and manual installation handoff.
 
 The native Map reads your client text maps and shares the logged position, named destinations and validated route with the main app. Hover the full zone-title row for **Reset**, Follow, zoom and a button cycling **Map → Top → First person** beside its name. A separate grip moves the unlocked window. Its 3D scene loads only when used. Use Z controls to inspect another elevation; monster names and markers share interactive pointer targets. The complete main **Map Explorer** keeps its own views and zoomable Local Map.
 
-Both 3D views mark your latest logged location with a cyan ground ring, even
-when camera Follow is off. **Auto Z** uses the latest known logged elevation;
+Both 3D views mark your latest logged location with a cyan ground ring and add
+a movement-direction arrow once later locations establish travel direction,
+even when camera Follow is off. The marker keeps a visible minimum size when
+zoomed out. In Top 3D, left drag pans; right drag rotates the perspective.
+**Auto Z** uses the latest known logged elevation;
 moving the Z slider or inspecting a mob switches to manual slicing. Turn Auto Z
 back on, or Reset the overlay, to resume it. Missing height stays unknown. A
 nearby validated floor grounds the marker; otherwise its status identifies the
@@ -535,6 +540,7 @@ The separate `action=eozobservations` endpoint uses a versioned bounded batch
 and exhaustive per-event acknowledgements, not the article-edit workflow.
 
 Use [the contribution design](docs/design/WIKI_CONTRIBUTIONS.md),
+[persistent contribution ignores](docs/CONTRIBUTION_IGNORES.md),
 [evidence/outbox contract](docs/CONTRIBUTION_EVIDENCE_PLAN.md),
 [Character walkthrough](docs/CHARACTER_WALKTHROUGH.md) and
 [current release plan](docs/RELEASE_098_PLAN.md) for the detailed boundaries.

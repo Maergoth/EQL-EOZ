@@ -1,5 +1,6 @@
 import { loggedLocationToWorld } from './coordinate-system.js';
 import { isOwnedPetName } from './generated-pets.js';
+import {LogContext} from './log-context.js';
 
 const LINE_RE = /^\[([^\]]+)\]\s*(.*)$/;
 const AUTO_ATTACK_VERBS = new Set(['hit', 'slash', 'crush', 'pierce', 'punch', 'claw', 'bite', 'maul']);
@@ -81,8 +82,10 @@ function isCurrencyLoot(item) {
 }
 
 export class EQLogParser {
-    constructor() {
+    constructor(options={}) {
+        this.logContext=new LogContext(options);
         this.character = '';
+        this.sourceIdentity='';
         // Only /who identity rows establish other player names. A nearby spell
         // cast alone cannot identify an actor as either a player or a monster.
         this.knownPlayerNames = new Set();
@@ -125,7 +128,12 @@ export class EQLogParser {
         this.knownPlayerNames.clear();
         this.lastKill = null;this.currentFight = null;this.currentLineAt = null;
         this.sourceEncounters = new WeakSet();this.currentSourceEvents = new WeakSet();
+        this.logContext.reset();
     }
+
+    setLogIdentityPack(pack){this.logContext.getPack=()=>pack||{};}
+    logContextSnapshot(){return this.logContext.snapshot();}
+    seedLogContext(seed){if(!this.logContext.restore(seed))return false;this.zone=this.logContext.zone;this.zoneShortName=this.logContext.shortName;this.location=null;this.lastKill=null;return true;}
 
     startNewSession(at = Date.now()) {
         this.sessionNumber++;
@@ -166,6 +174,7 @@ export class EQLogParser {
     }
 
     setCharacterFromFilename(path) {
+        const source=String(path||'');if(this.sourceIdentity&&this.sourceIdentity!==source){this.resetSourceContext();this.character='';this.level=0;this.classes=[];}this.sourceIdentity=source;
         const name = String(path || '').split(/[\\/]/).pop() || '';
         const match = name.match(/^eqlog_([^_]+)_/i);
         if (match) { this.character = match[1]; this.knownPlayerNames.add(this.character.toLowerCase()); }
@@ -242,6 +251,7 @@ export class EQLogParser {
         this.lastKill = { name: victim, zone: this.zone, at };
         this.rememberNpc(victim, { killed: true });
         const targetEvidence={...(this.isPlayerTarget(victim)||this.knownPlayerNames.has(victim.toLowerCase())?{victimIsPlayer:true}:{}),...(isOwnedPetName(victim)?{isPet:true}:{})};
+        const considerLevel=this.logContext.levelFor(victim,at);if(considerLevel){targetEvidence.considerLevel=considerLevel;targetEvidence.zoneVisit=this.logContext.visit;}
         if (addToEncounter) {
             return this.rememberCombatEvent({ type: 'kill', victim, encounterTarget: victim, ...targetEvidence });
         }
@@ -368,8 +378,10 @@ export class EQLogParser {
 
         x = text.match(/^You have entered (.+?)\.?$/i);
         if (x) {
-            this.zone = normalizeName(x[1]);
+            this.logContext.anchor(normalizeName(x[1]),{at:this.currentLineAt,entered:true});
+            this.zone = this.logContext.zone;
             this.zoneShortName = '';
+            this.location=null;this.lastKill=null;
             return this.rememberEvent({ type: 'zone', zone: this.zone });
         }
 
@@ -383,15 +395,17 @@ export class EQLogParser {
             this.knownPlayerNames.add(normalizeName(x[3]).toLowerCase());
             if (this.knownPlayerNames.size>200) this.knownPlayerNames.delete(this.knownPlayerNames.values().next().value);
         }
-        if (x && (!this.character || x[3].toLowerCase() === this.character.toLowerCase())) {
+        if (x && this.character && x[3].toLowerCase() === this.character.toLowerCase()) {
             this.level = Number(x[1]);
             this.classes = x[2].toUpperCase().split('/');
-            if (!this.character) this.character = x[3];
             const displayZone = normalizeName(x[4]).replace(/\s+\d+$/, '').trim();
             const zoneShortName = normalizeName(x[5]).toLowerCase();
-            if (displayZone && zoneShortName !== this.zoneShortName) {
-                this.zone = displayZone;
+            const instanceId=normalizeName(x[4]).match(/\s+(\d+)$/)?.[1]||'',previousShort=this.zoneShortName;
+            const changed=this.logContext.anchor(displayZone,{shortName:zoneShortName,instanceId,at:this.currentLineAt});
+            if (displayZone && (changed||zoneShortName !== previousShort)) {
+                this.zone = this.logContext.zone;
                 this.zoneShortName = zoneShortName;
+                if(changed){this.location=null;this.lastKill=null;}
                 return this.rememberEvent({
                     type:'zone',
                     zone:this.zone,
@@ -440,6 +454,7 @@ export class EQLogParser {
             const name = normalizeName(x[1]);
             const level = Number(x[2]);
             this.rememberNpc(name, { level });
+            this.logContext.consider(name,level,this.currentLineAt);
             return this.rememberEvent({ type: 'consider', target: { name, level, at: this.currentLineAt || Date.now() } });
         }
 

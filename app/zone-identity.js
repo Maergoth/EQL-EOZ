@@ -32,7 +32,7 @@ export function viewerZoneName(value) {
     return gameZoneAliases.get(cleaned.toLowerCase()) || cleaned;
 }
 
-export function resolveZoneRecord(zones, value) {
+export function resolveZoneRecord(zones, value, {allowPartial=true}={}) {
     const original = cleanZoneName(value).toLowerCase();
     if (!original) return null;
     const canonical = viewerZoneName(value).toLowerCase();
@@ -41,11 +41,20 @@ export function resolveZoneRecord(zones, value) {
     // Pack-specific aliases take precedence over the compatibility table.
     const record = exact(original) || exact(canonical);
     if (record) return record;
+    if(!allowPartial)return null;
     const partial = zones.filter(zone => {
         const name = cleanZoneName(zone.name).toLowerCase();
         return name && (name.includes(original) || original.includes(name));
     });
     return partial.length === 1 ? partial[0] : null;
+}
+
+// A /who line supplies both a readable zone name and a client short name.
+// Prefer a verified catalog identity, retaining the readable name when a new
+// zone's archive ID has not reached the catalog yet.
+export function loggedZoneName(zones,value,shortName='') {
+    const record=(shortName&&resolveZoneRecord(zones,shortName,{allowPartial:false}))||resolveZoneRecord(zones,value,{allowPartial:false});
+    return record?.name||cleanZoneName(value)||cleanZoneName(shortName);
 }
 
 // A /who short name identifies the actual client archive. Retain it instead

@@ -1,17 +1,23 @@
 'use strict';
 const {WikiClient,WikiError,PRODUCTION_ORIGIN,validatePNG}=require('./wiki-client.cjs');
 const {readBoundedFile}=require('./wiki-attachments.cjs');
+const {ContributionGapVerifier}=require('./contribution-gap-verifier.cjs');
+const {LiveWikiCache}=require('./live-wiki-cache.cjs');
 const CHANNEL='eye-of-zomm:wiki';
 
 class WikiHost {
-    constructor({electron,origin,getMainWindow,stateDir,version,devWikiOrigin=null,allowLoopbackDevelopment=false,client=null,onStatus=null,onAttachmentPrepared=null,onIconRequest=null,onCaptureEvidence=null,onItemCatalog=null}) {
+    constructor({electron,origin,getMainWindow,stateDir,version,devWikiOrigin=null,allowLoopbackDevelopment=false,client=null,onStatus=null,onAttachmentPrepared=null,onIconRequest=null,onCaptureEvidence=null,onItemCatalog=null,isContributionIgnored=null,discoveryVerifier=null,liveCache=null}) {
         this.electron=electron;this.origin=origin;this.getMainWindow=getMainWindow;this.disposed=false;this.loginWindow=null;this.onStatus=onStatus;
         this.onAttachmentPrepared=onAttachmentPrepared;this.onIconRequest=onIconRequest;
         this.onCaptureEvidence=onCaptureEvidence;
-        this.onItemCatalog=onItemCatalog;this.capturedItemPlans=new Map();this.preparingCapturedItem=false;
-        this.statusRevision=0;
+        this.onBaseCatalog=onItemCatalog||(()=>Promise.resolve({}));
+        this.liveCache=liveCache||new LiveWikiCache({stateDir,onChange:()=>this.scheduleLiveEntriesChanged()});
+        this.onItemCatalog=async()=>{const base=await this.onBaseCatalog()||{},snapshot=await this.liveCache.snapshot(base),{applyLiveWikiOverlay}=await import('../app/live-wiki-overlay.js');return applyLiveWikiOverlay(base,snapshot);};
+        this.capturedItemPlans=new Map();this.preparingCapturedItem=false;
+        this.statusRevision=0;this.isContributionIgnored=isContributionIgnored;
+        this.discoveryVerifier=discoveryVerifier||new ContributionGapVerifier({getPack:this.onBaseCatalog,liveCache:this.liveCache,fetchImpl:globalThis.fetch});
         this.session=electron.session.fromPartition(devWikiOrigin?'eye-of-zomm-wiki-development':'persist:eye-of-zomm-wiki');
-        this.client=client||new WikiClient({session:this.session,version,stateDir,origin:devWikiOrigin||PRODUCTION_ORIGIN,allowLoopbackDevelopment,getItemCatalog:onItemCatalog});
+        this.client=client||new WikiClient({session:this.session,version,stateDir,origin:devWikiOrigin||PRODUCTION_ORIGIN,allowLoopbackDevelopment,getItemCatalog:this.onItemCatalog,isContributionIgnored,onWikiPageChanged:async title=>{this.discoveryVerifier.clear();await this.liveCache.invalidate(title);}});
         this.session.setPermissionRequestHandler?.((_contents,_permission,callback)=>callback(false));
         this.session.setPermissionCheckHandler?.(()=>false);
         this.session.setDevicePermissionHandler?.(()=>false);
@@ -25,6 +31,8 @@ class WikiHost {
         try{
             switch(action){
             case 'status':{await this.client.load();return await this.freshStatus();}
+            case 'live-entries':return await this.liveEntries();
+            case 'verify-discovery':return await this.verifyDiscovery(value);
             case 'contribution-history':return await this.client.contributionHistory(value);
             case 'observation-status':return await this.client.observationStatus();
             case 'submit-observations':return await this.client.submitObservations(value?.batch,{expectedUser:value?.expectedUser});
@@ -53,6 +61,15 @@ class WikiHost {
             default:throw new WikiError('action','Unknown wiki action.');
             }
         }catch(error){if(['prepare-attachment','discard-attachment'].includes(action)&&typeof error.code==='string'&&/^E[A-Z]+$/.test(error.code))throw new Error('[attachment] The screenshot could not be read or saved. Select it again.');throw new Error(`${error.code?`[${error.code}] `:''}${String(error.message||'The wiki action failed.').slice(0,600)}`);}
+    }
+    async liveEntries(){return this.liveCache.snapshot(await this.onBaseCatalog()||{});}
+    scheduleLiveEntriesChanged(){
+        if(this.disposed||this.liveEntriesTimer)return;
+        this.liveEntriesTimer=setTimeout(()=>{this.liveEntriesTimer=null;void this.liveEntries().then(snapshot=>{const window=this.getMainWindow();if(!this.disposed&&window&&!window.isDestroyed())window.webContents.send('eye-of-zomm:live-wiki-entries-changed',snapshot);}).catch(()=>{});},100);
+        this.liveEntriesTimer.unref?.();
+    }
+    async verifyDiscovery(value){
+        try{if(this.disposed)return{state:'unknown',reasons:[],confirmedRelations:[],checkedAt:new Date().toISOString()};if(['npc','item'].includes(value?.kind)&&typeof this.isContributionIgnored==='function'&&await this.isContributionIgnored({kind:value.kind,name:value.name}))return{state:'covered',reasons:[],confirmedRelations:[],checkedAt:new Date().toISOString()};return await this.discoveryVerifier.check(value);}catch{return{state:'unknown',reasons:[],confirmedRelations:[],checkedAt:new Date().toISOString()};}
     }
     async prepareAttachment({candidateId,kind,source,captureEvidence}={}){
         if(typeof candidateId!=='string'||candidateId.length>160||!/^[A-Za-z0-9_-]+$/.test(candidateId)||!['item','npc','zone','spell'].includes(kind)||!['clipboard','file','capture'].includes(source)||source==='capture'&&(kind!=='item'||typeof this.onCaptureEvidence!=='function'))throw new WikiError('attachment','Choose a candidate and paste/select a PNG or read its current item examine.');
@@ -151,6 +168,6 @@ class WikiHost {
         if(this.loginWindow&&!this.loginWindow.isDestroyed())this.loginWindow.close();
         await this.session.clearStorageData();await this.session.clearCache();await this.client.clearAccountState();this.statusRevision++;const status={origin:this.client.origin,authenticated:false,user:null,canEdit:false,canCreate:false,canUpload:false,blocked:false};await this.forwardStatus(status);void this.publishStatus();return status;
     }
-    dispose(){this.disposed=true;this.electron.ipcMain.removeHandler(CHANNEL);this.session.removeListener?.('will-download',this.downloadHandler);if(this.loginWindow&&!this.loginWindow.isDestroyed())this.loginWindow.close();this.loginWindow=null;}
+    dispose(){this.disposed=true;clearTimeout(this.liveEntriesTimer);this.liveCache.dispose();this.discoveryVerifier.dispose();this.electron.ipcMain.removeHandler(CHANNEL);this.session.removeListener?.('will-download',this.downloadHandler);if(this.loginWindow&&!this.loginWindow.isDestroyed())this.loginWindow.close();this.loginWindow=null;}
 }
 module.exports={WikiHost,CHANNEL};

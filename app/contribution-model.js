@@ -5,6 +5,7 @@ import { validateTierZeroVerification, requiresTierZeroVerification, tierZeroRec
 import { normalizeContributionChoices } from './contribution-choice-picker.js';
 import { isOwnedPetName } from './generated-pets.js';
 import { lootSetCoverage } from './loot-set-coverage.js';
+import { fillZoneCreationBlueprint, ZONE_OVERVIEW_TOKEN_FIELDS } from './zone-blueprint.js';
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 const TYPES = new Set(['item', 'npc', 'zone', 'spell']);
 const CLASS_NAMES = { BER:'Berserker', BRD:'Bard', BST:'Beastlord', CLR:'Cleric', DRU:'Druid', ENC:'Enchanter', MAG:'Magician', MNK:'Monk', NEC:'Necromancer', PAL:'Paladin', RNG:'Ranger', ROG:'Rogue', SHM:'Shaman', SHD:'Shadow Knight', WAR:'Warrior', WIZ:'Wizard' };
@@ -25,6 +26,12 @@ const category = title => `[[Category:${contributionTitle(title)}]]`;
 export function safeContributionFilename(value){
     const filename=contributionTitle(value);
     if(!/\.(?:png|jpe?g|webp)$/i.test(filename)||filename.length>230)throw Error('Choose a valid wiki image filename.');
+    return filename;
+}
+export function safeZoneMapFilename(value){
+    const filename=String(value??'').trim();
+    if(filename.length>230||/[\u0000-\u001f\u007f]/.test(filename))throw Error('Choose a valid wiki image filename.');
+    safeContributionFilename(filename);
     return filename;
 }
 export function contributionItemEffects(input){
@@ -146,7 +153,7 @@ export function buildContributionDraft(input, blueprints) {
     const blueprint = blueprints?.entries?.[type];
     const warnings = [], blockers = proposalError?[proposalError]:[];
     if(candidate.kind==='npc'&&(isOwnedPetName(candidate.name)||isOwnedPetName(candidate.title))||candidate.sources.some(source=>source.confirmed&&isOwnedPetName(source.npc))||
-        (Array.isArray(field('knownNPCs'))?field('knownNPCs'):[]).some(isOwnedPetName))blockers.push('Player and monster pets cannot be contributed as monsters or drop sources.');
+        ['knownNPCs','notableNPCs','raidNotableNPCs'].some(key=>(Array.isArray(field(key))?field(key):[]).some(isOwnedPetName)))blockers.push('Player and monster pets cannot be contributed as monsters or drop sources.');
     if (!blueprint) blockers.push(`The current ${type} blueprint is unavailable.`);
     const expected = candidate.kind === 'item' ? /\{\{\s*Itempage\b/i : candidate.kind === 'npc' ? /\{\{\s*Namedmobpage\b/i : candidate.kind === 'spell' ? /\{\{\s*Spell(?:page|pagesmart)\b/i : /zoneTopTable/;
     if (blueprint && !expected.test(blueprint.text)) blockers.push('The live blueprint structure changed. Review it in the wiki before submitting.');
@@ -159,7 +166,7 @@ export function buildContributionDraft(input, blueprints) {
     const confirmedSources = candidate.sources.filter(source => source.confirmed && source.npc && source.zone);
     if (candidate.sources.some(source => !source.confirmed)) warnings.push('Unconfirmed drop-source relationships are excluded.');
     const categories = new Set();
-    if (candidate.zone) categories.add(contributionTitle(candidate.zone));
+    if (candidate.zone&&candidate.kind!=='zone') categories.add(contributionTitle(candidate.zone));
     let text;
     if (candidate.kind === 'item') {
         if(requiresTierZeroVerification(candidate))categories.add(TIER_ZERO_VERIFICATION_CATEGORY);
@@ -223,20 +230,46 @@ export function buildContributionDraft(input, blueprints) {
             if (npcs.length || loot.length) warnings.push('The zone introduction is empty; add player-written details when known.');
             else warnings.push('Unknown zone details are left as ?.');
         }
-        const rows = [
-            ...(npcs.length&&field('notable')===true ? [`! Notable NPCs\n| ${npcs.map(link).join('<br>\n')}`] : []),
-            ...lootSectionRows(candidate,loot.filter(title=>contributionLootKind(candidate,title)==='common')),
-            `! Name in /who\n| ${literalWikiText(whoName || 'Unknown')}`
-        ];
-        text = `${era}${candidate.playerText}\n\n{| class="zoneTopTable"\n${rows.join('\n|-\n')}\n|}\n`;
+        if(candidate.intent==='update'){
+            // Existing zone updates use the narrow patcher below. They do not
+            // migrate an established article to the current creation layout.
+            text=`${era}${candidate.playerText}\n\n{| class="zoneTopTable"\n! Name in /who\n| ${literalWikiText(whoName||'Unknown')}\n|}\n`;
+        }else{
+            const availability=field('raidAvailability');
+            if(!['yes','no','unknown'].includes(availability))blockers.push('Answer whether this zone has a raid instance, or explicitly choose Unknown.');
+            if(availability==='unknown')warnings.push('Raid-instance availability is explicitly Unknown; no raid section or raid-only facts are asserted.');
+            const scalar=value=>typeof value==='string'||typeof value==='number'?literalWikiText(value).replace(/\r?\n/g,'<br>')||'?':'?';
+            const prose=value=>typeof value==='string'&&value.trim()?literalWikiText(value).replace(/(^|\n)(=+)/g,(_match,line,marks)=>line+marks.replace(/=/g,'&#61;')):'?';
+            const titles=(key,label)=>reviewedTitles(candidate,key,label,warnings,blockers).map(link).join('<br>\n')||'?';
+            const values={ERA:era.trim(),ZONE_NAME:literalWikiText(candidate.title),OVERVIEW:prose(candidate.playerText),RAID_AVAILABILITY:{yes:'Yes',no:'No',unknown:'Unknown'}[availability]||'Unknown',DYNAMIC_ZONE_LIST:`{{Special:DynamicZoneList/${candidate.title}}}`};
+            for(const [prefix,fieldPrefix]of [['',''],['RAID_','raid']]){
+                for(const [token,key]of Object.entries(ZONE_OVERVIEW_TOKEN_FIELDS)){
+                    const fieldKey=fieldPrefix?fieldPrefix+key[0].toUpperCase()+key.slice(1):key;
+                    if(prefix&&availability!=='yes'){values[prefix+token]='?';continue;}
+                    if(token==='NOTABLE_NPCS')values[prefix+token]=titles(fieldKey,prefix?'raid Notable NPCs':'Notable NPCs');
+                    else if(['RELATED_QUESTS','ADJACENT_ZONES'].includes(token))values[prefix+token]=titles(fieldKey,token==='RELATED_QUESTS'?'related quests':'adjacent zones');
+                    else if(token==='COMMON_LOOT')values[prefix+token]=prefix?'?':loot.filter(title=>contributionLootKind(candidate,title)==='common').map(itemTransclusion).join('<br>\n')||'?';
+                    // Initial creation establishes the standard summary row,
+                    // but does not turn observed loot into automatic Unique.
+                    else if(token==='UNIQUE_ITEMS')values[prefix+token]='?';
+                    else if(token==='MAP_IMAGE'){
+                        const filename=field(fieldKey);
+                        try{values[prefix+token]=typeof filename==='string'&&filename.trim()?`[[File:${safeZoneMapFilename(filename)}|thumb|right|600px|${literalWikiText(candidate.title+(prefix?' raid instance':'')+' map')}]]`:"''Map needed.''";}
+                        catch(error){blockers.push(error.message);values[prefix+token]="''Map needed.''";}
+                    }else values[prefix+token]=token==='MAP_NOTES'?prose(field(fieldKey)):scalar(field(fieldKey));
+                }
+            }
+            values.RAID_OVERVIEW=availability==='yes'?prose(field('raidOverview')):'?';
+            if(field('notable')===true&&npcs.length&&values.NOTABLE_NPCS==='?')values.NOTABLE_NPCS=npcs.map(link).join('<br>\n');
+            try{text=fillZoneCreationBlueprint(blueprint?.text,{raidAvailability:availability,values});assertZoneCreationLayout(text,{raidAvailability:availability});}
+            catch(error){blockers.push(error.message);text='';}
+        }
         if (npcs.length || loot.length) warnings.push('Zone references do not add the zone category to those NPC or item pages; review their page membership separately.');
-        if (field('dynamicZoneSupported') === true) text += `\n== What's in this zone? ==\n{{Special:DynamicZoneList/${candidate.title}}}\n`;
-        else warnings.push('A new zone may need a wiki DynamicZoneList allowlist update; no nonworking list was inserted.');
     }
     if(candidate.attachmentFilename&&candidate.kind!=='npc')text+=`\n[[File:${safeContributionFilename(candidate.attachmentFilename)}|thumb|${literalWikiText(input.attachment?.caption||candidate.title)}]]\n`;
     if (/\b(?:NPC_Name|ZONE_NAME|ZONE NAME|ITEM_NAME|Item Name|Describe the|Add a brief)\b/.test(text)) blockers.push('Replace all blueprint instructional placeholders.');
     if (/\{\{\s*(?:Special:|#|DISPLAYTITLE|DEFAULTSORT|subst:|safesubst:)|<\s*(?:script|iframe|object|embed)\b/i.test(candidate.playerText)) blockers.push('Remove unsupported executable or special-page markup from the contribution prose.');
-    if([...activeContributionText(text).matchAll(/\[\[\s*Category\s*:\s*([^\]|]+)(?:\|[^\]]*)?\]\]/gi)].some(match=>contributionNameKey(match[1])===contributionNameKey(TIER_ZERO_VERIFICATION_CATEGORY)))categories.delete(TIER_ZERO_VERIFICATION_CATEGORY);
+    for(const match of activeContributionText(text).matchAll(/\[\[\s*Category\s*:\s*([^\]|]+)(?:\|[^\]]*)?\]\]/gi))for(const title of categories)if(contributionNameKey(match[1])===contributionNameKey(title))categories.delete(title);
     return { title:candidate.title, kind:candidate.kind, text:`${text}\n${[...categories].map(title=>title===TIER_ZERO_VERIFICATION_CATEGORY?TIER_ZERO_CATEGORY_MARKER+'\n'+category(title):category(title)).join('\n')}\n`, warnings, blockers, blueprintRevision:blueprints?.revision ?? null };
 }
 
@@ -425,13 +458,15 @@ export function contributionZoneLootSetCoverage(source,itemTitle,instance='norma
 export function contributionZoneLootEntries(source){
     if(typeof source!=='string'||source.length>512*1024)throw Error('The zone page is unavailable or too large.');
     const entries=[],active=activeContributionText(source);
+    const zoneScopes=['normal','raid'].flatMap(instance=>{try{return [{instance,...zoneContributionRange(source,instance)}];}catch{return [];}});
     for(const [card,table]of zoneContributionTables(source).entries()){
+        const scopes=zoneScopes.filter(range=>table.start>=range.start&&table.end<=range.end),instance=scopes.length===1?scopes[0].instance:'unknown';
         const text=active.slice(table.start,table.end),rows=[...text.matchAll(/^![ \t]*([^\r\n]+)\r?\n\|[ \t]*/gm)];
         for(const [index,row]of rows.entries()){
             const label=zoneRowLabel(row[1]),kind=label==='unique items'?'unique':label==='common loot'?'common':null;if(!kind)continue;
             const start=row.index+row[0].length,body=text.slice(start,rows[index+1]?.index??text.length),separator=body.search(/^[ \t]*\|(?:-|\})/m),cell=separator<0?body:body.slice(0,separator);
             for(const reference of [...cell.matchAll(/\{\{\s*:\s*([^{}|\r\n]+)(?:\|[^{}]*)?\}\}/g),...cell.matchAll(/\[\[\s*([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/g)]){
-                const itemTitle=clean(reference[1],230).replace(/_/g,' ');if(itemTitle)entries.push({itemTitle,kind,card:'zone:'+card,sourceKind:'zone'});
+                const itemTitle=clean(reference[1],230).replace(/_/g,' ');if(itemTitle)entries.push({itemTitle,kind,card:'zone:'+card,sourceKind:'zone',instance});
             }
         }
     }
@@ -453,11 +488,13 @@ export function contributionNpcReferences(source){
             for(const row of contributionTemplates(field.value,'ItemWhereRow'))for(const value of row.fields)if(/^(?:npc|mob|monster)$/i.test(value.name))result.push({kind:'drop-source',itemTitle,npcTitle:clean(value.value,230).replace(/^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/,'$1')});
         }
     }
+    const zoneScopes=['normal','raid'].flatMap(instance=>{try{return [{instance,...zoneContributionRange(source,instance)}];}catch{return [];}});
     for(const [card,table]of zoneContributionTables(source).entries()){
+        const scopes=zoneScopes.filter(range=>table.start>=range.start&&table.end<=range.end),instance=scopes.length===1?scopes[0].instance:'unknown';
         const text=active.slice(table.start,table.end),rows=[...text.matchAll(/^![ \t]*([^\r\n]+)\r?\n\|[ \t]*/gm)];
         for(const [index,row]of rows.entries())if(zoneRowLabel(row[1])==='notable npcs'){
             const body=text.slice(row.index+row[0].length,rows[index+1]?.index??text.length),separator=body.search(/^[ \t]*\|(?:-|\})/m),cell=separator<0?body:body.slice(0,separator);
-            for(const reference of cell.matchAll(/\[\[\s*([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/g))result.push({kind:'zone-population',npcTitle:clean(reference[1],230).replace(/_/g,' '),card:'zone:'+card});
+            for(const reference of cell.matchAll(/\[\[\s*([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/g))result.push({kind:'zone-population',npcTitle:clean(reference[1],230).replace(/_/g,' '),card:'zone:'+card,instance});
         }
     }
     return result;
@@ -644,6 +681,29 @@ function zoneContributionTables(source){
     return tables.sort((a,b)=>a.start-b.start);
 }
 const zoneRowLabel=value=>contributionNameKey(String(value).replace(/'{2,}/g,'').replace(/:[ \t]*$/,'').trim());
+export function assertZoneCreationLayout(source,{raidAvailability,mapFiles}={}){
+    if(typeof source!=='string'||source.length>512*1024||!['yes','no','unknown'].includes(raidAvailability))throw Error('Prepare this new zone again with the unified blueprint and an explicit raid-instance answer.');
+    const active=activeContributionText(source),headings=[...active.matchAll(/^(={1,6})[ \t]*(.*?)[ \t]*\1[ \t]*\r?$/gm)],raids=headings.filter(row=>/\bRaid[ _]+(?:Instance|Zone)\b/i.test(row[2]));
+    if(raidAvailability==='yes'?(raids.length!==1||raids[0][1]!=='='||raids[0][2]!=='Raid Instance'):raids.length!==0)throw Error('Keep exactly the confirmed Raid Instance section, separate from the normal overview.');
+    if(/@@[A-Z][A-Z0-9_]*@@/.test(source))throw Error('Replace all unresolved zone blueprint tokens.');
+    const required=['level of monsters','minimum player level','types of monsters','notable npcs','common loot','unique items','related quests','adjacent zones','name in /who','zone spawn timer','succor/evacuate','zem value'];
+    for(const instance of raidAvailability==='yes'?['normal','raid']:['normal']){
+        const range=zoneContributionRange(source,instance),scope=source.slice(range.start,range.end),tables=zoneContributionTables(scope);
+        if(tables.length!==1)throw Error('Keep one complete zone overview table for each included instance.');
+        const tableText=activeContributionText(scope.slice(tables[0].start,tables[0].end)),rows=[...tableText.matchAll(/^![ \t]*([^\r\n]+)\r?\n\|[ \t]*/gm)],labelFor=row=>zoneRowLabel(row[1].replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,(_match,target,label)=>label||target)),labels=rows.map(labelFor);
+        if(required.some(label=>labels.filter(value=>value===label).length!==1)||instance==='normal'&&labels.filter(value=>value==='raid instance').length!==1)throw Error('Keep the standard zone overview rows, including Notable NPCs, Unique Items and raid availability.');
+        if(instance==='normal'){const row=rows.find(row=>labelFor(row)==='raid instance'),value=tableText.slice(row.index+row[0].length).split(/\r?\n/)[0].trim();if(value!=={yes:'Yes',no:'No',unknown:'Unknown'}[raidAvailability])throw Error('The zone overview must retain the reviewed raid-instance answer.');}
+        const maps=[...activeContributionText(scope).matchAll(/^==[ \t]*(Map|Raid Map)[ \t]*==[ \t]*\r?$/gm)];
+        if(maps.length!==1||maps[0][1]!== (instance==='raid'?'Raid Map':'Map'))throw Error('Keep the Map section for each included instance, even when the map is a placeholder.');
+        if(tables[0].end>maps[0].index)throw Error('Keep each zone overview before its Map section.');
+        if(mapFiles){
+            const start=maps[0].index+maps[0][0].length,rest=activeContributionText(scope).slice(start),end=rest.search(/^={1,2}[^=].*?={1,2}[ \t]*\r?$/m),mapText=rest.slice(0,end<0?rest.length:end),images=[...mapText.matchAll(/\[\[\s*(?:File|Image)\s*:\s*([^\]|]+)(?:\|[^\]]*)?\]\]/gi)].map(row=>safeZoneMapFilename(row[1].trim()));
+            if(mapFiles[instance]?images.length!==1||images[0]!==mapFiles[instance]:images.length!==0)throw Error('Map images must match the reviewed map fields. Change those fields and prepare a fresh Preview.');
+        }
+    }
+    if([...active.matchAll(/\[\[\s*Category\s*:\s*Zones\s*\]\]/gi)].length!==1)throw Error('Keep the Zones category so the new zone can populate its normal dynamic list.');
+    return true;
+}
 export function contributionZoneHasLootRow(source,kind='unique',options={}){
     let scope=source;if(options.card===undefined){const range=zoneContributionRange(source,options.instance||'normal');scope=source.slice(range.start,range.end);}
     const tables=zoneContributionTables(scope),table=options.card===undefined?(tables.length===1?tables[0]:null):tables[Number(String(options.card).replace(/^zone:/,''))];

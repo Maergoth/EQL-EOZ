@@ -2,7 +2,7 @@
 import { contributionSourceIncluded } from './contribution-update.js';
 import { contributionTitle, contributionItemEffects } from './contribution-model.js';
 import { normalizeWikiIdentity, createWikiResolver } from './wiki-identity.js';
-import { contributionSameIdentity as same, contributionInstanceMatches as instanceMatches, contributionNpcIncludesZone } from './contribution-reasons.js';
+import { contributionSameIdentity as same, contributionInstanceMatches as instanceMatches, contributionNpcIncludesZone, contributionNpcZoneStatus } from './contribution-reasons.js';
 import {cachedLootKindLabel} from './loot-classification.js';
 import {cachedContributionCoverage} from './contribution-coverage.js';
 const kinds={item:'Item',npc:'Monster',zone:'Zone',spell:'Spell'};
@@ -44,8 +44,8 @@ export function contributionRelationshipStatus(candidate={},change={}, {pack,res
     if(change.role==='zone-population'||change.role==='mob-zone'){
         const npc=resolver.resolve('npc',change.npc||change.subject||candidate.title||candidate.name);
         if(npc.membership==='ambiguous')return 'unknown';
-        if(npc.records.some(record=>contributionNpcIncludesZone(resolver,record,zone,observed)))return 'recorded';
-        return npc.membership==='missing'||npc.records.length?'missing':'unknown';
+        if(npc.membership==='missing')return 'missing';
+        return contributionNpcZoneStatus(resolver,npc.records,zone,observed);
     }
     if(!['zone-loot','npc-loot','item-source'].includes(change.role))return 'unknown';
     if(change.npc){
@@ -78,7 +78,8 @@ export function contributionDestinations(candidate={}, {pack}={}){
     const add=(rawTitle,role,subject,description,{primary=false,operation='Update if page exists',instance,item,npc,zone,notable}={})=>{
         let pageTitle;try{pageTitle=contributionTitle(rawTitle);}catch{return;}
         const key=pageTitle,change={role,subject,description,...(instance?{instance}:{}),...(item?{item}:{}),...(npc?{npc}:{}),...(zone?{zone}:{}),...(notable===true?{notable:true}:{})};
-        if(contributionRelationshipStatus(candidate,change,{resolver})==='recorded')return;
+        const relationshipStatus=contributionRelationshipStatus(candidate,change,{resolver});
+        if(relationshipStatus==='recorded'||relationshipStatus==='unknown'&&candidate.manual!==true&&['mob-zone','zone-population'].includes(role)&&notable!==true)return;
         if(!destinations.has(key))destinations.set(key,{title:pageTitle,operation:primary?(updating?'Update Page':'New Page'):operation,primary,changes:[]});
         const destination=destinations.get(key);
         if(!destination.changes.some(prior=>prior.role===role&&normalizeWikiIdentity(prior.subject)===normalizeWikiIdentity(subject)&&prior.description===description))destination.changes.push(change);

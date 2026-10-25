@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.15 - Verified discoveries, zones and map controls
+
+- Check the public live wiki before showing an automatic discovery, item gap or monster popup. Use the bundled snapshot to avoid checks for known facts. Keep pending, failed, broad, unsupported and inconclusive checks out of the discovery queue and popups; recheck current facts before publication.
+- Reuse temporarily cached public wiki entries, including their direct zone and loot data, until the shipped snapshot reaches that revision. Share the cache across item presence, gap verification and local views; expire absence verdicts quickly and refresh old source proof without treating temporary facts as global loot-count completeness.
+- Dismiss an individual discovery with its red ×, or use ∞× to ignore that exact NPC or item across future contribution attempts. Restore ignored entities from Contribution History, including while signed out. Device ignores persist across restarts and dataset updates; existing submission receipts remain available.
+- Preserve readable zone names from entry logs and self /who records, including Lake Nerius. Export canonical public zones beyond the curated map catalog and retain documented NPC zone/category facts. Empty cache metadata no longer proves a wiki gap.
+- Recover explicit numeric /con levels from the selected log and the same continuous zone visit. Prefill killed-monster levels as unconfirmed observations with provenance. Considering a monster alone creates no discovery; zone/source/instance changes and older contributor edits are respected.
+- Create zones from the shared live Zone blueprint with an opening overview and Map, explicit Yes/No/Unknown raid availability, and separate optional raid overview and Raid Map. Validate reviewed map images and keep placeholders when unknown; narrow updates preserve existing zone content.
+- Restore scoped global loot-count completeness by bounding reviewed unresolved groups without expanding their broad entries or manufacturing drop counts. Research materials remain uncertain; verified important loot can qualify as Unique under the existing six-monster rule.
+- Keep the 3D player marker visible at full-zone scale, show a movement-derived direction arrow, and make left-drag pan in the top 3D view. Retain explicit rotation controls for the perspective view.
+- Use an eye mark in the app header and browser icon, styled for the existing dark and gold interface.
+
 ## 0.9.14 - Contribution history and safer loot discovery
 
 - Skip routine automatic source backfill for known common materials only when cached records positively prove weight-only, unequippable metadata and at least six existing monster sources. Keep unknown entities, gear, effects, uncommon drops, incomplete metadata and manual contribution drafts available; no item-name exceptions or live material lookups are added.

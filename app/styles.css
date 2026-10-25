@@ -191,3 +191,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[t
 .map-loot-item h3{white-space:normal;overflow-wrap:anywhere}.map-loot-item .pill-row{margin-top:9px}.map-loot-item .stats{margin-bottom:12px}
 @media(max-width:1000px){.map-workspace:has(.map-loot-pane:not([hidden])){flex-direction:column;overflow:auto}.map-workspace:has(.map-loot-pane:not([hidden])) .viewer-frame-wrap{flex:0 0 45vh;min-height:220px}.map-loot-pane{flex:0 0 auto;width:100%;min-width:0;max-height:60vh}}
 .map-workspace>.map-loot-pane{padding:0}.map-loot-pane .map-loot-item h3{white-space:normal;overflow-wrap:anywhere}
+
+.brand-mark{display:grid;place-items:center;flex:none}.brand-mark img{display:block;width:44px;height:44px;object-fit:contain;filter:drop-shadow(0 0 7px #7bbbc529)}

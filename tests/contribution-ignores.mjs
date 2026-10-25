@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import vm from 'node:vm';
+import {createRequire} from 'node:module';
+import {createContributionIgnoreMatcher,contributionIgnoreIdentity} from '../app/contribution-ignore-identity.js';
+const {ContributionIgnores,ContributionIgnoresHost,FILE_NAME,MAX_BYTES,CHANNEL,CHANGED}=createRequire(import.meta.url)('../desktop/contribution-ignores.cjs');
+const directory=await fs.mkdtemp(path.join(os.tmpdir(),'eoz-contribution-ignores-'));
+const pack={meta:{sample:false,wikiEntitiesComplete:true},wikiEntities:{items:['Synthetic Dagger'],npcs:['A synthetic keeper'],titles:['Synthetic Dagger','A synthetic keeper']},items:[{name:'Synthetic Dagger',wikiTitle:'Synthetic Dagger',aliases:['Synthetic Blade']}],npcs:[{name:'A synthetic keeper',wikiTitle:'A synthetic keeper',aliases:['Keeper Alias']}],zones:[]};
+const target=(kind,name)=>({kind,name});let catalog=pack;
+try{
+    let store=new ContributionIgnores({stateDir:directory,getCatalog:async()=>catalog,now:()=>Date.parse('2026-10-25T12:00:00Z')});
+    assert.deepEqual((await store.list()).entries,[]);
+    assert.equal((await fs.readdir(directory)).length,0,'Listing a missing ledger never writes a profile or creates preferences');
+    let snapshot=await store.ignore(target('npc','Keeper Alias'));
+    assert.equal(snapshot.entries[0].canonicalTitle,'A synthetic keeper');assert.equal(snapshot.entries[0].basis,'canonical');
+    assert(await store.isIgnored(target('npc','A synthetic keeper')));assert(await store.isIgnored(target('monster','keeper alias')));
+    assert.equal(await store.isIgnored(target('item','A synthetic keeper')),false,'Entity kinds cannot share an ignore');
+    assert.equal(await store.isIgnored(target('npc','A synthetic keeper pet')),false,'An NPC ignore is not a fuzzy family rule');
+    await store.ignore(target('npc','A synthetic keeper'));assert.equal((await store.list()).entries.length,1,'Positive aliases do not create duplicate preferences');
+    await store.ignore(target('item','Synthetic Blade +5'));assert(await store.isIgnored(target('item','Synthetic Dagger +10')),'Known ranked aliases resolve only through positive canonical item identity');
+    await store.ignore(target('npc','mystery keeper'));await store.ignore(target('item','Unknown Blade +5'));
+    assert(await store.isIgnored(target('npc','Mystery_keeper')));assert.equal(await store.isIgnored(target('npc','Mystery Keeper')),false,'Unknown names preserve internal case');
+    assert.equal(await store.isIgnored(target('item','Unknown Blade')),false,'Unknown item tiers are not stripped into a family ignore');
+    const disk=await fs.readFile(path.join(directory,FILE_NAME),'utf8');assert.doesNotMatch(disk,/account|profile|logPath|wikiOrigin|expires|ttl/i);
+    store=new ContributionIgnores({stateDir:directory,getCatalog:async()=>catalog,now:()=>Date.parse('2040-10-25T12:00:00Z')});
+    assert.equal((await store.list()).entries.length,4,'Restart and elapsed years do not clear or expire ignores');
+    catalog={...pack,meta:{...pack.meta,version:'new-dataset'},npcs:[...pack.npcs,{name:'Mystery keeper',wikiTitle:'Mystery keeper',aliases:['Proven Mystery Alias']}]};
+    assert(await store.isIgnored(target('npc','Proven Mystery Alias')),'A later dataset can positively prove an alias for an earlier exact ignore');
+    catalog={};assert(await store.isIgnored(target('npc','Keeper Alias')),'Exact observed identity remains ignored when a later offline catalog lacks that entity');
+    catalog=pack;
+    snapshot=await store.list();const keeper=snapshot.entries.find(row=>row.kind==='npc'&&row.canonicalTitle==='A synthetic keeper');await store.restore({id:keeper.id});
+    assert.equal(await store.isIgnored(target('npc','Keeper Alias')),false);assert(await store.isIgnored(target('item','Synthetic Dagger')),'Restoring one NPC does not clear unrelated items');
+    const restarted=new ContributionIgnores({stateDir:directory,getCatalog:async()=>pack});assert.equal(await restarted.isIgnored(target('npc','Keeper Alias')),false,'Explicit restore survives restart');
+    const cases={...pack,items:[{name:'Case Relic',wikiTitle:'Case Relic'},{name:'Case relic',wikiTitle:'Case relic'}]};
+    const exact=contributionIgnoreIdentity(cases,target('item','Case Relic'));assert.equal(exact.basis,'exact');
+    const match=createContributionIgnoreMatcher([{...exact,id:'case'}],cases);assert(match(target('item','Case Relic')));assert.equal(match(target('item','Case relic')),false,'Competing case-distinct pages cannot silence one another');
+    assert.equal(contributionIgnoreIdentity(pack,target('npc','ﬃ'.repeat(300))),null,'Normalization cannot create an unreadable oversized persisted name');
+    for(const bad of [{kind:'zone',name:'Zone'},target('npc','Bad\nName'),{kind:'item',name:'Synthetic Dagger',canonicalTitle:'Forged'},target('item','')])await assert.rejects(store.ignore(bad),/Choose/);
+    const capped=new ContributionIgnores({stateDir:path.join(directory,'capacity'),getCatalog:async()=>({}),maxEntries:1});
+    const first=await capped.ignore(target('item','First unknown'));await assert.rejects(capped.ignore(target('item','Second unknown')),/full/);assert.equal((await capped.list()).entries[0].name,'First unknown','Capacity rejection never evicts an older permanent choice');
+    await capped.restore({id:first.entries[0].id});await capped.ignore(target('item','Second unknown'));
+    const tiny=new ContributionIgnores({stateDir:path.join(directory,'byte-capacity'),maxBytes:20});await assert.rejects(tiny.ignore(target('item','UTF 界')),/full/);assert.equal((await tiny.list()).entries.length,0);
+    for(const [name,content]of [['corrupt','{'],['oversized','x'.repeat(MAX_BYTES+1)],['unknown-fields',JSON.stringify({schemaVersion:1,entries:[],expires:0})]]){
+        const stateDir=path.join(directory,name);await fs.mkdir(stateDir);const file=path.join(stateDir,FILE_NAME);await fs.writeFile(file,content);const broken=new ContributionIgnores({stateDir});
+        assert.equal((await broken.list()).blocked,true);await assert.rejects(broken.isIgnored(target('npc','Any')),/could not be read/);await assert.rejects(broken.ignore(target('item','Anything')),/could not be read/);assert.equal(await fs.readFile(file,'utf8'),content,'Unreadable ledger is preserved instead of silently reset');
+    }
+    const handlers=new Map(),main={isDestroyed:()=>false,webContents:{mainFrame:{url:'http://127.0.0.1:1234/'}}},updates=[];
+    const host=new ContributionIgnoresHost({ipcMain:{handle:(channel,fn)=>handlers.set(channel,fn),removeHandler:channel=>handlers.delete(channel)},origin:'http://127.0.0.1:1234',getMainWindow:()=>main,store,onChanged:value=>updates.push(value)});
+    const invoke=handlers.get(CHANNEL),event={sender:main.webContents,senderFrame:main.webContents.mainFrame};
+    await invoke(event,'ignore',target('npc','New exact NPC'));assert.equal(updates.length,1);assert((await invoke(event,'list')).entries.some(row=>row.name==='New exact NPC'));
+    for(const patch of [{sender:{}},{senderFrame:{url:'http://127.0.0.1:1234/'}},{senderFrame:{url:'http://127.0.0.1:1234/overlay.html'}}])await assert.rejects(invoke({...event,...patch},'restore',{id:'x'}),/main app/);
+    await assert.rejects(invoke(event,'clear-all'),/Unknown/);host.dispose();assert.equal(handlers.has(CHANNEL),false);
+    const exposed={},calls=[];vm.runInNewContext(await fs.readFile(new URL('../desktop/preload.cjs',import.meta.url),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld:(key,value)=>exposed[key]=value},ipcRenderer:{invoke:(...args)=>calls.push(args),on(){},removeListener(){}}})});
+    exposed.eyeOfZommWiki.contributionIgnores();assert.deepEqual(calls.at(-1),[CHANNEL,'list']);exposed.eyeOfZommWiki.ignoreContributionEntity(target('npc','Keeper'));assert.deepEqual(calls.at(-1),[CHANNEL,'ignore',target('npc','Keeper')]);exposed.eyeOfZommWiki.restoreContributionEntity({id:'x'});assert.deepEqual(calls.at(-1),[CHANNEL,'restore',{id:'x'}]);assert.equal(typeof exposed.eyeOfZommWiki.onContributionIgnoresChanged,'function');assert.equal(CHANGED,'eye-of-zomm:contribution-ignores-changed');
+    console.log('Contribution ignores: persistent restart/restore, alias and case boundaries, no TTL/account scope, capacity rejection, fail-closed corruption, main-frame IPC and preload pass.');
+}finally{await fs.rm(directory,{recursive:true,force:true});}

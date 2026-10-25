@@ -1,4 +1,5 @@
 // Native submission receipts. Corrections open the current page's wiki editor.
+import {mountIgnoredEntities} from './ignored-entities-view.js';
 const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 const statuses = Object.freeze({pending:'Pending',submitted:'Published','partly-submitted':'Partly published','needs-attention':'Needs attention'});
 const pageStatuses = Object.freeze({pending:'Pending',applied:'Saved',unknown:'Not confirmed',failed:'Failed'});
@@ -37,6 +38,8 @@ export function mountContributionHistory({host, wiki} = {}) {
     let active = false, dirty = true, loading = false, disposed = false, epoch = 0, warning = '', error = '';
     host.innerHTML = `<div class="contribution-history-heading"><div><h3>Contribution History</h3><p class="settings-helper">Automatic additions and reviewed submissions saved on this device for the signed-in wiki account. Open an entry to view its changes or edit the current page on the wiki.</p></div><button class="secondary-button" data-history-refresh>Refresh history</button></div><div class="contribution-history-tools"><label>Show<select data-history-filter aria-label="Filter contribution history"><option value="all">All submissions</option>${Object.entries(statuses).map(([value,label])=>`<option value="${value}">${label}</option>`).join('')}</select></label><span data-history-count></span></div><p data-history-status role="status"></p><div data-history-entries></div><button class="secondary-button" data-history-more hidden>Load older contributions</button>`;
     const find = selector => host.querySelector(selector);
+    const ignoreHost=host.ownerDocument.createElement('section');ignoreHost.className='contribution-ignores';ignoreHost.setAttribute('aria-label','Ignored NPCs and items on this device');host.append(ignoreHost);
+    const ignored=mountIgnoredEntities({host:ignoreHost,wiki});
     function render() {
         if (disposed) return;
         find('[data-history-refresh]').disabled = loading || !wiki?.contributionHistory;
@@ -79,6 +82,7 @@ export function mountContributionHistory({host, wiki} = {}) {
         setActive(value) {
             const next = value === true, opening = next && !active;
             active = next;
+            ignored.setActive(next);
             // Cookies can expire or change while hidden without a status event.
             // Every open clears cached rows and verifies the native account.
             if (active && (opening || dirty && !loading)) void refresh();
@@ -91,6 +95,6 @@ export function mountContributionHistory({host, wiki} = {}) {
         },
         markChanged() { dirty = true; if (active) void refresh(); },
         refresh,
-        dispose() { disposed = true; epoch++; find('[data-history-refresh]').removeEventListener('click',onRefresh); find('[data-history-more]').removeEventListener('click',onMore); find('[data-history-filter]').removeEventListener('change',onFilter); }
+        dispose() { disposed = true; epoch++; ignored.dispose(); find('[data-history-refresh]').removeEventListener('click',onRefresh); find('[data-history-more]').removeEventListener('click',onMore); find('[data-history-filter]').removeEventListener('change',onFilter); }
     };
 }

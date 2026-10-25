@@ -7,7 +7,7 @@ let pack = { meta:{ wikiEntitiesComplete:true, version:'full-1' }, wikiEntities:
 }, npcs:[{ name:'Fallback Rat', aliases:['Fallback alias'] }], items:[{ name:'Fallback Ring' }] };
 const values = new Map(), prompts = [], warnings = [];
 const storage = { getItem:key => values.get(key), setItem:(key, value) => values.set(key, value) };
-const options = { getPack:() => pack, storage, now:() => clock, verifyItem:()=>({status:'missing'}), onMissing:prompt => prompts.push(prompt), onWarning:message => warnings.push(message) };
+const options = { getPack:() => pack, storage, now:() => clock, verifyItem:()=>({status:'missing'}), verifyDiscovery:()=>({state:'missing',reasons:['missing-page'],checkedAt:new Date(clock).toISOString()}), onMissing:prompt => prompts.push(prompt), onWarning:message => warnings.push(message) };
 let discovery = createWikiDiscovery(options);
 const consume = (event, context = {}) => discovery.consume({ at:clock, ...event }, { live:true, logId:'log-a', zone:'Test Zone', ...context });
 assert.equal(wikiEntityKey(' The_King&#39;s  Guard'), "the king's guard");
@@ -99,4 +99,14 @@ const legacy=createWikiDiscovery({...options,storage:{getItem:()=>JSON.stringify
 assert.equal(legacy.consume({type:'kill',victim:'a legacy watcher',at:clock},{live:true}),null,'Old article-erased Ignore keys retain their original suppression only');
 assert.equal(legacy.consume({type:'loot',item:'Legacy Gem +5',at:clock},{live:true}),null,'Legacy tier-specific Ignore follows the exact supported base item');
 const exactOnly=createWikiDiscovery({...options,storage:{getItem:()=>JSON.stringify({schemaVersion:2,ignored:['monster|a distinct watcher']}),setItem(){}}});assert(exactOnly.consume({type:'kill',victim:'the distinct watcher',at:clock},{live:true}),'New Ignore records do not collapse distinct NPC articles');
+const unchecked=createWikiDiscovery({...options,verifyDiscovery:null});assert.equal(unchecked.consume({type:'kill',victim:'Unchecked synthetic keeper',at:clock},{live:true}),null,'A cached monster miss cannot bypass a missing native verifier');assert.equal(unchecked.snapshot().pending.length,0);
+for(const state of ['covered','unknown','failure','cancelled','expired','missing']){
+ let complete,fail;const pending=new Promise((resolve,reject)=>{complete=resolve;fail=reject;}),shown=[];
+ const gated=createWikiDiscovery({...options,verifyDiscovery:()=>pending,onMissing:value=>shown.push(value)});
+ assert.equal(gated.consume({type:'kill',victim:'Async synthetic keeper '+state,at:clock},{live:true}),null);assert.equal(shown.length,0,'Async NPC checks never flash a notice');
+ if(state==='cancelled')gated.cancelChecks();
+ if(state==='expired')clock+=10001;
+ if(state==='failure')fail(Error('offline'));else complete({state:['covered','unknown'].includes(state)?state:'missing',reasons:['missing-page'],checkedAt:new Date(clock).toISOString()});
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(shown.length,state==='missing'?1:0,state+' keeps the native monster delivery gate honest');gated.dispose();
+}
 console.log('Wiki discovery: complete public catalog membership, normalization, live freshness, bounded queue, replay/log identity and persistent Ignore passed.');

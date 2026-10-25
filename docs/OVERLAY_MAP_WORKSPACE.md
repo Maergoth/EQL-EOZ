@@ -62,6 +62,8 @@ Map action opens the native map in first person at that mob's position.
 | --- | --- |
 | Native map controls and labels | `app/map-overlay.js`: collapsed hover/focus header, Reset/default follow and zoom, placed-name hit rectangles, accessible marker buttons, view cycle |
 | Lazy overlay 3D | `app/map-overlay-3d.js`, `app/zoneviewer/viewer.html?overlay=1`: reuse current decoder/viewer/first-person navigation; release child on line-map mode or hide; cancel stale zone/root loads |
+| Logged 3D player marker | `app/zoneviewer/player-state.js`: independent ring and movement-derived chevron, nearby-floor proof, minimum camera-relative screen size, clear on source/zone reset |
+| Top 3D pointer policy | `app/zoneviewer/overlay-mode.js`: adapt the pinned Trackball controls to left-drag pan and right-drag rotation; retain flat-map and first-person controls |
 | Native host and permissions | `desktop/overlay-host.cjs`, Map-only document CSP: fixed session commands, separate Map session with read-only viewer/game-file request allowlist, no log/settings/installer capabilities |
 | Intel controls and scrolling | `app/overlay.js`, `app/overlay.css`: anchored tier 0..10 and My Class, scrolling `#intel-body`, hover/focus mob actions, no global Map shortcut |
 | Shared owner | `app/app.js`: item tier and class remain one saved preference; resolve current NPC identity/normal/raid source before map focus; publish `intel.itemTier` and transient `map.focus` |

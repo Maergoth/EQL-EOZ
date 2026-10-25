@@ -2,6 +2,63 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "0.9.15",
+  "title": "Verified discoveries, zones and map controls",
+  "changes": [
+    "Check the public live wiki before showing an automatic discovery, item gap or monster popup. Use the bundled snapshot to avoid checks for known facts. Keep pending, failed, broad, unsupported and inconclusive checks out of the discovery queue and popups; recheck current facts before publication.",
+    "Reuse temporarily cached public wiki entries, including their direct zone and loot data, until the shipped snapshot reaches that revision. Share the cache across item presence, gap verification and local views; expire absence verdicts quickly and refresh old source proof without treating temporary facts as global loot-count completeness.",
+    "Dismiss an individual discovery with its red ×, or use ∞× to ignore that exact NPC or item across future contribution attempts. Restore ignored entities from Contribution History, including while signed out. Device ignores persist across restarts and dataset updates; existing submission receipts remain available.",
+    "Preserve readable zone names from entry logs and self /who records, including Lake Nerius. Export canonical public zones beyond the curated map catalog and retain documented NPC zone/category facts. Empty cache metadata no longer proves a wiki gap.",
+    "Recover explicit numeric /con levels from the selected log and the same continuous zone visit. Prefill killed-monster levels as unconfirmed observations with provenance. Considering a monster alone creates no discovery; zone/source/instance changes and older contributor edits are respected.",
+    "Create zones from the shared live Zone blueprint with an opening overview and Map, explicit Yes/No/Unknown raid availability, and separate optional raid overview and Raid Map. Validate reviewed map images and keep placeholders when unknown; narrow updates preserve existing zone content.",
+    "Restore scoped global loot-count completeness by bounding reviewed unresolved groups without expanding their broad entries or manufacturing drop counts. Research materials remain uncertain; verified important loot can qualify as Unique under the existing six-monster rule.",
+    "Keep the 3D player marker visible at full-zone scale, show a movement-derived direction arrow, and make left-drag pan in the top 3D view. Retain explicit rotation controls for the perspective view.",
+    "Use an eye mark in the app header and browser icon, styled for the existing dark and gold interface."
+  ],
+  "steps": [
+    {
+      "title": "Control discoveries",
+      "image": "0.9.15/discovery-controls",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Automatic discoveries appear after a live wiki check confirms the gap. Use the red × to dismiss one entry, or ∞× to ignore its NPC or item until restored.",
+      "alt": "Actual isolated Chromium contribution queue showing red dismiss and infinity ignore controls beside synthetic NPC and zone drafts.",
+      "caption": "Actual Electron Chromium capture with synthetic drafts, a local shared-blueprint fixture and an isolated profile. The native fixture verifies queue controls, ignore/restore and zone-form behavior. No installed profile, game pixels or production wiki writes.",
+      "imageSha256": "4f23fc4b3d3bc592499b2f827c2c5d621ab36b919e7e03e149d6aa7690a23565"
+    },
+    {
+      "title": "Restore ignored NPCs and items",
+      "image": "0.9.15/ignored-entities",
+      "view": "contribute",
+      "action": "Open Contribution History",
+      "copy": "Contribution History includes an ignored-entities list for this device. Find an NPC or item and choose Restore to permit future discoveries again. Saved drafts and published receipts are preserved.",
+      "alt": "Actual isolated Chromium Contribution History with a synthetic ignored NPC, local search and type filters, and Restore button.",
+      "caption": "Actual Electron Chromium capture with synthetic drafts, a local shared-blueprint fixture and an isolated profile. The native fixture verifies queue controls, ignore/restore and zone-form behavior. No installed profile, game pixels or production wiki writes.",
+      "imageSha256": "f732b4cb7efe5c08e05dbed3849091b9fb1f945dbf31fc2b1568aef9ec7df2b3"
+    },
+    {
+      "title": "Set up normal and raid zones",
+      "image": "0.9.15/zone-creation",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Choose whether the zone has a raid instance. The shared blueprint keeps normal and raid details separate and always includes an overview and Map, with placeholders for facts not yet known.",
+      "alt": "Actual isolated Chromium new-zone form showing the explicit raid-instance answer and separate normal and raid overview fields.",
+      "caption": "Actual Electron Chromium capture with synthetic drafts, a local shared-blueprint fixture and an isolated profile. The native fixture verifies queue controls, ignore/restore and zone-form behavior. No installed profile, game pixels or production wiki writes.",
+      "imageSha256": "eaf30a5c3fc4a3aa07d2addf01c59f0e20f43a57bc43866fc2133608cd927a12"
+    },
+    {
+      "title": "Pan the top 3D map",
+      "image": "0.9.15/map-player-arrow",
+      "view": "map",
+      "action": "Open Map",
+      "copy": "Left-drag pans the top 3D view. The location ring stays visible at whole-zone zoom, and movement adds a direction arrow. Use right-drag when you want to rotate.",
+      "alt": "Actual native Top 3D map showing a cyan player location ring and movement arrow over a synthetic floor with synthetic NPC labels.",
+      "caption": "Actual isolated Electron WebGL map capture after synthetic log location updates through the normal overlay pipeline. Native pointer checks verify camera and target pan together without tilting. No game files, player pixels or installed profile are used.",
+      "imageSha256": "02c77898dbb750538c13963179dc56cb3f1ef62765897996f3b74dfe53c74991"
+    }
+  ]
+},
+{
   "version": "0.9.14",
   "title": "Contribution history and safer loot discovery",
   "changes": [

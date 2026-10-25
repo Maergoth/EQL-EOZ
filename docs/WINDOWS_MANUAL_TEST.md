@@ -1,5 +1,9 @@
 # Eye of Zomm Windows/game-client acceptance test
 
+## 0.9.15 verified discovery and map checks
+
+Release candidate: `v0.9.15`. With synthetic missing/existing/failed/delayed wiki responses, confirm no automatic row, editor, Character gap, toast or popup appears before a missing result. Covered, error, expired and source-switched results remain quiet. Test red × dismissal, ∞× persistence/restart and signed-out History Restore. Exercise explicit raid Yes/No/Unknown, map placeholders and separate normal/raid overview previews. Enter a zone, refresh self /who, consider a monster with a numeric level, then kill it: only same-visit evidence prefills, unconfirmed. In the top 3D view, confirm a visible location ring at full-zone zoom, movement-derived arrow and left-drag pan without camera tilt.
+
 ## 0.9.14 contribution history and discovery checks
 
 With Timers closed, trigger a genuinely missing item and verify a separate

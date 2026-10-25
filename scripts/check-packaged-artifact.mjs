@@ -58,7 +58,7 @@ for (const [name, content, required] of [
     ['header version', index, 'id="titlebar-version"'],
     ['runtime version binding', app, "$('#titlebar-version').textContent"],
     ['/who zone parser', parser, "source:'who'"],
-    ['/who canonical zone resolution', app, 'event.zoneShortName || event.zone'],
+    ['/who canonical zone resolution', app, 'loggedZoneName(pack.zones,event.zone,event.zoneShortName)'],
     ['game-map formatter', coordinates, 'formatWorldLocationForGameMap'],
     ['sync status', viewerHtml, 'Synced to in-game map ${formatWorldLocationForGameMap(worldLocation)}'],
     ['viewer world transform', viewerBundle, 'eqWorldToThree(e,t,n){return new A(-Tt(t),Tt(n),Tt(e))}'],

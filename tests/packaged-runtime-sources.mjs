@@ -9,7 +9,7 @@ import { packagedArchivePaths, PACKAGED_RUNTIME_SOURCES, PACKAGED_RUNTIME_IMAGES
 const bootstrapPath = 'app/data/eye-of-zomm-pack.bootstrap.json';
 const requiredModules = [
     'app/appearance.js', 'app/appearance-presets.json', 'app/appearance-presets.generated.js', 'desktop/appearance.cjs', 'desktop/linux-runtime.cjs', 'desktop/log-selection.cjs',
-    bootstrapPath,
+    bootstrapPath,'app/assets/eye-of-zomm.svg',
     'app/whats-new.js','app/whats-new.css','app/release-history.js','app/release-history-state.js','desktop/window-placement.cjs',
     'app/overlay-map.html','app/map-overlay-3d.js','app/zoneviewer/overlay-mode.js','desktop/overlay-map-policy.cjs',
     'app/map-overlay.js', 'app/map-overlay-data.js', 'app/wiki-discovery.js', 'app/wiki-discovery-ui.js',
@@ -17,11 +17,15 @@ const requiredModules = [
     'app/timer-alerts.js', 'desktop/discovery-host.cjs', 'desktop/overlay-host.cjs', 'desktop/overlay-docking.cjs', 'desktop/overlay-preload.cjs', 'app/character-walkthrough.js',
     'app/contribution-evidence.js','app/contribution-choice-picker.js','app/contribution-review-view.js',
     'app/contribution-history.js','desktop/contribution-history.cjs','app/loot-classification.js',
+    'app/contribution-ignore-identity.js','app/ignored-entities-view.js','desktop/contribution-ignores.cjs',
     'app/loot-set-coverage.js','app/tooltip-delay.js',
     'desktop/discovery-notice-window.cjs','desktop/discovery-notice-preload.cjs','app/discovery-notices.html','app/discovery-notices.js','app/discovery-notices.css',
     'app/character-itembox.js','app/catalog-itembox.js','app/wiki-itembox.css','app/overlay-drag.js','app/discovery-contribution-flow.js',
     'app/capture-png.worker.js','app/inventory-export.js','desktop/inventory-file-host.cjs',
     'app/character-inventory-view.js','app/character-storage.js','app/character-profiles.js','desktop/character-storage.cjs',
+    'desktop/live-wiki-cache.cjs','desktop/wiki-item-existence.cjs','app/live-wiki-overlay.js',
+    'desktop/contribution-gap-verifier.cjs','app/contribution-discovery-gate.js',
+    'app/zone-blueprint.js','app/zone-creation-view.js','app/contribution-queue-controls.js','app/log-context.js','desktop/log-context-history.cjs',
     'app/zone-identity.js', 'app/viewer-zone-selection.js', 'app/zone-load-guard.js',
     'app/viewport-framing.js', 'app/established-route-guard.js', 'app/drop-certification.js', 'app/navigation-policy.js', 'app/route-validation.js', 'app/zoneviewer/ZoneViewerApp.js'
 ];

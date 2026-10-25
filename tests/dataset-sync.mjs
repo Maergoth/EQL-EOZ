@@ -9,6 +9,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import {loggedZoneName} from '../app/zone-identity.js';
+import {applyLiveWikiOverlay} from '../app/live-wiki-overlay.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const mainPath = path.join(root, 'desktop/main.cjs');
@@ -450,7 +452,7 @@ test('bootstrap packaging preserves complete and incomplete global count records
 
 test('renderer fallback retains the whole producer count index for contribution previews',async()=>{
     const start=rendererSource.indexOf('async function loadPack()'),end=rendererSource.indexOf('async function connectBridge()',start),value=classificationPack('renderer-counts'),calls=[];
-    const context=vm.createContext({pack:{meta:{},zones:[],npcs:[],items:[]},parser:{},settings:{},fetch:async url=>{calls.push(url);if(!url.includes('bootstrap'))throw Error('No local cache');return jsonResponse(value);},rebuildPackIndexes(){},buildEraSelect(){},buildItemSlotSelect(){},renderAll(){},$:()=>({textContent:''})});
+    const context=vm.createContext({pack:{meta:{},zones:[],npcs:[],items:[]},basePack:null,liveEntrySnapshot:{schemaVersion:1,entries:[]},applyLiveWikiOverlay,parser:{},settings:{},loggedZoneName,fetch:async url=>{calls.push(url);if(!url.includes('bootstrap'))throw Error('No local cache');return jsonResponse(value);},rebuildPackIndexes(){},buildEraSelect(){},buildItemSlotSelect(){},renderAll(){},$:()=>({textContent:''})});
     vm.runInContext(rendererSource.slice(start,end),context);await vm.runInContext('loadPack()',context);
     assert.deepEqual(context.pack.lootSourceCounts,value.lootSourceCounts);assert.equal(context.pack.meta.lootSourceCountsVersion,2);assert.deepEqual(context.pack.npcs[0].aliases,['Guardian Redirect']);assert.equal(calls.length,2);
     assert.deepEqual(context.pack.wikiRelationshipCoverage,value.wikiRelationshipCoverage);
@@ -464,7 +466,7 @@ test('the renderer skips primary caches with missing or nonnumeric schema versio
     for (const schemaVersion of [undefined, 'not-a-schema']) {
         const calls = [];
         const context = vm.createContext({
-            pack:{ meta:{}, zones:[], npcs:[], items:[] }, parser:{}, settings:{},
+            pack:{ meta:{}, zones:[], npcs:[], items:[] },basePack:null,liveEntrySnapshot:{schemaVersion:1,entries:[]},applyLiveWikiOverlay, parser:{}, settings:{},loggedZoneName,
             fetch:async url => {
                 calls.push(url);
                 return jsonResponse(url.includes('bootstrap') ? pack('fallback') : { ...pack('invalid'), meta:{ schemaVersion } });

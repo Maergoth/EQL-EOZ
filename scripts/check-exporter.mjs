@@ -41,6 +41,9 @@ assert.equal(schema.$defs.contributionCard.properties.schemaVersion.const, 1);
 assert.equal(schema.$defs.contributionCard.additionalProperties, false);
 assert.deepEqual(schema.$defs.lootSet.required, ['items', 'complete']);
 assert.equal(schema.$defs.lootSet.properties.items.maxItems, 1000);
+assert.equal(schema.$defs.lootSet.properties.possibleSource.$ref, '#/$defs/relationshipSource');
+assert.deepEqual(schema.$defs.lootSet.properties.possibleRule.enum, ['reviewed-research-catalog', 'literal-self-title']);
+assert(schema.$defs.lootSet.allOf.some(rule => rule.then?.properties?.complete?.const === false), 'Reviewed domains must remain uncertainty-only.');
 for (const field of schema.$defs.lootSourceCount.required) {
     assert.deepEqual(schema.properties.items.items.properties[field], schema.$defs.lootSourceCount.properties[field], `Rich item ${field} matches catalog metadata.`);
 }
@@ -50,6 +53,8 @@ const normalizeMethod = source.match(/    private function intIfWhole[\s\S]*?(?=
 if (!parseMethod || !normalizeMethod) throw new Error('Unable to isolate exporter location parser.');
 const candidateMethod = source.match(/    private function rememberPublicLootSource[\s\S]*?(?=\n    private function resolveLootTitle)/)?.[0];
 if (!candidateMethod) throw new Error('Unable to isolate exporter candidate identity boundary.');
+const sourceDomainConstant = source.match(/    private const SOURCE_GROUP_DOMAINS = \[[\s\S]*?\n    \];/)?.[0];
+if (!sourceDomainConstant) throw new Error('Unable to isolate the reviewed uncertainty registry.');
 
 const fixtures = [
     ['{{loc|1208|-714|12}}', [1208, -714, 12]],
@@ -85,6 +90,7 @@ class MediaWikiServices {
     public function getRedirectTarget($title) { return $title->getText() === 'Guardian alias' ? new Title('Guardian 1') : null; }
 }
 class CandidateIdentityHarness {
+${sourceDomainConstant}
     private EqlItemLootSourceCounts $lootCounts;
     private array $lootTitleMemo = [];
     private array $lootSourceKinds = [];
@@ -145,6 +151,15 @@ $setCatalog = $sets->catalog($resolve);
 $incompleteSets = new EqlItemLootSourceCounts();
 $incompleteSets->sets(['Synthetic gear'=>['items'=>['Synthetic relic'], 'complete'=>false]]);
 $incompleteSets->npc('Guardian 1', '{{Namedmobpage|known_loot={{:Synthetic gear}}}}');
+$domainIntro='Synthetic reviewed source domain.';
+$domainBounded=false;
+$domainItems=EqlNpcLootWikitext::reviewedSourceDomainItems($domainIntro.'<ul><li>{{:Synthetic relic}}</li><li>{{:Synthetic relic}}</li></ul>', hash('sha256',$domainIntro), $domainBounded);
+$possibleSets=new EqlItemLootSourceCounts();
+$possibleSets->item('Synthetic relic','{{Itempage|itemname=Synthetic relic|dropsfrom=}}');
+$possibleSets->item('Unaffected relic','{{Itempage|itemname=Unaffected relic|dropsfrom=}}');
+$possibleSets->sets(['Research'=>['items'=>[], 'complete'=>false, 'possibleItems'=>['Synthetic relic'], 'possibleItemsComplete'=>true]]);
+$possibleSets->npc('Guardian 1','{{Namedmobpage|known_loot=[[Research]]}}');
+$possibleCatalog=$possibleSets->catalog($resolve);
 $legacyHover = '<onlyinclude><div class="hbdiv">[[Synthetic relic]]<span class="hb">{{Itembox|itemname=Synthetic relic|statsblock=AC: 2}}</span></div></onlyinclude>{{Itempage|itemname=Synthetic relic}}';
 echo json_encode(['locations'=>$out, 'five'=>$five, 'six'=>$six, 'incomplete'=>$incomplete,
     'pets'=>$pets->catalog($resolve)['Synthetic material'],
@@ -160,6 +175,9 @@ echo json_encode(['locations'=>$out, 'five'=>$five, 'six'=>$six, 'incomplete'=>$
     'setMembers'=>$setMembers, 'setComplete'=>$setComplete,
     'setCatalog'=>$setCatalog,
     'incompleteSet'=>$incompleteSets->catalog($resolve)['Synthetic relic'],
+    'domainItems'=>$domainItems, 'domainBounded'=>$domainBounded, 'possibleCatalog'=>$possibleCatalog,
+    'literalLeaf'=>EqlNpcLootWikitext::literalSourceLeaf('Synthetic relic','Synthetic relic'),
+    'normalWho'=>EqlNpcLootWikitext::normalZoneWhoAliases('{| class="zoneTopTable"'."\n! Name in /who\n| newzone\n|}"),
     'legacyTarget'=>EqlNpcLootWikitext::globalItemTemplateTarget($legacyHover),
     'legacyTrailing'=>EqlNpcLootWikitext::globalItemTemplateTarget(str_replace('</onlyinclude>', '{{Unknown}}</onlyinclude>', $legacyHover)),
     'legacyDynamic'=>EqlNpcLootWikitext::globalItemTemplateTarget(str_replace('AC: 2', '{{{value|AC: 2}}}', $legacyHover)),
@@ -198,6 +216,12 @@ assert.deepEqual(actual.setCatalog['Synthetic relic'], countRecord([...fiveNames
 assert.deepEqual(actual.setCatalog['Set-only relic'], countRecord(['Guardian 6']));
 assert.equal(Object.hasOwn(actual.setCatalog, 'Synthetic gear'), false, 'A set title never becomes a fictitious item.');
 assert.deepEqual(actual.incompleteSet, countRecord(['Guardian 1'], false), 'Incomplete membership retains only a proved lower bound.');
+assert.deepEqual(actual.domainItems, ['Synthetic relic']);
+assert.equal(actual.domainBounded, true, 'A reviewed literal catalog can bound possible identities after identical-reference deduplication.');
+assert.deepEqual(actual.possibleCatalog['Synthetic relic'], countRecord([], false), 'Possible research membership never adds a positive NPC source.');
+assert.deepEqual(actual.possibleCatalog['Unaffected relic'], countRecord([]), 'Bounded uncertainty does not poison unrelated exact counts.');
+assert.equal(actual.literalLeaf, true);
+assert.deepEqual(actual.normalWho, ['newzone']);
 assert.equal(actual.legacyTarget, 'Synthetic relic', 'Public proof accepts one unconditional static matching item hover.');
 assert.equal(actual.legacyTrailing, null, 'Additional template output cannot prove a single item.');
 assert.equal(actual.legacyDynamic, null, 'Dynamic item hover output remains unverified.');

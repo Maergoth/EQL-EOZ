@@ -61,3 +61,11 @@ for(let index=0;index<12;index++){for(const value of gates)value.gate.resolve();
 const statuses=(await Promise.all(queued)).map(value=>value.status);assert(maxActive<=2);assert(statuses.includes('unknown'),'Queue overflow is bounded and cannot prove missing');assert(statuses.includes('missing'));
 for(const checker of [local,ambiguous,live,redirect,coalesced,retry,bounded])checker.dispose();
 console.log('Item existence: local positive identity, fixed anonymous single-title query, strict missing proof, redirects, coalescing/cache, stale-result guards, retry backoff and request bounds passed.');
+
+{
+let sharedCalls=0,sharedClock=100000,sharedResult={state:'covered',canonicalTitle:'Synthetic Downloaded Relic',checkedAt:new Date(sharedClock).toISOString()};
+const shared=new WikiItemExistence({getPack:async()=>({}),now:()=>sharedClock,entryVerifier:{check:async request=>{sharedCalls++;assert.equal(request.kind,'item');assert.deepEqual(request.reasons,['missing-page']);return sharedResult;}},fetchImpl:()=>{throw Error('Shared source verifier must replace the duplicate info-only lookup');}});
+assert.equal((await shared.check({name:'Synthetic Downloaded Relic'})).status,'present');assert.equal((await shared.check({name:'Synthetic Downloaded Relic'})).status,'present');assert.equal(sharedCalls,1);shared.clear();
+sharedResult={state:'missing',canonicalTitle:'Synthetic Missing Relic',reasons:['missing-page'],checkedAt:new Date(sharedClock-59000).toISOString()};assert.equal((await shared.check({name:'Synthetic Missing Relic'})).status,'missing');sharedClock+=2000;assert.equal((await shared.check({name:'Synthetic Missing Relic'})).status,'unknown','Shared absence proof cannot gain a second sixty-second lifetime');assert.equal(sharedCalls,3);shared.dispose();
+console.log('Item presence uses the shared full-entry verifier and preserves original absence freshness.');
+}

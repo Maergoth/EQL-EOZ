@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {mkdtemp,rm,readFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import vm from 'node:vm';
+const require=createRequire(import.meta.url),{WikiHost,CHANNEL}=require('../desktop/wiki-host.cjs');
+const directory=await mkdtemp(join(tmpdir(),'eoz-live-wiki-host-')),origin='http://127.0.0.1:4321',npc='Synthetic Restored Keeper',zone='Synthetic Known Lake',item='Synthetic Scoped Relic';
+let base={meta:{version:'old-snapshot',wikiEntitiesComplete:true,lootSourceCountsVersion:2},wikiEntities:{items:[item],npcs:[npc],zones:[zone],titles:[item,npc,zone]},npcs:[{name:npc,wikiTitle:npc,zone:'',revisionId:1}],zones:[{name:zone,wikiTitle:zone,revisionId:1}],items:[{name:item,wikiTitle:item,revisionId:1,lootSourceCount:1,lootSourceNpcs:['Other Keeper'],lootSourceCountComplete:true}],lootSourceCounts:{[item]:{lootSourceCount:1,lootSourceNpcs:['Other Keeper'],lootSourceCountComplete:true}}};
+const rows=new Map([[npc,{revision:10,content:`{{Namedmobpage|name=${npc}|zone=[[${zone}]]|known_loot={{:${item}}}|common_loot=}}`,categories:[zone]}],[zone,{revision:11,content:'[[Category:Zones]]',categories:['Zones']}]]);
+const main={isDestroyed:()=>false,webContents:{mainFrame:{url:origin+'/'},sent:[],send(...args){this.sent.push(args);}}},handlers=new Map();let calls=0;
+const fetchImpl=async(url,init)=>{calls++;assert.equal(init.credentials,'omit');assert.equal(init.useSessionCookies,false);const title=new URL(url).searchParams.get('titles'),row=rows.get(title);assert(row);return new Response(JSON.stringify({query:{pages:[{title,ns:0,pageid:10,categories:row.categories.map(name=>({title:'Category:'+name})),revisions:[{revid:row.revision,slots:{main:{contentmodel:'wikitext',content:row.content}}}]}]}}));};
+const session={fetch(){throw Error('Public cache must never read account session');},setPermissionRequestHandler(){},setPermissionCheckHandler(){},setDevicePermissionHandler(){},on(){},removeListener(){}};
+const electron={session:{fromPartition:()=>session},ipcMain:{handle:(channel,fn)=>handlers.set(channel,fn),removeHandler:channel=>handlers.delete(channel)}};
+const make=()=>{const host=new WikiHost({electron,origin,getMainWindow:()=>main,stateDir:directory,onItemCatalog:async()=>base});host.discoveryVerifier.fetch=fetchImpl;return host;};
+const request={kind:'npc',name:npc,zone,instance:'normal',reasons:['missing-population'],relations:[{type:'mob-zone',name:npc,zone,instance:'normal',evidence:'kill'}]},event={sender:main.webContents,senderFrame:main.webContents.mainFrame};let host;
+try{
+ host=make();assert.equal((await host.verifyDiscovery(request)).state,'covered');assert.equal(calls,2);let snapshot=await host.liveEntries();assert.equal(snapshot.entries.length,2);
+ assert.equal((await host.verifyDiscovery(request)).state,'covered');assert.equal(calls,2,'Repeated covered checks reuse positive proof');
+ const catalog=await host.client.getItemCatalog();assert.equal(catalog.npcs.find(row=>row.name===npc).zone,zone);assert(catalog.items.find(row=>row.name===item).dropSources.some(row=>row.name===npc));assert.equal(catalog.lootSourceCounts[item].lootSourceCountComplete,false,'Native publication sees the same temporary facts and invalidates an affected old Unique proof');assert.equal(base.lootSourceCounts[item].lootSourceCountComplete,true,'The verified snapshot is not mutated');
+ const invoke=handlers.get(CHANNEL);assert.equal((await invoke(event,'live-entries')).entries.length,2);await assert.rejects(invoke({...event,sender:{}},'live-entries'),/main app/);
+ host.dispose();host=make();calls=0;host.discoveryVerifier.fetch=()=>{throw Error('Fresh retained public sources should survive restart without HTTP');};assert.equal((await host.verifyDiscovery(request)).state,'covered');assert.equal(calls,0);
+ await host.client.onWikiPageChanged(npc);assert(!(await host.liveEntries()).entries.some(row=>row.title===npc),'A real or uncertain publication invalidates the affected cached source');
+ await host.liveCache.put({title:npc,namespace:0,revision:10,content:rows.get(npc).content,categories:[zone],fetchedAt:new Date().toISOString(),source:'public-wiki',origin:'https://eqlwiki.com'});
+ base={...base,meta:{...base.meta,version:'new-snapshot'},npcs:[{name:npc,wikiTitle:npc,zone,revisionId:10}],zones:[{name:zone,wikiTitle:zone,revisionId:11}]};assert.equal((await host.liveEntries()).entries.length,0,'Only the actual base snapshot revision catches up and flushes temporary entries');
+ const exposed={},ipcCalls=[],listeners=new Map();vm.runInNewContext(await readFile(new URL('../desktop/preload.cjs',import.meta.url),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld:(key,value)=>exposed[key]=value},ipcRenderer:{invoke:(...args)=>ipcCalls.push(args),on:(channel,callback)=>listeners.set(channel,callback),removeListener:channel=>listeners.delete(channel)}})});exposed.eyeOfZommWiki.liveEntries();assert.deepEqual(ipcCalls.at(-1),[CHANNEL,'live-entries']);let delivered;const off=exposed.eyeOfZommWiki.onLiveEntriesChanged(value=>{delivered=value;});listeners.get('eye-of-zomm:live-wiki-entries-changed')({}, {schemaVersion:1,entries:[]});assert.equal(delivered.schemaVersion,1);off();assert(!listeners.has('eye-of-zomm:live-wiki-entries-changed'));
+ console.log('Live wiki host: shared anonymous source cache, restart reuse, typed temporary facts/native count guard, current-base catch-up, publication invalidation and trusted IPC/preload passed.');
+}finally{host?.dispose();await rm(directory,{recursive:true,force:true});}
