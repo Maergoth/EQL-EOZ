@@ -156,7 +156,7 @@ export function renderIntel(intel = {}, {query = '', expanded = new Set(), loadi
 }
 export function panelMarkup(panel) {
     if (panel === 'parse') return `<nav class="parse-tabs" aria-label="Parse metrics">${TABS.map(tab => `<button type="button" data-tab="${tab}" aria-pressed="${tab === 'damage'}" class="${tab === 'damage' ? 'is-active' : ''}">${TAB_LABELS[tab]}</button>`).join('')}</nav><div id="parse-body"></div>`;
-    if (panel === 'intel') return '<div class="intel-controls"><div class="panel-toolbar intel-filter-row"><label class="intel-tier-label" for="intel-item-tier">Item level <output id="intel-item-tier-value" for="intel-item-tier">Base</output></label><input id="intel-item-tier" type="range" min="0" max="10" step="1" value="0" aria-label="Item level"><label class="intel-class-label"><input id="class-filter" type="checkbox"> My Class</label><label class="intel-crawl-label" title="Keep defeated mobs dimmed until the next zone entry"><input id="intel-crawl-mode" type="checkbox"> Crawl</label></div><input id="intel-search" class="intel-search" type="search" maxlength="160" placeholder="Find named or rare mob…" aria-label="Search named and rare mobs"><span id="intel-attention" class="sr-only" role="status" aria-live="polite"></span></div><div id="intel-body" class="intel-mob-list" role="region" aria-label="Named and rare mob loot"></div>';
+    if (panel === 'intel') return '<div class="intel-controls"><div class="panel-toolbar intel-filter-row"><label class="intel-tier-label" for="intel-item-tier">Tier <output id="intel-item-tier-value" for="intel-item-tier">Base</output></label><input id="intel-item-tier" type="range" min="0" max="10" step="1" value="0" aria-label="Item level"><label class="intel-class-label"><input id="class-filter" type="checkbox"> My Class</label><label class="intel-crawl-label" title="Keep defeated mobs dimmed until the next zone entry"><input id="intel-crawl-mode" type="checkbox"> Crawl</label></div><input id="intel-search" class="intel-search" type="search" maxlength="160" placeholder="Find named or rare mob…" aria-label="Search named and rare mobs"><span id="intel-attention" class="sr-only" role="status" aria-live="polite"></span></div><div id="intel-body" class="intel-mob-list" role="region" aria-label="Named and rare mob loot"></div>';
     if (panel === 'map') return '<div id="native-map-root"></div>';
     return '<div class="timer-display"><div id="timer-list"></div><div id="swing-body"></div></div>';
 }
@@ -382,7 +382,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             }
             if (state.sessionAvailable !== true || draftIntelTier === intelTierValue(intel.itemTier)) draftIntelTier = null;
             const tier = draftIntelTier ?? intelTierValue(intel.itemTier);
-            $('#intel-item-tier').value = String(tier); $('#intel-item-tier-value').textContent = tier ? `Tier ${tier}` : 'Base';
+            $('#intel-item-tier').value = String(tier); $('#intel-item-tier-value').textContent = tier ? `+${tier}` : 'Base';
             $('#intel-item-tier').setAttribute('aria-valuetext',tier ? `Tier ${tier}` : 'Base item stats');
             const focused = (intel.npcs || []).find(npc => !crawlDefeated(npc,intel) && intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
             const key = focused ? intelNpcKey(focused,intel) : '';
@@ -451,7 +451,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     listen($('#encounter-scope'),'change',event => { scope = event.target.value; render(); });
     listen($('#class-filter'),'change',event => { void action('session:class-filter',{panel,enabled:event.target.checked}); });
     listen($('#intel-crawl-mode'),'change',event => { void action('session:crawl-mode',{enabled:event.target.checked}); });
-    listen($('#intel-item-tier'),'input',event => { draftIntelTier = intelTierValue(event.target.value); $('#intel-item-tier-value').textContent = draftIntelTier ? `Tier ${draftIntelTier}` : 'Base'; event.target.setAttribute('aria-valuetext',draftIntelTier ? `Tier ${draftIntelTier}` : 'Base item stats'); });
+    listen($('#intel-item-tier'),'input',event => { draftIntelTier = intelTierValue(event.target.value); $('#intel-item-tier-value').textContent = draftIntelTier ? `+${draftIntelTier}` : 'Base'; event.target.setAttribute('aria-valuetext',draftIntelTier ? `Tier ${draftIntelTier}` : 'Base item stats'); });
     listen($('#intel-item-tier'),'change',event => { draftIntelTier = intelTierValue(event.target.value); void action('session:item-tier',{tier:draftIntelTier}); });
     listen($('#intel-search'),'input',event => { intelQuery = event.target.value; render(); });
     // Only entering the mob name opens pointer actions. Keep the group open
