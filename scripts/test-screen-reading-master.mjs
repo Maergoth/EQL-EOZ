@@ -22,8 +22,14 @@ async function native({root,profile,phase}){
         await until(()=>run(()=>Boolean(document.querySelector('[data-capture-opt-in]')&&window.eyeOfZommCapture)),'actual settings and preload');
         assert.equal((await run(()=>window.eyeOfZommCapture.status())).readingEnabled,phase==='enabled','Native config survives process restart without inferring permission from a reader');
         if(phase==='enabled'){
+            // The persisted enabled phase may legitimately enumerate before
+            // the fixture disables it. Exercise that allowed path explicitly
+            // so the disabled-period assertion cannot depend on startup timing.
+            await run(()=>window.eyeOfZommCapture.sources());assert(captures>0,'Persisted permission permits source enumeration before disable');
             await until(()=>run(async()=>{await window.eyeOfZommCapture.setReadingEnabled(false);return !(await window.eyeOfZommCapture.status()).readingEnabled;}),'disable persisted permission');
         }
+        const disabledCaptureBaseline=captures;
+        if(phase!=='enabled')assert.equal(disabledCaptureBaseline,0,'An absent or persisted-off permission cannot enumerate during startup');
         await run(()=>document.querySelector('[data-view="contribute"]').click());await wait(150);
         const result=await run(async()=>{
             const api=window.eyeOfZommCapture;
@@ -31,7 +37,7 @@ async function native({root,profile,phase}){
             const warning=document.querySelector('[data-screen-reading-warning]');return {denied,text:warning.textContent,color:getComputedStyle(warning).color,status:await api.status()};
         });
         assert.deepEqual(result.denied,[true,true,true,true,true,true]);assert.equal(result.status.enabled,false);assert.equal(result.status.owner,null);assert.match(result.text,/ALL screen reading is disabled/);assert.equal(result.color,'rgb(255, 132, 132)');
-        assert.equal(captures,0,'Opening Contribute while unchecked cannot enumerate or capture a source');
+        assert.equal(captures,disabledCaptureBaseline,'Opening Contribute and all blocked image paths cannot enumerate after native disable acknowledgment');
         if(phase==='initial'){
             await run(()=>document.querySelector('[data-capture-opt-in]').click());await until(()=>run(async()=>(await window.eyeOfZommCapture.status()).readingEnabled),'checkbox grants native permission');
             await until(()=>captures===1,'Active Contribute automatically requests its source after enabling');assert.equal((await run(()=>window.eyeOfZommCapture.status())).enabled,false,'No source means no fabricated active capture');await wait(150);assert.equal(captures,1,'The active tab requests a source once, without a reload/restart loop');
