@@ -4,6 +4,13 @@ import {recoverItemBaseStat,recoverItemBaseStats,isItemBaseCandidate,ITEM_BASE_R
 
 const options={tier:4,fraction:0,augmentStatus:'excluded'};
 const contains=(result,base)=>result.ranges.some(range=>base>=range.min&&base<=range.max&&Math.abs((base-range.min)/range.step-Math.round((base-range.min)/range.step))<1e-7);
+// Literal observed values exercise the inverse through the corrected shared
+// forward engine, rather than deriving the observation from that same engine.
+for(const [key,observed,tier,fraction,base]of [['AC',22,6,5,14],['HP',75,5,4,50],['HP',71,4,4,50]]){
+    const recovered=recoverItemBaseStat(key,observed,{tier,fraction,augmentStatus:'excluded'});
+    assert.equal(recovered.status,'exact');assert.equal(recovered.value,base);
+    assert.equal(isItemBaseCandidate(key,base,observed,{tier,fraction,augmentStatus:'excluded'}),true);
+}
 const integerKeys=['AC','HP','MP','END','STR','STA','AGI','DEX','WIS','INT','CHA','SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE',
     'HP_REGEN','MANA_REGEN','END_REGEN','HASTE','DMG','RANGE','DELAY','COLD_DMG','FIRE_DMG','MAGIC_DMG','POISON_DMG','DISEASE_DMG','CORRUPTION_DMG','CHROMATIC_DMG','PRISMATIC_DMG','ELEMENTAL_DMG','BANE_DMG','BACKSTAB_DMG'];
 for(const key of integerKeys)for(const base of [-41,-10,-4,-1,0,1,5,10,11,27,73]){

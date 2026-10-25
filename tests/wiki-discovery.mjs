@@ -7,7 +7,7 @@ let pack = { meta:{ wikiEntitiesComplete:true, version:'full-1' }, wikiEntities:
 }, npcs:[{ name:'Fallback Rat', aliases:['Fallback alias'] }], items:[{ name:'Fallback Ring' }] };
 const values = new Map(), prompts = [], warnings = [];
 const storage = { getItem:key => values.get(key), setItem:(key, value) => values.set(key, value) };
-const options = { getPack:() => pack, storage, now:() => clock, onMissing:prompt => prompts.push(prompt), onWarning:message => warnings.push(message) };
+const options = { getPack:() => pack, storage, now:() => clock, verifyItem:()=>({status:'missing'}), onMissing:prompt => prompts.push(prompt), onWarning:message => warnings.push(message) };
 let discovery = createWikiDiscovery(options);
 const consume = (event, context = {}) => discovery.consume({ at:clock, ...event }, { live:true, logId:'log-a', zone:'Test Zone', ...context });
 assert.equal(wikiEntityKey(' The_King&#39;s  Guard'), "the king's guard");
@@ -63,7 +63,7 @@ for (const meta of [{}, { wikiEntitiesComplete:false }, { wikiEntitiesComplete:t
     assert.equal(discovery.snapshot().complete, false);
 }
 pack = { meta:{ wikiEntitiesComplete:true }, wikiEntities:{ items:[], npcs:[] }, items:[], npcs:[] };
-assert.equal(consume({ type:'loot', item:'Missing titles array' }), null);
+assert.ok(consume({ type:'loot', item:'Missing titles array' }), 'A native live result may verify an item absent from an incomplete local catalog');
 pack = { meta:{ wikiEntitiesComplete:true, version:'full-2' }, wikiEntities:{ npcs:[], items:[], titles:[] }, items:[], npcs:[] };
 assert.ok(consume({ type:'loot', item:'Now verifiable catalog absence' }));
 pack = { ...pack, wikiEntities:{ ...pack.wikiEntities, titles:['Now present after update'] } };

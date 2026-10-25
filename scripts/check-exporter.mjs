@@ -14,11 +14,17 @@ assert(collector.includes("require_once __DIR__ . '/../extensions/DynamicZoneLis
 assert(parser.includes('final class EqlNpcLootWikitext'), 'The matching source parser is mirrored.');
 assert(source.includes("'lootSourceCountsVersion' => 1"), 'The producer marks cached count metadata.');
 assert(source.includes("'lootSourceCounts' => (object)$lootSourceCounts"), 'The catalog includes statless item counts, preserving an empty JSON object.');
+assert(source.includes("'lootSetsVersion' => 1"), 'The producer versions explicit set membership.');
+assert(source.includes("'lootSets' => (object)$this->lootSets"), 'Set membership preserves an empty JSON object.');
 const schema = JSON.parse(readFileSync(new URL('../server/eye-of-zomm-pack.schema.json', import.meta.url), 'utf8'));
 assert.equal(schema.properties.meta.properties.lootSourceCountsVersion.const, 1);
 assert.equal(schema.properties.lootSourceCounts.additionalProperties.$ref, '#/$defs/lootSourceCount');
 assert.deepEqual(schema.$defs.lootSourceCount.required, ['lootSourceCount', 'lootSourceCountComplete', 'lootSourceNpcs']);
 assert.equal(schema.properties.npcs.items.properties.aliases.type, 'array');
+assert.equal(schema.properties.meta.properties.lootSetsVersion.const, 1);
+assert.equal(schema.properties.lootSets.additionalProperties.$ref, '#/$defs/lootSet');
+assert.deepEqual(schema.$defs.lootSet.required, ['items', 'complete']);
+assert.equal(schema.$defs.lootSet.properties.items.maxItems, 1000);
 for (const field of schema.$defs.lootSourceCount.required) {
     assert.deepEqual(schema.properties.items.items.properties[field], schema.$defs.lootSourceCount.properties[field], `Rich item ${field} matches catalog metadata.`);
 }
@@ -83,11 +89,11 @@ $counts = new EqlItemLootSourceCounts();
 $counts->item('Synthetic relic', "{{Itempage|itemname=Synthetic relic|dropsfrom=[[Zone One]]\n* [[Guardian 1]]\n* [[Guardian alias]]\n* [[Ground_Spawn]]\n* [[GROUND SPAWNS]]\n== Raid Instance ==\n[[Zone Two]]\n* [[Guardian 1]]}}");
 for ($i = 2; $i <= 5; $i++) {
     $field = $i % 2 ? 'known_loot' : 'common_loot';
-    $counts->npc('Guardian ' . $i, '{{Namedmobpage|zone=[[Another zone]]|' . $field . '={{:Synthetic relic}}}}');
+    $counts->npc('Guardian ' . $i, '{{Namedmobpage|items_sold=Earlier stock|items_sold=Final stock|zone=[[Another zone]]|' . $field . '={{:Synthetic relic}}}}');
 }
 $counts->npc('Ground Spawn', '{{Namedmobpage|common_loot={{:Synthetic relic}}}}');
 $five = $counts->catalog($resolve)['Synthetic relic'];
-$counts->npc('Guardian 6', '{{Namedmobpage|common_loot={{:Synthetic relic}}}}');
+$counts->npc('Guardian 6', '{{MerchantPage|items_sold=Earlier stock|items_sold=Final stock|commonloot={{:Synthetic relic}}}}');
 $six = $counts->catalog($resolve)['Synthetic relic'];
 $counts->incomplete();
 $incomplete = $counts->catalog($resolve)['Synthetic relic'];
@@ -99,11 +105,44 @@ $overflow = new EqlItemLootSourceCounts(100, 1);
 $overflow->item('Synthetic material', "{{Itempage|itemname=Synthetic material|dropsfrom=* [[Guardian 1]]\n* [[Guardian 2]]}}");
 $missing = new EqlItemLootSourceCounts();
 $missing->npc('Guardian 1', '{{Namedmobpage|known_loot={{:Synthetic missing material}}}}');
+$duplicateSource = '{{Namedmobpage|items_sold=Earlier stock|items_sold=Final stock|known_loot={{:Synthetic relic}}}}';
+$defaultDuplicateStrict = EqlNpcLootWikitext::analyseNpcPage($duplicateSource) === null;
+$duplicateLoot = new EqlItemLootSourceCounts();
+$duplicateLoot->item('Synthetic relic', '{{Itempage|itemname=Synthetic relic|dropsfrom=}}');
+$duplicateLoot->npc('Guardian 1', '{{Namedmobpage|known_loot={{:Synthetic relic}}|known_loot=None}}');
+$caseComplete = true;
+$caseRows = EqlNpcLootWikitext::npcLootSources('{{Namedmobpage|known_loot={{Legacy Relic}}{{Legacy relic}}}}', $caseComplete, true, true, ['Legacy Relic'=>'Synthetic relic']);
+$badgeComplete = true;
+$badgeRows = EqlNpcLootWikitext::npcLootSources('{{Namedmobpage|known_loot={{Item Lore|A static description}}{{lootcheck}}{{:Synthetic relic}}}}', $badgeComplete, true, true);
+$setComplete = true;
+$setMembers = EqlNpcLootWikitext::globalGearSetItems('{{Gear Set|Synthetic relic|[[Set-only relic]]|Synthetic_relic}}', $setComplete);
+$sets = new EqlItemLootSourceCounts();
+$sets->item('Synthetic relic', '{{Itempage|itemname=Synthetic relic|dropsfrom=}}');
+$sets->sets(['Synthetic gear'=>['items'=>$setMembers, 'complete'=>$setComplete]]);
+for ($i = 1; $i <= 5; $i++) { $sets->npc('Guardian ' . $i, '{{Namedmobpage|known_loot={{:Synthetic relic}}}}'); }
+$sets->npc('Guardian 6', '{{Namedmobpage|known_loot={{:Synthetic gear}}{{:Synthetic relic}}}}');
+$setCatalog = $sets->catalog($resolve);
+$incompleteSets = new EqlItemLootSourceCounts();
+$incompleteSets->sets(['Synthetic gear'=>['items'=>['Synthetic relic'], 'complete'=>false]]);
+$incompleteSets->npc('Guardian 1', '{{Namedmobpage|known_loot={{:Synthetic gear}}}}');
+$legacyHover = '<onlyinclude><div class="hbdiv">[[Synthetic relic]]<span class="hb">{{Itembox|itemname=Synthetic relic|statsblock=AC: 2}}</span></div></onlyinclude>{{Itempage|itemname=Synthetic relic}}';
 echo json_encode(['locations'=>$out, 'five'=>$five, 'six'=>$six, 'incomplete'=>$incomplete,
     'pets'=>$pets->catalog($resolve)['Synthetic material'],
     'ground'=>$ground->catalog($resolve)['Synthetic material'],
     'overflow'=>$overflow->catalog($resolve)['Synthetic material'],
     'missing'=>$missing->catalog($resolve)['Synthetic missing material'],
+    'defaultDuplicateStrict'=>$defaultDuplicateStrict,
+    'duplicateLoot'=>$duplicateLoot->catalog($resolve)['Synthetic relic'],
+    'templateKey'=>EqlNpcLootWikitext::templateInvocationKey('Template:legacy_Relic'),
+    'caseTemplates'=>EqlNpcLootWikitext::globalNpcLootTemplateNames('{{Namedmobpage|known_loot={{Legacy Relic}}{{Legacy relic}}}}'),
+    'caseComplete'=>$caseComplete, 'caseItems'=>array_column($caseRows, 'item'),
+    'badgeComplete'=>$badgeComplete, 'badgeItems'=>array_column($badgeRows, 'item'),
+    'setMembers'=>$setMembers, 'setComplete'=>$setComplete,
+    'setCatalog'=>$setCatalog,
+    'incompleteSet'=>$incompleteSets->catalog($resolve)['Synthetic relic'],
+    'legacyTarget'=>EqlNpcLootWikitext::globalItemTemplateTarget($legacyHover),
+    'legacyTrailing'=>EqlNpcLootWikitext::globalItemTemplateTarget(str_replace('</onlyinclude>', '{{Unknown}}</onlyinclude>', $legacyHover)),
+    'legacyDynamic'=>EqlNpcLootWikitext::globalItemTemplateTarget(str_replace('AC: 2', '{{{value|AC: 2}}}', $legacyHover)),
     'candidateMemo'=>$candidateIdentity->memo()]);
 `;
 const result = spawnSync('php', [], {
@@ -122,6 +161,23 @@ const countRecord = (names, complete = true) => ({lootSourceNpcs:names, lootSour
 const fiveNames = Array.from({length:5}, (_, index) => `Guardian ${index + 1}`);
 assert.deepEqual(actual.five, countRecord(fiveNames), 'Cross-zone, instance and redirect sources count once; exact Ground Spawn/Spawns labels cannot turn five monsters into six.');
 assert.deepEqual(actual.six, countRecord([...fiveNames, 'Guardian 6']), 'Authored NPC Common and Unique loot both reach the global six-monster boundary.');
+assert.equal(actual.defaultDuplicateStrict,true,'Ordinary renderer/helper calls retain strict duplicate-parameter recognition.');
+assert.deepEqual(actual.duplicateLoot,countRecord([]),'The final exact static loot parameter wins, while ordinary renderer calls remain strict.');
+assert.equal(actual.templateKey, 'Legacy Relic');
+assert.deepEqual(actual.caseTemplates, ['Legacy Relic', 'Legacy relic']);
+assert.equal(actual.caseComplete, false, 'Case-distinct template titles require independent public proofs.');
+assert.deepEqual(actual.caseItems, ['Synthetic relic']);
+assert.equal(actual.badgeComplete, true, 'Reviewed static badges do not conceal authored items.');
+assert.deepEqual(actual.badgeItems, ['Synthetic relic']);
+assert.equal(actual.setComplete, true);
+assert.deepEqual(actual.setMembers, ['Synthetic relic', 'Set-only relic']);
+assert.deepEqual(actual.setCatalog['Synthetic relic'], countRecord([...fiveNames, 'Guardian 6']), 'A sixth set source reaches Common and overlaps direct references once.');
+assert.deepEqual(actual.setCatalog['Set-only relic'], countRecord(['Guardian 6']));
+assert.equal(Object.hasOwn(actual.setCatalog, 'Synthetic gear'), false, 'A set title never becomes a fictitious item.');
+assert.deepEqual(actual.incompleteSet, countRecord(['Guardian 1'], false), 'Incomplete membership retains only a proved lower bound.');
+assert.equal(actual.legacyTarget, 'Synthetic relic', 'Public proof accepts one unconditional static matching item hover.');
+assert.equal(actual.legacyTrailing, null, 'Additional template output cannot prove a single item.');
+assert.equal(actual.legacyDynamic, null, 'Dynamic item hover output remains unverified.');
 assert.deepEqual(actual.incomplete, countRecord([...fiveNames, 'Guardian 6'], false), 'An incomplete scan retains only its proven lower bound.');
 assert.deepEqual(actual.pets, countRecord(['a carpet']), 'Explicit pet labels are excluded without substring filtering.');
 assert.deepEqual(actual.ground, countRecord(['Ground Spawn Keeper']), 'Canonical Ground Spawns aliases are excluded while longer monster names are retained.');

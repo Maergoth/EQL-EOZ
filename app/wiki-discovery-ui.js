@@ -1,4 +1,4 @@
-// Shared by the main trigger editor and its native Timers surface. This is a
+// Shared by the dedicated discovery popup and spawn prompt. This is a
 // presentation queue only; catalog checks and clipboard capture stay in owner IPC.
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const requestNumber = value => typeof value === 'string' && /^capture-[1-9]\d{0,14}$/.test(value) ? Number(value.slice(8)) : 0;

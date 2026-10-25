@@ -65,6 +65,20 @@ if its formula identity changed. Existing ambiguity/review guards remain;
 aligned weight rounding does not independently certify its inverse. Character
 totals still come solely from the recorded character sheet.
 
+Rules revision 2, bundled with 0.9.14, floors the total for positive primary
+stats above ten: `floor(base + base × effectiveRank / 10)`. Small positive
+primary stats still add whole ranks; negative penalties retain their existing
+rounding. Screenshot regressions cover HP 50 → 75 at rank 5 plus 4/32,
+AC 14 → 22 at rank 6 plus 5/64, and HP 50 → 71 at rank 4 plus 4/16.
+The inverse searches this same forward engine, including fractional progress;
+it does not use a separate inverse formula. The revision change invalidates
+pending recovery reviews made with the older rounded-primary rules.
+The same revision expands Void eligibility to AC, HP, Mana, Endurance and their
+three regeneration fields in addition to attributes and ordinary saves. Two
+distinct qualifying base fields still earn one Void per whole rank. Aliases
+count once; unknown fields do not qualify. Weapon damage, Backstab, Haste,
+Attack, delay and weight stay outside that whitelist.
+
 Focused checks cover canonical math/wiki DOM behavior, Character/cards/recovery,
 release snapshot integrity and the shared Windows/Linux artifact contract.
 Synthetic checks do not constitute new game calibration or live-site testing.

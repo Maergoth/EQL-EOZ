@@ -2,11 +2,22 @@
 
 ## 0.9.14 - Contribution history and safer loot discovery
 
+- Bring Discoveries and Contribution History into one Contribute section with shared account controls. Compact the reader toolbar and replace the repeated three-receipt feed with one latest-result summary linking to History. Preserve draft edits, visible failure reasons and reader ownership when switching tabs.
+- Make Pause reading stop the Contribute-owned reader even with a pending item request or late start. Refresh or view re-entry cannot restart it; explicit Start or Contribute can resume using the selected source. Log processing continues separately.
+- Add **Any** immediately before **Auto** in Items. It disables only the Items class filter and preserves the detected/profile classes used elsewhere.
+- Recognize complete documented item-set membership in authored monster and zone loot sections, scoped to the instance. Preserve the listed set and its loot kind; fill missing individual item-page sources without appending redundant members. Native reviewed and saved-plan guards enforce the same coverage rule.
+- Standardize rich item previews on a 350 ms mouseover delay across the main app, Character and Intel. Keep keyboard access immediate and cancel pending previews on leave, scroll or source/view changes.
+- Avoid Intel row layout work on unrelated session updates and patch distance labels in place. Preserve its scrolling DOM and scroll position; retain anchor/focus recovery when displayed content changes.
+- Restore native Map startup by admitting its two bundled shared-scaling scripts through the existing local request policy. Other vendor files, provenance JSON and private APIs stay unavailable to that window.
+- Show missing-wiki suggestions in a dedicated lower-right desktop popup, independent of Timers and without activating the main window. Preserve stacked cards, visible-time expiry, hover/focus holds and explicit Contribute/Ignore actions; only Contribute starts its reader workflow.
+- Check cached item membership before a bounded, coalesced public page-existence lookup. Suppress existing pages and unverified failures; cancel stale source/profile lookups before they can open a popup. Timers has no discovery-action IPC bridge.
 - Add **Contribute → History** with automatic and reviewed submission receipts, partial and unconfirmed outcomes, local filters, older receipts, and saved-page/revision/diff links. Load only the current wiki account's receipts; switching accounts or logging out clears displayed rows. History cannot publish or retry work.
 - Retain bounded native receipt metadata independently of editable plans. Preserve unreadable history, keep evidence and credentials out of the receipt file, and report history-storage failures without changing a confirmed wiki edit result.
 - Exclude explicit owner-labelled pets from new monster discoveries and contribution plans, including stale catalog matches, while preserving literal monster names that merely contain similar letters. Existing edited and submitted work stays available.
 - Classify new loot placement from distinct monsters across the trusted cached wiki dataset. Six or more means Common; fewer means Unique only with complete count provenance. Missing or incomplete counts require refreshed data/review and never silently default to Unique. Count lookup makes no live wiki requests; ordinary publication/account/revision guards remain.
 - Retain the existing weight formula and cover the rank-ten display boundary: base weight 2.5 displays as 0.3.
+- Bundle corrected shared rules revision 2: positive primary stats above ten use the floored rank gain, matching HP 50 → 75 at rank 5 with 4/32 progress and AC 14 → 22 at rank 6 with 5/64 progress. Reverse recovery uses the same engine; older saved recovery reviews require review under the new rules. Negative penalties retain their existing rounding.
+- Include AC, HP, Mana, Endurance and their three regeneration fields in the shared Void eligibility whitelist. Two distinct qualifying base fields still earn one Void per rank; weapon damage, Backstab, Haste and Attack do not qualify.
 
 See [the release record](docs/RELEASE_0914_PLAN.md),
 [history contract](docs/CONTRIBUTION_HISTORY.md), and

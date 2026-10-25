@@ -34,6 +34,9 @@
         },
         "lootSourceCountsVersion": {
           "const": 1
+        },
+        "lootSetsVersion": {
+          "const": 1
         }
       }
     },
@@ -220,6 +223,14 @@
         "$ref": "#/$defs/lootSourceCount"
       }
     },
+    "lootSets": {
+      "type": "object",
+      "maxProperties": 5000,
+      "description": "Canonical public Gear Set title to explicit canonical members. Complete membership permits source deduplication without name guesses.",
+      "additionalProperties": {
+        "$ref": "#/$defs/lootSet"
+      }
+    },
     "icons": {
       "type": "object",
       "additionalProperties": {
@@ -229,6 +240,29 @@
     }
   },
   "$defs": {
+    "lootSet": {
+      "type": "object",
+      "required": [
+        "items",
+        "complete"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          }
+        },
+        "complete": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "lootSourceCount": {
       "type": "object",
       "required": [

@@ -24,6 +24,7 @@ import { contributionReaderMatches } from './contribution-reader.js';
 import { createAutomaticItemContribution } from './automatic-item-contribution.js';
 import { automaticSourceReceiptKey,automaticSourceDraftKeys,automaticSourceDraftComplete } from './automatic-source-results.js';
 import { mountContributionHistory } from './contribution-history.js';
+import { TOOLTIP_HOVER_DELAY_MS } from './tooltip-delay.js';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let eras=['Classic Era','Kunark Era','Velious Era'];
@@ -114,7 +115,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function cancelAutomaticContribution(){contributionEvidenceEpoch++;automaticContributions?.cancel();}
     function markContributionEdited(){if(selectedId)manuallyEditedContributions.add(selectedId);cancelAutomaticContribution();}
     try{const raw=storage?.getItem(OCR_AREA_STORAGE_KEY);if(raw&&raw.length<=24000){const parsed=JSON.parse(raw);if(Array.isArray(parsed))areaProfiles=parsed.slice(-MAX_OCR_AREAS).filter(value=>typeof value?.key==='string'&&value.key.length<=1000&&validAreaProfile(value)).map(value=>({key:value.key,region:normalizeOcrArea(value.region),referenceSize:frameSize(value.referenceSize)}));}}catch{/* A damaged optional calibration must not block ordinary capture. */}
-    root.innerHTML=`<div class="capture-toolbar panel"><div><h2>Contribute to Wiki</h2><p>New item readings and loot sources can publish automatically. Review entries that need a match or correction.</p></div><div class="capture-actions"><button class="secondary-button" data-wiki-login>Log in to wiki</button><button class="text-button" data-wiki-refresh>Refresh account</button><span data-account-status role="status">Not connected</span></div></div>
+    root.innerHTML=`<header class="capture-toolbar contribution-heading"><div><h2>Contribute</h2><p>Review discoveries or view your saved wiki submissions.</p></div><div class="capture-actions contribution-account"><span data-account-status role="status">Not connected</span><button class="secondary-button" data-wiki-login>Log in to wiki</button><button class="text-button" data-wiki-refresh>Refresh account</button></div></header>
         <div class="contribution-layout"><aside class="panel contribution-sidebar"><h3>Discovery queue</h3><fieldset class="contribution-filters"><legend>Show gaps</legend><div data-contribution-filters></div></fieldset><p class="settings-helper" data-contribution-count role="status"></p><details class="contribution-manual"><summary>Add a page manually</summary><form data-add-contribution><label>Type<select name="kind"><option value="item">Item</option><option value="npc">Monster</option><option value="zone">Zone</option></select></label><label>Name<input name="name" required maxlength="230" placeholder="ex. Thornstinger"></label><button class="secondary-button">Add for review</button></form></details><div data-contribution-list></div></aside><article class="panel contribution-editor" data-contribution-editor></article></div><div class="panel wiki-review" data-wiki-review hidden></div>`;
     settingsRoot.innerHTML=`<h2>Screen reading</h2><label class="check-control"><input type="checkbox" data-capture-opt-in> Enable optional screen reading</label><p class="settings-helper">Screen reading currently requires the Default Modern (default_modern) game UI skin. Other skins are not yet calibrated. Logs supply kills, loot and zones. Screen reading supplies item tooltips, examine windows and visible character stats. It runs locally, without audio or video recording. Contribute reads about once per second when a configured or unique EverQuest window is available; otherwise choose its source there. Use Pause automatic reading to pause it.</p><div class="capture-settings-controls" hidden><label>Source<select data-capture-source aria-label="Capture source"><option value="">Choose a window or display</option></select></label><div class="capture-actions"><button class="secondary-button" data-capture-sources>Choose source</button><button class="primary-button" data-capture-start>Start contribution capture</button><button class="secondary-button" data-capture-pause>Pause</button><button class="secondary-button" data-capture-stop>Stop all capture</button><button class="secondary-button" data-capture-calibrate disabled>Calibrate OCR area</button><button class="text-button" data-capture-import>Read a screenshot</button></div></div><p data-capture-status class="settings-helper" role="status">Screen reading disabled.</p>`;
     characterRoot.innerHTML=`<div class="capture-toolbar panel"><div><label class="character-profile-select">Character Select<select data-character-select aria-label="Character Select"></select></label><p>Import your equipped items, read your displayed stats and share your character. Keep all your gear equipped.</p></div></div>
@@ -137,7 +138,9 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     const contributionTabs=document.createElement('div');contributionTabs.className='contribution-tabs';contributionTabs.setAttribute('role','tablist');contributionTabs.setAttribute('aria-label','Contribute to Wiki');
     contributionTabs.innerHTML='<button type="button" id="contribution-discoveries-tab" role="tab" aria-selected="true" aria-controls="contribution-discoveries-panel" data-contribution-tab="discoveries">Discoveries</button><button type="button" id="contribution-history-tab" role="tab" aria-selected="false" aria-controls="contribution-history-panel" tabindex="-1" data-contribution-tab="history">Contribution History</button>';
     discoveryPanel.before(contributionTabs);
-    const historyPanel=document.createElement('section');historyPanel.id='contribution-history-panel';historyPanel.className='panel contribution-history';historyPanel.hidden=true;historyPanel.setAttribute('role','tabpanel');historyPanel.setAttribute('aria-labelledby','contribution-history-tab');discoveryPanel.after(historyPanel);
+    const historyPanel=document.createElement('section');historyPanel.id='contribution-history-panel';historyPanel.className='contribution-history';historyPanel.hidden=true;historyPanel.setAttribute('role','tabpanel');historyPanel.setAttribute('aria-labelledby','contribution-history-tab');
+    const contributionSection=document.createElement('section');contributionSection.className='panel contribution-section';contributionSection.dataset.contributionSection='';
+    const heading=$('.contribution-heading');root.prepend(contributionSection);contributionSection.append(heading,contributionTabs,discoveryPanel,historyPanel);
     const contributionHistory=mountContributionHistory({host:historyPanel,wiki});
     unsubscribers.push(()=>contributionHistory.dispose());
     function setContributionTab(next,{focus=false}={}){
@@ -148,6 +151,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         contributionHistory.setActive(next==='history'&&Boolean(root.closest('.view.is-active')));refreshContributionReader();
     }
     listen(contributionTabs,'click',event=>{const button=event.target.closest('[data-contribution-tab]');if(button)setContributionTab(button.dataset.contributionTab);});
+    listen(discoveryPanel,'click',event=>{if(event.target.closest('[data-open-contribution-history]'))setContributionTab('history',{focus:true});});
     listen(contributionTabs,'keydown',event=>{if(!event.target.closest('[role="tab"]')||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setContributionTab(event.key==='Home'?'discoveries':event.key==='End'?'history':contributionTab==='history'?'discoveries':'history',{focus:true});});
     function shareStatus(message,error=false){const host=dialog.querySelector('[data-share-status]');host.textContent=message;host.classList.toggle('capture-warning',error);}
     async function act(callback){if(disposed||busy)return;busy=true;contributionEvidenceEpoch++;renderCharacterSelect();try{return await callback();}catch(error){const message=error.message||'This action could not complete.';if(dialog.open)shareStatus(message,true);else warning(message);}finally{busy=false;if(!disposed)renderCharacterSelect();}}
@@ -305,18 +309,18 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function refreshSources(){void chooseSources().catch(error=>warning(error.message));}
     async function start(mode,{sourceId=selectedSource(),sessionId}={}){if(!capture)throw Error('Screen reading requires the desktop app.');if(mode!=='character'&&!optIn)throw Error('Enable Screen reading in Settings, then choose a source.');if(!sourceId)throw Error('Choose the game window first.');if(mode==='character')optIn=true;closeArea();const epoch=walkthroughEpoch,source=sources.find(source=>source.id===sourceId),profile=areaProfiles.find(profile=>profile.key===areaKey(source,mode)),next=await capture.start({mode,sourceId,...(sessionId?{sessionId}:{}),...(profile?{region:profile.region,referenceSize:profile.referenceSize}:{})});if(disposed||mode==='character'&&epoch!==walkthroughEpoch)return next;captureState=next;renderCapture();return next;}
     async function stopCapture(mode){if(!capture)throw Error('Screen reading requires the desktop app.');if(!publishing)invalidatePlan();captureState=await capture.stop(mode?{mode}:undefined);renderCapture();}
-    const discoveryPicker=document.createElement('section');discoveryPicker.className='panel contribution-discovery-capture';discoveryPicker.dataset.discoveryCapture='';discoveryPicker.hidden=true;
-    discoveryPicker.innerHTML='<h3>Item screen reader</h3><p data-discovery-capture-message role="status"></p><p data-contribution-examine-prompt></p><label data-discovery-source-label>Game window or display<select data-discovery-capture-source aria-label="Discovery capture source"><option value="">Choose a source</option></select></label><div class="capture-actions"><button type="button" class="primary-button" data-discovery-capture-start>Start item reading</button><button type="button" class="secondary-button" data-contribution-reader-pause>Pause automatic reading</button></div>';
+    const discoveryPicker=document.createElement('section');discoveryPicker.className='contribution-discovery-capture';discoveryPicker.dataset.discoveryCapture='';discoveryPicker.hidden=true;
+    discoveryPicker.innerHTML='<div class="contribution-reader-heading"><h3>Item reader</h3><p data-discovery-capture-message role="status"></p></div><div class="contribution-reader-controls"><label data-discovery-source-label>Game window or display<select data-discovery-capture-source aria-label="Discovery capture source"><option value="">Choose a source</option></select></label><div class="capture-actions"><button type="button" class="primary-button" data-discovery-capture-start>Start item reading</button><button type="button" class="secondary-button" data-contribution-reader-pause>Pause reading</button></div></div><p data-contribution-examine-prompt class="settings-helper"></p>';
     root.querySelector('.contribution-layout').before(discoveryPicker);
     const itemDiscoveryRequests=()=>[...discoveryRequests.values()].filter(request=>request.purpose==='item-link');
-    const wantsContributionReader=()=>!disposed&&contributionTab==='discoveries'&&(itemDiscoveryRequests().length>0||contributionVisible&&!contributionReaderSuppressed);
+    const wantsContributionReader=()=>!disposed&&!contributionReaderSuppressed&&contributionTab==='discoveries'&&(itemDiscoveryRequests().length>0||contributionVisible);
     const gameSource=source=>source?.type==='window'&&/everquest|eqgame(?:\.exe)?/i.test(source.name||source.label||'');
     function renderDiscoveryCapture(){
         const pending=itemDiscoveryRequests(),select=discoveryPicker.querySelector('[data-discovery-capture-source]');
         const running=captureState.owner==='contribution'&&captureState.phase==='running',candidate=selected();
         discoveryPicker.hidden=contributionTab==='history'||!pending.length&&!contributionVisible;
         discoveryPicker.querySelector('[data-discovery-capture-message]').textContent=discoveryMessage||(captureState.owner==='character'?'Character reading is active. Finish or stop it before reading contribution items.':contributionReaderSuppressed?'Automatic reading is paused. Choose Start item reading when ready.':running?'Reading your selected game window about once per second. New values are proposals for review.':'Choose the game window below. The reader uses the Default Modern game UI.');
-        discoveryPicker.querySelector('[data-contribution-examine-prompt]').textContent=candidate?.kind==='item'?`Open ${candidate.name}’s complete examine window in EverQuest and leave it visible. Matching text will fill this entry; screenshot and icon suggestions appear when available.`:'Open an item’s complete examine window when reviewing its item entry. Keep all of its text visible.';
+        discoveryPicker.querySelector('[data-contribution-examine-prompt]').textContent=candidate?.kind==='item'?`Open ${candidate.name}’s full examine window. Text, screenshot and icon suggestions fill this entry.`:'Open an item’s full examine window to propose its text, screenshot and icon.';
         discoveryPicker.querySelector('[data-discovery-source-label]').hidden=running;
         discoveryPicker.querySelector('[data-discovery-capture-start]').hidden=running&&!contributionReaderSuppressed;
         discoveryPicker.querySelector('[data-contribution-reader-pause]').hidden=contributionReaderSuppressed||!contributionVisible;
@@ -360,7 +364,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             captureState=await capture.status();if(!wantsContributionReader())return{cancelled:true};
             if(captureState.owner==='character')throw Error('Finish or stop Character capture, then choose Contribute again.');
             if(captureState.owner==='contribution'&&['running','selecting'].includes(captureState.phase)){renderCapture();return{};}
-            optIn=true;const requestedSessionId=globalThis.crypto.randomUUID(),next=await start('contribution',{sourceId:choice.id,sessionId:requestedSessionId});if(next)captureState=next;
+            discoverySourceId=choice.id;optIn=true;const requestedSessionId=globalThis.crypto.randomUUID(),next=await start('contribution',{sourceId:choice.id,sessionId:requestedSessionId});if(next)captureState=next;
             if(captureState.owner!=='contribution'){
                 // Character may win while native start IPC is in flight. Only
                 // our requested contribution resume slot may be cancelled.
@@ -392,8 +396,9 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         if(request.candidateId&&!candidate)return{ok:false,error:'This linked item contribution no longer matches.'};
         if(!candidate)candidate=queue.add({kind:'item',name:itemExaltationBaseIdentity(name)},true);
         if(!candidate)return{ok:false,error:'This linked item could not be opened for review.'};
+        contributionReaderSuppressed=false;discoveryMessage='';
         record.candidateId=candidate.id;discoveryRequests.set(record.id,record);selectContribution(candidate.id);navigate('contribute');loadWiki();
-        try{const prepared=await prepareDiscoveryCapture();if(disposed||discoveryRequests.get(record.id)!==record)return discoveryResult(record,{cancelled:true});const result=discoveryResult(record,prepared);if(!prepared.needsSource&&!prepared.cancelled)discoveryCaptureReady(record,result);return result;}
+        try{const prepared=await prepareDiscoveryCapture('',{explicit:true});if(disposed||discoveryRequests.get(record.id)!==record)return discoveryResult(record,{cancelled:true});const result=discoveryResult(record,prepared);if(!prepared.needsSource&&!prepared.cancelled)discoveryCaptureReady(record,result);return result;}
         catch(error){discoveryMessage=error.message||'Item reading could not start.';renderDiscoveryCapture();return discoveryResult(record,{ok:false,error:discoveryMessage});}
     }
     async function cancelDiscoveryContribution(request={}){
@@ -597,7 +602,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         if(publishing||dragId)return;cancelPendingItemTooltip();clearTimeout(tooltipTimer);
         if(!itemTooltip.hidden&&tooltipCardId===button.dataset.editCard){clearTimeout(tooltipTimer);return;}
         itemTooltip.hidden=true;pendingTooltipButton=button;
-        tooltipShowTimer=setTimeout(()=>{const target=pendingTooltipButton;cancelPendingItemTooltip();if(!disposed&&!publishing&&target?.isConnected&&target.matches(':hover')&&!dragId)showItemTooltip(target);},350);
+        tooltipShowTimer=setTimeout(()=>{const target=pendingTooltipButton;cancelPendingItemTooltip();if(!disposed&&!publishing&&target?.isConnected&&target.matches(':hover')&&!dragId)showItemTooltip(target);},TOOLTIP_HOVER_DELAY_MS);
     }
     function deferHideItemTooltip(){cancelPendingItemTooltip();clearTimeout(tooltipTimer);tooltipTimer=setTimeout(()=>{if(!itemTooltip.matches(':hover')&&!itemTooltip.contains(document.activeElement))hideItemTooltip();},220);}
     function showItemTooltip(button){
@@ -891,8 +896,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     });
     listen(dialog.querySelector('[data-share-close]'),'click',()=>{if(!publishing)dialog.close();});listen(dialog,'cancel',event=>{if(publishing)event.preventDefault();});listen(dialog.querySelector('[data-share-copy]'),'click',()=>void act(async()=>{if(!shareImage)throw Error('Preview a character image first.');const flow=walkthrough.snapshot(),epoch=walkthroughEpoch;await share.copyPng(shareImage.dataUrl);await finishWalkthrough(flow,epoch);shareStatus('Character PNG copied to your clipboard.');}));listen(dialog.querySelector('[data-share-save]'),'click',()=>void act(async()=>{if(!shareImage)throw Error('Preview a character image first.');const flow=walkthrough.snapshot(),epoch=walkthroughEpoch,result=await share.savePng(shareImage.dataUrl);if(result.ok)await finishWalkthrough(flow,epoch);shareStatus(result.ok?'Character PNG saved.':'Save canceled. Capture remains active.');}));listen(dialog.querySelector('[data-share-upload]'),'click',()=>void act(uploadSnapshot));
     if(wiki?.onAutomaticSourceResult){
-        const receipt=document.createElement('section');receipt.className='panel contribution-automatic-results';receipt.hidden=true;receipt.setAttribute('aria-live','polite');discoveryPanel.prepend(receipt);
-        let recent=[];
+        const receipt=document.createElement('div');receipt.className='contribution-latest-result';receipt.hidden=true;receipt.setAttribute('aria-live','polite');discoveryPicker.after(receipt);
         unsubscribers.push(wiki.onAutomaticSourceResult(result=>{
             if(disposed||!['submitted','deferred','needs-attention'].includes(result?.status))return;
             contributionHistory.markChanged();
@@ -909,10 +913,9 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             }
             const link=title=>`<a href="https://eqlwiki.com/${encodeURIComponent(title)}" target="_blank" rel="noopener noreferrer">${escape(title)}</a>`;
             const label=result.status==='submitted'?'Drop source recorded':'Drop source needs review';
-            const summary=`<p><strong>${label}</strong> · ${link(source.itemTitle)} → ${link(source.npcTitle)} · ${link(source.zoneTitle)}</p>`;
-            const plan=result.plan&&Array.isArray(result.plan.pages)?{...result.plan,pages:result.plan.pages.slice(0,6)}:null;
-            recent=[summary+(plan?`<p>${contributionPublishReceiptMarkup(plan)}</p>`:'')+(result.reason?`<p class="settings-helper">${escape(String(result.reason).slice(0,600))}</p>`:''),...recent].slice(0,3);
-            receipt.hidden=false;receipt.innerHTML=recent.join('');renderQueue();
+            const summary=`<strong>${label}</strong> · ${link(source.itemTitle)} → ${link(source.npcTitle)}`;
+            receipt.hidden=false;receipt.classList.toggle('capture-warning',result.status!=='submitted');
+            receipt.innerHTML=`<div><p>${summary}</p>${result.reason?`<p class="settings-helper">${escape(String(result.reason).slice(0,600))}</p>`:''}</div><button type="button" class="text-button" data-open-contribution-history>View history</button>`;renderQueue();
             if(!busy&&!publishing&&selectedId&&!queueRows().some(candidate=>candidate.id===selectedId)){selectedId=queueRows()[0]?.id||'';renderCandidate();}
             notify(`${label}: ${source.itemTitle} → ${source.npcTitle} (${source.zoneTitle}).`,{tone:result.status==='submitted'?'success':'warning'});
         })||(()=>{}));

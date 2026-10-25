@@ -106,4 +106,8 @@ const staleFingerprint=JSON.parse(confirmed.baseRecovery.sourceFingerprint);stal
 const stale={...confirmed,baseRecovery:{...confirmed.baseRecovery,sourceFingerprint:JSON.stringify(staleFingerprint)}};
 assert.notEqual(stale.baseRecovery.sourceFingerprint,confirmed.baseRecovery.sourceFingerprint);
 assert.equal(validateItemBaseReview(stale).ok,false,'A review from a different bundled formula identity requires review');
+const priorRules=JSON.parse(getItemScalingIdentity());priorRules.revision=1;
+const priorFingerprint=JSON.parse(confirmed.baseRecovery.sourceFingerprint);priorFingerprint[priorFingerprint.length-1]=JSON.stringify(priorRules);
+assert.equal(getItemScalingRevision(),2,'Positive-primary flooring ships as a new formula revision');
+assert.equal(validateItemBaseReview({...confirmed,baseRecovery:{...confirmed.baseRecovery,sourceFingerprint:JSON.stringify(priorFingerprint)}}).ok,false,'The prior rounded-primary revision cannot authorize a new write, even when this particular base still roundtrips');
 console.log('Item base review: explicit exact/range choices, context/source/stat invalidation, preserved prose and observations, verified outgoing text, inference markers and replay persistence passed.');

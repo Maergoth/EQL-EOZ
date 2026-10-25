@@ -27,6 +27,13 @@ assert.equal(scaleItemStat('RANGE', -5, 2, { isAmmo:true }), -5, 'a negative Ran
 assert.equal(Object.hasOwn(scaledItemStats({ stats:{ STR:5 } }, 2), 'RANGE'), false, 'no Range is invented');
 assert.equal(scaleItemStat('WT', 2.5, 10), 0.3, 'rank-ten weight rounds 2.5 up to the displayed 0.3');
 
+// Fixed screenshot observations distinguish flooring positive primary gains
+// from rounding them to nearest, including nonzero fractional progress.
+for(const [key,base,rank,fraction,expected]of [
+    ['AC',14,6,5,22],['HP',50,5,4,75],['HP',50,4,4,71],
+    ['HP',11,1,1,12],['STR',10,5,4,15],['STA',-14,6,5,-5]
+])assert.equal(scaleItemStat(key,base,rank,{fraction}),expected,`${key} ${base} at ${rank}+${fraction}: shared primary rounding`);
+
 const weapon={slots:['PRIMARY','SECONDARY'],classes:['ROG'],stats:{DMG:12,STR:5,DEX:5,COLD_DMG:4},displayLines:['Skill: Piercing Atk Delay: 19']},original=structuredClone(weapon);
 const thorn=scaledItemStats(weapon,5,{fraction:4});
 assert.equal(thorn.DMG,18);assert.equal(thorn.BACKSTAB_DMG,15,'The wiki template Backstab baseline uses the shared independent formula');
@@ -39,6 +46,17 @@ assert.equal(Object.hasOwn(scaledItemStats({stats:{STR:null,DEX:5}},5),'SV_CORRU
 assert.equal(scaledItemStats({stats:{STR:null,DEX:5}},5).STR,null);assert.equal(scaleItemStat('HP',null,5),null);
 assert.equal(scaledItemStats({...weapon,stats:{...weapon.stats,ACCURACY:null}},5).ACCURACY,null,'An explicitly unknown Accuracy stays unknown');
 assert.equal(Object.hasOwn(scaledItemStats(weapon,0),'ACCURACY'),false);assert.equal(Object.hasOwn(scaledItemStats(weapon,0),'SV_CORRUPTION'),false);
+assert.equal(scaledItemStats({stats:{AC:2,HP:12,STR:3}},5).SV_CORRUPTION,5,'Diamond-style AC/HP/STR qualify for rank-five Void');
+assert.equal(scaledItemStats({stats:{HP_REGEN:2,MANA_REGEN:2,END_REGEN:2}},5).SV_CORRUPTION,5,'Talisman-style regeneration fields qualify for rank-five Void');
+for(const key of ['AC','HP','MP','END','HP_REGEN','MANA_REGEN','END_REGEN']){
+    assert.equal(scaledItemStats({stats:{[key]:2,STR:3}},5).SV_CORRUPTION,5,`${key} is a qualifying base stat alongside an attribute`);
+}
+assert.equal(Object.hasOwn(scaledItemStats({stats:{STR:3,DMG:13,BACKSTAB_DMG:13}},5),'SV_CORRUPTION'),false,'Serpent-style weapon damage and Backstab do not count as extra Void qualifiers');
+assert.equal(Object.hasOwn(scaledItemStats({stats:{STR:3,HASTE:2,ATK:2,DMG:13,BACKSTAB_DMG:13,DELAY:27,WT:2}},5),'SV_CORRUPTION'),false,'Haste, attack, weapon damage, delay and weight remain outside the whitelist');
+assert.equal(Object.hasOwn(scaledItemStats({stats:{HP:12,Mana:null}},5),'SV_CORRUPTION'),false,'Unknown newly eligible fields do not establish a second qualifier');
+assert.equal(Object.hasOwn(scaledItemStats({stats:{HP:12,HP_REGEN:null}},5),'SV_CORRUPTION'),false,'Unknown regeneration cannot establish a second qualifier');
+assert.equal(Object.hasOwn(scaledItemStats({stats:{HP_REGEN:2,HPREGEN:2}},5),'SV_CORRUPTION'),false,'Aliases of the same regeneration field count once');
+for(const explicit of [0,7])assert.equal(scaledItemStats({stats:{AC:2,HP:12,SV_CORRUPTION:explicit}},5).SV_CORRUPTION,explicit,'An explicit Void field remains caller-owned, including zero');
 assert.equal(itemEffectiveLevel(10,1023),10,'The cap has no fractional progress');
 assert.equal(scaleItemStat('WT',1,10,{fraction:1023}),.2,'Weight uses the same normalized capped state and exact ceiling as the wiki');
 assert.equal(scaleItemStat('WT',1,4,{fraction:9999}),scaleItemStat('WT',1,4,{fraction:15}),'Weight rejects excess fractional progress consistently');

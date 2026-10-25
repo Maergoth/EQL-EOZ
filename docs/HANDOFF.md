@@ -1,10 +1,25 @@
 # Eye of Zomm contributor handoff
 
-0.9.14 adds Contribute History, shared explicit pet exclusion, and native cached
+0.9.14 puts Discoveries and Contribution History inside one Contribute section,
+with shared account controls, a compact reader and one latest-result summary.
+Tab changes preserve drafts and pause only the reader owned by Contribute.
+It also adds shared explicit pet exclusion and native cached
 global loot classification while retaining the exact category fix from 0.9.13
-and the wiki-owned formula snapshot from 0.9.12. The
+and the shared formula architecture from 0.9.12. Its updated rules revision 2
+floors large positive primary stats, expands Void qualifiers to AC, pools and
+regeneration, and invalidates older recovery reviews; negative penalties retain
+their previous rounding. Missing-wiki cards use a dedicated non-activating
+lower-right popup, independent of Timers; item admission checks cache first,
+then bounded public existence, and rejects stale or unverified results. The
 [release record](RELEASE_0914_PLAN.md) separates source fixtures,
 screenshot, package/publication, and independent dataset producer receipts.
+
+Items Any is a local browsing override immediately before Auto. Explicit
+complete set membership prevents redundant member additions in authored
+NPC/zone loot and keeps reciprocal item-page sources independent. Shared rich
+item hover timing is 350 ms; Intel updates distance labels in place and skips
+row geometry on unrelated shared snapshots. Native/source fixture evidence and
+physical acceptance limits are recorded in the active release plan.
 
 0.9.13 corrects the canonical category to Tier 0 Verification Needed. The
 category-only hotfix preserves the existing contribution and formula flows.

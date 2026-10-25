@@ -87,7 +87,7 @@ export function contributionDestinations(candidate={}, {pack}={}){
             const instance=instanceOf(source),scope=zoneName(instance);
             add(title,'item-source',source.npc,'Add drop source: '+source.npc+' · '+source.zone+' · '+scope,{primary:true,instance,item:title,npc:source.npc,zone:source.zone});
             if(!['normal','raid'].includes(instance))continue;
-            add(source.npc,'npc-loot',title,'Add '+title+' to monster loot · '+scope,{instance,item:title,npc:source.npc,zone:source.zone});
+            add(source.npc,'npc-loot',title,'Check '+title+' against monster loot and documented item sets at Preview · '+scope,{instance,item:title,npc:source.npc,zone:source.zone});
             add(source.zone,'zone-population',source.npc,'Add monster: '+source.npc+' · '+scope,{instance,npc:source.npc,zone:source.zone});
             add(source.zone,'zone-loot',title,'Add loot: '+title+' · '+scope,{instance,item:title,zone:source.zone});
         }

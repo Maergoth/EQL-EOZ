@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {classifyCachedLoot} from '../app/loot-classification.js';
-import {buildContributionDraft,extractContributionBlueprints,patchContributionPrimary,patchContributionRelationship} from '../app/contribution-model.js';
+import {buildContributionDraft,extractContributionBlueprints,patchContributionPrimary,patchContributionRelationship,contributionZoneLootEntries} from '../app/contribution-model.js';
 import {contributionLootMarkup} from '../app/contribution-editor.js';
 import {assertGlobalLootCountContract} from '../scripts/global-loot-count-contract.mjs';
 const require=createRequire(import.meta.url),{WikiClient}=require('../desktop/wiki-client.cjs');
@@ -12,6 +12,7 @@ function pack(count,{complete=true,modern=true}={}){
     return {meta:{version:'synthetic-count-v1',generatedAt:'2026-10-25T12:00:00Z',sample:false,wikiEntitiesComplete:true,...(modern?{lootSourceCountsVersion:1}:{})},wikiEntities:{items:[item.name,'Powder Alias'],npcs:[...npcNames,'Guardian Alias'],titles:[item.name,'Powder Alias',...npcNames,'Guardian Alias']},items:[{...item,aliases:['Powder Alias']}],npcs:npcNames.map((name,index)=>({name,wikiTitle:name,aliases:index===0?['Guardian Alias']:[]}))};
 }
 let proof=classifyCachedLoot(pack(5),'Synthetic Shared Powder');
+assert.deepEqual(contributionZoneLootEntries('<nowiki>{| class="zoneTopTable"\n! Unique Items\n| {{:Ignored Example}}\n|}</nowiki>\n{| class="zoneTopTable"\n! Unique Items\n| {{:Synthetic Unique}}\n|-\n! Common Loot\n| [[Synthetic Common]]\n|}\n== Raid Instance ==\n{| class="zoneTopTable"\n! Common Loot\n| {{:Synthetic Raid Common}}\n|}'),[{itemTitle:'Synthetic Unique',kind:'unique',card:'zone:0',sourceKind:'zone'},{itemTitle:'Synthetic Common',kind:'common',card:'zone:0',sourceKind:'zone'},{itemTitle:'Synthetic Raid Common',kind:'common',card:'zone:1',sourceKind:'zone'}],'Only active zone summary loot cells classify items, including separate raid tables');
 assert.equal(proof.kind,'unique');assert.equal(proof.count,5);assert.equal(proof.complete,true);
 proof=classifyCachedLoot(pack(5),'Powder Alias',['Synthetic Guardian 5']);
 assert.equal(proof.kind,'common');assert.equal(proof.count,6,'The new sixth source counts before choosing the destination section');

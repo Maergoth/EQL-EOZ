@@ -54,8 +54,23 @@ The build-time catalog relevance gate requires version 1, a nonempty bounded
 global index, consistent count/name arrays and matching rich-item mirrors. It
 rejects an older bootstrap without these fields; it makes no live wiki requests.
 
+`meta.lootSetsVersion: 1` and `lootSets[setTitle] = {items, complete}` document
+explicit set membership in the native pack. Only a complete, bounded list of
+valid canonical members can establish coverage. Similar names and prefixes do
+not establish membership. `app/loot-set-coverage.js` and the contribution model
+recognize a listed set in an authored monster or zone loot section, scoped to
+the selected normal/raid instance. They preserve the set and its authored loot
+kind instead of appending individual members. A missing source on the member's
+own item page can still be added. The same native preparation and saved-plan
+guards reject redundant member additions, including manually edited wikicode.
+This coverage check uses the trusted pack and the page source already loaded
+for Preview; it does not introduce live membership/count queries.
+
 `node tests/loot-classification.mjs` covers synthetic global counts, the exact
 six-monster boundary, canonical duplicates, missing/incomplete data and pet
 exclusion. Native planner/automatic-source fixtures separately check trusted-pack
 selection and unchanged publication guards. These are isolated fixtures, not
 live wiki edits or observed game drop rates.
+`node tests/loot-set-coverage.mjs` additionally covers explicit membership and
+aliases, authored/protected text, instance boundaries, preserved set placement,
+source-only updates and native redundant-member guards.

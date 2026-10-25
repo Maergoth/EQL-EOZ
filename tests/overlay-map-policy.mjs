@@ -10,6 +10,8 @@ assert(request('/overlay-map.html?panel=map','GET','mainFrame'));
 assert(request('/zoneviewer/viewer.html?overlay=1','GET','subFrame'));
 for(const path of ['/map-overlay-3d.js','/zoneviewer/overlay-mode.js','/zoneviewer/zone-parser.worker.js','/zoneviewer/ext.eqlZoneViewer.css'])assert(request(path));
 assert(request('/appearance.js','GET','script'));assert(request('/appearance-presets.generated.js','GET','script'));
+for(const path of ['/vendor/item-scaling-core.js','/vendor/item-scaling-rules.js'])assert(request(path,'GET','script'),'Map chrome imports the same bundled item tooltip modules as Intel');
+for(const path of ['/vendor/private.js','/vendor/item-scaling-source.json','/vendor/item-scaling-rules.json'])assert.equal(request(path,'GET','script'),false,'No general vendor or provenance network allowance is added');
 for(const path of ['/appearance-presets.json','/appearance-presets.json?source=private','/settings.json','/appearance-private.json'])assert.equal(request(path),false,'Static font scripts require no JSON/network allowance');
 assert(request('/api/eq-files'));
 for(const path of ['mistmoore.s3d','resources/synthetic.eqg','Maps/mistmoore.txt','Maps/Brewall/mistmoore_1.txt','mp3index.txt','MP3INDEX.TXT','mistmoore_assets.txt','synthetic-zone_2_assets.txt'])assert(request('/api/eq-file?path='+encodeURIComponent(path)+'&surface=overlay-map'),path);

@@ -58,7 +58,7 @@ function harness() {
         viewerFolderStatus:'ready', viewerZoneState:{ zone:'', status:'idle', message:'' },
         partialLine:'', activeRoute:null, renderedRareViewerKey:'', pendingViewerLocation:null,latestLocationSync:null,
         overlaySession:{ inputs:[], consume(event, context) { this.inputs.push({ event, context }); }, flush() {} },
-        wikiDiscovery:{consume() {}},
+        wikiDiscovery:{consume() {}},cancelDiscoveryChecks(){},
         discoveryContributionFlow:{cancelled:0,cancelWhere(){this.cancelled++;return Promise.resolve();}},
         observationPreference:false,sessionDraining:false,
         observedLogCursor:0,captureWorkspace:{cancelled:0,consumeLog() {},cancelSource(){this.cancelled++;}},

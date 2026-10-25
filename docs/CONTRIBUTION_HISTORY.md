@@ -5,6 +5,18 @@ It includes attempted submissions and saved partial or uncertain results. A
 preview with no submission attempt is not a receipt. Opening history does not
 submit, retry, upload, reconcile wiki pages, or start capture.
 
+Discoveries and Contribution History are tabs inside the same Contribute
+section, below shared wiki account controls. Discoveries keeps a compact item
+reader toolbar and one latest source-result summary linking to History; full
+receipts are retained in the native list. Opening History pauses only the
+reader owned by Contribute and preserves the current editable discovery.
+Pause reading also stops that owned reader when a missing-item request remains
+pending, including a late start. Refreshing or returning to Discoveries cannot
+restart it; an explicit Start or new Contribute action can resume the workflow.
+This control affects screen reading, not ordinary log processing.
+Arrow keys, Home and End move between tabs. Logging out clears visible history
+immediately before any asynchronous refresh can finish.
+
 `WikiClient.persist()` records sanitized plan metadata, including automatic item
 and loot-source plans that use the same native client. The submission boundary
 also records an attempt before authentication and records failures that occur
@@ -38,7 +50,10 @@ page with operation `upload`. Fixed-origin page URLs are generated natively;
 revision/diff URLs are emitted only for confirmed applied revisions. An uncertain
 result does not prove that an edit was saved.
 
-Run `node tests/contribution-history-host.mjs` for synthetic native transport,
+Run `node tests/contribution-workspace-layout.mjs` for integrated section, latest
+results, draft and keyboard/account behavior, and
+`node scripts/test-discovery-capture-workspace.mjs` for actual Electron reader
+ownership and History pausing. Run `node tests/contribution-history-host.mjs` for synthetic native transport,
 storage/restart/privacy, bounded retention, account isolation, partial/uncertain
 results, failure handling, and read-only IPC coverage. These fixtures do not
 establish production authentication, live-game capture, or a production edit.

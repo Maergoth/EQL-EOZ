@@ -5,16 +5,32 @@
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
 **0.9.14: contribution history and safer loot discovery.** Open
-**Contribute → History** to see this device's automatic and reviewed submissions
+**Contribute → Contribution History** to see this device's automatic and reviewed submissions
 for your signed-in wiki account, including partly saved and unconfirmed results.
-Saved pages offer revision and diff links. History never retries a submission.
+Saved pages offer revision and diff links. Discoveries and History share the
+Contribute section and account controls; a compact reader toolbar and latest
+result keep the discovery queue close at hand. History preserves drafts and
+pauses its owned reader while open. It never retries a submission.
 Explicit owner-labelled pets stay out of monster discoveries and contribution
 plans. Common/Unique loot placement uses distinct monsters across the cached
 wiki dataset: six or more means Common; fewer means Unique only when the count
-is complete. No live counter requests are made. See
+is complete. No live counter requests are made. Shared item rules revision 2
+also corrects positive primary-stat flooring: base HP 50 shows 75 at rank 5
+with 4/32 progress. AC, HP, Mana, Endurance and regeneration also count toward
+the two-stat requirement for rank-based Void. Saved base-recovery reviews from
+older formulas require review after updating. Missing-wiki notices now appear
+in their own lower-right desktop popup, including when Timers is closed.
+Item notices check cached page membership first, then a bounded public existence
+lookup when necessary; unverified failures show no missing-page claim. See
 [the history guide](docs/CONTRIBUTION_HISTORY.md),
-[cached loot classification](docs/CONTRIBUTION_LOOT_CLASSIFICATION.md), and
+[cached loot classification](docs/CONTRIBUTION_LOOT_CLASSIFICATION.md),
+[item discovery checks](docs/ITEM_DISCOVERY_EXISTENCE.md), and
 [the release record](docs/RELEASE_0914_PLAN.md).
+
+Items adds **Any** before **Auto** to browse every class without changing the
+character profile. Contributions preserve documented item sets instead of
+repeating their covered members. Rich item previews share a 350 ms mouseover
+delay, and Intel keeps its scrolling list intact during unrelated updates.
 
 **0.9.13: correct tier-zero verification category.** Ranked and recovered item
 pages now use the exact

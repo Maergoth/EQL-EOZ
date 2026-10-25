@@ -1,12 +1,16 @@
 # Browsable release history
 
-0.9.14 archives an actual CUA capture of the integrated contribution workspace,
-modules and styles with synthetic account-scoped receipts, partial and uncertain
-outcomes, local filters and saved-page links. The History tab and expanded
-partial result were visually reviewed. Its version-owned image and SHA-256 are
-recorded under `0.9.14/contribution-history`. Isolated wiki/storage APIs supply
-synthetic data; no player pixels, installed profiles or production wiki edits
-appear. Earlier captures, captions and hashes remain immutable.
+0.9.14 archives three actual isolated Electron Chromium captures: the unified
+Contribute section with embedded Discoveries/Contribution History tabs and
+compact item reader; account-scoped history with an expanded partial result;
+and the separate native wiki-suggestion popup. The contribution fixture uses
+synthetic sources, readings, screenshot pixels and wiki/storage APIs. The native
+popup fixture verifies bottom-right work-area placement, stacked notices,
+unchanged foreground focus, closed Timers, explicit actions and completion
+expiry. The images are visually reviewed and their SHA-256 values appear in the
+version-owned release steps. No game/player pixels, installed profiles, live
+wiki requests or production wiki submissions appear. Earlier captures, captions
+and hashes remain immutable.
 
 0.9.13 archives one visually reviewed actual Electron Chromium capture of the
 current contribution saved-plan review. The real contribution model generates

@@ -6,7 +6,7 @@ import {createItemBaseReview,applyItemBaseReview} from '../app/item-base-review.
 import {EQLogParser} from '../app/parser.js';
 let clock=Date.UTC(2026,9,24,14),cursor=0;
 let pack={meta:{wikiEntitiesComplete:true},wikiEntities:{items:['Known Cloak','Quest Token'],npcs:['Forest Warden'],titles:['Known Cloak','Quest Token','Forest Warden','Forest Glade']},items:[{name:'Known Cloak',wikiTitle:'Known Cloak',revisionId:12,dropSources:[{name:'Forest Warden',zone:'Forest Glade',instanceType:'normal'}]},{name:'Quest Token',dropSources:[{name:'Quest',zone:''}]}],npcs:[{name:'Forest Warden',zone:'Forest Glade'}],zones:[{name:'Forest Glade'}]};
-const values=new Map(),storage={getItem:key=>values.get(key),setItem:(key,value)=>values.set(key,value)},options={storage,getPack:()=>pack,now:()=>clock};
+const values=new Map(),storage={getItem:key=>values.get(key),setItem:(key,value)=>values.set(key,value)},options={storage,getPack:()=>pack,now:()=>clock,verifyItem:()=>({status:'missing'})};
 let q=createContributionQueue(options);
 const event=(type,fields,zone='Forest Glade',instance='normal')=>{clock+=1000;return q.consumeLog({type,...fields},{live:true,zone,instance,at:clock,logId:'synthetic-source',cursor:++cursor});};
 assert.equal(event('loot',{item:'KNOWN_CLOAK +5'}).candidate,null,'A bare known item is not a new contribution');

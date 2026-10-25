@@ -196,6 +196,23 @@ the cached GitHub pack, without live count requests. Old packs remain readable
 and lack proof of a complete count. Deploy the matching wiki source and rebuild
 the dataset to provide this metadata; no host-wrapper installation is needed.
 
+`meta.lootSetsVersion: 1` marks the additive `lootSets` map. A canonical public
+set title maps to `{items, complete}` from literal positional members of public
+top-level `Gear Set` cards, with canonical nested membership flattened and
+bounded. An NPC's authored set reference supplies each member's source count
+once, alongside direct item references; the set title does not become an item.
+Clients may treat a complete listed set as sufficient coverage of its members.
+Incomplete membership, cycles, hidden pages and expansion limits cannot prove
+that an absent member is covered. Membership never comes from naming patterns.
+
+Global count parsing uses the final repeated exact static NPC parameter, and
+recognizes reviewed metadata-only badges without inventing item references.
+Unknown wrappers remain incomplete. Zero-argument legacy item templates require
+public current-source proof of a literal unconditional item hover; template
+proof keys preserve case after the first letter. Ordinary wiki renderer/helper
+calls retain strict duplicate handling. These changes require matching producer,
+collector and parser sources, followed by a newly published filtered dataset.
+
 The October 21, 2026 owner-approved rollout completed staging and production
 deployment via EQLWiki PRs #35/#36 and the explicit-zone precedence follow-up
 #37/#38, then rebuilt and published final manifest

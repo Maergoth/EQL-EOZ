@@ -1,10 +1,10 @@
 // A lightweight native-window renderer. Session ownership and all log reads stay
 // in the main app; opening or reloading a panel cannot create another parser.
-import { mountWikiDiscoveryNotices } from './wiki-discovery-ui.js';
 import { applyAppearance } from './appearance.js';
 import { isItemStatModified } from './item-stat-presentation.js';
 import { catalogItemboxMarkup } from './catalog-itembox.js';
 import { mountOverlayDrag } from './overlay-drag.js';
+import { createTooltipHover } from './tooltip-delay.js';
 const PANELS = Object.freeze({ parse:'Parse', intel:'Zone & loot', timers:'Triggers', map:'Map' });
 // PNUT M&M 28bbf8d _TabStrip/_HeaderBar and compact MeterTable, translated
 // to native Electron panels with EQL colors and this app's supported metrics.
@@ -126,7 +126,7 @@ export function renderIntel(intel = {}, {query = '', expanded = new Set(), loadi
             const previewCount = Math.min(3,(npc.drops || []).length);
             const pending = open && loading.has(key) && drops.length < total;
             const focused = Boolean(intel.focusedNpcId && String(npc.id || npc.name) === String(intel.focusedNpcId));
-            return `<article class="npc-row con-${conKey(npc.con)} ${focused ? 'is-focused' : ''}" data-intel-key="${attr(key)}" ${focused ? 'aria-current="true"' : ''}><div class="npc-summary${actionKey === key ? ' is-actions-open' : ''}"><div class="npc-heading"><button type="button" class="npc-name" aria-label="${attr(`Actions for ${npc.name}`)}" aria-describedby="npc-actions-${index}">${escapeHtml(npc.name)}</button>${raid ? '<span class="raid-source-badge">Raid</span>' : ''}<small>${npc.level || npc.levelMax ? `L${escapeHtml(npc.level || (npc.levelMin === npc.levelMax ? npc.levelMax : `${npc.levelMin}–${npc.levelMax}`))}` : ''}${Number.isFinite(npc.distance) ? ` · ${fmt(npc.distance)}u` : ''}</small></div><div class="npc-meta">${npc.named ? 'Named' : npc.rare ? 'Rare' : 'NPC'} · ${knownDropLabel({...npc,drops,dropCount:total},intel.myClassOnly,shown.length)}${npc.waypoint ? ' · waypoint available' : ''}</div><div id="npc-actions-${index}" class="row-actions" role="group" aria-label="${attr(`Actions for ${npc.name}`)}"><button type="button" data-npc-action="details" data-npc-index="${index}">Details</button><button type="button" data-npc-action="route" data-npc-index="${index}" ${!intel.canRoute || !npc.waypoint ? 'disabled title="Enable maps and use a current logged location in the main app"' : ''}>Route</button><button type="button" data-npc-action="copy-waypoint" data-npc-index="${index}" ${!npc.waypoint ? 'disabled' : ''}>Copy /waypoint</button><button type="button" data-npc-action="wiki" data-npc-index="${index}">Wiki</button><button type="button" data-npc-action="map" data-npc-index="${index}" ${!npc.waypoint ? 'disabled title="No known location for this mob"' : 'title="Open native Map at this mob"'}>Map</button></div></div><div class="npc-drop-list" ${pending ? 'aria-busy="true"' : ''}>${shown.map((item,itemIndex) => renderItem(item,itemIndex,`intel:${index}`)).join('')}</div>${total > previewCount ? `<button type="button" class="show-more-drops" data-intel-expand="${attr(key)}" data-npc-index="${index}" aria-expanded="${open}">${open ? 'Show Less' : `Show More (${Math.max(0,total - previewCount)})`}</button>` : ''}${pending ? '<div class="npc-meta">Loading remaining drops…</div>' : ''}${open && errors.has(key) ? `<div class="intel-drop-error" role="status">${escapeHtml(errors.get(key))}</div><button type="button" class="show-more-drops" data-intel-retry="${attr(key)}" data-npc-index="${index}">Retry loading drops</button>` : ''}</article>`;
+            return `<article class="npc-row con-${conKey(npc.con)} ${focused ? 'is-focused' : ''}" data-intel-key="${attr(key)}" ${focused ? 'aria-current="true"' : ''}><div class="npc-summary${actionKey === key ? ' is-actions-open' : ''}"><div class="npc-heading"><button type="button" class="npc-name" aria-label="${attr(`Actions for ${npc.name}`)}" aria-describedby="npc-actions-${index}">${escapeHtml(npc.name)}</button>${raid ? '<span class="raid-source-badge">Raid</span>' : ''}<small>${npc.level || npc.levelMax ? `L${escapeHtml(npc.level || (npc.levelMin === npc.levelMax ? npc.levelMax : `${npc.levelMin}–${npc.levelMax}`))}` : ''}<span data-intel-distance-index="${index}">${Number.isFinite(npc.distance) ? ` · ${fmt(npc.distance)}u` : ''}</span></small></div><div class="npc-meta">${npc.named ? 'Named' : npc.rare ? 'Rare' : 'NPC'} · ${knownDropLabel({...npc,drops,dropCount:total},intel.myClassOnly,shown.length)}${npc.waypoint ? ' · waypoint available' : ''}</div><div id="npc-actions-${index}" class="row-actions" role="group" aria-label="${attr(`Actions for ${npc.name}`)}"><button type="button" data-npc-action="details" data-npc-index="${index}">Details</button><button type="button" data-npc-action="route" data-npc-index="${index}" ${!intel.canRoute || !npc.waypoint ? 'disabled title="Enable maps and use a current logged location in the main app"' : ''}>Route</button><button type="button" data-npc-action="copy-waypoint" data-npc-index="${index}" ${!npc.waypoint ? 'disabled' : ''}>Copy /waypoint</button><button type="button" data-npc-action="wiki" data-npc-index="${index}">Wiki</button><button type="button" data-npc-action="map" data-npc-index="${index}" ${!npc.waypoint ? 'disabled title="No known location for this mob"' : 'title="Open native Map at this mob"'}>Map</button></div></div><div class="npc-drop-list" ${pending ? 'aria-busy="true"' : ''}>${shown.map((item,itemIndex) => renderItem(item,itemIndex,`intel:${index}`)).join('')}</div>${total > previewCount ? `<button type="button" class="show-more-drops" data-intel-expand="${attr(key)}" data-npc-index="${index}" aria-expanded="${open}">${open ? 'Show Less' : `Show More (${Math.max(0,total - previewCount)})`}</button>` : ''}${pending ? '<div class="npc-meta">Loading remaining drops…</div>' : ''}${open && errors.has(key) ? `<div class="intel-drop-error" role="status">${escapeHtml(errors.get(key))}</div><button type="button" class="show-more-drops" data-intel-retry="${attr(key)}" data-npc-index="${index}">Retry loading drops</button>` : ''}</article>`;
         }).join('') : `<div class="intel-empty">${needle ? 'No matching mobs.' : raid ? 'No raid-instance mobs in this zone.' : 'No matching named or rare mobs.'}</div>`}</div></section>`;
     }).join('');
 }
@@ -134,7 +134,7 @@ export function panelMarkup(panel) {
     if (panel === 'parse') return `<nav class="parse-tabs" aria-label="Parse metrics">${TABS.map(tab => `<button type="button" data-tab="${tab}" aria-pressed="${tab === 'damage'}" class="${tab === 'damage' ? 'is-active' : ''}">${TAB_LABELS[tab]}</button>`).join('')}</nav><div id="parse-body"></div>`;
     if (panel === 'intel') return '<div class="intel-controls"><div class="panel-toolbar intel-filter-row"><label class="intel-tier-label" for="intel-item-tier">Item level <output id="intel-item-tier-value" for="intel-item-tier">Base</output></label><input id="intel-item-tier" type="range" min="0" max="10" step="1" value="0" aria-label="Item level"><label class="intel-class-label"><input id="class-filter" type="checkbox"> My Class</label></div><input id="intel-search" class="intel-search" type="search" maxlength="160" placeholder="Find named or rare mob…" aria-label="Search named and rare mobs"><span id="intel-attention" class="sr-only" role="status" aria-live="polite"></span></div><div id="intel-body" class="intel-mob-list" role="region" aria-label="Named and rare mob loot"></div>';
     if (panel === 'map') return '<div id="native-map-root"></div>';
-    return '<div class="timer-display"><div id="timer-list"></div><div id="swing-body"></div></div><div id="wiki-discovery-notices"></div>';
+    return '<div class="timer-display"><div id="timer-list"></div><div id="swing-body"></div></div>';
 }
 export function timerView(timer = {}, now = Date.now()) {
     const durationMs = number(timer.durationSeconds) * 1000;
@@ -164,7 +164,7 @@ export function renderSwing(swing = {}, now = Date.now()) {
     const progress = swing.status === 'casting' ? 1 : Math.min(1, Math.max(0, (now - lastAt) / intervalMs));
     return `<div class="swing-row" title="Observed swing estimate from your log; timing has one-second precision"><strong>Observed ${(intervalMs / 1000).toFixed(1)}s</strong><span class="swing-track"><span style="--progress:${(progress * 100).toFixed(1)}%;--swing-color:${progress >= .85 ? '#80b892' : '#d8b75c'}"></span></span></div>`;
 }
-export function mountOverlay({ document = globalThis.document, bridge = globalThis.eyeOfZommOverlay, panel = new URLSearchParams(globalThis.location?.search || '').get('panel'), setInterval = globalThis.setInterval, clearInterval = globalThis.clearInterval, now = Date.now } = {}) {
+export function mountOverlay({ document = globalThis.document, bridge = globalThis.eyeOfZommOverlay, panel = new URLSearchParams(globalThis.location?.search || '').get('panel'), setInterval = globalThis.setInterval, clearInterval = globalThis.clearInterval, setTimeout = globalThis.setTimeout, clearTimeout = globalThis.clearTimeout, now = Date.now } = {}) {
     panel = Object.hasOwn(PANELS, panel) ? panel : 'parse';
     const $ = selector => document.querySelector(selector);
     if (!$('#panel-content')) return { dispose() {} };
@@ -176,9 +176,11 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         // timer management live in the main app; one hover button opens it.
         $('.hover-menu').innerHTML = '<button class="chrome-button" type="button" data-open-view="timers" aria-label="Edit triggers" title="Edit triggers">⚙</button>';
     }
-    let state = {}, scope = 'live', tab = 'damage', disposed = false, status = '', request = 0, stateGeneration = 0, noticeGeneration = 0, lastNoticeId = '', unsubscribe, mapController, discoveryNotices, noticeResizeObserver, measuredTimerHeight = 0;
+    let state = {}, scope = 'live', tab = 'damage', disposed = false, status = '', request = 0, stateGeneration = 0, noticeGeneration = 0, lastNoticeId = '', unsubscribe, mapController, measuredTimerHeight = 0;
     let intelQuery = '', lastIntelFocus = '', lastIntelFocusEvent = '', draftIntelTier = null, intelActionKey = '', activeItemTooltip = null, itemTooltipHideTimer = null, lastParseSession = null;
     const expandedIntel = new Set(), collapsedIntelSections = new Set(), intelLoading = new Map(), intelDropCache = new Map(), intelErrors = new Map();
+    let lastIntelContent='',lastSessionAvailability=null,intelDistances=[],intelDropRevision=0;
+    const itemTooltipHover=createTooltipHover({show:showItemTooltip,valid:target=>!disposed && state.sessionAvailable===true && state.preferences?.visible!==false && target?.isConnected && !target.closest('[hidden]'),setTimeout,clearTimeout});
     const listeners = [];
     let resizeDrag=null,resizePending=null,resizeBusy=false;
     const listen = (target,name,callback) => { target?.addEventListener(name,callback); listeners.push(() => target?.removeEventListener(name,callback)); };
@@ -192,8 +194,9 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         return {item:items?.[Number(target?.dataset?.itemIndex)],npc};
     };
     function cancelTooltipDismissal() { if (itemTooltipHideTimer !== null) globalThis.clearTimeout(itemTooltipHideTimer); itemTooltipHideTimer = null; }
-    function hideItemTooltip() { cancelTooltipDismissal(); activeItemTooltip = null; if ($('#intel-item-tooltip')) $('#intel-item-tooltip').hidden = true; }
+    function hideItemTooltip() { itemTooltipHover.cancel(); cancelTooltipDismissal(); activeItemTooltip = null; if ($('#intel-item-tooltip')) $('#intel-item-tooltip').hidden = true; }
     function scheduleTooltipDismissal() {
+        itemTooltipHover.cancel();
         if (disposed) return;
         cancelTooltipDismissal();
         itemTooltipHideTimer = globalThis.setTimeout(() => {
@@ -212,6 +215,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         tooltip.style.top = `${Math.max(8,Math.min(height - rect.height - 8,y + gap + rect.height <= height - 8 ? y + gap : y - rect.height - gap))}px`;
     }
     function showItemTooltip(target,event,preserveDismissal = false) {
+        itemTooltipHover.cancel();
         const {item,npc} = overlayItemForTarget(target), tooltip = $('#intel-item-tooltip');
         if (!item || !npc || !tooltip) { hideItemTooltip(); return; }
         if (!preserveDismissal) cancelTooltipDismissal();
@@ -233,12 +237,8 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
     }
     function measureTimers() {
         if (disposed || panel !== 'timers') return;
-        const height = Math.max(36,Math.ceil(10 + ['#timer-list','#swing-body','#wiki-discovery-notices','#session-restart','#overlay-status'].reduce((sum,selector) => sum + ($(selector)?.getBoundingClientRect().height || 0),0)));
+        const height = Math.max(36,Math.ceil(10 + ['#timer-list','#swing-body','#session-restart','#overlay-status'].reduce((sum,selector) => sum + ($(selector)?.getBoundingClientRect().height || 0),0)));
         if (height !== measuredTimerHeight) {measuredTimerHeight = height; void Promise.resolve(bridge?.action?.('content-height',height)).catch(() => {});}
-    }
-    if (panel === 'timers') {
-        discoveryNotices = mountWikiDiscoveryNotices({root:$('#wiki-discovery-notices'),action:(name,payload) => bridge.discoveryAction(name,payload),now,setInterval,clearInterval,onSizeChange:measureTimers});
-        if (globalThis.ResizeObserver) {noticeResizeObserver = new globalThis.ResizeObserver(measureTimers); noticeResizeObserver.observe($('#wiki-discovery-notices'));}
     }
     const currentIntelNpc = key => (session().intel?.npcs || []).find(npc => intelNpcKey(npc,session().intel) === key);
     async function loadIntelDrops(npc,key) {
@@ -250,6 +250,7 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
             if (disposed || intelLoading.get(key) !== token || !currentIntelNpc(key)) return;
             if (!Array.isArray(result?.items)) throw new Error(result?.error || 'The remaining drops could not be loaded.');
             intelDropCache.set(key,{items:result.items,total:number(result.total ?? result.items.length)});
+            intelDropRevision++;
             // Keep memory bounded across long sessions with many visited zones.
             while (intelDropCache.size > 80) intelDropCache.delete(intelDropCache.keys().next().value);
         } catch (error) {
@@ -305,11 +306,12 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         const notifications = renderTimerNotifications(timers.notifications,now());
         replace($('#timer-list'), (!visible.length && (timers.swing?.enabled === true || notifications) ? '' : renderTimerRows(visible, now()))+notifications);
         replace($('#swing-body'), renderSwing(timers.swing, now()));
-        discoveryNotices?.render(session().discovery || []);
         measureTimers();
     }
     function render() {
         if (disposed) return;
+        let intelDomChanged=false;
+        if(state.sessionAvailable!==true||state.preferences?.visible===false)hideItemTooltip();
         const prefs = state.preferences || {};
         document.documentElement.style.setProperty('--panel-opacity', String(Math.min(1, Math.max(.15, number(prefs.backgroundOpacity) || .85))));
         applyAppearance(document,state.appearance,{panelScale:Number(prefs.fontScale) || 1});
@@ -361,17 +363,31 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
                     shell.dataset.focusSequence = String(intel.focusSequence || '');
                 }
             } else if (!focused) { lastIntelFocus = ''; }
+            // Timer, parse and position heartbeats share this snapshot. Keep
+            // the scrolling Intel DOM intact unless its displayed content
+            // changes; distance-only updates need no row geometry or markup.
+            const contentKey=JSON.stringify([{...intel,npcs:(intel.npcs||[]).map(({distance,...npc})=>npc)},intelQuery,[...expandedIntel],[...intelLoading.keys()],intelDropRevision,[...intelErrors],intelActionKey,[...collapsedIntelSections]]);
+            intelDomChanged=contentKey!==lastIntelContent;
+            if(intelDomChanged){
+            lastIntelContent=contentKey;itemTooltipHover.cancel();
             const list=$('#intel-body'),listTop=list.getBoundingClientRect().top,previousScroll=list.scrollTop;
             const anchor=[...list.querySelectorAll('[data-intel-key]')].find(row=>row.getBoundingClientRect().bottom>listTop+2),anchorKey=anchor?.dataset.intelKey,anchorOffset=anchor?anchor.getBoundingClientRect().top-listTop:0;
             const active=document.hasFocus()?document.activeElement:null,activeRow=active&&list.contains(active)?active.closest('[data-intel-key]'):null;
             const activeAction=active?.dataset?.npcAction,activeItem=active?.dataset?.itemName,activeTag=active?.tagName,activeWasName=active?.classList?.contains('npc-name'),activeWasExpand=active?.hasAttribute?.('data-intel-expand'),activeWasRetry=active?.hasAttribute?.('data-intel-retry');
             replace(list, renderIntel(intel,{query:intelQuery,expanded:expandedIntel,loading:intelLoading,dropCache:intelDropCache,errors:intelErrors,actionKey:intelActionKey,collapsedSections:collapsedIntelSections}));
+            intelDistances=[...list.querySelectorAll('[data-intel-distance-index]')];
             if(!newFocusEvent){
                 const rows=[...list.querySelectorAll('[data-intel-key]')],newAnchor=rows.find(row=>row.dataset.intelKey===anchorKey);
                 if(activeRow&&!active?.isConnected){const row=rows.find(row=>row.dataset.intelKey===activeRow.dataset.intelKey),target=activeAction?[...row?.querySelectorAll('[data-npc-action]')||[]].find(button=>button.dataset.npcAction===activeAction):activeWasName?row?.querySelector('.npc-name'):activeWasExpand?row?.querySelector('[data-intel-expand]'):activeWasRetry?row?.querySelector('[data-intel-retry]'):activeItem?[...row?.querySelectorAll('[data-item-hover]')||[]].find(item=>item.dataset.itemName===activeItem&&item.tagName===activeTag):null;target?.focus({preventScroll:true});}
                 list.scrollTop=newAnchor?list.scrollTop+newAnchor.getBoundingClientRect().top-listTop-anchorOffset:previousScroll;
             }
             refreshItemTooltip();
+            }
+            intelDistances.forEach(distance=>{
+                const npc=intel.npcs?.[Number(distance.dataset.intelDistanceIndex)];if(!npc)return;
+                const text=Number.isFinite(npc.distance)?` · ${fmt(npc.distance)}u`:'';
+                if(distance.textContent!==text)distance.textContent=text;
+            });
             if (freshFocus) {
                 if (newFocusEvent) [...document.querySelectorAll('[data-intel-key]')].find(element => element.dataset.intelKey === key)?.scrollIntoView({block:'start',behavior:'instant'});
                 if (!intelDropCache.has(key) && (focused.drops?.length || 0) < number(focused.dropCount)) void loadIntelDrops(focused,key);
@@ -379,10 +395,11 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         }
         else if (panel === 'map') { $('#overlay-title').textContent = s.zone || 'Map'; mapController?.setVisible?.(state.preferences?.visible !== false); mapController?.render(s); }
         else renderTimers();
-        document.querySelectorAll('#panel-content button, #panel-content input, #panel-content select').forEach(element => {
+        if(panel!=='intel'||intelDomChanged||lastSessionAvailability!==state.sessionAvailable)document.querySelectorAll('#panel-content button, #panel-content input, #panel-content select').forEach(element => {
             if (state.sessionAvailable !== true) { if (!element.disabled) element.dataset.sessionDisabled = 'true'; element.disabled = true; }
             else if (element.dataset.sessionDisabled) { element.disabled = false; delete element.dataset.sessionDisabled; }
         });
+        lastSessionAvailability=state.sessionAvailable;
         $('#overlay-status').textContent = state.sessionAvailable !== true ? 'Session paused · open main app.' : status;
         measureTimers();
     }
@@ -435,12 +452,14 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         // focusing steps as well as during the synchronous focus event.
         queueMicrotask(() => { if (!disposed && document.activeElement === button) revealIntelAction(button); });
     });
-    listen($('#intel-body'),'pointerover',event => { const target = event.target.closest?.('[data-item-hover]'); if (target) showItemTooltip(target,event); });
-    listen($('#intel-body'),'pointermove',event => { const target = event.target.closest?.('[data-item-hover]'); if (target && activeItemTooltip) { activeItemTooltip.point = {clientX:event.clientX,clientY:event.clientY}; positionItemTooltip(target,event); } });
+    listen($('#intel-body'),'pointerover',event => { const target = event.target.closest?.('[data-item-hover]'); if (target && !target.contains(event.relatedTarget)) { hideItemTooltip(); itemTooltipHover.queue(target,event); } });
+    listen($('#intel-body'),'pointermove',event => { const target = event.target.closest?.('[data-item-hover]'); if (target && activeItemTooltip) { activeItemTooltip.point = {clientX:event.clientX,clientY:event.clientY}; positionItemTooltip(target,event); } else if(target)itemTooltipHover.queue(target,event); });
     listen($('#intel-body'),'pointerout',event => { const target = event.target.closest?.('[data-item-hover]'); if (target && !target.contains(event.relatedTarget) && !$('#intel-item-tooltip')?.contains(event.relatedTarget)) scheduleTooltipDismissal(); });
     listen($('#intel-body'),'focusin',event => { const target = event.target.closest?.('[data-item-hover]'); if (target) showItemTooltip(target); });
     listen($('#intel-body'),'focusout',event => { if (event.target.closest?.('[data-item-hover]') && !$('#intel-item-tooltip')?.contains(event.relatedTarget)) scheduleTooltipDismissal(); });
     listen($('#intel-body'),'scroll',hideItemTooltip);
+    listen(document.defaultView,'blur',hideItemTooltip);
+    listen(document.defaultView,'pagehide',hideItemTooltip);
     listen($('#intel-item-tooltip'),'pointerover',cancelTooltipDismissal);
     listen($('#intel-item-tooltip'),'pointerout',event => { if (!event.currentTarget.contains(event.relatedTarget)) scheduleTooltipDismissal(); });
     listen($('#intel-item-tooltip'),'focusin',cancelTooltipDismissal);
@@ -503,6 +522,6 @@ export function mountOverlay({ document = globalThis.document, bridge = globalTh
         }).catch(() => report('Map overlay unavailable · open the main map.'));
     }
     render();
-    return {render(next) {stateGeneration++; state = next || {}; render();},dispose() {disposed = true;moveController.dispose();resizePending=null;finishResize();resizeHandles.forEach(handle=>handle.remove()); hideItemTooltip(); listeners.forEach(remove => remove()); unsubscribe?.(); mapController?.dispose(); discoveryNotices?.dispose(); noticeResizeObserver?.disconnect(); clearInterval(tick);}};
+    return {render(next) {stateGeneration++; state = next || {}; render();},dispose() {disposed = true;itemTooltipHover.dispose();moveController.dispose();resizePending=null;finishResize();resizeHandles.forEach(handle=>handle.remove()); hideItemTooltip(); listeners.forEach(remove => remove()); unsubscribe?.(); mapController?.dispose(); clearInterval(tick);}};
 }
 if (globalThis.document?.querySelector('#overlay')) mountOverlay();

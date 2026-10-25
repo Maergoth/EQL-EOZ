@@ -39,6 +39,10 @@ async function run({root,profile}){
         // an explicit ownership fixture, without requesting physical OS focus.
         await execute(()=>{Object.defineProperty(document,'hasFocus',{value:()=>true,configurable:true});[...document.querySelectorAll('.npc-row')].find(row=>row.querySelector('.npc-name').textContent==='Mob 11').querySelector('[data-intel-expand]').focus({preventScroll:true});});
         const before=await execute(anchor);assert(before.scroll>100);
+        await execute(()=>{window.keptIntelRow=document.querySelector('.npc-row');window.intelGeometryReads=0;const original=Element.prototype.getBoundingClientRect;window.restoreIntelRect=()=>Element.prototype.getBoundingClientRect=original;Element.prototype.getBoundingClientRect=function(){window.intelGeometryReads++;return original.call(this);};});
+        for(let n=0;n<20;n++)await execute(n=>{const next=structuredClone(window.intelState);next.snapshot.session.parse={damage:n};next.snapshot.session.intel.npcs.forEach(npc=>npc.distance+=1);window.publishIntel(next);},n);
+        assert.deepEqual(await execute(()=>({reads:window.intelGeometryReads,sameRow:window.keptIntelRow===document.querySelector('.npc-row')})),{reads:0,sameRow:true},'Native heartbeat/distance updates retain the real DOM and avoid every row geometry walk');
+        await execute(()=>{window.restoreIntelRect();});
         for(let n=0;n<12;n++){
             await execute(n=>{const next=structuredClone(window.intelState);next.snapshot.session.intel.npcs.reverse();next.snapshot.session.intel.npcs.forEach((npc,i)=>npc.distance=n*100+i+1);window.publishIntel(next);},n);
             const after=await execute(anchor);assert.equal(after.key,before.key,'routine location updates preserve the visible mob');assert(Math.abs(after.offset-before.offset)<1.1,'routine updates preserve its viewport offset');assert.deepEqual(after.order,before.order,'distance/order changes cannot reorder the list');

@@ -2,6 +2,13 @@
 
 ## 0.9.14 contribution history and discovery checks
 
+With Timers closed, trigger a genuinely missing item and verify a separate
+lower-right popup on the main window's monitor. Existing cached/live wiki pages
+and failed existence checks must not claim absence. Confirm no focus change or
+capture until Contribute, Ignore/dismiss behavior, stacked notice sizing,
+15 seconds of visible time with hover/focus holds, and fitting after a monitor
+is removed. Timers must continue to contain countdowns rather than wiki cards.
+
 Release candidate: `v0.9.14`. In an isolated synthetic profile, open Contribute
 then History and check manual/automatic, partial and uncertain receipts, local
 filters, older receipts, fixed-origin links and readable narrow/large-text
@@ -12,6 +19,26 @@ file intact. Test owner-labelled pet discoveries and cached global counts just
 below/at six without adding live counter requests. Physical game capture,
 production authentication, installer and package checks remain separate receipts
 in [the release record](RELEASE_0914_PLAN.md).
+
+In Items, Any must sit immediately left of Auto and show all classes without
+changing detected/profile classes or the other panels. Verify rich item hovers
+in Items, Character and Intel wait about 350 ms; passing over or scrolling away
+must cancel a pending popup, while keyboard focus still opens it immediately.
+Scroll a busy Intel list while parse/timer updates arrive and movement changes
+distances. Its rows, scroll position and focused control should stay stable.
+For an item belonging to a documented set already listed on an NPC or zone in
+the selected instance, Preview should preserve that set instead of adding its
+member again; missing individual item-page sources may still be included.
+
+With a missing-item request pending, Pause reading must stop the reader owned
+by Contribute. Refresh and leaving/returning must keep it paused; explicit Start
+or a new Contribute action may resume it. Ordinary log processing continues.
+
+Rules revision 2: verify base HP 50 previews as 75 at rank 5 plus 4/32 and AC 14
+as 22 at rank 6 plus 5/64. Diamondine Earring and Talisman of Kejaar Kerrath
+should gain +5 Void at rank 5; Serpent's Tooth should not. Older pending
+base-recovery plans must require a fresh Preview; already confirmed saved pages
+must stay saved. These item previews must not alter recorded Character totals.
 
 0.9.13 hotfix: the item page preview should use
 `[[Category:Tier 0 Verification Needed]]` for unverified ranked or recovered
@@ -38,9 +65,9 @@ notice when link codes are stripped. Repeated queued/ignored/submitted items
 must not create duplicate drafts. These physical game checks remain separate
 from synthetic component checks.
 
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.13-x64.exe`.
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.14-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.13` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.14` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
 
 ## Overlay drag and resize acceptance
 

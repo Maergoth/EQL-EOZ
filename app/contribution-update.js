@@ -11,7 +11,7 @@ export function contributionUpdateSummary(candidate={}){
         if(candidate.kind==='item'){
             sections.sources=true;fields.add('sources');
             const sources=(candidate.sources||[]).filter(source=>source.npc&&source.zone&&contributionSourceIncluded(source));
-            for(const source of sources)additions.push('Add '+source.npc+' ('+source.zone+') to this item’s sources, add '+(candidate.title||candidate.name)+' to the monster’s loot, and add both to the zone’s '+(source.instance==='raid'?'Raid Zone':'Normal Zone')+' list.');
+            for(const source of sources)additions.push('Add '+source.npc+' ('+source.zone+') to this item’s sources. Preview checks the monster’s authored loot and documented item sets before adding an individual loot entry, and completes the zone’s '+(source.instance==='raid'?'Raid Zone':'Normal Zone')+' references.');
             if(!sources.length)additions.push('Include a source below, or enter the monster and zone that dropped this item. The review will show updates to the item, monster and zone.');
         }else if(candidate.kind==='npc'){sections.loot=true;fields.add('knownLoot');fields.add('lootKinds');additions.push('Add the observed loot here and add this monster/zone to each existing item’s sources, with the same zone references.');}
         else if(candidate.kind==='zone'){sections.loot=true;fields.add('knownLoot');fields.add('lootKinds');additions.push('Add the observed loot to this zone and complete the linked item and monster drop-source entries.');}
