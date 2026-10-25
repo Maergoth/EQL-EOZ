@@ -108,6 +108,29 @@ try {
         const state = () => execute(owner, () => window.eyeOfZommOverlays.getState());
         const control = (action, panel, value) => execute(owner, (action, panel, value) => window.eyeOfZommOverlays.control(action, panel, value), action, panel, value);
         const action = (panel, command, payload) => execute(panels()[panel], (command, payload) => window.eyeOfZommOverlay.action(command, payload), command, payload);
+        const placeNativeBounds = async (id, bounds) => {
+            const window=panels()[id];let lastNativeChange=Date.now();
+            const changed=()=>{lastNativeChange=Date.now();};
+            window.on('move',changed);window.on('resize',changed);
+            try{
+                window.setBounds(bounds);
+                // X11's setBounds notifications create the host's native-move
+                // fallback, which completes after 250ms without movement.
+                // Wait for native geometry and persisted host geometry to
+                // agree and settle before asking a different overlay to dock
+                // against this target. Windows usually emits moved earlier.
+                await until(async()=>{
+                    const current=window.getBounds(),saved=(await state()).panels[id].bounds;
+                    // Electron/Windows may round fractional physical pixels
+                    // back by 1–2 DIPs. Use the settled native rectangle as
+                    // the next gesture's origin, as the host itself does.
+                    return Date.now()-lastNativeChange>=350&&['x','y','width','height'].every(key=>Math.abs(current[key]-saved[key])<=2)&&
+                        ['x','y','width'].every(key=>Math.abs(current[key]-bounds[key])<=2)&&(id==='timers'||Math.abs(current.height-bounds.height)<=2);
+                },`${id} fixture placement settles before a new drag`);
+                return window.getBounds();
+            }catch(error){throw Error(`${error.message}; requested=${JSON.stringify(bounds)} native=${JSON.stringify(window.getBounds())} host=${JSON.stringify((await state()).panels[id])} quietMs=${Date.now()-lastNativeChange}`);
+            }finally{window.off('move',changed);window.off('resize',changed);}
+        };
         const append = async texts => {
             const stamp = new Date().toString().replace(/ GMT.*$/, '');
             await fs.appendFile(log, texts.map(text => `[${stamp}] ${text}\n`).join(''));
@@ -239,14 +262,14 @@ try {
             // restored afterward; their collision guards remain production-real
             // and the separate native fixture exercises four-panel docking.
             await control('hide','map');await control('hide','intel');
-            const resizeTarget={x:100,y:100,width:parseBeforeResize.width+86,height:parseBeforeResize.height+40};panels().parse.setBounds(resizeTarget);
-            const actualTarget=panels().parse.getBounds(),timerWindow=panels().timers;
+            const resizeTarget={x:100,y:100,width:parseBeforeResize.width+86,height:parseBeforeResize.height+40};
+            const actualTarget=await placeNativeBounds('parse',resizeTarget),timerWindow=panels().timers;
             // Release docking deliberately excludes the group just detached in
             // that gesture. First detach the seeded/default pair, then perform
             // a fresh move toward Parse to exercise intentional reattachment.
             await action('timers','move-start');await action('timers','move-end',{cancel:true});
-            timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+27,width:actualTarget.width-8,height:84});
-            await action('timers','move-start');await action('timers','move',{deltaX:-5,deltaY:-20});await action('timers','move-end');
+            const stagedTimer=await placeNativeBounds('timers',{x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+27,width:actualTarget.width-8,height:84});
+            await action('timers','move-start');await action('timers','move',{deltaX:actualTarget.x-stagedTimer.x,deltaY:actualTarget.y+actualTarget.height+7-stagedTimer.y});await action('timers','move-end');
             try{await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height&&bounds.width===actualTarget.width;},'Triggers touches current resized native Parse bounds and shares its width');}catch(error){throw Error(`${error.message}; target=${JSON.stringify(actualTarget)} timer=${JSON.stringify(timerWindow.getBounds())} workAreas=${JSON.stringify(fixtureScreen.getAllDisplays().map(display=>display.workArea))} preferences=${JSON.stringify((await state()).panels)}`);}
             // Native setBounds is fixture positioning, not user height intent.
             // Establish manual height through the real own-panel resize path.
