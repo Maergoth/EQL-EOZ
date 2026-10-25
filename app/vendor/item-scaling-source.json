@@ -1,6 +1,6 @@
 {
   "repository": "Maergoth/EQLWiki",
-  "commit": "86b281e6a75c58072ef4f273fb350da9a0314e1d",
+  "commit": "780b61946cdb7167cb88ff38eb7d1fe53bd59d3e",
   "directory": "extensions/ItemLevelSlider",
   "sha256": {
     "item-scaling-core.js": "98a0564c5e7cea2355eb9326c2abdf2e6965b242b48f392b600f7c2c15f9dee4",

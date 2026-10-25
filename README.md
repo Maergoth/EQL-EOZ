@@ -1,5 +1,7 @@
 # EQLWiki — Eye of Zomm
 
+**1.0.0: Eye of Zomm.** Responsive logged-location maps, shared Crawl progress, per-combatant parsing and AA, retained Live encounters, explicit weapon-base previews, a structured contribution form and one Screen Reading master switch. Native desktop and installer icons use the eye. See [the release record](docs/RELEASE_1_0_PLAN.md).
+
 **Eye of Zomm** is a local-first Windows and Linux app for **EverQuest Legends**. It reads ordinary game logs, combines them with cached EQLWiki knowledge, and keeps maps, named-mob loot, combat parses and triggers in separate desktop windows.
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)

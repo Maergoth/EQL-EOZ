@@ -1,5 +1,9 @@
 # Eye of Zomm Windows/game-client acceptance test
 
+## 1.0.0 release checks
+
+Release candidate: `v1.0.0`. Confirm desktop/installer eye artwork; live `/loc` marker updates and source/reset clears; shared Crawl defeat/collapse and zone reset; all logged combatants, per-name breakdowns and AA Gained; Live retains a completed fight. Check tier-eight explicit Backstab 21 and weight 0.7 for the documented Torturer's Signature bases. Verify unchecked Screen Reading denies every capture/OCR path, and checked Contribute starts reading an existing log-backed item. New Item Found selects its exact structured form, blank statistics stay omitted, manual edits survive OCR/proof refresh, and fresh proof is required for publication. These installed-game checks remain separate from synthetic CI.
+
 ## 0.9.15 verified discovery and map checks
 
 Release candidate: `v0.9.15`. With synthetic missing/existing/failed/delayed wiki responses, confirm no automatic row, editor, Character gap, toast or popup appears before a missing result. Covered, error, expired and source-switched results remain quiet. Test red × dismissal, ∞× persistence/restart and signed-out History Restore. Exercise explicit raid Yes/No/Unknown, map placeholders and separate normal/raid overview previews. Enter a zone, refresh self /who, consider a monster with a numeric level, then kill it: only same-visit evidence prefills, unconfirmed. In the top 3D view, confirm a visible location ring at full-zone zoom, movement-derived arrow and left-drag pan without camera tilt.
