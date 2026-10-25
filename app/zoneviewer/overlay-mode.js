@@ -1,5 +1,20 @@
 const knownZ=value=>(typeof value==='number'||typeof value==='string'&&value.trim()!=='')&&Number.isFinite(Number(value));
 
+// The pinned viewer uses TrackballControls for Top 3D and OrbitControls for
+// the flat client map. Adapt their public mouse mapping without changing the
+// decoder bundle or first-person pointer-look controls.
+export function installViewerTopPan(app){
+    if(typeof app?.createOrbitControls!=='function')return {dispose(){}};
+    const original=app.createOrbitControls;
+    const configure=(controls,mapOnly=false)=>{
+        if(!mapOnly&&controls?.mouseButtons){controls.mouseButtons.LEFT=2;controls.mouseButtons.RIGHT=0;}
+        return controls;
+    };
+    function create(camera,mapOnly=false){return configure(original.call(this,camera,mapOnly),mapOnly);}
+    app.createOrbitControls=create;configure(app.orbit,app.mapFileVisible===true);
+    return {dispose(){if(app.createOrbitControls===create)app.createOrbitControls=original;}};
+}
+
 // Shared presentation-only clipping for the main viewer and native overlay.
 export function applyViewerSlice(app,{center,tolerance=25}={}){
     if(!Number.isFinite(center)||!Number.isFinite(tolerance)||tolerance<1||tolerance>250)return {ok:false};

@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {EQLogParser} from '../app/parser.js';
+import {loggedZoneName,viewerZoneTarget} from '../app/zone-identity.js';
+import {createContributionQueue} from '../app/contribution-queue.js';
+
+const known={name:'Synthetic Known Vale',wikiTitle:'Synthetic Known Vale',viewerName:'The Known Vale',aliases:['knownvale','Known Vale']},zones=[known],pack={meta:{sample:false,wikiEntitiesComplete:true},zones,items:[],npcs:[],wikiEntities:{items:[],npcs:[],titles:['Synthetic Known Vale','Synthetic Uncharted Vale']}},parser=new EQLogParser();
+parser.setCharacterFromFilename('C:/Synthetic/eqlog_Syntheticplayer_server.txt');
+const apply=line=>{const event=parser.parse(line);if(event?.type==='zone')event.zone=parser.zone=loggedZoneName(zones,event.zone,event.zoneShortName);return event;};
+let event=apply('[Sun Oct 25 05:56:09 2026] You have entered Synthetic Uncharted Vale.');assert.equal(event.zone,'Synthetic Uncharted Vale');
+const queue=createContributionQueue({storage:null,getPack:()=>pack}),entered=queue.add({kind:'zone',name:parser.zone},true);
+event=apply('[Sun Oct 25 06:07:56 2026] [50 WAR] Syntheticplayer (Human) <Synthetic Guild> ZONE: Synthetic Uncharted Vale (syntheticshort)');
+assert.equal(event.zoneShortName,'syntheticshort');assert.equal(event.zone,'Synthetic Uncharted Vale','An uncatalogued short name cannot replace the readable /who name');assert.equal(parser.snapshot().zone,'Synthetic Uncharted Vale');
+assert.equal(viewerZoneTarget(zones,parser.zone,parser.zoneShortName),'','Preserving display identity does not invent a supported map');
+const contribution=queue.add({kind:'zone',name:parser.zone},true);assert.equal(contribution.id,entered.id,'Entering and then reading /who reuse one draft');assert.equal(queue.snapshot().length,1);assert.equal(contribution.membership,'present','Readable known wiki titles reuse their page even before a rich zone record exists');assert.equal(contribution.title,'Synthetic Uncharted Vale');assert.equal(queue.snapshot().some(candidate=>candidate.name==='syntheticshort'),false);
+assert.equal(loggedZoneName(zones,'Unknown display','knownvale'),'Synthetic Known Vale','A verified short name still selects its canonical zone');
+assert.equal(loggedZoneName(zones,'Known Vale','unknown_short'),'Synthetic Known Vale','A known full-name alias is checked when the short name is unknown');
+assert.equal(loggedZoneName(zones,'The Known Vale'),'Synthetic Known Vale');assert.equal(loggedZoneName(zones,'','uncataloguedshort'),'uncataloguedshort','A raw name is retained only when no display name exists');assert.equal(loggedZoneName(zones,'',''),'');
+assert.equal(loggedZoneName(zones,'Synthetic Known Vale Annex','unknown_short'),'Synthetic Known Vale Annex','A new zone cannot be collapsed into an older zone by a name substring');
+assert.equal(loggedZoneName([...zones,{name:'Synthetic Uncharted Vale',aliases:['syntheticshort']}],'Synthetic Uncharted Vale','syntheticshort'),'Synthetic Uncharted Vale','A later catalog refresh preserves the same display identity');
+const restarted=new EQLogParser();restarted.setCharacterFromFilename('C:/Synthetic/eqlog_Syntheticplayer_server.txt');const replayed=restarted.parse('[Sun Oct 25 06:07:56 2026] [50 WAR] Syntheticplayer (Human) ZONE: Synthetic Uncharted Vale (syntheticshort)');assert.equal(loggedZoneName(zones,replayed.zone,replayed.zoneShortName),'Synthetic Uncharted Vale','A restarted selected-log parser can establish the readable identity from /who alone');
+event=apply('[Sun Oct 25 06:09:10 2026] You have entered Known Vale.');assert.equal(event.zone,'Synthetic Known Vale');
+const source=readFileSync(new URL('../app/app.js',import.meta.url),'utf8');assert(source.includes('const canonicalZone = loggedZoneName(pack.zones,event.zone,event.zoneShortName);'),'Actual log ingestion uses the shared readable-name fallback');assert(source.includes('parser.zone = loggedZoneName(pack.zones,parser.zone,parser.zoneShortName);'),'A data refresh rechecks both full and short identities');
+console.log('Log zone identity: uncatalogued /who short IDs preserve readable wiki identity; known short/full aliases, data refresh and unavailable map boundaries passed.');

@@ -10,9 +10,9 @@ const sameUser=(a,b)=>a?.id===b?.id&&a?.name===b?.name;
 const errorText=error=>String(error?.message||'The drop source needs review.').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,400);
 
 class AutomaticLootSources{
-    constructor({client,onResult=()=>{},onDeferred=()=>{},onDecision=()=>{},now=Date.now}={}){
+    constructor({client,isIgnored=async()=>false,onResult=()=>{},onDeferred=()=>{},onDecision=()=>{},now=Date.now}={}){
         if(!client)throw Error('Automatic loot sources require the native wiki client.');
-        this.client=client;this.onResult=onResult;this.onDeferred=onDeferred;this.onDecision=onDecision;this.now=now;
+        this.client=client;this.isIgnored=isIgnored;this.onResult=onResult;this.onDeferred=onDeferred;this.onDecision=onDecision;this.now=now;
         this.chain=Promise.resolve();this.pending=0;this.epoch=0;this.disposed=false;
         this.seen=new Set();this.completed=new Set();this.kills=new Map();this.cursors=new Map();this.decisions=new Map();
     }
@@ -58,11 +58,13 @@ class AutomaticLootSources{
         const keyFor=name=>[input.logId,normalizeWikiIdentity(zone),instance,normalizeWikiIdentity(name)].join('|');
         if(input.event==='kill'){
             if(record.subject?.kind!=='monster'||!record.subject.name||/^(?:you|yourself)$/i.test(record.subject.name)||record.input.isPlayer||record.input.isPet||isOwnedPetName(record.subject.name))return{accepted:false};
+            if(await this.isIgnored({kind:'npc',name:record.subject.name}))return{accepted:false,ignored:true};
             this.kills.set(keyFor(record.subject.name),{source:input.logId,at,cursor:input.cursor});if(this.kills.size>MAX_RECENT)this.kills.delete(this.kills.keys().next().value);return{accepted:true};
         }
         if(record.subject?.kind!=='item')return{accepted:false};
         const itemName=contributionTitle(itemExaltationBaseIdentity(record.subject.name));
         const catalog=await this.client.getItemCatalog?.();current();
+        if(await this.isIgnored({kind:'item',name:record.subject.name},catalog))return{accepted:false,ignored:true};
         if(catalog){
             if(this.policyCatalog!==catalog){this.policyCatalog=catalog;this.policyResolver=createWikiResolver(catalog);}
         }
@@ -70,6 +72,7 @@ class AutomaticLootSources{
         const results=[];
         for(const relation of relations){
             if(isOwnedPetName(relation.name)||/^(?:you|yourself|unknown|\?)$/i.test(relation.name))continue;
+            if(await this.isIgnored({kind:'npc',name:relation.name},catalog))continue;
             if(relation.evidence==='recent-kill'){const kill=this.kills.get(keyFor(relation.name));if(!kill||kill.cursor>=input.cursor||at<kill.at||at-kill.at>KILL_MS)continue;}
             let context={observationId:record.id,item:itemName,npc:contributionTitle(relation.name),zone,instance};
             const dataset=String(catalog?.meta?.version||catalog?.meta?.manifestVersion||'')+'|'+String(catalog?.meta?.generatedAt||'')+'|'+String(catalog?.meta?.wikiRelationshipCoverageVersion||'')+'|'+String(catalog?.meta?.lootSourceCountsVersion||''),factKey=contributionRelationKey(context,{resolver:this.policyResolver||createWikiResolver({})}),memoKey=dataset+'|'+factKey;
@@ -103,7 +106,7 @@ class AutomaticLootSources{
                 };
                 let plan=await this.client.prepareObservedLootRelation({relation:context,itemPage:item,npcPage:npc,zonePage,account:account.user,observationId:record.id,relationKey,evidence:relation.evidence,catalog});current();checkPlan(plan);
                 const stored=this.client.plans.get(plan.id);if(!stored)throw Error('The prepared source update was not saved.');
-                const beforeWrite=async()=>{current();checkPlan(stored);await this.client.expectedUser(account.user);current();};
+                const beforeWrite=async()=>{current();if(await this.isIgnored({kind:'item',name:context.item},catalog)||await this.isIgnored({kind:'npc',name:context.npc},catalog))throw Error('This entity is ignored on this device.');checkPlan(stored);await this.client.expectedUser(account.user);current();};
                 const result=await this.client.submitPlan({planId:plan.id,reviewDigest:plan.reviewDigest},{beforeWrite,automaticPolicyPages:[item,npc,zonePage]});
                 if(result.automaticOptOut){if(['covered','routine'].includes(result.automaticOptOut.decision)&&!result.pages.some(page=>['applied','unknown','failed'].includes(page.status))){results.push(quiet(result.automaticOptOut.decision,result.automaticOptOut.reason));continue;}throw Object.assign(Error(result.automaticOptOut.reason||'This saved source update needs review.'),result.pages.some(page=>['applied','unknown','failed'].includes(page.status))?{plan:result}:{});}
                 if(result.status!=='submitted')throw Object.assign(Error('The wiki did not confirm every source link. Review the saved result in Contribute.'),{plan:result});

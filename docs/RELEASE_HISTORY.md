@@ -1,5 +1,7 @@
 # Browsable release history
 
+0.9.15 archives four visually reviewed actual isolated Electron Chromium captures: discovery queue dismiss/forever-ignore controls, the device ignore manager inside Contribution History, the unified normal/raid zone creation form, and a real native WebGL top map with a synthetic movement arrow. All entities, account responses and storage are synthetic. The native fixture verifies the controls, Restore, shared blueprint previews, required raid choice, placeholders and large-text layout. No installed profile, game pixels or production wiki writes are used. Earlier releases and image hashes remain unchanged.
+
 0.9.14 archives three actual isolated Electron Chromium captures: the unified
 Contribute section with embedded Discoveries/Contribution History tabs and
 compact item reader; account-scoped history with an expanded partial result;

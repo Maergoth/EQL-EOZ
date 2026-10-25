@@ -30,7 +30,7 @@ const button=new Element(document),navigations=[],navigationWasModal=[];
 const tour=mountWhatsNew({document,button,storage,getVersion:()=> '0.8.8',navigate:view=>{navigations.push(view);navigationWasModal.push(document.body.children[0].open);}}),dialog=document.body.children[0],$=selector=>dialog.querySelector(selector);
 assert.equal(dialog.open,false,'Mounting the app cannot interrupt users with an automatic walkthrough');
 assert.match(button.textContent,/New/);
-assert.equal($('[data-tour-version]').children.length,27,'Historical releases remain browsable');
+assert.equal($('[data-tour-version]').children.length,releaseHistoryUpTo('0.8.8').length,'Historical releases remain browsable');
 assert.equal(dialog.attributes['aria-labelledby'],'whats-new-title');
 button.click();assert.equal(dialog.open,true);assert.equal($('[data-tour-count]').textContent,'1 of 4');
 assert.equal($('[data-tour-previous]').disabled,true);assert.equal(document.activeElement,$('[data-tour-next]'));

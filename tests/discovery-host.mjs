@@ -17,7 +17,7 @@ function fixture(options={}) {
         desktopCapturer:{ async getSources(options) { captures.push(options); return sourceAction ? sourceAction() : sources; } },
         clipboard:{ writeImage(image) { if (clipboardFailure) throw clipboardFailure; images.push(image); } }
     };
-    const host = new DiscoveryHost({ electron, origin, getMainWindow:() => main,itemExistence:{check:async()=>({status:'missing'}),clear(){},dispose(){}},...options });
+    const host = new DiscoveryHost({ electron, origin, getMainWindow:() => main,verifyDiscovery:async()=>({state:'missing',reasons:['missing-page'],confirmedRelations:[],checkedAt:new Date((options.now||Date.now)()).toISOString()}),itemExistence:{check:async()=>({status:'missing'}),clear(){},dispose(){}},...options });
     const frame = window => ({ sender:window.webContents, senderFrame:window.webContents.mainFrame });
     return { host, main, timer, other, mainEvent:frame(main), timerEvent:frame(timer),get noticeEvent(){return frame(host.notices.window);}, otherEvent:frame(other), captures, images, handlers, windowsCreated:() => windowsCreated,
         setSources(value) { sources = value; }, setSourceAction(value) { sourceAction = value; }, setClipboardFailure(value) { clipboardFailure = value; } };
@@ -171,3 +171,19 @@ assert.equal((await pendingIgnore.host.handle(pendingIgnore.mainEvent,'show',{..
 await pendingIgnore.host.handle(pendingIgnore.mainEvent,'ignore',{id:linkedPrompt.id});pendingLookup.resolve({status:'missing'});assert.equal((await pendingShow).suppressed,true);assert.equal(pendingIgnore.windowsCreated(),0,'Ignoring a pending lookup prevents its late popup');
 assert.equal((await pendingIgnore.host.handle(pendingIgnore.mainEvent,'show',linkedPrompt)).suppressed,true,'A retired request cannot resurrect after dismissal');pendingIgnore.host.dispose();
 console.log('Discovery admission: native proof required, present/error suppression, expiry, source cancellation, exact owner continuity and canonical item dedup passed.');
+
+for(const proof of [null,{state:'unknown'},{state:'covered',reasons:[]},{state:'missing',reasons:['missing-population'],checkedAt:new Date().toISOString()},{state:'missing',reasons:['missing-page'],checkedAt:new Date(Date.now()-61000).toISOString()}]){
+ const f=fixture({verifyDiscovery:async()=>proof});assert.equal((await f.host.handle(f.mainEvent,'show',prompt())).suppressed,true);assert.equal(f.windowsCreated(),0,'No generic NPC popup without fresh live missing-page proof');
+ const spawn={...prompt('spawn-proof'),purpose:'spawn-location',candidateId:'candidate-proof',spawnEvidenceId:'evidence-proof'};assert.equal((await f.host.handle(f.mainEvent,'show',spawn)).suppressed,true);assert.equal(f.windowsCreated(),0,'No spawn popup without fresh live missing-page proof');f.host.dispose();
+}
+for(const action of ['clear','cancel','navigate','ignore']){
+ const pending=deferred(),f=fixture({verifyDiscovery:()=>pending.promise}),showing=f.host.handle(f.mainEvent,'show',prompt('pending-npc'));await new Promise(done=>setImmediate(done));assert.equal(f.windowsCreated(),0);
+ if(action==='clear')f.host.clear();else if(action==='cancel')await f.host.handle(f.mainEvent,'cancel-item-checks');else if(action==='navigate')f.main.webContents.mainFrame.url=origin+'/other';else await f.host.handle(f.mainEvent,'ignore',{id:'pending-npc'});
+ pending.resolve({state:'missing',reasons:['missing-page'],checkedAt:new Date().toISOString()});assert.equal((await showing).suppressed,true);assert.equal(f.windowsCreated(),0,'Late NPC proof stays quiet after '+action);f.host.dispose();
+}
+for(const kind of ['item','monster']){const f=fixture({isContributionIgnored:async()=>true});assert.equal((await f.host.handle(f.mainEvent,'show',{...prompt('ignored-native'),kind})).suppressed,true);assert.equal(f.windowsCreated(),0);f.host.dispose();}
+console.log('Native NPC popup admission: current live proof required, pending/present/unknown/stale suppressed, cancellation/ignores win.');
+
+const newlyIgnored=new Set(),existingIgnore=fixture({isContributionIgnored:async target=>newlyIgnored.has(target.kind+'|'+target.name)});
+await existingIgnore.host.handle(existingIgnore.mainEvent,'show',prompt('already-visible'));await existingIgnore.host.handle(existingIgnore.mainEvent,'show',{...linkedPrompt,id:'independent-item'});assert.equal(existingIgnore.host.queue.length,2);
+newlyIgnored.add('npc|a synthetic rat');await existingIgnore.host.reconcileIgnores();assert.deepEqual(existingIgnore.host.queue.map(row=>row.id),['independent-item'],'Saving a permanent ignore removes its already visible popup while preserving unrelated notices');existingIgnore.host.dispose();

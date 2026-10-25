@@ -1,5 +1,7 @@
 # Eye of Zomm implementation status
 
+0.9.15 baseline: automatic discovery admission requires fresh anonymous live-wiki proof after the cached-data gate. Pending, unsupported, failed and inconclusive checks remain internal. Explicit user-created reviews and actual partial submission receipts are preserved. Zone creation, permanent ignores, readable log anchoring, same-visit /con suggestions and visible 3D markers/top-view pan are included; final release gates are recorded in [RELEASE_0915_PLAN.md](RELEASE_0915_PLAN.md).
+
 0.9.14 adds native contribution History receipts with account filtering and
 bounded private storage inside a unified Contribute section. Shared account
 controls, embedded tabs, a compact reader and one latest-result summary preserve

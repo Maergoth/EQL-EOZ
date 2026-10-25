@@ -1,6 +1,7 @@
 // Private log facts feed local proposals. Automatic publication is authorized
 // separately by the native actual-log witness and its append-only write gate.
 import { createWikiResolver, normalizeWikiIdentity, itemBaseIdentity, itemExaltationBaseIdentity } from './wiki-identity.js';
+import {validConsiderLevelProof} from './log-context.js';
 
 export const CONTRIBUTION_QUEUE_KEY = 'eql-eye-of-zomm-contributions-v1';
 export const CONTRIBUTION_QUEUE_BYTES = 1800000;
@@ -42,6 +43,8 @@ export function logContributionObservation(event,context={}, {now=Date.now(),fre
     if(!name)return null;
     const kind=event.type==='loot'||linked?'item':event.type==='kill'?'monster':'zone';
     const fields=[{key:'name',value:name,confidence:100}],relations=[];
+    const levelProof=event.type==='kill'&&validConsiderLevelProof(event.considerLevel,{name,zone,instance,visit:event.zoneVisit,at})?Object.fromEntries(['schemaVersion','kind','npc','zone','instance','instanceId','visit','at','level','minimum','maximum','samples','value'].map(key=>[key,event.considerLevel[key]])):null;
+    if(levelProof){fields.push({key:'level',value:levelProof.value,confidence:100});input.zoneVisit=levelProof.visit;}
     const linkedTier=linked?itemBaseIdentity(displayName).tier:null;if(linkedTier!==null)fields.push({key:'tier',value:linkedTier,confidence:100});
     const relate=(type,relatedName,evidence)=>relations.push({type,name:relatedName,zone,instance,evidence,confirmed:false,eventId:id,at:capturedAt,...(type==='drop-source'?{item:name}:{})});
     if(kind==='monster'&&zone){relate('mob-zone',name,event.type);relate('zone-population',name,event.type);}
@@ -54,6 +57,6 @@ export function logContributionObservation(event,context={}, {now=Date.now(),fre
             if(evidence==='explicit-corpse'&&zone){relate('mob-zone',sourceName,'explicit-corpse');relate('zone-population',sourceName,'explicit-corpse');}
         }
     }
-    return {id,kind:'game-log',owner:'contribution',capturedAt,input,subject:{kind,name},fields,relations,
-        evidence:{text:linked?contributionEvidenceText(event.evidence?.text,6000)||`Item linked in chat: ${displayName}`:`Log ${event.type}: ${name}${zone?` in ${zone}`:''}${relations.filter(relation=>relation.type==='drop-source').map(relation=>`\nSource suggestion: ${relation.name} (${relation.evidence})`).join('')}`,logLine}};
+    return {id,kind:'game-log',owner:'contribution',capturedAt,input,subject:{kind,name},fields,relations,...(levelProof?{levelEvidence:{...levelProof,sourceToken:source}}:{}),
+        evidence:{text:linked?contributionEvidenceText(event.evidence?.text,6000)||`Item linked in chat: ${displayName}`:`Log ${event.type}: ${name}${zone?` in ${zone}`:''}${relations.filter(relation=>relation.type==='drop-source').map(relation=>`\nSource suggestion: ${relation.name} (${relation.evidence})`).join('')}${levelProof?`\nExplicit /con level${levelProof.minimum===levelProof.maximum?'':'s'} ${levelProof.value} observed at ${new Date(levelProof.at).toISOString()} during this same zone visit. Review this observed level; it does not establish the monster's full level range.`:''}`,logLine}};
 }

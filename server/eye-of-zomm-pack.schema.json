@@ -314,8 +314,33 @@
         },
         "possibleItemsComplete": {
           "type": "boolean"
+        },
+        "possibleSource": {
+          "$ref": "#/$defs/relationshipSource"
+        },
+        "possibleRule": {
+          "enum": [ "reviewed-research-catalog", "literal-self-title" ],
+          "description": "Reviewed uncertainty bound only; never positive membership or NPC drop coverage."
         }
       },
+      "allOf": [
+        {
+          "if": { "required": [ "possibleRule" ] },
+          "then": {
+            "required": [ "source", "possibleItems", "possibleItemsComplete" ],
+            "properties": {
+              "items": { "maxItems": 0 },
+              "complete": { "const": false },
+              "possibleItems": { "minItems": 1 },
+              "possibleItemsComplete": { "const": true }
+            }
+          }
+        },
+        {
+          "if": { "required": [ "possibleRule" ], "properties": { "possibleRule": { "const": "reviewed-research-catalog" } } },
+          "then": { "required": [ "possibleSource" ] }
+        }
+      ],
       "additionalProperties": false
     },
     "lootSourceCount": {

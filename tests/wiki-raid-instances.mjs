@@ -34,6 +34,8 @@ const fixtures = {
     'Synthetic future zone':{ text:'[[Synthetic future raid NPC]] (Raid Instance Only)\n= Adventure =\n== Raid Instance ==\n=== Bosses ===\n! Raid Boss NPCs\n|[[Synthetic future raid NPC]]\n|-\n== Normal Instance ==\n! Types of Monsters\n|[[Synthetic future public NPC]]', zoneCandidate:true, revision:502 },
     'Synthetic future raid NPC':{ text:'{{Namedmobpage\n|zone=[[Synthetic future zone]]\n|level=55\n}}', revision:113 },
     'Synthetic future public NPC':{ text:'{{Namedmobpage\n|zone=[[Synthetic future zone]]\n|level=15\n}}', revision:114 },
+    'Synthetic normal lake':{ text:'{| class="zoneTopTable"\n! Name in /who\n| ?\n|}', zoneCandidate:true, revision:505 },
+    'Synthetic lake spawn':{ text:'{{Namedmobpage\n|zone=[[Synthetic normal lake]]\n|level=20\n}}', categories:['Synthetic normal lake'], revision:115 },
     'King Tranix':{ text:npc(52), revision:101 },
     'Fire Giant Warrior':{ text:npc(49), revision:102 },
     'Synthetic raid boss':{ text:npc(55), categories:['Raid Encounters'], revision:103 },
@@ -95,6 +97,14 @@ Object.assign(fixtures, {
 });
 const php = `<?php
 class Maintenance {}
+class SyntheticPublicRevision { public const FOR_PUBLIC=1; }
+class_alias(SyntheticPublicRevision::class, 'MediaWiki\\Revision\\RevisionRecord');
+class MediaWikiServices {
+    public static function getInstance() { return new self; }
+    public function getUserFactory() { return new class { public function newAnonymous() { return 'anonymous'; } }; }
+    public function getPermissionManager() { return new class { public function userCan($action,$user,$title) { if($action!=='read'||$user!=='anonymous') throw new RuntimeException('Expected anonymous read'); return true; } }; }
+    public function getRedirectLookup() { return new class { public function getRedirectTarget($title) { return empty($GLOBALS['fixtures'][$title->getText()]['redirect']) ? null : Title::newFromText($GLOBALS['fixtures'][$title->getText()]['redirect']); } }; }
+}
 class Title {
     private string $text;
     public function __construct(string $value) { $this->text = ucfirst(str_replace('_', ' ', $value)); }
@@ -134,10 +144,14 @@ $factory = new class {
                 };
             }
             public function getRevisionRecord() {
-                return new class($this->fixture['revision'] ?? 0) {
-                    private int $id;
-                    public function __construct(int $id) { $this->id = $id; }
-                    public function getId() { return $this->id; }
+                return new class($this->fixture) {
+                    public function __construct(private ?array $fixture) {}
+                    public function getId() { return $this->fixture['revision'] ?? 0; }
+                    public function getContent($slot,$audience) {
+                        if($slot!=='main'||$audience!==SyntheticPublicRevision::FOR_PUBLIC) throw new RuntimeException('Expected public main slot');
+                        if(!$this->fixture) return null;
+                        return new class($this->fixture['text']) { public function __construct(private string $text) {} public function getModel() { return 'wikitext'; } public function getText() { return $this->text; } };
+                    }
                 };
             }
             public function getRedirectTarget() { return empty($this->fixture['redirect']) ? null : Title::newFromText($this->fixture['redirect']); }
@@ -188,6 +202,8 @@ assert.equal(result.status, 0, result.stderr || 'Actual exporter raid fixture ha
 const actual = JSON.parse(result.stdout);
 assert.deepEqual(actual.commentRows,[],'Multiline HTML comments are removed before structured-row tokenization, even when the line parser is called directly');
 const records = name => actual.npcs.filter(record => record.name === name);
+assert.equal(records('Synthetic lake spawn')[0].zone, 'Synthetic normal lake', 'Literal public normal zones survive without a curated map entry');
+assert.deepEqual(records('Synthetic lake spawn')[0].categoryZones, ['Synthetic normal lake'], 'New public zone categories retain independent population evidence');
 const sources = name => actual.items.find(record => record.name === name).dropSources;
 const raid = name => records(name).filter(record => record.raidInstance);
 const byTitle = title => actual.items.find(record => record.wikiTitle === title);

@@ -14,6 +14,13 @@ const instanceMatches=(observed,cached)=>instance(observed)==='unknown'||instanc
 export const contributionSameIdentity=same;
 export const contributionInstanceMatches=instanceMatches;
 export const contributionNpcIncludesZone=(resolver,record,zone,observed={})=>instanceMatches(observed,record)&&(record.zoneScope==='various'||record.zone&&same(resolver,'zone',record.zone,zone)||instance(observed)!=='raid'&&instance(record)!=='raid'&&Array.isArray(record.categoryZones)&&record.categoryZones.some(value=>same(resolver,'zone',value,zone)));
+// An empty exported zone is not evidence that the authored page lacks it.
+// Older catalogs could omit zones outside the curated map registry entirely.
+export function contributionNpcZoneStatus(resolver,records,zone,observed={}){
+    if(records.some(record=>contributionNpcIncludesZone(resolver,record,zone,observed)))return 'recorded';
+    if(!records.length||records.some(record=>instanceMatches(observed,record)&&!record.zone&&!record.zoneScope&&!(Array.isArray(record.categoryZones)&&record.categoryZones.length)))return 'unknown';
+    return 'missing';
+}
 export function hasInferredBase(record={}) {
     return record.baseStatsInferred===true || record.baseRecovery?.inferred===true ||
         /These stats are reverse calculated from a tier (?:10|[0-9]) item\. Please confirm with a tier 0 item and remove this message/i.test(String(record.notes||'')) ||
@@ -44,7 +51,7 @@ export function contributionReasons(candidate, resolver, {pack}={}) {
     }
     if(resolved.membership==='present'&&candidate.kind==='npc') {
         const zones=relations.filter(r=>r.type==='mob-zone'&&r.zone&&['kill','consider','explicit-corpse'].includes(r.evidence));
-        if(zones.length&&records.length&&zones.some(relation=>!records.some(record=>contributionNpcIncludesZone(resolver,record,relation.zone,relation))))reasons.push('missing-population');
+        if(zones.length&&records.length&&zones.some(relation=>contributionNpcZoneStatus(resolver,records,relation.zone,relation)==='missing'))reasons.push('missing-population');
         const loot=Array.isArray(fields.knownLoot?.value)?fields.knownLoot.value:[];
         if(candidate.manual===true&&loot.some(name=>{
             const item=resolver.resolve('item',itemBaseIdentity(name).name);
@@ -56,7 +63,7 @@ export function contributionReasons(candidate, resolver, {pack}={}) {
         const population=relations.filter(r=>r.type==='zone-population'&&r.name&&r.zone);
         if(population.some(relation=>{
             const npc=resolver.resolve('npc',relation.name);
-            return npc.membership==='missing'||npc.records.length&&!npc.records.some(record=>contributionNpcIncludesZone(resolver,record,candidate.name,relation));
+            return npc.membership==='missing'||contributionNpcZoneStatus(resolver,npc.records,candidate.name,relation)==='missing';
         }))reasons.push('missing-population');
         // A bare acquired-in-zone event is not a source claim. Require the
         // accompanying corpse/source association before proposing zone loot.

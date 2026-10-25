@@ -8,8 +8,8 @@ const identityModule = import('../app/wiki-identity.js');
 const unknown = () => ({status:'unknown',source:'live'});
 
 class WikiItemExistence {
-    constructor({getPack=async()=>({}),fetchImpl=globalThis.fetch,now=Date.now,timeoutMs=8000,maxConcurrent=2,maxPending=20}={}) {
-        this.getPack=getPack;this.fetch=fetchImpl;this.now=now;
+    constructor({getPack=async()=>({}),entryVerifier=null,fetchImpl=globalThis.fetch,now=Date.now,timeoutMs=8000,maxConcurrent=2,maxPending=20}={}) {
+        this.getPack=getPack;this.fetch=fetchImpl;this.entryVerifier=entryVerifier;this.now=now;
         this.timeoutMs=Math.max(1,Math.min(8000,Number(timeoutMs)||8000));
         this.maxConcurrent=Math.max(1,Math.min(2,Number(maxConcurrent)||2));
         this.maxPending=Math.max(1,Math.min(20,Number(maxPending)||20));
@@ -43,7 +43,7 @@ class WikiItemExistence {
             const task=this.queue.shift();this.active++;
             this.probe(task.title).then(result=>{
                 if(this.disposed||task.generation!==this.generation){task.resolve(unknown());return;}
-                const ttl=result.status==='present'?24*60*60*1000:result.status==='missing'?60000:15000;
+                const proofAt=Date.parse(result.checkedAt||'');const ttl=result.status==='present'?24*60*60*1000:result.status==='missing'?Math.max(0,60000-(Number.isFinite(proofAt)?this.now()-proofAt:0)):15000;
                 this.cache.set(task.key,{result,until:this.now()+ttl});
                 while(this.cache.size>1000)this.cache.delete(this.cache.keys().next().value);
                 task.resolve({...result});
@@ -54,6 +54,12 @@ class WikiItemExistence {
         }
     }
     async probe(title) {
+        if(this.entryVerifier){
+            try{const result=await this.entryVerifier.check({kind:'item',name:title,zone:'',instance:'unknown',reasons:['missing-page'],relations:[]});
+                if(result?.state==='covered')return{status:'present',title:result.canonicalTitle||title,source:'live'};
+                if(result?.state==='missing'&&Array.isArray(result.reasons)&&result.reasons.includes('missing-page')){const checkedAt=Date.parse(result.checkedAt||'');if(Number.isFinite(checkedAt)&&checkedAt<=this.now()+2000&&this.now()-checkedAt<60000)return{status:'missing',title:result.canonicalTitle||title,source:'live',checkedAt:result.checkedAt};}
+            }catch{}return unknown();
+        }
         if(typeof this.fetch!=='function')return unknown();
         const controller=new AbortController();this.controllers.add(controller);
         let timer;

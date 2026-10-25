@@ -165,6 +165,25 @@ try{
             const marker=await childExecute(()=>{const app=window.eqlZoneViewer,ring=app.scene.getObjectByName('eoz-player-ground-marker');return{visible:ring?.visible,position:ring?.position.toArray(),basis:ring?.userData.groundBasis,status:window.eqlEyeOfZommViewer.status().playerMarker};});
             assert.equal(marker.visible,true);assert.deepEqual(marker.position,[-10,12.24,20]);assert.equal(marker.basis,'collision-ground');
             assert.equal(marker.status.markerVisible,true);assert.equal(await mainExecute(map,()=>document.querySelector('[data-map-auto-z]').getAttribute('aria-pressed')),'true');
+            assert.equal(marker.status.arrowVisible,false,'one /loc cannot invent a facing arrow');
+            const wideMarker=await childExecute(()=>{
+                const app=window.eqlZoneViewer,ring=app.scene.getObjectByName('eoz-player-ground-marker'),camera=app.perspective,old={position:camera.position.clone(),up:camera.up.clone(),quaternion:camera.quaternion.clone(),target:app.orbit.target.clone()};
+                app.orbit.target.copy(ring.position);camera.position.set(ring.position.x,30000,ring.position.z);camera.up.set(0,0,-1);camera.lookAt(ring.position);app.orbit.update();app.renderer.render(app.scene,camera);
+                const perPixel=2*camera.position.distanceTo(ring.position)*Math.tan(camera.fov*Math.PI/360)/app.els.viewport.clientHeight,radius=5.2*ring.scale.x/perPixel;
+                camera.position.copy(old.position);camera.up.copy(old.up);camera.quaternion.copy(old.quaternion);app.orbit.target.copy(old.target);app.orbit.update();app.renderer.render(app.scene,camera);return{radius};
+            });
+            assert(wideMarker.radius>=8.9,'whole-zone Top framing retains a nine-pixel player ring instead of a subpixel marker');
+            const pointer=await mainExecute(map,()=>{const frame=document.querySelector('.native-map-3d-frame'),outer=frame.getBoundingClientRect(),inner=frame.contentDocument.querySelector('canvas').getBoundingClientRect();return{x:Math.round(outer.x+inner.x+inner.width*.65),y:Math.round(outer.y+inner.y+inner.height*.7)};});
+            const beforePan=await childExecute(()=>({position:window.eqlZoneViewer.perspective.position.toArray(),target:window.eqlZoneViewer.orbit.target.toArray(),quaternion:window.eqlZoneViewer.perspective.quaternion.toArray(),buttons:{...window.eqlZoneViewer.orbit.mouseButtons}}));
+            assert.equal(beforePan.buttons.LEFT,2);assert.equal(beforePan.buttons.RIGHT,0);
+            map.webContents.sendInputEvent({type:'mouseMove',...pointer});map.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,...pointer});
+            for(let step=1;step<=5;step++){map.webContents.sendInputEvent({type:'mouseMove',x:pointer.x+step*8,y:pointer.y+step*3,modifiers:['leftButtonDown']});await wait(20);}
+            map.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,x:pointer.x+40,y:pointer.y+15});await wait(160);
+            const afterPan=await childExecute(()=>({position:window.eqlZoneViewer.perspective.position.toArray(),target:window.eqlZoneViewer.orbit.target.toArray(),quaternion:window.eqlZoneViewer.perspective.quaternion.toArray()}));
+            assert(Math.hypot(...afterPan.target.map((value,index)=>value-beforePan.target[index]))>1,'actual native left-pointer drag pans the Top target');
+            assert(afterPan.quaternion.every((value,index)=>Math.abs(value-beforePan.quaternion[index])<.0001),'left drag preserves Top camera tilt');
+            assert(afterPan.position.every((value,index)=>Math.abs((value-beforePan.position[index])-(afterPan.target[index]-beforePan.target[index]))<.001),'camera and target translate together');
+            await click('follow');
             await capture('map-player-top.png');
             await click('mode');await until(()=>childExecute(()=>window.eqlZoneViewer.mode==='first'),'real First Person mode');
             const beforeFocus=await childExecute(()=>({camera:window.eqlZoneViewer.perspective.position.toArray(),hud:window.eqlZoneViewer.els.coord.textContent}));
@@ -195,6 +214,8 @@ try{
             const inspectionCamera=unknownFocus.camera;
             await fs.appendFile(log,`[${stamp}] Your Location is 13, 23, 14\n`);
             await until(()=>childExecute(()=>window.eqlZoneViewer.scene.getObjectByName('eoz-player-ground-marker')?.position.x===-13),'new log sample updates the player marker with Follow off');
+            const arrow=await childExecute(()=>{const app=window.eqlZoneViewer,arrow=app.scene.getObjectByName('eoz-player-direction-arrow'),V=app.perspective.position.constructor;app.renderer.render(app.scene,app.camera);const direction=arrow.localToWorld(new V(0,0,-14)).sub(arrow.getWorldPosition(new V())).normalize();return{visible:arrow.visible,direction:direction.toArray(),status:window.eqlEyeOfZommViewer.status().playerMarker};});
+            assert.equal(arrow.visible,true);assert.equal(arrow.status.arrowVisible,true);assert(arrow.direction[0]<0&&arrow.direction[2]>0,'actual heading arrow uses world X/Y mapping, not inverted client-map axes');
             assert.deepEqual(await childExecute(()=>window.eqlZoneViewer.perspective.position.toArray()),inspectionCamera,'New player evidence leaves the inspection camera unchanged');
             assert.equal(await mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)),12,'NPC/manual floor inspection survives new elevations');
             await mainExecute(map,()=>document.querySelector('[data-map-auto-z]').click());
@@ -202,7 +223,7 @@ try{
             await fs.appendFile(log,`[${stamp}] Your Location is 14, 24, 16\n`);
             await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===16),'enabled Auto Z follows later logs');
             const cleared=await childExecute(()=>{const api=window.eqlEyeOfZommViewer;api.clearPlayerLocation();return api.status().playerMarker;});
-            assert.equal(cleared.markerVisible,false);assert.equal(cleared.hasKnownZ,false,'Clear removes old source height as well as its mesh');
+            assert.equal(cleared.markerVisible,false);assert.equal(cleared.arrowVisible,false);assert.equal(cleared.hasKnownZ,false,'Clear removes old source height as well as both meshes');
             const mainFrame=owner.webContents.mainFrame.frames.find(candidate=>/\/zoneviewer\/viewer.html$/.test(candidate.url));
             assert(mainFrame,'Main app retains its ordinary shared viewer document');
             await execute(mainFrame,installGeometry);
@@ -217,13 +238,17 @@ try{
                 const manual={state:api.status().playerMarker,clip:Number(app.els.clip.value),camera:app.perspective.position.toArray()};
                 document.querySelector('.eoz-auto-z').click();const enabled={state:api.status().playerMarker,slice:app.renderer.clippingPlanes.map(value=>value.constant)};
                 const rejected=api.syncLocation({x:0,y:0,z:null},{moveCamera:false});
+                api.syncLocation({x:2000,y:7,z:16},{moveCamera:false});const teleported=api.status().playerMarker;
+                api.syncLocation({x:2000,y:7,z:16},{moveCamera:false});const stationaryAfterTeleport=api.status().playerMarker;
+                api.syncLocation({x:2002,y:7,z:16},{moveCamera:false});const movedAfterTeleport=api.status().playerMarker;
                 api.clearPlayerLocation();const cleared=api.status().playerMarker;
-                return{first,camera,manual,enabled,rejected,cleared};
+                return{first,camera,manual,enabled,rejected,teleported,stationaryAfterTeleport,movedAfterTeleport,cleared};
             });
             assert.equal(mainAutoZ.first.state.autoZ,true);assert.equal(mainAutoZ.first.button,'true');assert.deepEqual(mainAutoZ.first.marker,[-6,12.24,4]);assert.deepEqual(mainAutoZ.first.slice,[37,13]);
             assert.deepEqual(mainAutoZ.first.range,[-500,500],'Main Auto Z retains the full zone range instead of trapping the manual slider in the automatic band');
             assert.equal(mainAutoZ.manual.state.autoZ,false);assert.equal(mainAutoZ.manual.clip,300,'The actual range input can inspect a far floor outside the previous automatic slice');assert.deepEqual(mainAutoZ.manual.camera,mainAutoZ.camera,'Main record-only sync leaves camera unchanged');
             assert.equal(mainAutoZ.enabled.state.autoZ,true);assert.deepEqual(mainAutoZ.enabled.slice,[41,9]);assert.equal(mainAutoZ.rejected.ok,false,'Unknown main elevation never becomes zero');
+            assert.equal(mainAutoZ.teleported.arrowVisible,false);assert.equal(mainAutoZ.stationaryAfterTeleport.arrowVisible,false,'a teleport and duplicate /loc do not reuse the previous direction');assert.equal(mainAutoZ.movedAfterTeleport.arrowVisible,true,'a new movement sample establishes direction again');
             assert.equal(mainAutoZ.cleared.markerVisible,false);assert.equal(mainAutoZ.cleared.hasKnownZ,false);
             await click('reset');await until(()=>mainExecute(map,()=>document.querySelector('[data-map-action="mode"]').textContent==='Map'&&!document.querySelector('.native-map-3d-frame')),'Reset unloads 3D iframe');
             await wait(1150);assert.equal(await mainExecute(map,()=>Boolean(document.querySelector('.native-map-3d-frame'))),false,'Retained snapshots cannot replay a consumed mob focus after Reset');
@@ -242,7 +267,7 @@ try{
             await click('reset');assert.equal(await mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)),128,'Reset enables Auto Z at the newest known logged height');
             await fs.appendFile(log,[`[${stamp}] [26 MNK] Fixture (Iksar) ZONE: The Castle of Mistmoore (mistmoore)`,`[${stamp}] Your Location is 10, 20, 12`].join('\n')+'\n');
             await until(()=>mainExecute(map,()=>Number(document.querySelector('[data-map-z]').value)===12),'other zones keep their normal logged elevation default');
-            console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,realConfiguredFolder:true,realS3dEqgHydration:true,realParserWorker:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,groundMarkerBothViews:true,followOffMarker:true,autoZManualReenable:true,mainViewerAutoZ:true,unknownHeightGrounded:true,resetAndHideUnload:true,hateFallbackAndManualSlice:true}));
+            console.log('EOZ_MAP_3D_SMOKE='+JSON.stringify({ok:true,realConfiguredFolder:true,realS3dEqgHydration:true,realParserWorker:true,syntheticGeometry:true,realWebGL:true,privateApisBlocked:true,realCameraModes:true,loggedPositionRetained:true,groundMarkerBothViews:true,screenSizedPlayerMarker:true,headingArrow:true,topLeftDragPan:true,followOffMarker:true,autoZManualReenable:true,mainViewerAutoZ:true,unknownHeightGrounded:true,resetAndHideUnload:true,hateFallbackAndManualSlice:true}));
             BrowserWindow.prototype.focus=originalFocus;app.exit(0);
         }
         app.on('browser-window-created',(_event,window)=>{observeWindow(window);if(started)return;started=true;void inspect().catch(error=>{console.error('EOZ_MAP_DIAGNOSTICS='+JSON.stringify(diagnostics));console.error(error.stack);app.exit(1);});});

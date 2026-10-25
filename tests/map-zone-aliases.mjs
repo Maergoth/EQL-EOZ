@@ -33,7 +33,7 @@ for(const zone of catalog){
  }
  for(const id of ids){
   assert.equal(viewerZoneTarget(catalog,zone.name,id.toUpperCase()),id,'An exact supported /who short name takes precedence over the display preference');
-  const parser=new EQLogParser(),event=parser.parse('[Sun Oct 25 02:00:00 2026] [55 WAR] Syntheticplayer (Human) ZONE: '+zone.viewerName+' 123 ('+id+')');
+  const parser=new EQLogParser();parser.setCharacterFromFilename('C:/Synthetic/eqlog_Syntheticplayer_server.txt');const event=parser.parse('[Sun Oct 25 02:00:00 2026] [55 WAR] Syntheticplayer (Human) ZONE: '+zone.viewerName+' 123 ('+id+')');
   assert.equal(event?.zoneShortName,id);const target=viewerZoneTarget(catalog,event.zone,event.zoneShortName);assert.equal(target,id);assert.equal((await api.loadZone(target)).ok,true);assert.equal(app.currentZoneRecord.id,id);
   const family=selectMapFamily(ids.map(other=>({path:(other===id?'Maps/Verified/':'Maps/')+other+'.txt',size:12})),zone,id);assert.equal(family?.layers[0].path,'Maps/Verified/'+id+'.txt','2D maps retain the same exact archive identity before folder preference');shortNames++;
  }

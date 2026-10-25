@@ -16,7 +16,7 @@ async function run({root,temporary,screenshots}){
     const resources=new Set(['spawn-prompt.html','spawn-prompt.js','spawn-prompt.css','wiki-discovery-ui.js']);
     const server=http.createServer(async(req,res)=>{try{const file=new URL(req.url,'http://fixture').pathname.slice(1);if(!file){res.setHeader('Content-Type','text/html');res.end('<!doctype html><title>Synthetic main fixture</title>');return;}if(!resources.has(file)){res.writeHead(404).end();return;}res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(await fs.readFile(path.join(root,'app',file)));}catch{res.writeHead(404).end();}});
     await new Promise(done=>server.listen(0,'127.0.0.1',done));const origin=`http://127.0.0.1:${server.address().port}`;
-    const main=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}}),host=new DiscoveryHost({electron:require('electron'),origin,getMainWindow:()=>main});
+    const main=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}}),host=new DiscoveryHost({verifyDiscovery:async()=>({state:'missing',reasons:['missing-page'],confirmedRelations:[],checkedAt:new Date().toISOString()}),electron:require('electron'),origin,getMainWindow:()=>main});
     const wait=ms=>new Promise(done=>setTimeout(done,ms)),until=async(fn,label,timeout=5000)=>{const end=Date.now()+timeout;while(Date.now()<end){if(await fn())return;await wait(25);}throw Error(`Timed out ${label}`);};
     let foreign;
     try{

@@ -16,7 +16,7 @@ async function run({root,profile,output}){
  let captures=0,lookups=0,mainFocus=0;const main=new BrowserWindow({show:false,width:800,height:600,webPreferences:{preload:path.join(root,'desktop/preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false}});
  const originalFocus=main.focus.bind(main);main.focus=()=>{mainFocus++;originalFocus();};
  const {DiscoveryHost}=require(path.join(root,'desktop/discovery-host.cjs'));
- const host=new DiscoveryHost({electron:{BrowserWindow,ipcMain,screen,desktopCapturer:{getSources(){captures++;throw Error('No desktop capture allowed in this informational fixture.');}}},origin,getMainWindow:()=>main,itemExistence:{async check(){lookups++;return{status:'missing',source:'live'};},clear(){},dispose(){}}});
+ const host=new DiscoveryHost({verifyDiscovery:async()=>({state:'missing',reasons:['missing-page'],confirmedRelations:[],checkedAt:new Date().toISOString()}),electron:{BrowserWindow,ipcMain,screen,desktopCapturer:{getSources(){captures++;throw Error('No desktop capture allowed in this informational fixture.');}}},origin,getMainWindow:()=>main,itemExistence:{async check(){lookups++;return{status:'missing',source:'live'};},clear(){},dispose(){}}});
  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const until=async(predicate,label,timeout=5000)=>{const end=Date.now()+timeout;while(Date.now()<end){try{const value=await predicate();if(value)return value;}catch{}await wait(50);}throw Error('Timed out: '+label);};
  const execute=(window,fn,...args)=>window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);

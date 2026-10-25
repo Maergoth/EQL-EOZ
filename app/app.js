@@ -6,7 +6,7 @@ import { locationPollDelay } from './movement-tracking.js';
 import { buildDiagnosticSnapshot } from './diagnostics.js';
 import { routeDistanceLabel } from './route-guidance.js';
 import { formatWorldLocationForPlayer, waypointCommandForWorldLocation, wikiLocationToWorld } from './coordinate-system.js';
-import { resolveZoneRecord, viewerZoneTarget } from './zone-identity.js';
+import { resolveZoneRecord, viewerZoneTarget, loggedZoneName } from './zone-identity.js';
 import { mountAppUpdates } from './app-update-ui.js';
 import { compactParseSnapshot, createOverlaySession } from './overlay-session.js';
 import { mountOverlayController } from './overlay-controller.js';
@@ -26,12 +26,14 @@ import { catalogItemboxMarkup } from './catalog-itembox.js';
 import { collectDropObservation } from './drop-observations.js';
 import { createWikiResolver } from './wiki-identity.js';
 import { createTooltipHover } from './tooltip-delay.js';
+import { applyLiveWikiOverlay } from './live-wiki-overlay.js';
 
 const CLASSES = ['WAR','CLR','PAL','RNG','SHD','DRU','MNK','BRD','ROG','SHM','NEC','WIZ','MAG','ENC','BST','BER'];
 const ERAS = ['Classic','Kunark','Velious','Luclin','Planes of Power','Legacy of Ykesha','Lost Dungeons of Norrath','Gates of Discord','Omens of War'];
 
-const parser = new EQLogParser();
+const parser = new EQLogParser({getPack:()=>pack});
 let pack = { meta:{}, zones:[], npcs:[], items:[] };
+let basePack=pack,liveEntrySnapshot={schemaVersion:1,entries:[]},liveEntriesTimer=null;
 let observationPack=null,observationResolver=null;
 const observationSession=globalThis.crypto.randomUUID();
 let observationPreference=true;
@@ -414,7 +416,8 @@ async function loadPack() {
             if (!nextPack || !(Number(nextPack.meta?.schemaVersion) >= 3) || !Array.isArray(nextPack.zones) || !Array.isArray(nextPack.npcs) || !Array.isArray(nextPack.items)) {
                 throw new Error('invalid Eye of Zomm data pack');
             }
-            pack = nextPack;
+            basePack = nextPack;
+            pack = applyLiveWikiOverlay(basePack,liveEntrySnapshot);
             break;
         } catch (error) {
             lastError = error;
@@ -426,15 +429,28 @@ async function loadPack() {
     }
 
     rebuildPackIndexes();
-    if (parser.zoneShortName) {
-        parser.zone = zoneRecord(parser.zoneShortName)?.name || parser.zone;
-    }
+    parser.zone = loggedZoneName(pack.zones,parser.zone,parser.zoneShortName);
     if (!settings.era) settings.era = pack.meta.currentEra || 'Classic';
     $('#pack-version').textContent = pack.meta.version || 'unknown';
     $('#pack-mode').textContent = pack.meta.sample ? 'Sample' : 'Production';
     buildEraSelect();
     buildItemSlotSelect();
     renderAll();
+}
+
+function acceptLiveWikiEntries(snapshot){
+    if(snapshot?.schemaVersion!==1||!Array.isArray(snapshot.entries))return;
+    if(Number.isSafeInteger(snapshot.version)&&Number.isSafeInteger(liveEntrySnapshot.version)&&snapshot.version<liveEntrySnapshot.version)return;
+    liveEntrySnapshot=snapshot;clearTimeout(liveEntriesTimer);
+    liveEntriesTimer=setTimeout(()=>{
+        liveEntriesTimer=null;if(!(Number(basePack.meta?.schemaVersion)>=3))return;
+        const next=applyLiveWikiOverlay(basePack,liveEntrySnapshot);if(next===pack)return;
+        pack=next;rebuildPackIndexes();parser.zone=loggedZoneName(pack.zones,parser.zone,parser.zoneShortName);
+        const content=$('.content'),loot=$('#map-loot-pane'),scroll=content?.scrollTop,lootScroll=loot?.scrollTop,s=state(),profile=effectiveProfile(s),view=$('.nav-button.is-active')?.dataset.view||'overview';
+        buildItemSlotSelect();renderHeader(s,profile);renderViewPanel(view,s,profile);captureWorkspace.refresh();
+        if(content)content.scrollTop=scroll;if(loot)loot.scrollTop=lootScroll;
+        syncRareMobsToViewer(false);void overlaySession.publish();
+    },100);
 }
 
 async function connectBridge() {
@@ -542,6 +558,7 @@ async function pollLog() {
     try {
         const data = await api(`/api/log?offset=${encodeURIComponent(logOffset)}`);
         if(sessionDraining)return;
+        if(data.stale){schedulePoll(0);return;}
         if (!mapSourceContextMatches(requestSource)) { schedulePoll(0); return; }
         let changed = false;
         let requiresFullRender = false;
@@ -563,6 +580,9 @@ async function pollLog() {
             requiresFullRender = true;
         }
         if (data.reset) {
+            parser.resetSourceContext();
+            if(data.logPath)parser.setCharacterFromFilename(data.logPath);
+            if(data.logContext)parser.seedLogContext(data.logContext);
             logOffset = Number(data.startOffset) || 0;
             partialLine = '';
         }
@@ -611,7 +631,7 @@ function consumeText(text, allowTransientUi = true) {
         const event = parser.parse(line, { recordSession:allowTransientUi || parser.sessionNumber === 1 });
         if (event && event.type !== 'location') requiresFullRender = true;
         if (event?.type === 'zone') {
-            const canonicalZone = zoneRecord(event.zoneShortName || event.zone)?.name || event.zoneShortName || event.zone;
+            const canonicalZone = loggedZoneName(pack.zones,event.zone,event.zoneShortName);
             event.zone = canonicalZone;
             parser.zone = canonicalZone;
             if (zoneKey(previousZone) !== zoneKey(canonicalZone)) parser.location = null;
@@ -2403,6 +2423,7 @@ const overlaySession = createOverlaySession({ api:window.eyeOfZommOverlays, getS
 const timerAlerts = createTimerAlerts();
 const wikiDiscovery = createWikiDiscovery({getPack:()=>pack,
     verifyItem:value=>window.eyeOfZommDiscovery?.action('check-item-exists',value) || Promise.resolve({status:'unknown'}),
+    verifyDiscovery:value=>window.eyeOfZommWiki?.verifyDiscovery?.(value) || Promise.resolve({state:'unknown'}),
     getSuppression:(kind,name,options)=>captureWorkspace.suppression?.(kind,name,options),
     onIgnore:(kind,name,options)=>captureWorkspace.suppress?.(kind,name,options),
     onMissing:entry=>window.eyeOfZommDiscovery?.show(entry) || Promise.reject(new Error('The desktop discovery prompt is unavailable.')),
@@ -2460,11 +2481,13 @@ captureWorkspace = mountCaptureWorkspace({characterStorage,contributionStorage:c
     onDiscoveryItem:observation=>discoveryContributionFlow.recordItem(observation),
     onDiscoveryLocation:location=>discoveryContributionFlow.recordLocation(location),
     onDiscoveryCapture:(request,result)=>discoveryContributionFlow.ready(request,result)});
+const stopLiveWikiEntries=window.eyeOfZommWiki?.onLiveEntriesChanged?.(acceptLiveWikiEntries);
+void window.eyeOfZommWiki?.liveEntries?.().then(acceptLiveWikiEntries).catch(()=>{});
 const observationSettings=document.createElement('section');observationSettings.className='observation-settings';observationSettings.innerHTML='<h2>Drop observations</h2><label class="check-control"><input type="checkbox" data-observation-enabled checked> Collect and sync drop observations</label><p class="settings-helper">Keeps minimal kill and loot observations locally and sends them hourly when logged in to the wiki. Chat, screenshots and file paths are excluded. Drop percentages are not calculated yet.</p><p data-observation-status role="status"></p><a href="https://eqlwiki.com/API_Documentation" target="_blank" rel="noopener">Wiki API documentation</a>';document.getElementById('capture-settings').append(observationSettings);
 const renderObservationStatus=async()=>{try{const status=await window.eyeOfZommObservations?.status();if(!status){observationSettings.hidden=true;return;}observationPreference=status.enabled;observationSettings.querySelector('[data-observation-enabled]').checked=status.enabled;observationSettings.querySelector('[data-observation-status]').textContent=`${status.pending} pending · ${status.acknowledged} delivered${status.error?' · '+status.error:''}`;}catch{observationSettings.querySelector('[data-observation-status]').textContent='Observation storage unavailable.';}};
 observationSettings.querySelector('[data-observation-enabled]').onchange=async event=>{try{await window.eyeOfZommObservations.configure({enabled:event.target.checked});await renderObservationStatus();}catch(error){showNotice(error.message,{tone:'warning'});await renderObservationStatus();}};
 void renderObservationStatus();const observationStatusTimer=setInterval(()=>void renderObservationStatus(),60000);
-window.addEventListener('pagehide', () => { clearTimeout(observationRetry);clearInterval(observationStatusTimer);wikiDiscovery.dispose();void discoveryContributionFlow.dispose();captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
+window.addEventListener('pagehide', () => { clearTimeout(liveEntriesTimer);stopLiveWikiEntries?.();clearTimeout(observationRetry);clearInterval(observationStatusTimer);wikiDiscovery.dispose();void discoveryContributionFlow.dispose();captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

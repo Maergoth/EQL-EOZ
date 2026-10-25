@@ -18,7 +18,9 @@ const { DiscoveryHost } = require('./discovery-host.cjs');
 const { WikiItemExistence } = require('./wiki-item-existence.cjs');
 const { CaptureHost } = require('./capture-host.cjs');
 const { AutomaticLogReader } = require('./automatic-log-reader.cjs');
+const {LogContextHistory}=require('./log-context-history.cjs');
 const { AutomaticLootSources } = require('./automatic-loot-sources.cjs');
+const { ContributionIgnores, ContributionIgnoresHost, CHANGED:CONTRIBUTION_IGNORES_CHANGED } = require('./contribution-ignores.cjs');
 const { WikiHost } = require('./wiki-host.cjs');
 const { DropObservationHost } = require('./drop-observation-host.cjs');
 const { IconFinderHost } = require('./icon-finder-host.cjs');
@@ -58,7 +60,11 @@ let overlayHost = null;
 let discoveryHost = null;
 let captureHost = null;
 let automaticLogReader = null;
+const logContextHistory=new LogContextHistory();
+let servedLogPath='';
 let automaticLootSources = null;
+let contributionIgnores = null;
+let contributionIgnoresHost = null;
 let automaticCatalog = null;
 let automaticCatalogKey = '';
 let wikiHost = null;
@@ -202,7 +208,7 @@ async function readConfig() {
 function updateConfig(values) {
     const operation=configWriteQueue.catch(()=>{}).then(async()=>{
         const config=await readConfig(), next={...config,...values};
-        if(['eqRootPath','logPath','logSelection'].some(key=>Object.hasOwn(values,key)&&config[key]!==next[key]))automaticLogReader?.reset();
+        if(['eqRootPath','logPath','logSelection'].some(key=>Object.hasOwn(values,key)&&config[key]!==next[key])){automaticLogReader?.reset();logContextHistory.reset();servedLogPath='';}
         delete next.alwaysOnTop;
         await atomicWriteJson(configPath(),next);
         desktopSettings=windowSettings(next);
@@ -499,6 +505,7 @@ async function readLogWindow(offsetValue) {
     const logPath = await resolveLogPath();
     if (!logPath || !fs.existsSync(logPath)) {
         automaticLogReader?.reset();
+        logContextHistory.reset();servedLogPath='';
         return { logPath, logExists: false, startOffset: 0, newOffset: 0, reset: true, text: '' };
     }
 
@@ -506,7 +513,7 @@ async function readLogWindow(offsetValue) {
     try {
         const stat = await handle.stat();
         const length = stat.size;
-        let offset = Number(offsetValue) || 0;
+        let offset = servedLogPath===logPath?Number(offsetValue)||0:0;
         let reset = false;
 
         if (offset <= 0 || offset > length) {
@@ -528,6 +535,15 @@ async function readLogWindow(offsetValue) {
             reset,
             text: bytesRead ? buffer.subarray(0, bytesRead).toString('utf8') : ''
         };
+        if(reset){
+            const catalog=await automaticWikiCatalog();
+            const prefix=logContextHistory.prefix({logPath,startOffset,zones:catalog.zones||[]}),generation=logContextHistory.generation;
+            result.logContext=await prefix;
+            if(generation!==logContextHistory.generation)return{logPath,logExists:true,stale:true};
+            const current=await fsp.stat(logPath).catch(()=>null);
+            if(!current||current.ino!==stat.ino||current.dev!==stat.dev||current.birthtimeMs!==stat.birthtimeMs||current.size<length||await resolveLogPath()!==logPath){servedLogPath='';return{logPath,logExists:true,startOffset:0,newOffset:0,reset:true,text:'',logContext:null};}
+        }
+        servedLogPath=logPath;
         // Only actual configured-file bytes authorize automatic source edits.
         // Renderer-proposed log observations continue to populate local drafts.
         await automaticLogReader?.ingest(result).catch(()=>{});
@@ -543,6 +559,11 @@ async function automaticWikiCatalog(){
     if(!key)return {};
     if(key!==automaticCatalogKey){const loaded=await readJson(file,null);if(!loaded)return {};automaticCatalog=loaded;automaticCatalogKey=key;}
     return automaticCatalog||{};
+}
+
+function getContributionIgnores(){
+    if(!contributionIgnores)contributionIgnores=new ContributionIgnores({stateDir:userDataDir(),getCatalog:automaticWikiCatalog});
+    return contributionIgnores;
 }
 
 async function eqFileManifest() {
@@ -910,16 +931,19 @@ async function bootstrap() {
     await characterStorage.initialize();
     inventoryFileHost = new InventoryFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig});
     captureHost = new CaptureHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
+    contributionIgnoresHost=new ContributionIgnoresHost({ipcMain,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,store:getContributionIgnores(),
+        onChanged:snapshot=>{automaticLootSources?.cancel();void discoveryHost?.reconcileIgnores().catch(()=>{});if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send(CONTRIBUTION_IGNORES_CHANGED,snapshot);}});
     wikiHost = new WikiHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
         stateDir:path.join(userDataDir(),'wiki-contributions'),version:APP_VERSION,
         onStatus:status=>{void observationHost?.accountChanged(status);if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:wiki-state',status);},
         onAttachmentPrepared:({png})=>captureHost.importPng(png,{mode:'contribution'}),
         onCaptureEvidence:proof=>captureHost.getItemEvidence(proof),
         onItemCatalog:automaticWikiCatalog,
+        isContributionIgnored:(target,catalog)=>getContributionIgnores().isIgnored(target,catalog),
         onIconRequest:(action,value)=>iconFinderHost.handle(action,value)});
     const sourceReceipt=result=>{if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:automatic-source-result',{
         ...result,itemTitle:result.item||'',npcTitle:result.npc||'',zoneTitle:result.zone||''});};
-    automaticLootSources=new AutomaticLootSources({client:wikiHost.client,onResult:sourceReceipt,onDeferred:sourceReceipt,onDecision:sourceReceipt});
+    automaticLootSources=new AutomaticLootSources({client:wikiHost.client,isIgnored:(target,catalog)=>getContributionIgnores().isIgnored(target,catalog),onResult:sourceReceipt,onDeferred:sourceReceipt,onDecision:sourceReceipt});
     automaticLogReader=new AutomaticLogReader({getPack:automaticWikiCatalog,onReset:()=>automaticLootSources.cancel(),
         onObservation:record=>automaticLootSources.observe(record)});
     iconFinderHost = new IconFinderHost({session:wikiHost.session,stateDir:path.join(userDataDir(),'wiki-icons'),nativeImage:electron.nativeImage});
@@ -932,7 +956,8 @@ async function bootstrap() {
     rendererDrain = new RendererDrain({ipcMain,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     shareHost = new ShareHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
-        itemExistence:new WikiItemExistence({getPack:automaticWikiCatalog,fetchImpl:(url,options)=>electron.net.fetch(url,{...options,credentials:'omit',useSessionCookies:false})})});
+        verifyDiscovery:value=>wikiHost.verifyDiscovery(value),isContributionIgnored:target=>getContributionIgnores().isIgnored(target),
+        itemExistence:new WikiItemExistence({getPack:automaticWikiCatalog,entryVerifier:wikiHost.discoveryVerifier,fetchImpl:(url,options)=>electron.net.fetch(url,{...options,credentials:'omit',useSessionCookies:false})})});
     createWindow(config,await readJson(windowPlacementPath(),{}));
     // Metadata checks are quiet. Application downloads require an explicit
     // request or the saved opt-in; a staged installer never runs on startup.
@@ -1010,7 +1035,7 @@ app.on('before-quit', event => {
             quitting=false;rendererDrain.resume();
             dialog.showErrorBox('Eye of Zomm could not save pending observations','The app has been left open. Check available disk space and try closing it again.');return;
         }
-        stopDataPackRefresh();automaticLogReader?.dispose();automaticLootSources?.dispose();overlayHost?.dispose();discoveryHost?.dispose();wikiHost?.dispose();iconFinderHost?.dispose();shareHost?.dispose();inventoryFileHost?.dispose();appUpdater?.shutdown();
+        stopDataPackRefresh();logContextHistory.dispose();automaticLogReader?.dispose();automaticLootSources?.dispose();overlayHost?.dispose();discoveryHost?.dispose();wikiHost?.dispose();iconFinderHost?.dispose();shareHost?.dispose();inventoryFileHost?.dispose();appUpdater?.shutdown();
         try { server?.close(); } catch {}
         await Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain,characterStorage?.close(),observationHost?.close()]);
         rendererDrain?.dispose();electron.session.defaultSession.flushStorageData();quitReady=true;app.quit();

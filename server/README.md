@@ -185,7 +185,7 @@ comments, namespace links and prose do not establish additional drops.
 unresolved candidate titles, enriched items and added unique source variants.
 These additions require producer deployment and a new published dataset.
 
-`meta.lootSourceCountsVersion: 1` marks the additive global loot-count contract.
+`meta.lootSourceCountsVersion: 2` marks the additive global loot-count contract.
 The top-level `lootSourceCounts` map is keyed by canonical item title, including
 statless materials and item redlinks documented by public NPC loot. Each entry
 contains `lootSourceCount`, `lootSourceCountComplete` and `lootSourceNpcs`;
@@ -194,6 +194,9 @@ with authored NPC `known_loot`/`common_loot` across every zone and instance.
 Public redirects and page IDs deduplicate monsters; NPC records also carry
 their public redirect aliases. Explicit pet labels and the exact normalized
 `Ground Spawn`/`Ground Spawns` source labels are excluded from monster counts.
+Version 2 requires an actual public canonical NPC/Merchant card for every
+counted monster; redlinks remain relationship evidence and withhold complete
+count proof instead of inflating the verified lower bound.
 
 Only anonymous-readable current public source contributes. Bounded parsing,
 redirect resolution or scans that fail or overflow mark counts incomplete and
@@ -211,6 +214,19 @@ once, alongside direct item references; the set title does not become an item.
 Clients may treat a complete listed set as sufficient coverage of its members.
 Incomplete membership, cycles, hidden pages and expansion limits cannot prove
 that an absent member is covered. Membership never comes from naming patterns.
+Bounded possible identities are separate uncertainty metadata. The reviewed
+legacy Research catalog records `possibleRule: reviewed-research-catalog` and
+both `source`/`possibleSource` revisions; a literal self-title stub uses
+`possibleRule: literal-self-title`. Both retain `items: []`, `complete: false`,
+and never establish a positive member/drop cross-product. Unsupported or missing
+catalogs fail closed. These additive fields retain count v2 and set v1 schemas.
+
+The curated zone/map catalog is augmented from canonical current public
+Category:Zones pages, including normal zones without raids. New records have no
+invented viewer ID/name. Only a single literal normal-overview `/who` row can
+add an alias; placeholders, raid-only values and conflicting public claims do
+not replace curated identities. A refreshed dataset is required for clients to
+receive new zone presence and classifications.
 
 Global count parsing uses the final repeated exact static NPC parameter, and
 recognizes reviewed metadata-only badges without inventing item references.

@@ -1,5 +1,8 @@
 import { mountContributionChoicePickers, readContributionChoicePicker } from './contribution-choice-picker.js';
 import { createContributionQueue } from './contribution-queue.js';
+import { createContributionIgnoreMatcher } from './contribution-ignore-identity.js';
+import { contributionQueueControls } from './contribution-queue-controls.js';
+import { createContributionDiscoveryGate } from './contribution-discovery-gate.js';
 import { CHARACTER_SLOTS, createCharacterModel, characterObservationInput, characterSlotCompatibility, characterStatLabel, characterEquipmentEligibility, characterLooseCandidates, characterBaseItemName, safeCharacterIcon } from './character-model.js';
 import { createCharacterProfiles } from './character-profiles.js';
 import { createCharacterWalkthrough, CHARACTER_WALKTHROUGH_STEPS, CHARACTER_ITEM_READ_STEPS } from './character-walkthrough.js';
@@ -25,6 +28,7 @@ import { createAutomaticItemContribution } from './automatic-item-contribution.j
 import { automaticSourceReceiptKey,automaticSourceDraftKeys,automaticSourceDraftComplete } from './automatic-source-results.js';
 import { mountContributionHistory } from './contribution-history.js';
 import { TOOLTIP_HOVER_DELAY_MS } from './tooltip-delay.js';
+import {zoneCreationFields,zoneCreationMarkup,updateZoneCreationVisibility,ZONE_CREATION_FIELD_KEYS} from './zone-creation-view.js';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let eras=['Classic Era','Kunark Era','Velious Era'];
@@ -85,7 +89,9 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     getPack=()=>({}),getProfile=()=>({}),getAppearance=()=>({}),notify=()=>{},onDiscoveryItem=()=>false,onDiscoveryLocation=()=>false,onDiscoveryCapture=()=>{}}={}){
     const root=document.getElementById('contribution-workspace'),characterRoot=document.getElementById('character-workspace'),settingsRoot=document.getElementById('capture-settings');
     if(!root||!characterRoot||!settingsRoot)return{consumeLog(){},refresh(){},dispose(){},beginDiscoveryContribution:async()=>({ok:false,error:'Contribute is unavailable.'}),cancelDiscoveryContribution:async()=>({ok:true})};
-    const warning=message=>notify(message,{tone:'warning'}),queue=createContributionQueue({storage:contributionStorage,getPack,onWarning:warning}),profiles=createCharacterProfiles({storage:characterStorage,onWarning:warning});
+    let ignoreEntries=[],ignoreMatcher=null,ignoreMatcherPack=null,ignoreRevision=0,ignoreMatcherRevision=-1;
+    function entityIgnored(target){const pack=getPack();if(!ignoreMatcher||ignoreMatcherPack!==pack||ignoreMatcherRevision!==ignoreRevision){ignoreMatcher=createContributionIgnoreMatcher(ignoreEntries,pack);ignoreMatcherPack=pack;ignoreMatcherRevision=ignoreRevision;}return ignoreMatcher(target);}
+    const warning=message=>notify(message,{tone:'warning'}),queue=createContributionQueue({storage:contributionStorage,getPack,onWarning:warning,isIgnored:entityIgnored}),profiles=createCharacterProfiles({storage:characterStorage,onWarning:warning});
     let contributionResolverCache=null;
     function contributionResolver(){
         const pack=getPack(),key=[pack,pack.items,pack.npcs,pack.zones,pack.wikiEntities,pack.meta?.manifestVersion||pack.meta?.version,pack.meta?.wikiEntitiesComplete,pack.meta?.sample];
@@ -104,7 +110,14 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     const filterKey='eql-eye-of-zomm-contribution-filters-v1';
     let enabledGaps=CONTRIBUTION_FILTERS.map(value=>value.key);
     try{const saved=JSON.parse(storage?.getItem(filterKey)||'null');if(Array.isArray(saved))enabledGaps=saved.filter(key=>CONTRIBUTION_FILTERS.some(filter=>filter.key===key));}catch{/* Optional browsing preferences never block drafts. */}
-    const visibleQueueCandidates=()=>{const candidates=queue.snapshot().filter(candidate=>candidate.status!=='submitted'),decisions=queue.sourceDecisionKeys();if(!decisions.length)return candidates;const resolver=contributionResolver();return candidates.filter(candidate=>manuallyEditedContributions.has(candidate.id)||!automaticSourceDraftComplete(candidate,decisions,{pack:getPack(),resolver}));};
+    let discoveryUiReady=false,spawnPromptEpoch=0;
+    const discoveryChecksActive=()=>Boolean(characterRoot.closest('.view.is-active')||root.closest('.view.is-active')&&root.querySelector('#contribution-discoveries-panel')?.hidden!==true);
+    const discoveryGate=createContributionDiscoveryGate({verify:typeof wiki?.verifyDiscovery==='function'?request=>wiki.verifyDiscovery(request):null,getPack,onChange(){
+        if(disposed||!discoveryUiReady||publishing)return;
+        const previous=selectedId,rows=queueRows();if(!rows.some(candidate=>candidate.id===selectedId)){selectedId=rows[0]?.id||'';matches=null;invalidatePlan();}
+        renderQueue();if(previous!==selectedId||!root.contains(document.activeElement))renderCandidate();if(characterVisible())renderInventoryGaps();
+    }});
+    const visibleQueueCandidates=()=>{const candidates=queue.snapshot().filter(candidate=>candidate.status!=='submitted'&&!entityIgnored({kind:candidate.kind,name:candidate.title||candidate.name})),decisions=queue.sourceDecisionKeys(),resolver=contributionResolver();return candidates.filter(candidate=>!decisions.length||manuallyEditedContributions.has(candidate.id)||!automaticSourceDraftComplete(candidate,decisions,{pack:getPack(),resolver})).map(candidate=>discoveryGate.project(candidate,{request:discoveryChecksActive()})).filter(Boolean);};
     const queueRows=()=>visibleContributionQueue(visibleQueueCandidates(),enabledGaps);
     selectedId=queueRows()[0]?.id||'';
     let inventoryTimer=null,inventoryPolling=false,inventoryWatchEpoch=0,inventoryMessage='',statsStarting=false,spawnArmedId='',iconPage=0;
@@ -158,13 +171,13 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function invalidatePlan(){reviewEpoch++;plan=null;$('[data-wiki-review]').hidden=true;}
     function reviewIsCurrent(candidate,epoch){return !disposed&&epoch===reviewEpoch&&selectedId===candidate?.id&&JSON.stringify(selected())===JSON.stringify(candidate);}
     function setPublishing(value){publishing=value;root.inert=value;characterRoot.inert=value;dialog.inert=value;root.setAttribute('aria-busy',String(value));characterRoot.setAttribute('aria-busy',String(value));updatePublishAvailability();if(!value)contributionHistory.markChanged();}
-    function selected(){return queue.snapshot().find(c=>c.id===selectedId);}
+    function selected(){const candidate=queue.snapshot().find(c=>c.id===selectedId);return candidate&&!entityIgnored({kind:candidate.kind,name:candidate.title||candidate.name})?discoveryGate.project(candidate,{request:discoveryChecksActive()}):null;}
     function saveCandidate({reviewFields=false}={}){
         const candidate=selected(),form=$('[data-candidate-form]');if(!candidate||!form||publishing)return candidate;
         const data=new FormData(form),fields={...candidate.fields},originalCandidate=JSON.parse(form.dataset.originalCandidate||'{}');
         for(const row of form.querySelectorAll('[data-field-key]')){
             const key=row.dataset.fieldKey,input=row.querySelector('[data-field-value]');if(!input)continue;const picker=row.querySelector('[data-choice-picker]');let value=picker?readContributionChoicePicker(picker):input.value;
-            if(!picker&&input.dataset.array==='true')value=value.split(['statLines','knownLoot','knownNPCs'].includes(key)?/\n/:/[,\n]/).map(s=>s.trim()).filter(Boolean);
+            if(!picker&&input.dataset.array==='true')value=value.split(input.dataset.lines==='true'||['statLines','knownLoot','knownNPCs'].includes(key)?/\n/:/[,\n]/).map(s=>s.trim()).filter(Boolean);
             else if(input.dataset.type==='boolean')value=value===''?'':value==='true';
             else if(input.dataset.type==='number'&&value.trim()!==''&&Number.isFinite(Number(value)))value=Number(value);
             if(!picker&&value==='?')value='';
@@ -174,14 +187,23 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             fields[key]={value,confirmed:key==='notable'?typeof value==='boolean':reviewFields?nonblank:previous?.confirmed===true,edited:previous?.edited===true||!unchanged,...(key==='notable'&&typeof value==='boolean'?{source:'player'}:{})};
         }
         const sources=candidate.sources.map((source,index)=>{const button=form.querySelector(`[data-source-toggle="${index}"]`);return {...source,confirmed:button?button.getAttribute('aria-pressed')==='true':source.confirmed,...(button&&button.getAttribute('aria-pressed')!==String(contributionSourceIncluded(source))?{edited:true}:{})};});
-        const patch={...Object.fromEntries(['name','title','zone','era','playerText'].map(key=>[key,data.get(key)===String(originalCandidate[key]??'')?candidate[key]:data.get(key)])),intent:data.get('intent')||candidate.intent||'create',instance:form.elements.raid.checked?'raid':'normal',matchesReviewed:reviewFields||candidate.matchesReviewed===true,fields,sources};
+        const patch={...Object.fromEntries(['name','title','zone','era','playerText'].map(key=>[key,data.get(key)===String(originalCandidate[key]??'')?candidate[key]:data.get(key)])),intent:data.get('intent')||candidate.intent||'create',instance:form.dataset.newZone==='true'?'normal':form.elements.raid.checked?'raid':'normal',matchesReviewed:reviewFields||candidate.matchesReviewed===true,fields,sources};
         if(candidate.attachment)patch.attachment={...candidate.attachment,caption:String(data.get('attachmentCaption')||'').slice(0,1000),license:data.get('attachmentLicense')||'own-screenshot'};
         if(reviewFields&&patch.fields.lootKinds)patch.fields.lootKinds={...patch.fields.lootKinds,confirmed:true};
         const changed=Object.keys(patch).some(key=>JSON.stringify(patch[key])!==JSON.stringify(candidate[key]));
         if(changed){if(!reviewFields)patch.matchesReviewed=false;patch.planId=null;patch.status='needs-review';invalidatePlan();}
-        return queue.update(candidate.id,patch);
+        // A live receipt may expose only a subset of a captured source list.
+        // Saving that view must not erase the other observations from storage.
+        const raw=queue.snapshot().find(value=>value.id===candidate.id);
+        if(raw&&raw.manual!==true){
+            const sourceKey=source=>JSON.stringify([source.npc,source.zone,source.instance]);
+            const shownSources=new Set(candidate.sources.map(sourceKey));
+            patch.sources=[...sources,...raw.sources.filter(source=>!shownSources.has(sourceKey(source)))];
+            for(const key of ['knownLoot','knownNPCs'])if(patch.fields[key]?.edited!==true&&Array.isArray(raw.fields[key]?.value))patch.fields[key]={...patch.fields[key],value:[...new Set([...(patch.fields[key]?.value||[]),...raw.fields[key].value])]};
+        }
+        const updated=queue.update(candidate.id,patch);return discoveryGate.project(updated);
     }
-    function selectContribution(id){if(!id||publishing)return;setContributionTab('discoveries');cancelAutomaticContribution();saveCandidate();selectedId=id;iconPage=0;invalidatePlan();renderQueue();renderCandidate();}
+    function selectContribution(id){if(!id||publishing||!queueRows().some(candidate=>candidate.id===id))return false;setContributionTab('discoveries');cancelAutomaticContribution();saveCandidate();selectedId=id;iconPage=0;invalidatePlan();renderQueue();renderCandidate();return true;}
     function contributionContextMarkup(candidate,{showSpawn=true}={}){
         let text=contributionRelationsMarkup(candidate);
         if(candidate.kind==='npc'&&showSpawn){
@@ -196,28 +218,49 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     }
     function renderQueue(){
         const all=visibleQueueCandidates(),candidates=queueRows(),counts=contributionQueueCounts(all),filters=$('[data-contribution-filters]');
+        const attention=root.querySelector('.contribution-latest-result[data-automatic-review-key]');
+        if(attention&&!all.some(candidate=>automaticSourceDraftKeys(candidate,{resolver:contributionResolver()})?.includes(attention.dataset.automaticReviewKey))){attention.hidden=true;attention.innerHTML='';}
         filters.innerHTML=CONTRIBUTION_FILTERS.map(filter=>`<label class="check-control"><input type="checkbox" data-gap-filter="${filter.key}" ${enabledGaps.includes(filter.key)?'checked':''}>${escape(filter.label)} <span class="contribution-filter-count">${counts[filter.key]}</span></label>`).join('');
         $('[data-contribution-count]').textContent=`${candidates.length} of ${all.length} entries shown`;
-        $('[data-contribution-list]').innerHTML=candidates.map(c=>{const info=contributionQueueInfo(c);return `<article class="contribution-row ${c.id===selectedId?'is-active':''}"><button type="button" class="contribution-row-select" data-candidate-id="${escape(c.id)}"><strong>${escape(c.name)}</strong><small class="contribution-queue-type">${escape(info.kind)} <span aria-hidden="true">›</span> ${info.pageType}</small>${info.labels.length?`<span class="contribution-gap-tags">${info.labels.map(label=>`<span>${escape(label)}</span>`).join('')}</span>`:''}${['submitted','partial','needs-attention'].includes(c.status)?`<small>${escape(c.status==='submitted'?'Submitted':c.status==='partial'?'Partly submitted':'Needs attention')}</small>`:''}</button>${contributionDestinationHintsMarkup(c,{compact:true,pack:getPack()})}</article>`;}).join('')||`<p class="empty-state">${all.length?'No entries match these filters. Check a gap type above to show it.':'New discoveries from logs and screen reads appear here.'}</p>`;
+        $('[data-contribution-list]').innerHTML=candidates.map(c=>{const info=contributionQueueInfo(c);return `<article class="contribution-row ${c.id===selectedId?'is-active':''}">${contributionQueueControls(c,{canIgnore:typeof wiki?.ignoreContributionEntity==='function',disabled:publishing})}<button type="button" class="contribution-row-select" data-candidate-id="${escape(c.id)}"><strong>${escape(c.name)}</strong><small class="contribution-queue-type">${escape(info.kind)} <span aria-hidden="true">›</span> ${info.pageType}</small>${info.labels.length?`<span class="contribution-gap-tags">${info.labels.map(label=>`<span>${escape(label)}</span>`).join('')}</span>`:''}${['submitted','partial','needs-attention'].includes(c.status)?`<small>${escape(c.status==='submitted'?'Submitted':c.status==='partial'?'Partly submitted':'Needs attention')}</small>`:''}</button>${contributionDestinationHintsMarkup(c,{compact:true,pack:getPack()})}</article>`;}).join('')||`<p class="empty-state">${all.length?'No entries match these filters. Check a gap type above to show it.':'New discoveries from logs and screen reads appear here.'}</p>`;
+    }
+    function dismissDiscovery(id){
+        if(publishing)return;cancelAutomaticContribution();if(selectedId!==id)saveCandidate();queue.remove(id);manuallyEditedContributions.delete(id);
+        if(selectedId===id)selectedId=queueRows()[0]?.id||'';matches=null;invalidatePlan();renderQueue();renderCandidate();
+    }
+    function applyIgnoreSnapshot(snapshot){
+        if(disposed||!snapshot||snapshot.schemaVersion!==1||!Array.isArray(snapshot.entries))return;
+        ignoreEntries=snapshot.entries;ignoreRevision++;cancelAutomaticContribution();
+        if(selectedId&&!queueRows().some(candidate=>candidate.id===selectedId)){selectedId=queueRows()[0]?.id||'';matches=null;invalidatePlan();renderCandidate();}
+        renderQueue();
+    }
+    async function ignoreForever(id){
+        if(publishing)return;const candidate=queue.snapshot().find(entry=>entry.id===id);if(!candidate||!['npc','item'].includes(candidate.kind))return;
+        if(typeof wiki?.ignoreContributionEntity!=='function')throw Error('Permanent ignores require the updated desktop app.');
+        cancelAutomaticContribution();saveCandidate();
+        const snapshot=await wiki.ignoreContributionEntity({kind:candidate.kind,name:candidate.title||candidate.name});
+        // Keep saved drafts intact so restoring the entity can reveal them.
+        applyIgnoreSnapshot(snapshot);notify(candidate.name+' will be ignored. Restore it in Contribution History.');
     }
     function renderCandidate(){
         renderDiscoveryCapture();
         itemBaseUi?.dispose();itemBaseUi=null;contributionIcons?.dispose();contributionIcons=null;contributionChoices?.dispose();contributionChoices=null;const candidate=selected(),host=$('[data-contribution-editor]');
         if(!candidate){host.innerHTML='<p class="empty-state">Choose a discovery or add a page to review.</p>';return;}
-        const fields=candidate.kind==='item'?withDefaultItemStatLines(candidate.fields):{...candidate.fields};
+        const summary=contributionUpdateSummary(candidate),isNewZone=candidate.kind==='zone'&&!summary.updating;
+        const fields=isNewZone?zoneCreationFields(candidate.fields):candidate.kind==='item'?withDefaultItemStatLines(candidate.fields):{...candidate.fields};
         const keys=candidate.kind==='npc'?['notable','level','race','class','location','respawnTime','AC','HP','special','knownLoot']:candidate.kind==='zone'?['whoName','knownNPCs','knownLoot']:candidate.kind==='spell'?['castTime','duration','effect','mana']:['classes','slots','races','iconId','effectName','effectType','effectCastTime','effectLevel'];
         const effects=contributionItemEffects({fields:Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{...value,confirmed:true}]))}),effect=effects[0];
         for(const key of keys)if(!fields[key])fields[key]={value:key==='effectName'?effect?.name||'':key==='effectType'?effect?.type||'':key==='effectCastTime'?effect?.castTime||'':key==='effectLevel'?effect?.level||'':['knownLoot','knownNPCs','classes','slots','races'].includes(key)?[]:'',confirmed:false};
-        const displayCandidate={...candidate,fields},localMatches=matches?.candidateId===candidate.id?matches.matches:queue.matches(candidate),summary=contributionUpdateSummary(candidate);
+        const displayCandidate={...candidate,fields},localMatches=matches?.candidateId===candidate.id?matches.matches:queue.matches(candidate);
         const fieldEntries=Object.entries(fields).filter(([key])=>candidate.kind!=='item'||key!=='iconId'),isUpdate=summary.updating,mainFields=isUpdate?fieldEntries.filter(([key])=>summary.fields.includes(key)):fieldEntries,extraFields=isUpdate?fieldEntries.filter(([key])=>!summary.fields.includes(key)):[];
         const gapSummary=isUpdate?`<section class="contribution-change-summary"><h3>What will be added</h3>${summary.gaps.map(gap=>`<p><strong>${escape(gap.label)}</strong> · ${escape(gap.description)}</p>`).join('')}<div data-contribution-destination-host>${contributionDestinationHintsMarkup(candidate,{pack:getPack()})}</div><p class="settings-helper">Preview shows each page change. Existing content stays in place.</p></section>`:'';
-        const fieldMarkup=entries=>entries.map(([key,field])=>contributionFieldMarkup(key,field,{kind:candidate.kind,requireLocation:!isUpdate})).join(''),mainFieldMarkup=fieldMarkup(mainFields);
+        const fieldMarkup=entries=>entries.filter(([key])=>!isNewZone||!ZONE_CREATION_FIELD_KEYS.includes(key)).map(([key,field])=>contributionFieldMarkup(key,field,{kind:candidate.kind,requireLocation:!isUpdate})).join(''),mainFieldMarkup=fieldMarkup(mainFields);
         const optionalFields=isUpdate?`<details data-additional-contribution><summary>Other optional changes</summary><div class="contribution-fields">${fieldMarkup(extraFields)}</div><label>Description / notes<textarea name="playerText" rows="3" maxlength="12000" placeholder="ex. Summons nearby players.">${escape(candidate.playerText)}</textarea></label>${candidate.kind==='item'?'':contributionScreenshotMarkup(candidate)}</details>`:'';
-        host.innerHTML=`<div class="capture-actions contribution-iterate"><button type="button" class="text-button" data-candidate-previous>← Previous</button><span data-queue-position></span><button type="button" class="text-button" data-candidate-next>Next →</button></div><form data-candidate-form><h2>${escape(candidate.name)}</h2>${contributionItemEvidenceMarkup(candidate,fields)}${contributionMatchMarkup(candidate,localMatches)}<div class="capture-form-grid">${isUpdate?`<input type="hidden" name="name" value="${escape(candidate.name)}">`:`<label>Observed name<input name="name" value="${escape(candidate.name)}" maxlength="230" required placeholder="ex. A loathing lich"></label>`}<label>Destination page<input name="title" value="${escape(candidate.title)}" maxlength="230" required placeholder="ex. A loathing lich"></label><div class="contribution-zone-field" ${isUpdate&&!summary.fields.includes('zone')&&!summary.sections.sources&&!summary.sections.loot?'hidden':''}><label>Zone<input name="zone" value="${escape(candidate.zone)}" maxlength="230" placeholder="ex. Plane of Hate"></label><label class="check-control"><input type="checkbox" name="raid" ${candidate.instance==='raid'?'checked':''}> Raid Instance</label></div>${isUpdate?`<input type="hidden" name="era" value="${escape(candidate.era||'Classic Era')}">`:`<label>Era<select name="era">${eras.map(value=>`<option ${((candidate.era||'Classic Era')===value)?'selected':''}>${escape(value)}</option>`).join('')}</select></label>`}</div>${gapSummary}${!isUpdate?`<div data-contribution-destination-host>${contributionDestinationHintsMarkup(candidate,{pack:getPack()})}</div>`:''}${contributionContextMarkup(candidate,{showSpawn:!isUpdate||summary.fields.includes('location')})}${candidate.kind==='item'&&(!isUpdate||summary.sections.stats)?'<section data-item-base-review></section>':''}${mainFieldMarkup?`<section class="contribution-fields"><h3>${isUpdate?'Gap details':'Page details'}</h3>${mainFieldMarkup}</section>`:''}${['npc','zone'].includes(candidate.kind)&&(!isUpdate||summary.sections.loot)?contributionLootMarkup(displayCandidate,{pack:getPack()}):''}${candidate.kind==='item'&&(!isUpdate||summary.sections.sources)?`<section class="contribution-source-editor"><h3>Drop sources</h3>${candidate.sources.map((source,index)=>`<div class="contribution-source-row"><span>${escape(source.npc)} · ${escape(source.zone)} <small> · ${source.instance==='raid'?'Raid Zone':'Normal Zone'}</small></span><button type="button" class="secondary-button" data-source-toggle="${index}" aria-pressed="${contributionSourceIncluded(source)}">${contributionSourceIncluded(source)?'Included':'Include source'}</button></div>`).join('')}<div class="capture-form-grid"><label>Monster<input data-add-source-npc placeholder="ex. A loathing lich" maxlength="230"></label></div><button type="button" class="secondary-button" data-add-source>Add source</button></section>`:''}${isUpdate?optionalFields:`<label>Description / notes<textarea name="playerText" rows="4" maxlength="12000" placeholder="ex. Summons nearby players.">${escape(candidate.playerText)}</textarea></label>${candidate.kind==='item'?'':contributionScreenshotMarkup(candidate)}`}${contributionEvidenceMarkup(candidate)}<div class="capture-actions"><button class="primary-button" type="submit" data-prepare-contribution>Preview wiki changes</button>${candidate.planId?'<button class="secondary-button" type="button" data-resume-plan>Resume saved review</button>':''}<button class="text-button" type="button" data-ignore-candidate>Ignore entry</button><a href="https://eqlwiki.com/API_Documentation" target="_blank" rel="noopener">API documentation</a></div></form>`;
+        host.innerHTML=`<div class="capture-actions contribution-iterate"><button type="button" class="text-button" data-candidate-previous>← Previous</button><span data-queue-position></span><button type="button" class="text-button" data-candidate-next>Next →</button></div><form data-candidate-form ${isNewZone?'data-new-zone="true"':''}><h2>${escape(candidate.name)}</h2>${contributionItemEvidenceMarkup(candidate,fields)}${contributionMatchMarkup(candidate,localMatches)}<div class="capture-form-grid">${isUpdate?`<input type="hidden" name="name" value="${escape(candidate.name)}">`:`<label>${isNewZone?'Zone name':'Observed name'}<input name="name" value="${escape(candidate.name)}" maxlength="230" required placeholder="${isNewZone?'ex. Forgotten Vale':'ex. A loathing lich'}"></label>`}<label>Destination page<input name="title" value="${escape(candidate.title)}" maxlength="230" required placeholder="${isNewZone?'ex. Forgotten Vale':'ex. A loathing lich'}"></label>${isNewZone?`<input type="hidden" name="zone" value="${escape(candidate.zone)}"><input type="checkbox" name="raid" hidden>`:`<div class="contribution-zone-field" ${isUpdate&&!summary.fields.includes('zone')&&!summary.sections.sources&&!summary.sections.loot?'hidden':''}><label>Zone<input name="zone" value="${escape(candidate.zone)}" maxlength="230" placeholder="ex. Plane of Hate"></label><label class="check-control"><input type="checkbox" name="raid" ${candidate.instance==='raid'?'checked':''}> Raid Instance</label></div>`}${isUpdate?`<input type="hidden" name="era" value="${escape(candidate.era||'Classic Era')}">`:`<label>Era<select name="era">${eras.map(value=>`<option ${((candidate.era||'Classic Era')===value)?'selected':''}>${escape(value)}</option>`).join('')}</select></label>`}</div>${gapSummary}${!isUpdate?`<div data-contribution-destination-host>${contributionDestinationHintsMarkup(candidate,{pack:getPack()})}</div>`:''}${contributionContextMarkup(candidate,{showSpawn:!isUpdate||summary.fields.includes('location')})}${isNewZone?zoneCreationMarkup(candidate,fields):''}${candidate.kind==='item'&&(!isUpdate||summary.sections.stats)?'<section data-item-base-review></section>':''}${mainFieldMarkup?`<section class="contribution-fields"><h3>${isUpdate?'Gap details':'Page details'}</h3>${mainFieldMarkup}</section>`:''}${['npc','zone'].includes(candidate.kind)&&(!isUpdate||summary.sections.loot)?contributionLootMarkup(displayCandidate,{pack:getPack()}):''}${candidate.kind==='item'&&(!isUpdate||summary.sections.sources)?`<section class="contribution-source-editor"><h3>Drop sources</h3>${candidate.sources.map((source,index)=>`<div class="contribution-source-row"><span>${escape(source.npc)} · ${escape(source.zone)} <small> · ${source.instance==='raid'?'Raid Zone':'Normal Zone'}</small></span><button type="button" class="secondary-button" data-source-toggle="${index}" aria-pressed="${contributionSourceIncluded(source)}">${contributionSourceIncluded(source)?'Included':'Include source'}</button></div>`).join('')}<div class="capture-form-grid"><label>Monster<input data-add-source-npc placeholder="ex. A loathing lich" maxlength="230"></label></div><button type="button" class="secondary-button" data-add-source>Add source</button></section>`:''}${isUpdate?optionalFields:isNewZone?contributionScreenshotMarkup(candidate):`<label>Description / notes<textarea name="playerText" rows="4" maxlength="12000" placeholder="ex. Summons nearby players.">${escape(candidate.playerText)}</textarea></label>${candidate.kind==='item'?'':contributionScreenshotMarkup(candidate)}`}${contributionEvidenceMarkup(candidate)}<div class="capture-actions"><button class="primary-button" type="submit" data-prepare-contribution>Preview wiki changes</button>${candidate.planId?'<button class="secondary-button" type="button" data-resume-plan>Resume saved review</button>':''}<button class="text-button" type="button" data-ignore-candidate>Ignore entry</button><a href="https://eqlwiki.com/API_Documentation" target="_blank" rel="noopener">API documentation</a></div></form>`;
         const form=$('[data-candidate-form]');contributionChoices=mountContributionChoicePickers({root:form});form.dataset.originalCandidate=JSON.stringify(Object.fromEntries(['name','title','zone','era','playerText'].map(key=>[key,candidate[key]])));
         const availability=()=>{$('[data-prepare-contribution]').disabled=publishing;};
         const bindMatches=()=>form.querySelectorAll('[data-use-existing]').forEach(button=>button.onclick=()=>{const current=saveCandidate();matches=null;queue.update(current.id,{title:button.dataset.useExisting,intent:'update',matchesReviewed:false,planId:null});invalidatePlan();renderQueue();renderCandidate();});bindMatches();
-        form.oninput=event=>{markContributionEdited();if(['name','title'].includes(event.target.name))matches=null;const saved=saveCandidate();if(!saved)return;invalidatePlan();availability();if(['name','title','zone','raid','intent'].includes(event.target.name)){form.querySelector('[data-contribution-destination-host]').innerHTML=contributionDestinationHintsMarkup(saved,{pack:getPack()});renderQueue();}if(['name','title'].includes(event.target.name)){$('[data-live-matches-status]').textContent='';$('[data-match-results]').innerHTML=contributionMatchesMarkup(saved,queue.matches(saved));bindMatches();}if(event.target.name==='intent'){matches=null;renderQueue();renderCandidate();}};
+        form.oninput=event=>{markContributionEdited();if(['name','title'].includes(event.target.name))matches=null;const saved=saveCandidate();if(!saved)return;updateZoneCreationVisibility(form);invalidatePlan();availability();if(['name','title','zone','raid','intent'].includes(event.target.name)){form.querySelector('[data-contribution-destination-host]').innerHTML=contributionDestinationHintsMarkup(saved,{pack:getPack()});renderQueue();}if(['name','title'].includes(event.target.name)){$('[data-live-matches-status]').textContent='';$('[data-match-results]').innerHTML=contributionMatchesMarkup(saved,queue.matches(saved));bindMatches();}if(event.target.name==='intent'){matches=null;renderQueue();renderCandidate();}};
         form.addEventListener('click',event=>{if(event.target.closest('[data-source-toggle],[data-add-source],[data-loot-kind],[data-add-loot],[data-remove-attachment],[data-contribution-file],[data-contribution-paste]'))markContributionEdited();},true);
         form.onsubmit=event=>{event.preventDefault();void act(preparePlan);};
         $('[data-check-matches]').onclick=()=>void act(async()=>{const current=saveCandidate(),epoch=reviewEpoch;if(!wiki)throw Error('Live wiki matching requires the desktop app.');const result=await wiki.matches({name:current.title,kind:current.kind});if(!reviewIsCurrent(current,epoch))return;matches={...result,candidateId:current.id};$('[data-match-results]').innerHTML=contributionMatchesMarkup(current,result.matches||[]);$('[data-live-matches-status]').textContent='Checked live wiki.';bindMatches();});
@@ -257,11 +300,11 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         });
         const iconHost=$('[data-contribution-icons]');if(iconHost)renderContributionIcons(candidate,iconHost);
         $('[data-resume-plan]')?.addEventListener('click',()=>void act(async()=>{const current=saveCandidate(),epoch=reviewEpoch,restored=await wiki.getPlan({planId:current.planId});if(!reviewIsCurrent(current,epoch))return;plan=restored;renderPlan();}));
-        $('[data-ignore-candidate]').onclick=()=>{cancelAutomaticContribution();queue.remove(candidate.id);selectedId=queueRows()[0]?.id||'';invalidatePlan();renderQueue();renderCandidate();};
+        $('[data-ignore-candidate]').textContent='Dismiss discovery';$('[data-ignore-candidate]').onclick=()=>dismissDiscovery(candidate.id);
     }
     function applyAccountStatus(next){account=next;contributionHistory.setAccount(next);$('[data-account-status]').textContent=account?.authenticated?`Logged in as ${account.user.name}${account.canEdit?'':' · editing unavailable'}`:'Not logged in';$('[data-wiki-login]').textContent=account?.authenticated?'Log out of wiki':'Log in to wiki';}
     async function refreshAccount(){if(!wiki)return;applyAccountStatus(await wiki.status());}
-    async function preparePlan(){if(!wiki)throw Error('Wiki submission requires the desktop app.');const candidate=saveCandidate({reviewFields:true}),epoch=reviewEpoch,relatedPages=[];if(candidate.kind==='item')for(const source of candidate.sources.filter(s=>s.confirmed&&(!contributionUpdateSummary(candidate).updating||candidate.reasons?.includes('missing-source')||!candidate.reasons?.length||s.edited===true)))relatedPages.push({title:source.npc,role:'npc-loot',itemTitle:candidate.title,npcTitle:source.npc,zoneTitle:source.zone,instance:source.instance||'normal'});const prepared=await wiki.preparePlan({candidate,relatedPages,sourceItemHints:queue.sourceItemHints?.(candidate)||[],matchesReviewed:candidate.matchesReviewed===true});if(!reviewIsCurrent(candidate,epoch))throw Error('This draft changed while its review was loading. Prepare the updated review again.');plan=prepared;queue.update(candidate.id,{planId:plan.id});renderPlan();renderCandidate();}
+    async function preparePlan(){if(!wiki)throw Error('Wiki submission requires the desktop app.');const candidate=saveCandidate({reviewFields:true}),epoch=reviewEpoch,relatedPages=[];if(!candidate)throw Error('Wait for the live wiki to confirm this discovery before reviewing changes.');if(candidate.kind==='item')for(const source of candidate.sources.filter(s=>s.confirmed&&(!contributionUpdateSummary(candidate).updating||candidate.reasons?.includes('missing-source')||!candidate.reasons?.length||s.edited===true)))relatedPages.push({title:source.npc,role:'npc-loot',itemTitle:candidate.title,npcTitle:source.npc,zoneTitle:source.zone,instance:source.instance||'normal'});const prepared=await wiki.preparePlan({candidate,relatedPages,sourceItemHints:queue.sourceItemHints?.(candidate)||[],matchesReviewed:candidate.matchesReviewed===true});if(!reviewIsCurrent(candidate,epoch))throw Error('This draft changed while its review was loading. Prepare the updated review again.');plan=prepared;queue.update(candidate.id,{planId:plan.id});renderPlan();renderCandidate();}
     function updatePublishAvailability(){const host=$('[data-wiki-review]'),button=host.querySelector('[data-publish-plan]');if(!button)return;button.disabled=publishing||!plan||!plan.reviewDigest||!plan.pages?.length||plan.status==='submitted'||(plan.blockers||[]).length>0||!host.querySelector('[data-reviewed-plan]')?.checked;}
     function renderPlan(){
         const host=$('[data-wiki-review]');if(!plan){host.hidden=true;return;}host.hidden=false;
@@ -384,8 +427,15 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         if(discoveryRequests.size>=64&&!discoveryRequests.has(request.id))return{ok:false,error:'Finish or dismiss an existing discovery request first.'};
         const name=String(request.name||'').trim().slice(0,230),record={id:request.id,purpose:request.purpose,captureRequest:request.captureRequest,candidateId:request.candidateId||'',name};
         if(request.purpose==='spawn-location'){
-            const candidate=queue.snapshot().find(candidate=>candidate.id===request.candidateId&&candidate.kind==='npc');
+            let candidate=queue.snapshot().find(candidate=>candidate.id===request.candidateId&&candidate.kind==='npc');
             if(!candidate||name&&normalizeWikiIdentity(candidate.name)!==normalizeWikiIdentity(name))return{ok:false,error:'This monster contribution is no longer available.'};
+            const signature=discoveryGate.signature(candidate);await discoveryGate.check(candidate);
+            candidate=queue.snapshot().find(value=>value.id===candidate.id);
+            if(disposed||!candidate||signature!==discoveryGate.signature(candidate)||!discoveryGate.project(candidate,{request:false})||entityIgnored({kind:'npc',name:candidate.name}))return{ok:false,error:'This monster no longer has a confirmed wiki gap.'};
+            // Contribute is an explicit request to keep working on this draft,
+            // even after its automatic visibility receipt expires.
+            candidate=queue.add({kind:'npc',name:candidate.name,zone:candidate.zone,instance:candidate.instance},true);
+            if(!candidate)return{ok:false,error:'This monster contribution is no longer available.'};
             const armed=queue.armSpawnLocation(candidate.id,{persistent:true});if(!armed.ok)return armed;
             record.candidateId=candidate.id;discoveryRequests.set(record.id,record);spawnArmedId=candidate.id;selectContribution(candidate.id);navigate('contribute');loadWiki();return discoveryResult(record,{spawn:armed});
         }
@@ -396,6 +446,11 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         if(request.candidateId&&!candidate)return{ok:false,error:'This linked item contribution no longer matches.'};
         if(!candidate)candidate=queue.add({kind:'item',name:itemExaltationBaseIdentity(name)},true);
         if(!candidate)return{ok:false,error:'This linked item could not be opened for review.'};
+        const signature=discoveryGate.signature(candidate);await discoveryGate.check(candidate);
+        candidate=queue.snapshot().find(value=>value.id===candidate.id);
+        if(disposed||!candidate||signature!==discoveryGate.signature(candidate)||!discoveryGate.project(candidate,{request:false})||entityIgnored({kind:'item',name:candidate.name}))return{ok:false,error:'This item no longer has a confirmed wiki gap.'};
+        candidate=queue.add({kind:'item',name:candidate.name,zone:candidate.zone,instance:candidate.instance},true);
+        if(!candidate)return{ok:false,error:'This item contribution is no longer available.'};
         contributionReaderSuppressed=false;discoveryMessage='';
         record.candidateId=candidate.id;discoveryRequests.set(record.id,record);selectContribution(candidate.id);navigate('contribute');loadWiki();
         try{const prepared=await prepareDiscoveryCapture('',{explicit:true});if(disposed||discoveryRequests.get(record.id)!==record)return discoveryResult(record,{cancelled:true});const result=discoveryResult(record,prepared);if(!prepared.needsSource&&!prepared.cancelled)discoveryCaptureReady(record,result);return result;}
@@ -403,6 +458,8 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     }
     function setDiscoveryNotable(request={}){
         if(disposed||publishing)return{ok:false,error:disposed?'Contribute has closed.':'Finish the current wiki submission first.'};
+        const candidate=queue.snapshot().find(value=>value.id===request.candidateId);
+        if(!candidate||!discoveryGate.project(candidate)||entityIgnored({kind:'npc',name:candidate.name}))return{ok:false,error:'This monster no longer has a confirmed wiki gap.'};
         const result=queue.setNpcNotable(request);if(!result.ok)return result;
         if(selectedId===request.candidateId){invalidatePlan();renderCandidate();}renderQueue();return{ok:true,notable:result.notable};
     }
@@ -494,12 +551,23 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         const catalog=buildWikiEntityCatalog(pack),names=new Map();
         for(const entry of snapshot.inventoryExport?.rejectedItems||[])if(entry.reason==='wiki-item-missing'){const name=entry.baseName||entry.name;names.set(name.toLocaleLowerCase(),{name,tier:entry.tier});}
         inventoryGaps=[...names.values()].filter(entry=>!catalog.has('item',entry.name)).map(entry=>{const candidate=queue.add({kind:'item',name:entry.name,fields:{...(Number.isInteger(entry.tier)?{tier:entry.tier}:{})}});return {...entry,id:candidate?.id||''};});
-        const host=$('[data-character-wiki-gaps]',characterRoot);host.hidden=!snapshot.inventoryExport;
-        host.innerHTML='<h3>Wiki gaps</h3>'+(inventoryGaps.length?'<p>'+ (catalog.complete?'These exported items are missing from the cached wiki.':'These exported items could not be matched. The wiki catalog is incomplete; check existing pages in Contribute.')+' Their equipment slots and augment sockets stay empty in your export. Submit them through Contribute, then add them after the wiki updates and re-export.</p>'+inventoryGaps.map((entry,index)=>'<div class="character-wiki-gap"><strong>'+escape(entry.name)+'</strong><button type="button" class="secondary-button" data-inventory-contribute="'+index+'">Open in Contribute</button></div>').join(''):'<p>No unmatched wiki items were found in this export.</p>');renderQueue();
+        renderInventoryGaps();renderQueue();
+    }
+    function renderInventoryGaps(){
+        const candidates=queue.snapshot(),visible=inventoryGaps.map((entry,index)=>({...entry,index})).filter(entry=>{
+            const candidate=candidates.find(value=>value.id===entry.id);
+            return candidate&&!entityIgnored({kind:'item',name:candidate.name})&&discoveryGate.project(candidate,{request:discoveryChecksActive()})?.reasons.includes('missing-page');
+        });
+        const host=$('[data-character-wiki-gaps]',characterRoot);host.hidden=!character.snapshot().inventoryExport||!visible.length;
+        host.innerHTML=visible.length?'<h3>Wiki gaps</h3><p>These exported items were not found on the live wiki. Submit them through Contribute, then add them after the wiki updates and re-export.</p>'+visible.map(entry=>'<div class="character-wiki-gap"><strong>'+escape(entry.name)+'</strong><button type="button" class="secondary-button" data-inventory-contribute="'+entry.index+'">Open in Contribute</button></div>').join(''):'';
     }
 
     async function contributeInventoryItem(index){
         const entry=inventoryGaps[index];if(!entry)return;
+        const current=queue.snapshot().find(candidate=>candidate.id===entry.id);if(!current)return;
+        const signature=discoveryGate.signature(current);await discoveryGate.check(current);
+        const latest=queue.snapshot().find(candidate=>candidate.id===entry.id);
+        if(disposed||!latest||signature!==discoveryGate.signature(latest)||!discoveryGate.project(latest,{request:false})?.reasons.includes('missing-page'))return;
         const candidate=queue.add({kind:'item',name:entry.name},true);if(candidate)selectedId=candidate.id;
         renderQueue();renderCandidate();navigate('contribute');loadWiki();
         notify('Submit '+entry.name+' through Contribute. Once it is on the wiki, add it and re-export your character.',{tone:'success'});
@@ -801,11 +869,11 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             if(liveItem&&contributionVisible&&!matching&&!itemDiscoveryRequests().length)return;
             const current=matching?saveCandidate():null;
             const candidate=queue.consume(current?{...observation,subject:{...observation.subject,name:current.name}}:observation);
-            if(candidate){if(!selectedId)selectedId=candidate.id;renderQueue();if(matching){
+            if(candidate){if(!replaying)void discoveryGate.check(candidate);if(!selectedId)selectedId=candidate.id;renderQueue();if(matching){
                 const known=getPack().items?.find(item=>normalizeWikiIdentity(itemExaltationBaseIdentity(item.wikiTitle||item.name))===normalizeWikiIdentity(itemExaltationBaseIdentity(current.name)));
                 if(/^\d{1,7}$/.test(String(known?.iconId))&&!candidate.fields.iconId?.edited&&!candidate.fields.iconId?.confirmed&&!candidate.fields.iconId?.value)queue.update(candidate.id,{fields:{...candidate.fields,iconId:{value:Number(known.iconId),confirmed:false}}});
                 invalidatePlan();renderReaderCandidate();
-            }else if(!root.contains(document.activeElement))renderCandidate();}
+            }else if(!selected()||!root.contains(document.activeElement))renderCandidate();}
             const completed=()=>{if(liveItem)try{onDiscoveryItem(observation);}catch(error){warning(error.message||'The discovery item could not be updated.');}};
             if(matching&&candidate)void stageReaderEvidence(observation,candidate).then(()=>publishFreshItem(observation)).finally(completed);else completed();
         }
@@ -835,7 +903,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         }finally{setPublishing(false);}
     }
     listen($('[data-contribution-filters]'),'change',event=>{const input=event.target.closest('[data-gap-filter]');if(!input||publishing)return;saveCandidate();enabledGaps=input.checked?[...new Set([...enabledGaps,input.dataset.gapFilter])]:enabledGaps.filter(key=>key!==input.dataset.gapFilter);try{storage?.setItem(filterKey,JSON.stringify(enabledGaps));}catch{}const visible=queueRows();if(!visible.some(candidate=>candidate.id===selectedId))selectedId=visible[0]?.id||'';matches=null;invalidatePlan();renderQueue();renderCandidate();});
-    listen(root,'click',event=>{const row=event.target.closest('[data-candidate-id]');if(row&&!publishing){cancelAutomaticContribution();saveCandidate();selectedId=row.dataset.candidateId;invalidatePlan();matches=null;renderQueue();renderCandidate();}});
+    listen(root,'click',event=>{const dismiss=event.target.closest('[data-dismiss-discovery]'),forever=event.target.closest('[data-ignore-forever]');if(dismiss||forever){event.preventDefault();event.stopPropagation();if(forever)void act(()=>ignoreForever(forever.dataset.ignoreForever));else dismissDiscovery(dismiss.dataset.dismissDiscovery);return;}const row=event.target.closest('[data-candidate-id]');if(row&&!publishing){matches=null;selectContribution(row.dataset.candidateId);}});
     listen($('[data-add-contribution]'),'submit',event=>{event.preventDefault();if(publishing)return;const data=new FormData(event.target),candidate=queue.add({kind:data.get('kind'),name:data.get('name')},true);if(candidate){selectedId=candidate.id;invalidatePlan();event.target.reset();renderQueue();renderCandidate();}});
     listen($('[data-wiki-login]'),'click',()=>void act(async()=>{if(account?.authenticated)await wiki.logout();else await wiki.login();await refreshAccount();}));listen($('[data-wiki-refresh]'),'click',()=>void act(refreshAccount));
     listen($('[data-capture-opt-in]',settingsRoot),'change',event=>{optIn=event.target.checked;$('.capture-settings-controls',settingsRoot).hidden=!optIn;if(!optIn){contributionReaderSuppressed=true;void stopCapture().catch(error=>warning(error.message));}});
@@ -924,6 +992,8 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             const link=title=>`<a href="https://eqlwiki.com/${encodeURIComponent(title)}" target="_blank" rel="noopener noreferrer">${escape(title)}</a>`;
             const label=result.status==='submitted'?'Drop source recorded':'Drop source needs review';
             const summary=`<strong>${label}</strong> · ${link(source.itemTitle)} → ${link(source.npcTitle)}`;
+            if(!hasAttempt&&(!key||!visibleQueueCandidates().some(candidate=>automaticSourceDraftKeys(candidate,{resolver:contributionResolver()})?.includes(key)))){receipt.hidden=true;receipt.innerHTML='';delete receipt.dataset.automaticReviewKey;renderQueue();return;}
+            if(!hasAttempt)receipt.dataset.automaticReviewKey=key;else delete receipt.dataset.automaticReviewKey;
             receipt.hidden=result.status==='submitted';receipt.classList.toggle('capture-warning',result.status!=='submitted');
             receipt.innerHTML=`<div><p>${summary}</p>${result.reason?`<p class="settings-helper">${escape(String(result.reason).slice(0,600))}</p>`:''}</div>${hasAttempt?'<button type="button" class="text-button" data-open-contribution-history>View history</button>':'<span class="settings-helper">Review this item in Discoveries.</span>'}`;renderQueue();
             if(!busy&&!publishing&&selectedId&&!queueRows().some(candidate=>candidate.id===selectedId)){selectedId=queueRows()[0]?.id||'';renderCandidate();}
@@ -977,14 +1047,57 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         const revision=captureStatusRevision;void capture.status().then(async next=>{if(disposed)return;if(revision===captureStatusRevision){captureState=next;renderCapture();}await replay();}).catch(error=>{if(!disposed)warning(error.message);});
     }
     function loadWiki(){if(wikiLoaded||!wiki)return;wikiLoaded=true;void wiki.blueprints().then(blueprints=>{if(Array.isArray(blueprints.eras)&&blueprints.eras.length){eras=blueprints.eras;const select=$('[name=era]');if(select){const value=select.value;select.innerHTML='<option value="">Confirm era</option>'+eras.map(era=>`<option>${escape(era)}</option>`).join('');select.value=value;}}}).catch(()=>{});unsubscribers.push(wiki.onStatus?.(applyAccountStatus)||(()=>{}));void refreshAccount().catch(()=>{$('[data-account-status]').textContent='Wiki unavailable; local review remains saved.';contributionHistory.setAccount(null);});}
-    renderQueue();renderCandidate();renderCharacter();renderCapture();
+    if(wiki?.onContributionIgnoresChanged)unsubscribers.push(wiki.onContributionIgnoresChanged(applyIgnoreSnapshot));
+    if(wiki?.contributionIgnores)void wiki.contributionIgnores().then(applyIgnoreSnapshot).catch(()=>warning('Ignored entities could not be loaded. Automatic contributions will wait for the device ignore list.'));
+    let discoveryLogSource='';
+    function resetDiscoveryChecks(){
+        spawnPromptEpoch++;discoveryGate.clear();queue.cancelSpawnLocation?.();
+        if(spawnArmedId)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+spawnArmedId}).catch(()=>{});
+        spawnArmedId='';if(discoveryUiReady){renderQueue();renderCandidate();}
+    }
+    async function showVerifiedSpawnPrompt(prompt){
+        const epoch=++spawnPromptEpoch,candidate=queue.snapshot().find(value=>value.id===prompt.candidateId);
+        queue.cancelSpawnLocation?.();if(!candidate)return;
+        const signature=discoveryGate.signature(candidate);await discoveryGate.check(candidate);
+        const latest=queue.snapshot().find(value=>value.id===prompt.candidateId);
+        if(disposed||publishing||epoch!==spawnPromptEpoch||Date.now()>prompt.expiresAt||!latest||signature!==discoveryGate.signature(latest)||entityIgnored({kind:'npc',name:latest.name})||!discoveryGate.project(latest,{request:false})?.reasons.includes('missing-page'))return;
+        const armed=queue.armSpawnLocation(latest.id);if(!armed.ok)return;
+        spawnArmedId=latest.id;
+        const shown=await globalThis.eyeOfZommDiscovery?.show({id:'spawn-'+prompt.candidateId,candidateId:prompt.candidateId,kind:'monster',name:prompt.name,zone:prompt.zone,purpose:'spawn-location',spawnEvidenceId:prompt.spawnEvidenceId,...(typeof prompt.notable==='boolean'?{notable:prompt.notable}:{}),hint:'Stand at its spawn point and type /loc now. The next location will be saved automatically.'}).catch(()=>null);
+        if(disposed||epoch!==spawnPromptEpoch||!shown||shown.error||shown.suppressed){if(spawnArmedId===latest.id){queue.cancelSpawnLocation?.();spawnArmedId='';}return;}
+        notify('Stand at '+prompt.name+'’s spawn and type /loc. Recording is armed.',{duration:15000,actionLabel:'Contribute',onAction:()=>void Promise.resolve().then(()=>{if(!globalThis.eyeOfZommDiscovery?.action)throw Error('Discovery contribution controls are unavailable. Restart Eye of Zomm and try again.');return globalThis.eyeOfZommDiscovery.action('contribute',{id:'spawn-'+prompt.candidateId});}).catch(error=>warning(error.message||'The discovery request could not be opened.'))});
+    }
+    async function notifySavedLocation(captured){
+        const candidate=queue.snapshot().find(value=>value.id===captured.candidateId);if(!candidate)return;
+        const epoch=spawnPromptEpoch,signature=discoveryGate.signature(candidate);await discoveryGate.check(candidate);
+        const latest=queue.snapshot().find(value=>value.id===captured.candidateId);
+        if(disposed||epoch!==spawnPromptEpoch||!latest||signature!==discoveryGate.signature(latest)||entityIgnored({kind:'npc',name:latest.name})||!discoveryGate.project(latest,{request:false}))return;
+        notify('Spawn location saved for '+captured.name+'. Review it in Contribute.',{tone:'success'});
+    }
+    function openContribution(id){
+        const show=()=>{if(selectContribution(id)){navigate('contribute');loadWiki();return true;}return false;};
+        if(show())return;
+        const candidate=queue.snapshot().find(value=>value.id===id);if(!candidate||entityIgnored({kind:candidate.kind,name:candidate.title||candidate.name}))return;
+        const signature=discoveryGate.signature(candidate);
+        void discoveryGate.check(candidate).then(()=>{
+            const latest=queue.snapshot().find(value=>value.id===id);
+            if(disposed||!latest||signature!==discoveryGate.signature(latest)||!discoveryGate.project(latest,{request:false}))return;
+            show();
+        }).catch(()=>{});
+    }
+    discoveryUiReady=true;renderQueue();renderCandidate();renderCharacter();renderCapture();
     return{beginDiscoveryContribution,cancelDiscoveryContribution,setDiscoveryNotable,consumeLog(event,context){
         if(disposed||!event||context?.live!==true)return;
-        if(['zone','profile'].includes(event.type)){if(spawnArmedId)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+spawnArmedId}).catch(()=>{});spawnArmedId='';}
-        const result=queue.consumeLog(event,context);if(result.candidate){if(!selectedId)selectedId=result.candidate.id;renderQueue();if(!root.contains(document.activeElement))renderCandidate();}
-        if(result.prompt){const prompt=result.prompt;spawnArmedId=prompt.candidateId;void globalThis.eyeOfZommDiscovery?.show({id:'spawn-'+prompt.candidateId,candidateId:prompt.candidateId,kind:'monster',name:prompt.name,zone:prompt.zone,purpose:'spawn-location',spawnEvidenceId:prompt.spawnEvidenceId,...(typeof prompt.notable==='boolean'?{notable:prompt.notable}:{}),hint:'Stand at its spawn point and type /loc now. The next location will be saved automatically.'}).catch(()=>{});notify('Stand at '+prompt.name+'’s spawn and type /loc. Recording is armed.',{duration:15000,actionLabel:'Contribute',onAction:()=>void Promise.resolve().then(()=>{if(!globalThis.eyeOfZommDiscovery?.action)throw Error('Discovery contribution controls are unavailable. Restart Eye of Zomm and try again.');return globalThis.eyeOfZommDiscovery.action('contribute',{id:'spawn-'+prompt.candidateId});}).catch(error=>warning(error.message||'The discovery request could not be opened.'))});}
-        if(result.locationCaptured){let handled=false;try{handled=onDiscoveryLocation(result.locationCaptured,{...context,at:event.at||context?.at})===true;}catch(error){warning(error.message||'The discovery location could not be updated.');}if(!handled)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+result.locationCaptured.candidateId}).catch(()=>{});spawnArmedId='';if(selectedId===result.locationCaptured.candidateId)renderCandidate();notify('Spawn location saved for '+result.locationCaptured.name+'. Review it in Contribute.',{tone:'success'});}
+        const source=String(context.logId||'current');
+        if(discoveryLogSource&&discoveryLogSource!==source||['zone','profile'].includes(event.type))resetDiscoveryChecks();
+        discoveryLogSource=source;
+        // Only an actual fresh observation or an open discovery view starts a
+        // check. Background renders can hide expired receipts without polling.
+        const result=queue.consumeLog(event,context);if(result.candidate){if(!selectedId)selectedId=result.candidate.id;renderQueue();if(!selected()||!root.contains(document.activeElement))renderCandidate();}
+        for(const candidate of result.candidates||[result.candidate])if(candidate)void discoveryGate.check(candidate);
+        if(result.prompt)void showVerifiedSpawnPrompt(result.prompt).catch(()=>{});
+        if(result.locationCaptured){let handled=false;try{handled=onDiscoveryLocation(result.locationCaptured,{...context,at:event.at||context?.at})===true;}catch(error){warning(error.message||'The discovery location could not be updated.');}if(!handled)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+result.locationCaptured.candidateId}).catch(()=>{});spawnArmedId='';if(selectedId===result.locationCaptured.candidateId)renderCandidate();void notifySavedLocation(result.locationCaptured).catch(()=>{});}
         if(capture&&['loot','kill','zone','profile'].includes(event.type))void capture.observeLog({event,context}).catch(()=>{});
         return result;
-    },cancelSource(){cancelAutomaticContribution();contributionReaderSuppressed=true;discoveryRequests.clear();void stopOwnedDiscoveryCapture().catch(()=>{});renderDiscoveryCapture();queue.cancelSpawnLocation?.();if(spawnArmedId)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+spawnArmedId}).catch(()=>{});spawnArmedId='';},openContribution(id){selectContribution(id);navigate('contribute');loadWiki();},ignoreContribution(id){cancelAutomaticContribution();queue.remove(id);if(selectedId===id)selectedId=queueRows()[0]?.id||'';invalidatePlan();renderQueue();renderCandidate();},suppression:(kind,name,options)=>queue.suppression?.(kind,name,options)||{suppressed:false},suppress:(kind,name,options)=>queue.suppress?.(kind,name,options),reconcile:options=>queue.reconcile?.(options),refresh(){refreshContributionReader();if(characterVisible())watchInventory();else stopInventoryWatch();if(root.closest('.view.is-active')||characterRoot.closest('.view.is-active'))loadWiki();characterCatalog.refresh();const wasSeeded=profileSeeded;seedProfile();if(!wasSeeded&&profileSeeded)renderCharacter();},dispose(){cancelAutomaticContribution();disposed=true;contributionIconCrop=null;discoveryRequests.clear();void stopOwnedDiscoveryCapture().catch(()=>{});discoveryPicker.remove();stopInventoryWatch();closeArea();itemBaseUi?.dispose();contributionIcons?.dispose();contributionChoices?.dispose();characterCatalog.dispose();augmentCatalog?.dispose();cancelPendingItemTooltip();clearTimeout(tooltipTimer);unsubscribers.forEach(remove=>remove?.());areaDialog.remove();dialog.remove();augmentDialog.remove();itemTooltip.remove();}};
+    },cancelSource(){cancelAutomaticContribution();resetDiscoveryChecks();discoveryLogSource='';contributionReaderSuppressed=true;discoveryRequests.clear();void stopOwnedDiscoveryCapture().catch(()=>{});renderDiscoveryCapture();},openContribution,ignoreContribution(id){cancelAutomaticContribution();queue.remove(id);if(selectedId===id)selectedId=queueRows()[0]?.id||'';invalidatePlan();renderQueue();renderCandidate();},suppression:(kind,name,options)=>entityIgnored({kind,name})?{suppressed:true,reason:'permanent-ignore'}:queue.suppression?.(kind,name,options)||{suppressed:false},suppress:(kind,name,options)=>queue.suppress?.(kind,name,options),reconcile:options=>queue.reconcile?.(options),refresh(){renderQueue();if(!selected())renderCandidate();refreshContributionReader();if(characterVisible())watchInventory();else stopInventoryWatch();if(root.closest('.view.is-active')||characterRoot.closest('.view.is-active'))loadWiki();characterCatalog.refresh();const wasSeeded=profileSeeded;seedProfile();if(!wasSeeded&&profileSeeded)renderCharacter();},dispose(){cancelAutomaticContribution();disposed=true;discoveryGate.dispose();spawnPromptEpoch++;contributionIconCrop=null;discoveryRequests.clear();void stopOwnedDiscoveryCapture().catch(()=>{});discoveryPicker.remove();stopInventoryWatch();closeArea();itemBaseUi?.dispose();contributionIcons?.dispose();contributionChoices?.dispose();characterCatalog.dispose();augmentCatalog?.dispose();cancelPendingItemTooltip();clearTimeout(tooltipTimer);unsubscribers.forEach(remove=>remove?.());areaDialog.remove();dialog.remove();augmentDialog.remove();itemTooltip.remove();}};
 }

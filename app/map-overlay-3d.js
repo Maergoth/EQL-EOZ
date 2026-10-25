@@ -61,7 +61,7 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
             const focus=map.focus,focusKey=focus?JSON.stringify([focus.sequence,focus.id,focus.zone]):'';
             const pendingFocus=focusKey&&focusKey!==lastFocus&&focus.zone===(map.zone||session.zone),nextLocation=locationKey(map.location);
             if(nextLocation!==lastLocation){
-                if(map.location)api.syncLocation(map.location,{mode,timestamp:map.location.at,moveCamera:follow&&!pendingFocus});
+                if(map.location){const synced=api.syncLocation(map.location,{mode,timestamp:map.location.at,moveCamera:follow&&!pendingFocus});if(synced?.ok===false)throw Error(synced.message||'Waiting for the loaded zone to accept the player location.');}
                 else api.clearPlayerLocation?.();
                 lastLocation=nextLocation;
             }
@@ -70,7 +70,7 @@ export function mountMapOverlay3D({root,getSession=()=>({}),onStatus=()=>{},onFo
                 const result=api.focusAtLocation?.(focus.loc,{mode:'first',fallbackZ:slice?.center});
                 if(result?.ok){lastFocus=focusKey;follow=false;focusNotice=`${focus.name||'NPC'} · inspection camera${result.heightEstimated?' · height estimated':''}`;onFollowChange(false);onFocusApplied(focus,result);report(focusNotice+groundNotice);}
             }else{
-                report((focusNotice||(mode==='first'?'First person · click the scene, then use movement keys to explore.':'Top 3D · drag to orbit, use +/− to zoom.'))+groundNotice);
+                report((focusNotice||(mode==='first'?'First person · click the scene, then use movement keys to explore.':'Top 3D · drag to pan, right drag to rotate, use +/− to zoom.'))+groundNotice);
             }
             api.resize?.();
         }catch(error){if(current())report(error?.message||'Unable to open this 3D zone.');}

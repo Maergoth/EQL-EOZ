@@ -9,8 +9,8 @@ const itemIdentity = value => String(value || '').normalize('NFKC').replace(/_/g
 // Suggestions use a dedicated non-activating window, independent of Timers.
 // Registration never captures pixels or sends game input.
 class DiscoveryHost {
-    constructor({ electron, origin, getMainWindow, showMain = null, itemExistence = null, now=Date.now }) {
-        this.electron = electron; this.origin = origin; this.getMainWindow = getMainWindow; this.itemExistence=itemExistence;this.now=now;this.noticeGeneration=0;
+    constructor({ electron, origin, getMainWindow, showMain = null, itemExistence = null, verifyDiscovery=null, isContributionIgnored=null, now=Date.now }) {
+        this.electron = electron; this.origin = origin; this.getMainWindow = getMainWindow; this.itemExistence=itemExistence;this.verifyDiscovery=verifyDiscovery;this.isContributionIgnored=isContributionIgnored;this.now=now;this.noticeGeneration=0;
         this.showMain = showMain; this.spawnWindow = null; this.spawnReady = null; this.spawnGeneration = 0;
         this.queue = []; this.disposed = false; this.capturing = false; this.captureId = null; this.captureGeneration = 0; this.contributionSequence = 0;
         this.pendingNotices=new Map();this.retiredNotices=new Set();this.notableSequence=0;
@@ -27,6 +27,13 @@ class DiscoveryHost {
         return this.isMain(event)||this.notices.allowed(event);
     }
     state() { return this.queue.map(item => ({ ...item })); }
+    async reconcileIgnores(){
+        if(this.disposed||typeof this.isContributionIgnored!=='function')return;
+        const generation=this.noticeGeneration,checked=await Promise.all(this.queue.map(async item=>{try{return await this.isContributionIgnored({kind:item.kind==='monster'?'npc':'item',name:item.name})?item:null;}catch{return item;}}));
+        if(this.disposed||generation!==this.noticeGeneration)return;
+        const hidden=new Set(checked.filter(Boolean));for(const item of hidden)this.retire(item.id);
+        this.queue=this.queue.filter(item=>!hidden.has(item));this.publishSpawn();this.notices.publish();if(!this.noticeState().length)this.notices.clear();
+    }
     retire(id){this.retiredNotices.add(id);while(this.retiredNotices.size>128)this.retiredNotices.delete(this.retiredNotices.values().next().value);}
     noticeState() { return this.state().filter(item=>item.purpose!=='spawn-location'); }
     spawnState() { return this.queue.filter(item => item.purpose === 'spawn-location').map(item => ({ ...item })); }
@@ -137,6 +144,16 @@ class DiscoveryHost {
                 if(!Number.isSafeInteger(value.createdAt)||!Number.isSafeInteger(value.expiresAt)||value.createdAt>startedAt+1000||value.expiresAt<=value.createdAt||value.expiresAt-value.createdAt>60000)throw Error('Invalid wiki notice lifetime.');
                 expiresAt=value.expiresAt;
             }
+            const ignored=async()=>{try{return typeof this.isContributionIgnored==='function'&&await this.isContributionIgnored({kind:value.kind==='monster'?'npc':'item',name:value.name});}catch{return true;}};
+            if(await ignored())return{ok:true,suppressed:true};
+            if(value.kind==='monster'){
+                const key='npc|'+String(value.name).normalize('NFKC').replace(/_/g,' ').trim()+'|'+String(value.zone||'').trim();
+                if(this.retiredNotices.has(value.id)||this.pendingNotices.has(key)||this.pendingNotices.size>=20)return{ok:true,suppressed:true};
+                const pending={id:value.id,kind:value.kind,name:value.name,cancelled:false};this.pendingNotices.set(key,pending);
+                let proof;try{proof=typeof this.verifyDiscovery==='function'?await this.verifyDiscovery({id:value.candidateId||value.id,kind:'npc',name:value.name,zone:String(value.zone||'').slice(0,240),instance:'unknown',reasons:['missing-page'],relations:[]}):null;}catch{}finally{if(this.pendingNotices.get(key)===pending)this.pendingNotices.delete(key);}
+                const checkedAt=typeof proof?.checkedAt==='number'?proof.checkedAt:Date.parse(proof?.checkedAt||'');
+                if(this.disposed||pending.cancelled||this.retiredNotices.has(value.id)||generation!==this.noticeGeneration||!this.isMain(event)||this.now()-startedAt>=60000||proof?.state!=='missing'||!Array.isArray(proof.reasons)||!proof.reasons.includes('missing-page')||!Number.isFinite(checkedAt)||checkedAt>this.now()+2000||this.now()-checkedAt>=60000||await ignored())return{ok:true,suppressed:true,deferred:proof?.state!=='covered'};
+            }
             if(value.kind==='item'){
                 if(startedAt>=expiresAt)return{ok:true,suppressed:true};
                 const key=itemIdentity(value.name);
@@ -145,6 +162,7 @@ class DiscoveryHost {
                 const pending={id:value.id,kind:value.kind,name:value.name,cancelled:false};this.pendingNotices.set(key,pending);
                 let existing;try{existing=this.itemExistence?await this.itemExistence.check({name:value.name}):{status:'unknown'};}finally{if(this.pendingNotices.get(key)===pending)this.pendingNotices.delete(key);}
                 if(this.disposed||pending.cancelled||this.retiredNotices.has(value.id)||generation!==this.noticeGeneration||!this.isMain(event)||this.now()>=expiresAt||existing.status!=='missing')return{ok:true,suppressed:true,...(existing.status==='unknown'?{deferred:true}:{})};
+                if(await ignored())return{ok:true,suppressed:true};
                 if(this.queue.some(item=>item.kind==='item'&&item.id!==value.id&&itemIdentity(item.name)===itemIdentity(value.name)))return{ok:true,suppressed:true};
             }
             if (this.queue.some(item => item.id === value.id)) return { ok:true, queued:true };

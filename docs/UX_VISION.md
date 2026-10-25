@@ -1,5 +1,7 @@
 # Eye of Zomm — Product and UX Vision
 
+0.9.15 keeps automatic discoveries invisible until the public live wiki confirms a missing page or exact gap. Cached data gates traffic; uncertainty never becomes a task. Device ignores and Restore live in Contribution History. Zone creation uses the shared normal/raid blueprint, log anchoring preserves readable names, and the top 3D map pans on left drag.
+
 0.9.14 adds **Contribute → History** for signed-in account receipts, clear
 partial/unconfirmed outcomes and saved-page links without retry controls.
 Explicit owner-labelled pets cannot become new monster contributions. Common

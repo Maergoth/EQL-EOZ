@@ -20,7 +20,7 @@ class AutomaticLogReader {
         if(typeof window.logPath!=='string'||typeof window.text!=='string'||window.text.length>3*1024*1024||
             !Number.isSafeInteger(window.startOffset)||!Number.isSafeInteger(window.newOffset)||window.startOffset<0||window.newOffset<window.startOffset)return;
         const beforeModules=this.revision;
-        const [{EQLogParser},{logContributionObservation},{resolveZoneRecord,viewerZoneName}]=await modules;
+        const [{EQLogParser},{logContributionObservation},{loggedZoneName}]=await modules;
         if(this.disposed||this.revision!==beforeModules)return;
         const reset=!this.parser||this.source!==window.logPath||window.reset===true||window.startOffset>this.offset;
         if(!reset&&window.startOffset<this.offset)return;
@@ -34,6 +34,8 @@ class AutomaticLogReader {
         }
         const revision=this.revision,pack=await this.getPack()||{};
         if(this.disposed||revision!==this.revision)return;
+        this.parser.setLogIdentityPack(pack);
+        if(reset&&window.logContext)this.parser.seedLogContext(window.logContext);
         const lines=(this.partial+text).split('\n');this.partial=lines.pop()||'';
         if(this.partial.length>65536)this.partial='';
         this.offset=window.newOffset;
@@ -41,11 +43,11 @@ class AutomaticLogReader {
             if(this.disposed)return;
             const line=raw.replace(/\r$/,'');if(line.length>65536)continue;
             const event=this.parser.parse(line,{recordSession:!reset});this.cursor++;
-            if(event?.type==='zone')this.parser.zone=resolveZoneRecord(pack.zones||[],event.zone)?.name||viewerZoneName(event.zone);
+            if(event?.type==='zone')event.zone=this.parser.zone=loggedZoneName(pack.zones||[],event.zone,event.zoneShortName);
             if(reset||!event||!['kill','loot','zone'].includes(event.type))continue;
             const at=Date.parse(line.match(/^\[([^\]]+)\]/)?.[1]||'');
             if(!Number.isFinite(at)||this.now()-at>10000||at-this.now()>2000)continue;
-            const zone=resolveZoneRecord(pack.zones||[],this.parser.zone)?.name||viewerZoneName(this.parser.zone);
+            const zone=loggedZoneName(pack.zones||[],this.parser.zone,this.parser.zoneShortName);
             const record=logContributionObservation(event,{live:true,at,zone,instance:'normal',logId:this.source,cursor:this.cursor,
                 logLine:line,playerNames:[this.parser.character,...this.parser.knownPlayerNames].filter(Boolean)}, {now:this.now()});
             if(record){

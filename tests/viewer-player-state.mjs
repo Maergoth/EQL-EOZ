@@ -31,12 +31,15 @@ for(const value of [null,undefined,'',false,NaN,Infinity])assert.equal(knownView
 assert.equal(knownViewerLocation({x:'0',y:2,z:-10}),true);
 const f=fixture();
 try{
-    assert.deepEqual(f.state.status(),{autoZ:true,hasKnownZ:false,markerVisible:false,groundBasis:'unknown'});
+    assert.deepEqual(f.state.status(),{autoZ:true,hasKnownZ:false,markerVisible:false,arrowVisible:false,groundBasis:'unknown'});
     f.state.setAutoZ(true);assert.equal(f.app.renderer.clippingPlanes,undefined,'No known height creates no fictitious zero slice');
     const result=f.state.observe({x:10,y:20,z:30}),mesh=f.created.find(value=>value.ring);
     assert.equal(result.ok,true);assert.equal(result.grounded,true);assert.deepEqual(result.ground,new Vector(-20,28,10));
     assert.deepEqual(mesh.ring.position,new Vector(-20,28.24,10));assert.equal(mesh.ring.name,'eoz-player-ground-marker');assert.equal(mesh.ring.userData.eqlCollision,false);
     assert.equal(mesh.beam.geometry.disposed,1);assert.equal(mesh.ring.geometry.disposed,0,'Only the detached live ring survives temporary beam cleanup');
+    f.app.els.viewport={clientHeight:500};mesh.ring.onBeforeRender(null,null,{position:new Vector(0,10000,0),fov:60});
+    assert(mesh.ring.scale.value>30,'far/whole-zone camera framing preserves a visible marker instead of a subpixel ring');
+    mesh.ring.onBeforeRender(null,null,{position:new Vector(0,40,0),fov:60});assert.equal(mesh.ring.scale.value,2.5,'nearby marker keeps its existing minimum world size');
     assert.deepEqual(f.target,{untouched:true});assert.equal(f.label.textContent,'Existing route');assert.deepEqual(f.camera.position,new Vector(2,3,4),'Player evidence does not move an inspection camera');
     assert.deepEqual(f.app.renderer.clippingPlanes.map(plane=>[plane.normal.y,plane.constant]),[[-1,55],[1,-5]],'Automatic slice centers on logged Z, independently of snapped marker ground');
     assert.deepEqual([Number(f.clip.min),Number(f.clip.max)],[-500,500],'Automatic slicing never narrows full-zone manual floor bounds');

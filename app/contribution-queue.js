@@ -9,9 +9,10 @@ import { automaticSourceReceiptKey } from './automatic-source-results.js';
 const KEY=CONTRIBUTION_QUEUE_KEY;
 const clean=(value,max=240)=>String(value??'').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim().slice(0,max);
 const candidateKey=(kind,name,zone='')=>`${kind}|${contributionNameKey(kind==='item'?itemIdentity(name).name:name)}|${kind==='item'?'':contributionNameKey(zone)}`;
-export function createContributionQueue({storage=globalThis.localStorage,getPack=()=>({}),onWarning=()=>{},now=Date.now,autoReconcile=true}={}){
+export function createContributionQueue({storage=globalThis.localStorage,getPack=()=>({}),isIgnored=()=>false,onWarning=()=>{},now=Date.now,autoReconcile=true}={}){
     let candidates=[],archive=[],automaticSourceReceipts=[],automaticSourceDecisions=[],sequence=0,cursor=0,catalogCache=null,lastReconciled=null,lastLog=null,armed=null,readBlocked=false,migrated=false;const ignored=new Set(),seenLogIds=new Set(),registry=new Map();
     const pack=()=>{try{return getPack()||{};}catch{return {};}};
+    const entityIgnored=(kind,name)=>['npc','item'].includes(wikiEntityKind(kind))&&isIgnored({kind:wikiEntityKind(kind),name})===true;
     function resolver(){const current=pack(),version=current.meta?.manifestVersion||current.meta?.version||'',entities=current.wikiEntities,complete=`${current.meta?.wikiEntitiesComplete===true}:${current.meta?.sample===true}`;if(catalogCache?.pack!==current||catalogCache.entities!==entities||catalogCache.version!==version||catalogCache.complete!==complete||catalogCache.items!==current.items||catalogCache.npcs!==current.npcs||catalogCache.zones!==current.zones)catalogCache={pack:current,entities,version,complete,items:current.items,npcs:current.npcs,zones:current.zones,resolver:createWikiResolver(current)};return catalogCache.resolver;}
     const canonicalKey=(kind,name,zone='')=>{const resolved=resolver().resolve(kind,name);return candidateKey(kind,resolved.canonicalTitle||name,zone);};
     const spawnEligible=candidate=>candidate?.kind==='npc'&&[candidate.name,candidate.title||candidate.name].every(name=>classifyNpcEvidence(name,resolver().resolve('npc',name)).eligible);
@@ -66,6 +67,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
     function save(){if(readBlocked)return false;try{const value=JSON.stringify({schemaVersion:1,sequence,cursor,candidates,archive,automaticSourceReceipts,automaticSourceDecisions,registry:[...registry.values()].slice(-2000),ignored:[...ignored].slice(-2000),seenLogIds:[...seenLogIds].slice(-2000)});if(new TextEncoder().encode(value).length>CONTRIBUTION_QUEUE_BYTES)throw Error('Queue too large');storage?.setItem(KEY,value);return true;}catch{onWarning('Contributions remain in memory because their saved queue is full or unavailable. Review or remove drafts before closing Eye of Zomm.');return false;}}
     function rememberState(kind,name,state,purpose='missing-page',zone=''){const resolved=resolver().resolve(kind,name),key=`${wikiIdentityKey(kind,resolved.canonicalTitle||name)}|${purpose}|${purpose==='spawn-location'?contributionNameKey(zone):''}`,prior=registry.get(key);if(prior?.state==='submitted'&&['queued','partial'].includes(state))return;registry.delete(key);registry.set(key,{key,state,at:new Date(now()).toISOString()});while(registry.size>2000)registry.delete(registry.keys().next().value);}
     function suppression(rawKind,name,{zone='',purpose='missing-page'}={}){const kind=wikiEntityKind(rawKind),key=canonicalKey(kind,name,zone),resolved=resolver().resolve(kind,name),entityKey=wikiIdentityKey(kind,resolved.canonicalTitle||name),entry=registry.get(`${entityKey}|${purpose}|${purpose==='spawn-location'?contributionNameKey(zone):''}`),candidate=candidates.find(value=>value.kind===kind&&(value.key===key||value.aliasKeys?.includes(key)||wikiIdentityKey(kind,resolver().resolve(kind,value.name).canonicalTitle||value.name)===entityKey&&(kind==='item'||!zone||contributionNameKey(value.zone)===contributionNameKey(zone))));
+        if(entityIgnored(kind,name))return {suppressed:true,reason:'ignored',permanent:true,candidateId:candidate?.id||null};
         const ignoredMatch=[...ignored].some(value=>value===key||value.startsWith(`${kind}|`)&&canonicalKey(kind,value.split('|')[1],kind==='item'?'':value.split('|')[2])===key);
         const sameEntity=value=>value.kind===kind&&wikiIdentityKey(kind,resolver().resolve(kind,value.name).canonicalTitle||value.name)===entityKey;
         const general=registry.get(`${entityKey}|missing-page|`),submitted=candidate?.status==='submitted'||general?.state==='submitted'||entry?.state==='submitted'||candidates.some(value=>value.status==='submitted'&&sameEntity(value)),ignoredState=general?.state==='ignored'||entry?.state==='ignored',queued=purpose==='spawn-location'?Boolean(candidate?.spawnRequest)||candidates.some(value=>value.spawnRequest&&sameEntity(value)):Boolean(candidate)||general?.state==='queued'||general?.state==='partial';
@@ -90,6 +92,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
     function add({kind,name,zone='',instance='unknown',fields={},evidence=null,relations=[]},force=false){
         name=clean(name);if(!['item','npc','zone'].includes(kind)||!name)return null;
         const observedName=name,identity=kind==='item'?itemIdentity(name):{name,tier:null};name=identity.name;
+        if(entityIgnored(kind,name))return null;
         if(identity.tier!==null){fields={...fields,...(!Object.hasOwn(fields,'tier')?{tier:identity.tier}:{})};if(!evidence)evidence={id:`item-name-${contributionSourceToken(observedName)}`,kind:'observed-name',capturedAt:new Date(now()).toISOString(),evidence:{text:`Observed item name: ${observedName}\nExact base identity: ${name}\nObserved tier decoration: +${identity.tier}`}};}
         const resolved=resolver().resolve(kind,name),key=canonicalKey(kind,name,zone),legacyKey=`${kind}|${contributionNameKey(observedName)}|${contributionNameKey(zone)}`;
         const present=resolved.membership;
@@ -107,7 +110,8 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         for(const [key,raw] of Object.entries(fields||{}).slice(0,80)){if(!validField(key))continue;let value=fieldValue(raw);
             if(candidate.fields[key]?.edited===true)continue;
             if(['knownLoot','knownNPCs'].includes(key)&&Array.isArray(value)){const previous=Array.isArray(candidate.fields[key]?.value)?candidate.fields[key].value:[],combined=[...new Map([...previous,...value].map(item=>[contributionNameKey(item),item])).values()].slice(0,100);if(JSON.stringify(combined)!==JSON.stringify(previous))candidate.fields[key]={...candidate.fields[key],value:combined,confirmed:false};}
-            else if(!candidate.fields[key]?.confirmed)candidate.fields[key]={...candidate.fields[key],value,confirmed:false};}
+            else if(!candidate.fields[key]?.confirmed&&!(key==='level'&&candidate.fields[key]?.edited===true))candidate.fields[key]={...candidate.fields[key],value,confirmed:false};}
+        if(evidence?.levelEvidence&&Object.hasOwn(fields,'level')&&candidate.fields.level?.confirmed!==true&&candidate.fields.level?.edited!==true)candidate.fields.level={...candidate.fields.level,source:'same-zone-consider',provenance:structuredClone(evidence.levelEvidence)};
         if(evidence&&!candidate.evidence.some(e=>e.id===evidence.id)){const text=evidence.evidence?.text||(evidence.kind==='game-log'?`Observed ${clean(evidence.subject?.kind)}: ${clean(evidence.subject?.name)}${(Array.isArray(evidence.relations)?evidence.relations:[]).filter(relation=>relation.type==='drop-source').map(relation=>`\nReported source: ${clean(relation.name)} in ${clean(relation.zone)} (${clean(relation.evidence)})`).join('')}`:'');candidate.evidence.push({id:clean(evidence.id),at:clean(evidence.capturedAt),kind:clean(evidence.kind),text:clean(text,6000),...(evidence.kind==='game-log'?{event:clean(evidence.input?.event,40),logLine:contributionLogLine(evidence.evidence?.logLine)}:{}),confidence:Math.min(100,Number(evidence.confidence??evidence.fields?.[0]?.confidence)||0)});candidate.evidence=candidate.evidence.slice(-6);}
         for(const relation of (Array.isArray(relations)?relations:[]).filter(r=>r?.type==='drop-source'))if(!candidate.sources.some(s=>contributionNameKey(s.npc)===contributionNameKey(relation.name)&&contributionNameKey(s.zone)===contributionNameKey(relation.zone)&&s.sourceEvidence===relation.evidence&&(s.instance||'unknown')===(relation.instance||'unknown')))candidate.sources.push({npc:clean(relation.name),zone:clean(relation.zone),instance:relation.instance||'unknown',confirmed:false,sourceEvidence:clean(relation.evidence)});
         for(const relation of (Array.isArray(relations)?relations:[]).slice(0,100))rememberRelation(candidate,relation,evidence);
@@ -120,14 +124,16 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         cursor=Math.max(cursor,Number(observation?.sequence)||0);
         const kind=observation?.subject?.kind==='monster'?'npc':observation?.subject?.kind;
         if(observation?.owner==='character'||!['item','npc','zone'].includes(kind)){save();return null;}
+        if(entityIgnored(kind,observation.subject.name)){save();return null;}
         // Persisted journal replay follows the same rule as fresh parsing.
         // Considers still drive Intel, but never create verification work.
         if(observation.kind==='game-log'&&(observation.input?.event==='consider'||kind==='npc'&&observation.input?.event!=='kill')){save();return null;}
         if(kind==='npc'&&!classifyNpcEvidence(observation.subject.name,resolver().resolve(kind,observation.subject.name)).eligible){save();return null;}
         const fields=Object.fromEntries((observation.fields||[]).filter(f=>f.key!=='name').map(f=>[f.key,f.value]));
-        if(Array.isArray(fields.knownNPCs))fields.knownNPCs=fields.knownNPCs.filter(name=>classifyNpcEvidence(name,resolver().resolve('npc',name)).eligible);
+        if(Array.isArray(fields.knownNPCs))fields.knownNPCs=fields.knownNPCs.filter(name=>!entityIgnored('npc',name)&&classifyNpcEvidence(name,resolver().resolve('npc',name)).eligible);
+        if(Array.isArray(fields.knownLoot))fields.knownLoot=fields.knownLoot.filter(name=>!entityIgnored('item',name));
         const itemName=kind==='item'?itemIdentity(observation.subject.name).name:null;
-        const zone=observation.input?.zone||'',instance=observation.input?.instance||'unknown',relations=[...(observation.relations||[])].filter(relation=>!['drop-source','mob-zone','zone-population'].includes(relation.type)||classifyNpcEvidence(relation.name,resolver().resolve('npc',relation.name)).eligible).map(relation=>relation.type==='zone-loot'?{...relation,name:itemIdentity(relation.name).name}:relation);
+        const zone=observation.input?.zone||'',instance=observation.input?.instance||'unknown',relations=[...(observation.relations||[])].filter(relation=>relation.type==='zone-loot'?!entityIgnored('item',relation.name):!['drop-source','mob-zone','zone-population'].includes(relation.type)||!entityIgnored('npc',relation.name)&&classifyNpcEvidence(relation.name,resolver().resolve('npc',relation.name)).eligible).map(relation=>relation.type==='zone-loot'?{...relation,name:itemIdentity(relation.name).name}:relation);
         // Older game-log journal records predate explicit relationship entries.
         // Replay the same observed associations, without promoting them to facts.
         if(observation.kind==='game-log'&&zone){
@@ -149,6 +155,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         save();return result||relatedCandidate;
     }
     function consumeLog(event,context={}){
+        if(event?.type==='kill'&&entityIgnored('npc',event.victim)||['loot','item-link'].includes(event?.type)&&entityIgnored('item',itemExaltationBaseIdentity(event.item)))return {candidate:null,prompt:null,locationCaptured:null};
         if(event?.type==='item-links'){
             const linked=[];
             for(const item of (Array.isArray(event.items)?event.items:[]).slice(0,8))if(typeof item==='string'&&item.length<=230){

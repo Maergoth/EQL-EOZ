@@ -1,5 +1,5 @@
-// Local catalog/suppression first. Item cache misses require a native exact-page
-// existence result before admission; incomplete local data never proves absence.
+// Local catalog/suppression first. Cache misses require a native live-page
+// result before admission; incomplete local data never proves absence.
 import { createWikiResolver, normalizeWikiIdentity, wikiIdentityKey, itemBaseIdentity, itemExaltationBaseIdentity } from './wiki-identity.js';
 import { classifyNpcEvidence } from './generated-pets.js';
 const IGNORE_KEY = 'eql-eye-of-zomm-wiki-discovery-ignored-v1';
@@ -32,7 +32,7 @@ export function buildWikiEntityCatalog(pack = {}) {
 }
 
 export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis.localStorage, now = Date.now,
-    onMissing = () => {}, onWarning = () => {}, getSuppression = () => null, onIgnore = () => {}, verifyItem = null, freshnessMs = 10000, cooldownMs = 300000 } = {}) {
+    onMissing = () => {}, onWarning = () => {}, getSuppression = () => null, onIgnore = () => {}, verifyItem = null, verifyDiscovery = null, freshnessMs = 10000, cooldownMs = 300000 } = {}) {
     const ignored = new Set(), legacyIgnored = new Set(), seen = new Set(), pending = new Map(), cooldowns = new Map(), watermarks = new Map();
     const checking = new Map();
     let cachedPack, cachedEntities, cachedVersion, cachedComplete, catalog = buildWikiEntityCatalog(), sequence = 0, warned = false, generation = 0, disposed = false;
@@ -90,7 +90,7 @@ export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis
         if (!(resolved.membership==='missing'||kind==='item'&&resolved.membership==='unknown') || suppressed || kind==='monster'&&!classifyNpcEvidence(name,resolved).eligible || ignored.has(key) || legacyIgnored.has(`${kind}|${legacyName}`) || seen.has(key)) return null;
         if (current - (cooldowns.get(key) ?? -Infinity) < cooldownMs || pending.size >= MAX_PENDING || checking.has(key)) return null;
         const id = `wiki-${kind}-${hash(key)}-${++sequence}`;
-        const prompt = { id, kind, name, zone:event.type==='item-link'?'':clean(context.zone || event.zone).slice(0, 160),...(kind==='item'?{createdAt:current,expiresAt:Math.min(current+freshnessMs,at+freshnessMs)}:{}),...(event.type==='item-link'?{purpose:'item-link',hint:event.itemLinkFormat==='plain-tiered-chat'?'Possible item mentioned in chat. Open its examine window to capture it for Contribute.':'Item linked in chat. Open its examine window to capture it for Contribute.'}:{}),...(event.type==='kill'?{hint:'Saved in Contribute. Record the monster’s spawn /loc there, then review its loot and zone.'}:{}) };
+        const prompt = { id, kind, name, zone:event.type==='item-link'?'':clean(context.zone || event.zone).slice(0, 160),createdAt:current,expiresAt:Math.min(current+freshnessMs,at+freshnessMs),...(event.type==='item-link'?{purpose:'item-link',hint:event.itemLinkFormat==='plain-tiered-chat'?'Possible item mentioned in chat. Open its examine window to capture it for Contribute.':'Item linked in chat. Open its examine window to capture it for Contribute.'}:{}),...(event.type==='kill'?{hint:'Saved in Contribute. Record the monster’s spawn /loc there, then review its loot and zone.'}:{}) };
         const lifetime=generation;
         const rollback = () => {pending.delete(id);seen.delete(key);cooldowns.delete(key);};
         const failed = () => {
@@ -98,7 +98,7 @@ export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis
             try { onWarning('The wiki discovery prompt could not open. It can be suggested again when encountered.'); } catch { /* A warning must not stop log parsing. */ }
         };
         const deliver = () => {
-            if(disposed||lifetime!==generation||kind==='item'&&now()>prompt.expiresAt)return null;
+            if(disposed||lifetime!==generation||now()>prompt.expiresAt)return null;
             const latest=currentCatalog().resolve(kind,observedName);
             if(['present','ambiguous'].includes(latest.membership)||ignored.has(key)||seen.has(key)||pending.size>=MAX_PENDING)return null;
             try{if(getSuppression(kind,name,{zone:context.zone||event.zone||'',purpose:'missing-page'})?.suppressed===true)return null;}catch{return null;}
@@ -113,12 +113,12 @@ export function createWikiDiscovery({ getPack = () => ({}), storage = globalThis
             }catch{failed();return null;}
             return {...prompt};
         };
-        if(kind!=='item')return deliver();
-        if(typeof verifyItem!=='function'||checking.size>=MAX_PENDING)return null;
+        const verify=kind==='item'?verifyItem:verifyDiscovery;
+        if(typeof verify!=='function'||checking.size>=MAX_PENDING)return null;
         const token={generation:lifetime};checking.set(key,token);
-        const accept=result=>{if(checking.get(key)!==token)return null;checking.delete(key);return result?.status==='missing'?deliver():null;};
+        const accept=result=>{if(checking.get(key)!==token)return null;checking.delete(key);const checkedAt=typeof result?.checkedAt==='number'?result.checkedAt:Date.parse(result?.checkedAt||'');return (kind==='item'?result?.status==='missing':result?.state==='missing'&&Array.isArray(result.reasons)&&result.reasons.includes('missing-page')&&Number.isFinite(checkedAt)&&checkedAt<=now()+2000&&now()-checkedAt<60000)?deliver():null;};
         try{
-            const result=verifyItem({name});
+            const result=verify(kind==='item'?{name}:{kind:'npc',name,zone:prompt.zone,instance:['normal','raid'].includes(context.instance)?context.instance:'unknown',reasons:['missing-page'],relations:[]});
             if(result&&typeof result.then==='function'){Promise.resolve(result).then(accept,()=>{if(checking.get(key)===token)checking.delete(key);});return null;}
             return accept(result);
         }catch{checking.delete(key);return null;}
