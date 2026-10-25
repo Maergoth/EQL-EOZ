@@ -10,6 +10,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'desktop/appearance.cjs',
     'desktop/linux-runtime.cjs',
     'desktop/log-selection.cjs',
+    'desktop/atomic-write-json.cjs',
     'app/data/eye-of-zomm-pack.bootstrap.json',
     'app/index.html',
     'app/assets/eye-of-zomm.svg',

@@ -7,6 +7,7 @@ configureLinuxRuntime(app, { platform:process.platform, env:process.env });
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
+const { atomicWriteJson:writeJsonAtomically } = require('./atomic-write-json.cjs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
@@ -185,10 +186,7 @@ async function readJson(filePath, fallback) {
 }
 
 async function atomicWriteJson(filePath, value) {
-    const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-    await fsp.mkdir(path.dirname(filePath), { recursive: true });
-    await fsp.writeFile(tmp, JSON.stringify(value, null, 2), 'utf8');
-    await fsp.rename(tmp, filePath);
+    await writeJsonAtomically(filePath, value);
 }
 
 async function readConfig() {
