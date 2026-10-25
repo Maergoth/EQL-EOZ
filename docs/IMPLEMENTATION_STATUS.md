@@ -1,5 +1,12 @@
 # Eye of Zomm implementation status
 
+0.9.10 integrates reliable drag detachment, shared wiki Itembox cards, map
+trajectory/opacity, screenshot-first tiered item review and persistent
+chat-item/monster contribution completion. The related sharing, kill-evidence
+and simplified-form changes are tracked as explicit integration gates in
+[RELEASE_0910_PLAN.md](RELEASE_0910_PLAN.md). Exact-head CI, public packages and
+physical acceptance remain separate receipts; earlier sections are historical.
+
 0.9.9 candidate implements deduplicated canonical match cards, decorated-item presence, filtered/ranked gap browsing, compact existing-page update reviews and reciprocal source/zone patches. Character uses numeric tiers, in-place badges and cancellable 350ms hover. See [the release plan](RELEASE_099_PLAN.md) for actual acceptance and publication status; earlier sections are historical.
 
 ## 0.9.8 candidate implementation
@@ -60,7 +67,7 @@ estimate. See [frontend cache](design/FRONTEND_CACHE.md),
 
 Last updated: 2026-10-24
 
-Code baseline: 0.9.8 candidate, extending published 0.9.7; active work tracked in [RELEASE_098_PLAN.md](RELEASE_098_PLAN.md)
+Code baseline: 0.9.10 candidate, extending published 0.9.9; active work tracked in [RELEASE_0910_PLAN.md](RELEASE_0910_PLAN.md)
 
 This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to-v1). For setup and architecture, use the [contributor handoff](HANDOFF.md). “Implemented” means the code and automated contract exist; proprietary map behavior still requires the linked Windows/game-client test.
 
@@ -89,13 +96,13 @@ This is the compact execution index for the [road to v1](UX_VISION.md#16-road-to
 
 ## Current highest-priority task
 
-Complete the authorized 0.9.8 follow-up using
-[RELEASE_098_PLAN.md](RELEASE_098_PLAN.md). Revalidate the final changed head,
-activate the reviewed wiki schema/templates/API documentation, verify backed-up
-local queue cleanup, then verify the unified Windows/Linux publication.
-Screen reading defaults off; existing
-combat/map/trigger functionality continues to use logs. Preserve all existing
-map acceptance requirements and explicit wiki review boundaries.
+Complete the authorized 0.9.10 integration/release checklist in
+[RELEASE_0910_PLAN.md](RELEASE_0910_PLAN.md), then verify the unified Windows/Linux
+publication against the final reviewed head. Keep separate wiki deployments and
+private-profile cleanup separately attributed and recorded. Screen reading is
+opt-in; choosing Contribute authorizes the request's inline capture flow while
+Character ownership remains protected. Existing combat/map/trigger functionality
+uses logs. Preserve map acceptance and explicit wiki review boundaries.
 
 Review the [0.8.1 integration audit](INTEGRATION_AUDIT.md) and
 [rendered map validation](MAP_VALIDATION.md). The local-archive pass now covers

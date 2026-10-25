@@ -2,6 +2,61 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "0.9.10",
+  "title": "Reliable overlays and streamlined wiki contributions",
+  "changes": [
+    "Gently drag snapped overlays to detach without resizing or moving neighbors. Dock only on release near a new edge; the old group cannot pull the panel back during that drag.",
+    "Reuse the wiki item frame, inline stats and linked effects throughout the app and native Intel. Preserve green changed values, Character tier controls, compact Exaltation name/effect and recorded-only totals.",
+    "Show logged movement direction on the minimap and retain it while stationary. Map opacity applies to the 2D canvas and the complete 3D surface.",
+    "Use class/slot multiselects, one Zone, screenshot and inline icon paste, fewer approval steps, explicit destinations and saved-page links. Share a reviewed Character sheet with one final Share action.",
+    "Automatically prefill editable compatible base proposals from tiered item evidence, preserve original readings/manual edits and retain the tier-zero verification note. Reject ambiguous weight decimals.",
+    "Require kill/death or named-corpse evidence for automatic monster discoveries, preserve the triggering line locally and exclude nearby casts, considers, players and recognized pets.",
+    "Offer Contribute for missing wiki items linked in live chat. Accepted notices stay pinned until fresh matching examine OCR or the newly armed next /loc is captured, show green completion, then close. Keep capture ownership and cancellation safe."
+  ],
+  "steps": [
+    {
+      "title": "Inspect items with the familiar wiki card",
+      "image": "0.9.10/shared-wiki-itembox-main",
+      "view": "items",
+      "action": "Open Items",
+      "copy": "Hover or focus an item in Items, NPCs, loot or Live Map for the same silver wiki frame and compact inline stats. Changed tier values stay green and effects link to their wiki pages. Character uses this frame with its editable tier and Exaltation controls while recorded totals stay unchanged.",
+      "alt": "Eye of Zomm 0.9.10 Items page with a synthetic tier-two item in the shared silver wiki-style card and green adjusted values.",
+      "caption": "Actual Electron main window with synthetic catalog/log data, an isolated profile and explicit Calibri 17px preference. Visually reviewed; no game/player pixels or production wiki requests.",
+      "imageSha256": "3652b5ba013cfe1312e7c2009bb87bc609363935d46c9fde90262c1598164a22"
+    },
+    {
+      "title": "Start with screenshot evidence and the item icon",
+      "image": "0.9.10/contribution-screenshot-and-icon",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Item review starts with the screenshot and a compact paste target inside Icon ID. Paste only the icon crop to find artwork locally, then check the destination and proposed additions. Raw evidence stays local until you explicitly include an article screenshot in the reviewed publication.",
+      "alt": "Synthetic item contribution with screenshot evidence, adjacent inline Icon ID paste target, destination review and explicit proposed page links.",
+      "caption": "Actual integrated Chromium contribution component with synthetic records, isolated APIs and a one-pixel screenshot placeholder. Visually reviewed; no game/player pixels or production uploads.",
+      "imageSha256": "324421569f9539e0d7c5281bc48354ef30d90115aeb1645e2783e57c0e3bea45"
+    },
+    {
+      "title": "Choose classes and equipment slots without typos",
+      "image": "0.9.10/contribution-multiselects",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Classes and Equipment slots use multiselect dropdowns. Drop sources reuse the Zone above. Tiered evidence prefills editable compatible base proposals. Preview all page changes, check I reviewed these page changes once above Publish, then publish; saved pages offer direct links.",
+      "alt": "Synthetic item form with open equipment multiselect, selected Primary and Secondary slots, class choices, linked proc field and a source form without a duplicate Zone input.",
+      "caption": "Actual integrated Chromium form at ordinary text size with synthetic evidence and isolated wiki/storage APIs. Keyboard choices, canonical persistence, layout and final review are fixture-tested; physical game and production writes remain separate acceptance.",
+      "imageSha256": "7a1bff9ae1d92e00920ad3f9a125f8402fd18afbeb1f5ba68b1f63b5d39f519e"
+    },
+    {
+      "title": "Keep the same item details beside the game",
+      "image": "0.9.10/shared-wiki-itembox-intel",
+      "view": "settings",
+      "action": "Open overlay settings",
+      "copy": "Native Zone & loot uses the same item frame and green adjusted values as the main app. Unlock panels to arrange them: a gentle drag detaches the selected window without resizing it or shifting its neighbors. Release close to a new panel edge to dock, or leave it freely positioned.",
+      "alt": "Native Zone and loot overlay showing the same synthetic tier-two item and shared wiki-style tooltip at an installed-font preference.",
+      "caption": "Actual Electron Intel overlay with synthetic records and an isolated profile at Calibri 17px. The font fixture also checks all four native panels, reload and process persistence; this is not live-game acceptance.",
+      "imageSha256": "b1fb1047ea6c83f3200274e051b05e8f5f3023397cf71547caa25edc6d5ee321"
+    }
+  ]
+},
+{
   "version": "0.9.9",
   "title": "Clearer wiki gap reviews and Character controls",
   "changes": [

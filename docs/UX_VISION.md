@@ -1,5 +1,13 @@
 # Eye of Zomm — Product and UX Vision
 
+0.9.10 makes gently dragged overlays detach immediately and dock only on
+release, uses shared wiki-style item cards throughout, and makes contributions
+Preview → Publish with clear destinations and saved-page links. Accepted chat
+item and monster prompts wait for fresh matching examine or next-/loc evidence,
+then show green completion. Character totals remain the reviewed recorded
+sheet; item-tier previews never change them. See
+[the integration/release plan](RELEASE_0910_PLAN.md).
+
 0.9.9 makes discovery review task-specific: Page Type > New Page/Update Page, plain gap tags and filters, matching before fields, focused additions for existing articles and preserved item/monster/zone formatting. Character hover waits350ms, tier badges agree immediately and Exaltations have compact names. Recorded character totals remain authoritative.
 
 ## 0.9.8 candidate

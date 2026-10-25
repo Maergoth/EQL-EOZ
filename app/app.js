@@ -633,7 +633,8 @@ function consumeText(text, allowTransientUi = true) {
         }
         if(allowTransientUi&&freshTimerEvent&&['zone','profile'].includes(event?.type))void discoveryContributionFlow?.cancelWhere(request=>request.purpose==='spawn-location',{close:true});
         const captureLogResult=captureWorkspace.consumeLog(event,{zone:parser.zone,live:allowTransientUi&&freshTimerEvent,
-            logId:bridgeInfo?.logPath||'current-log',at:parser.currentLineAt,cursor:observationCursor});
+            logId:bridgeInfo?.logPath||'current-log',at:parser.currentLineAt,cursor:observationCursor,
+            logLine:line.slice(0,2048),playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)});
         if(captureLogResult?.prompt)void discoveryContributionFlow?.cancelWhere(request=>request.purpose==='spawn-location'&&request.candidateId!==captureLogResult.prompt.candidateId,{close:true});
     }
     overlaySession.flush();

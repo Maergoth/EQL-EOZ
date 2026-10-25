@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {contributionEvidenceMarkup,contributionRelationsMarkup} from '../app/contribution-review-view.js';
+const line='[Sat Oct 24 10:00:00 2026] a synthetic keeper has been slain by Synthetic! <img src=x onerror=bad>';
+const markup=contributionEvidenceMarkup({evidence:[{kind:'game-log',event:'kill',at:'2026-10-24T14:00:00Z',text:'Log kill: a synthetic keeper',logLine:line}]});
+assert(markup.includes('Triggering log line'));assert(markup.includes('a synthetic keeper has been slain'));assert(markup.includes('&lt;img'));assert(!markup.includes('<img'));assert(markup.includes('Monster death'));
+const old=contributionEvidenceMarkup({evidence:[{kind:'game-log',text:'Observed monster: Old keeper'}]});assert(old.includes('Original log line unavailable'));assert(!old.includes('data-triggering-log-line'));
+const ocr=contributionEvidenceMarkup({evidence:[{kind:'ocr',text:'Item: Synthetic Relic'}]});assert(ocr.includes('Item: Synthetic Relic'));assert(!ocr.includes('Original log line unavailable'));
+assert(contributionEvidenceMarkup().includes('Manually entered.'));
+const context=contributionRelationsMarkup({name:'Synthetic Relic',relations:[{type:'mob-zone',name:'Synthetic Keeper',zone:'Fixture Vale',evidence:'kill'},{type:'mob-zone',name:'Old Keeper',evidence:'consider'},{type:'drop-source',name:'Other Keeper',item:'Synthetic Relic',evidence:'explicit-corpse'},{type:'zone-loot',name:'<script>bad</script>'}]});
+assert(context.includes('Monster killed: Synthetic Keeper'));assert(context.includes('Legacy consider: Old Keeper'));assert(context.includes('Not kill evidence'));assert(context.includes('Drop source: Other Keeper for Synthetic Relic'));assert(context.includes('Loot recorded: &lt;script&gt;'));assert(!context.includes('Monster observed'));assert(!context.includes('<script>'));
+console.log('Contribution review: actual escaped trigger lines, honest unavailable legacy evidence and kill/corpse context labels passed.');

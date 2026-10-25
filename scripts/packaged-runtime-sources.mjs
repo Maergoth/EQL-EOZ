@@ -16,9 +16,16 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/app.js',
     'app/capture-workspace.js',
     'app/contribution-editor.js',
+    'app/contribution-choice-picker.js',
+    'app/contribution-review-view.js',
     'app/contribution-presentation.js',
     'app/contribution-update.js',
     'app/character-item-card.js',
+    'app/character-itembox.js',
+    'app/catalog-itembox.js',
+    'app/wiki-itembox.css',
+    'app/overlay-drag.js',
+    'app/discovery-contribution-flow.js',
     'app/wiki-identity.js',
     'app/generated-pets.js',
     'app/contribution-reasons.js',
@@ -145,6 +152,7 @@ export function packagedArchivePaths(platform = process.platform) {
 }
 
 export const PACKAGED_RUNTIME_IMAGES=Object.freeze([...new Set([
+    ...['Itemtop','Itembot','Itemshot'].map(name=>`app/assets/wiki-item-card/${name}.gif`),
     ...['workspace','map','intel','timers'].map(name=>`app/assets/whats-new/${name}.png`),
     ...RELEASE_HISTORY.flatMap(release=>release.steps.map(step=>`app/assets/whats-new/${step.image}.png`))
 ])]);

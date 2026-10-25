@@ -20,3 +20,18 @@ const manual=q.add({kind:'npc',name:'a manual guardian'},true);q.update(manual.i
 pack={meta:{wikiEntitiesComplete:false},items:[],npcs:[],zones:[]};assert.equal(q.add({kind:'item',name:'Unknown Catalog Gem'}).membership,'unknown');
 const restored=queue().snapshot();assert.ok(restored.some(c=>c.name==='New Gem'));assert.equal(restored.some(c=>c.name==='Character-only Gem'),false);
 console.log('Contribution queue: exact prefix identity, upgraded-item presence, durable Ignore/replay, explicit missing-NPC source proposals, unconfirmed relationships and saved reviewed fields passed.');
+
+const hintValues=new Map(),hintStorage={getItem:key=>hintValues.get(key),setItem:(key,value)=>hintValues.set(key,value)},hintPack={meta:{wikiEntitiesComplete:true},items:[],npcs:[],zones:[]};
+let hints=createContributionQueue({storage:hintStorage,getPack:()=>hintPack});
+const hinted=hints.add({kind:'item',name:'Deferred Synthetic Gem'},true);
+const sources=[{npc:'A Later Guardian',zone:'Synthetic Vale',instance:'normal',confirmed:true}];
+hints.update(hinted.id,{title:'Canonical Synthetic Gem',sources,status:'submitted'});
+const mobHint={kind:'npc',name:'a later guardian',title:'A_later_guardian',zone:'Synthetic Vale',instance:'normal'};
+assert.deepEqual(hints.sourceItemHints(mobHint),['Canonical Synthetic Gem']);
+hints=createContributionQueue({storage:hintStorage,getPack:()=>hintPack});assert.deepEqual(hints.sourceItemHints(mobHint),['Canonical Synthetic Gem'],'Published item lookup hints survive restart without confirming mob loot');
+for(const patch of [{zone:'Other Vale'},{instance:'raid'},{instance:'unknown'},{name:'Other Guardian',title:'Other Guardian'},{kind:'item'}])assert.deepEqual(hints.sourceItemHints({...mobHint,...patch}),[]);
+hints.update(hinted.id,{sources:[{...sources[0],confirmed:false,edited:true,sourceEvidence:'explicit-corpse'}]});assert.deepEqual(hints.sourceItemHints(mobHint),[],'An excluded source is not offered as a lookup hint');
+hints.update(hinted.id,{sources:[{...sources[0],confirmed:false,sourceEvidence:'recent-kill'}]});assert.deepEqual(hints.sourceItemHints(mobHint),[],'Inferred recent kills are not source hints');
+hints.update(hinted.id,{sources:[{...sources[0],confirmed:false,sourceEvidence:'explicit-corpse'}]});assert.deepEqual(hints.sourceItemHints(mobHint),['Canonical Synthetic Gem']);
+const rawHints=JSON.parse([...hintValues.values()][0]);rawHints.archive=[rawHints.candidates[0]];rawHints.candidates=[];hintStorage.setItem('eql-eye-of-zomm-contributions-v1',JSON.stringify(rawHints));
+hints=createContributionQueue({storage:hintStorage,getPack:()=>hintPack});assert.deepEqual(hints.sourceItemHints(mobHint),['Canonical Synthetic Gem'],'Archived evidence can supply a lookup hint without re-creating a draft');

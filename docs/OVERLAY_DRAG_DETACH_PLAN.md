@@ -80,7 +80,7 @@ cleanup. A late Stop cannot end a replacement reader or clear another reader
 queued behind Character capture. Trusted running-status updates refresh evidence
 proof after resize/calibration/resume; stopped/error/takeover states offer retry.
 
-Pending next-release related changes (do not silently drop or claim deployed):
+Related changes integrated into the 0.9.10 source candidate:
 
 - #24 `codex/wiki-item-hovers`: wiki-style cards and single-button sharing.
 - #25 `codex/discovery-kill-evidence`: kill-only queue/journal acceptance, raw
@@ -88,9 +88,10 @@ Pending next-release related changes (do not silently drop or claim deployed):
 - #26 `codex/item-form-class-icons`: compact inline icon finder, multiselects,
   simpler reviews, saved-page links, effect preservation and later source links.
 
-This branch reuses the compact icon/saved-link and shared Itembox pieces needed
-by the newest requests. Integrate the related change branches explicitly before a release and
-resolve any shared form hunks in favor of the final requested behavior.
+The final source combines all three related changes with this branch. Contribute
+keeps one overall preview checkbox directly above Publish; Character sharing
+uses its single Share button. The source integration and publication receipts
+are tracked separately in [the 0.9.10 release plan](RELEASE_0910_PLAN.md).
 
 ## Verification ledger
 
@@ -151,3 +152,12 @@ map-loot fixture expecting a removed "Tier 7" label. It now checks the wiki-card
 title's +7 badge and the exact scaled HP170 field; the actual native fixture
 passes locally. The new discovery flow adds its own workspace fixture to both
 platform jobs and the Windows installer workflow. Exact-head CI remains a gate.
+
+The combined 0.9.10 source suite passes. The native main/preload workflow passes
+ten synthetic loopback writes, single-final-review publication/retry, User-page
+sharing, item-first/monster-later recovery and stale-source revision guards.
+The full Windows native overlay smoke also passes after its fixture deliberately
+detaches the former group before testing reattachment and isolates its independent
+resize from earlier docked groups. App docking behavior is unchanged by those
+fixture corrections. Package byte verification now includes the new helpers and
+original wiki frame images.

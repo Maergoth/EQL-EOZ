@@ -1,5 +1,28 @@
 # Shared wiki item mouseovers
 
+## Current 0.9.10 integration
+
+The release combines the shared Itembox presentation with PR24's single-action
+Character sharing and PR25–26 contribution changes. See
+[the release checklist](RELEASE_0910_PLAN.md) for integration and final platform/
+publication receipts. The component record below originally covered presentation
+alone; its sharing-unchanged statement is historical to that narrower change.
+
+Character inventory/equipment/editor/share review, main item/NPC/loot/Live Map
+and native Intel use the same escaped local wiki card. The original frame
+artwork, inline stat groups, linked effects and green adjusted values are shared.
+The tier slider/socket controls and 350ms pointer delay remain interactive;
+Exaltations show name/effect only. Recorded Character totals are independent of
+item values. One final Share action publishes the reviewed own-User-page sheet;
+preview/copy/save remain local and native account/revision/destination guards
+still apply. Explicit installed-font choices override the normal card font.
+
+Fresh 0.9.10 actual main/Intel captures and hashes are in the illustrated release
+history. Synthetic Electron font selection/reload/process-restore checks pass;
+physical game/compositor and separate wiki-renderer deployment remain distinct.
+
+## Original shared-renderer component record
+
 The main NPC/item/loot/Live Map mouseovers, native Intel item mouseovers, and
 Character inventory/equipment/editor/share-preview cards use the same local
 wiki Itembox presentation. This extends the reviewed Character renderer from

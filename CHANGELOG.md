@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.10 - Reliable overlays and streamlined wiki contributions
+
+- Gently drag a snapped overlay to detach it without resizing it or moving its neighbors. Dock only when released within eight pixels of a new panel; the detached group cannot pull it back during that drag. Resize grips remain clear of drag surfaces.
+- Use the same wiki-style item frame, inline stats and linked effects throughout Character, item/NPC/loot/Live Map and native Intel hovers. Keep the equipped tier slider, green changed values, compact Exaltation name/effect and recorded-only Character totals. Share the reviewed Character sheet with one Share action.
+- Give the minimap a movement-direction arrow based on successive logged locations, retain it while stationary and reset it on zone/source changes or large jumps. Native map opacity now applies to its two-dimensional canvas and complete three-dimensional surface.
+- Open item contributions with screenshot and inline icon paste together. Use Classes and Equipment slots multiselects, one Zone field, fewer approval steps, explicit destinations and saved-page links. Empty item fields stay blank; selected effects survive old unknown text. Later monster creation can recover published item-source relationships into its reviewed loot list.
+- Prefill editable compatible base-stat proposals from a tiered examine reading and include them in the preview without another Apply step. Preserve the observed evidence and valid manual edits, retain the tier-zero verification note and reject ambiguous missing weight decimals. Missing base SV Void starts at editable zero.
+- Restrict automatic monster discoveries to kill/death evidence and named-corpse loot sources; nearby casts, considers, players and recognized pets do not become new-monster submissions. Show the triggering log line locally, distinguish exact page matches and explain each proposed addition's destination. Preserve edited or partly published drafts during cleanup.
+- Detect encoded item links in live chat and offer Contribute for missing wiki items without inventing a loot source. After Contribute, keep the notice pinned until a fresh matching live examine reading is saved; show green completion before closing. Inline source choice preserves Character capture and existing readers.
+- Keep an accepted monster contribution waiting for the newly armed next `/loc` until capture or dismissal. Match only fresh evidence from the active request, handle resize/calibration/resume generations and offer retry after capture errors. Stop only the reader started for the completed or dismissed requests.
+
+See [the execution and release record](docs/RELEASE_0910_PLAN.md). App publication
+does not install separate wiki code, database templates or schema changes.
+
 ## 0.9.9 - Clearer wiki gap reviews and Character controls
 
 - Browse discovery gaps with New Page / Update Page tags and independent category filters. New monsters and items appear before smaller updates.

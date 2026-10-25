@@ -217,7 +217,11 @@ try {
             // Run visible trusted-pointer input after hidden capturePage checks:
             // Windows Viz can stall a hidden capture immediately after this
             // native show/resize/hide lifecycle, despite correct DOM/bounds.
-            const verifyPointerResize=async()=>{await control('show','parse');await control('lock','parse',false);await control('pass-through','parse',false);const pointerWindow=panels().parse,pointerBefore=pointerWindow.getBounds();
+            const verifyPointerResize=async()=>{const previousPanels=(await state()).panels;for(const id of ['map','intel','timers'])await control('hide',id);await control('show','parse');await control('lock','parse',false);await control('pass-through','parse',false);
+            // Other sections deliberately dock panels together. This case
+            // checks one independent southeast resize; shared dimensions have
+            // their own trusted-edge fixture and must not constrain its width.
+            await action('parse','move-start');await action('parse','move-end',{cancel:true});const pointerWindow=panels().parse,pointerBefore=pointerWindow.getBounds();
             await until(async()=>execute(pointerWindow,bounds=>Math.abs(document.documentElement.clientWidth-bounds.width)<=1&&Math.abs(document.documentElement.clientHeight-bounds.height)<=1,pointerBefore),'native resize viewport width and height are painted before pointer input');
             showNativeInactive.call(pointerWindow);await execute(pointerWindow,()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
             const resizePoint=await execute(pointerWindow,()=>{const rect=document.querySelector('#overlay-resize-handle').getBoundingClientRect();window.__resizePointer=[];for(const type of ['pointerdown','pointermove','pointerup'])document.querySelector('#overlay-resize-handle').addEventListener(type,event=>window.__resizePointer.push({type,trusted:event.isTrusted,x:event.screenX,y:event.screenY,clientX:event.clientX,clientY:event.clientY}));return{x:Math.round(rect.left+rect.width/2),y:Math.round(rect.top+rect.height/2)};});
@@ -229,6 +233,7 @@ try {
                 try{await until(()=>{const bounds=pointerWindow.getBounds();return Math.abs(bounds.width-(pointerBefore.width+24))<=1&&Math.abs(bounds.height-(pointerBefore.height+16))<=1;},'pointer handle changes real native bounds through bounded own-panel IPC');}catch(error){throw Error(`${error.message}; before=${JSON.stringify(pointerBefore)} actual=${JSON.stringify(pointerWindow.getBounds())} pointer=${JSON.stringify(await execute(pointerWindow,()=>({events:window.__resizePointer,status:document.querySelector('#overlay-status').textContent,active:document.body.classList.contains('is-resizing')})))}`);}
             }finally{pointerWindow.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,...pointerMoved});pointerWindow.hide();}
             await until(async()=>execute(pointerWindow,()=>!document.body.classList.contains('is-resizing')),'resize capture releases after pointer up');
+            for(const id of ['map','intel','timers'])if(previousPanels[id].visible)await control('show',id);
             };
             // This subsection verifies a Parse/Triggers pair. Other panels are
             // restored afterward; their collision guards remain production-real
@@ -236,8 +241,12 @@ try {
             await control('hide','map');await control('hide','intel');
             const resizeTarget={x:100,y:100,width:parseBeforeResize.width+86,height:parseBeforeResize.height+40};panels().parse.setBounds(resizeTarget);
             const actualTarget=panels().parse.getBounds(),timerWindow=panels().timers;
-            timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+7,width:actualTarget.width-8,height:84});
-            await action('timers','move-start');await action('timers','move-end');
+            // Release docking deliberately excludes the group just detached in
+            // that gesture. First detach the seeded/default pair, then perform
+            // a fresh move toward Parse to exercise intentional reattachment.
+            await action('timers','move-start');await action('timers','move-end',{cancel:true});
+            timerWindow.setBounds({x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+27,width:actualTarget.width-8,height:84});
+            await action('timers','move-start');await action('timers','move',{deltaX:-5,deltaY:-20});await action('timers','move-end');
             try{await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height&&bounds.width===actualTarget.width;},'Triggers touches current resized native Parse bounds and shares its width');}catch(error){throw Error(`${error.message}; target=${JSON.stringify(actualTarget)} timer=${JSON.stringify(timerWindow.getBounds())} workAreas=${JSON.stringify(fixtureScreen.getAllDisplays().map(display=>display.workArea))} preferences=${JSON.stringify((await state()).panels)}`);}
             // Native setBounds is fixture positioning, not user height intent.
             // Establish manual height through the real own-panel resize path.

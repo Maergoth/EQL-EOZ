@@ -1,8 +1,8 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.9-x64.exe`.
+Release acceptance target: `EQLWiki-Eye-of-Zomm-Setup-0.9.10-x64.exe`.
 
-Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.9` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
+Run this against a normal EverQuest Legends installation. Before testing, fully exit any running Eye of Zomm process. Confirm the header visibly says `v0.9.10` and the normal Windows title bar is present; stop if it does not. Record Windows scaling, zone category, and pass/fail; never share character identity, raw logs, coordinates tied to a character, filesystem paths, or game archives. Future releases must update both version strings in this introduction, while retaining every applicable earlier section. Release authorization does not mark this manual matrix complete; record observed results separately in [the live capture recovery plan](LIVE_CAPTURE_RECOVERY.md).
 
 ## Overlay drag and resize acceptance
 
@@ -35,7 +35,41 @@ Run this against a normal EverQuest Legends installation. Before testing, fully 
    with crisp map strokes. Top/First Person fade their entire native 3D surface.
    The main embedded map and its existing directional Local Map stay independent.
 
-## 0.9.8 targeted acceptance
+## 0.9.10 contribution and item acceptance
+
+1. Inspect the same item in Character, Items/NPCs/loot/Live Map and native Intel.
+   Confirm the shared silver wiki frame, inline stats, proc link, green changed
+   values and chosen font. Character tier/socket controls stay usable; only
+   Exaltation name/effect is shown, and recorded totals stay unchanged.
+2. Open an item form: screenshot and inline Icon ID paste appear together.
+   Classes/Equipment slots are fixed-choice multiselects; source entry reuses
+   Zone. Preview complete page changes, check **I reviewed these page changes**
+   once directly above Publish, then publish. Verify saved-page links, effects, empty item fields and partial
+   retry. Use only an authorized test account for coordinated actual edits.
+3. Review tiered evidence: automatic compatible base proposals appear in the
+   page preview, valid manual edits survive, unsupported numbers require
+   correction and the tier-zero verification note remains. Ambiguous missing
+   weight punctuation cannot silently publish a ten-times-larger weight.
+4. A nearby cast or consider must not create a new-monster contribution. Check
+   a genuine kill/death/named-corpse source, its private triggering line and
+   destination links. Known players/pets remain excluded. Do not share raw lines.
+5. Choose Contribute on a missing encoded chat-item link and keep the complete
+   examine visible. Verify inline source choice, pinned waiting, matching fresh
+   OCR green completion and dismissal. Unrelated, manual, replayed or stale
+   frames cannot complete it. Pause/resume/calibrate/resize, retry a failed
+   source and cancel while startup is pending. Preserve Character and existing
+   contribution readers; only the request-owned stream may stop at completion.
+6. Choose Contribute after an unknown monster kill, wait beyond five minutes,
+   then type a fresh `/loc` at its spawn. The accepted notice stays pinned until
+   capture/dismissal, flashes green and closes. Reject earlier locations and
+   mismatched zones/log sources. A newer monster prompt replaces the prior target.
+7. Share a reviewed Character sheet with one Share action; preview/copy/save
+   stay local. Account/revision/destination changes still invalidate the review.
+
+These checks require separately recorded observations on the new build. The
+synthetic fixture receipts and prior release passes do not complete them.
+
+## Historical 0.9.8 targeted acceptance
 
 - Adjust equipped-hover tiers with pointer and keyboard. Keep the hover, focus
   and scroll position stable, show real proc details and retain recorded totals.

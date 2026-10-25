@@ -1,6 +1,10 @@
 # Eye of Zomm contributor handoff
 
-0.9.9 follows the completed 0.9.8 baseline. Read [the active execution plan](RELEASE_099_PLAN.md) for contribution matching, targeted reciprocal updates, filtered gap browsing and Character hover/tier polish. Source/native checks and publication have distinct receipts. No new dataset or wiki schema change is required.
+0.9.10 extends published 0.9.9 with reliable overlay detachment, shared wiki item
+cards, simpler contribution forms/reviews and persistent fresh-evidence discovery
+flows. Read [the active release plan](RELEASE_0910_PLAN.md) for PR24–27 integration,
+component ownership and source/native/platform/publication receipts. No dataset
+producer run or wiki schema change is included in this app release.
 
 ## Completed 0.9.8 release plan
 
@@ -290,12 +294,15 @@ The app is read-only with respect to EverQuest. It may consume `/loc` lines prod
 
 ## Exact next work
 
-Complete the 0.9.7 inventory-export/current-stat flow in [INVENTORY_EXPORT_CHARACTER_PLAN.md](INVENTORY_EXPORT_CHARACTER_PLAN.md), including source, native walkthrough and profile-isolation checks. Then require the
-reviewed head's Windows/Linux native/package gates before merge. Verify the
-published installer, AppImage and deb against that source, archived images,
-offline OCR inventory and one fresh shared bootstrap. Record actual run IDs
-and public-download results in the release PR and private publication ledger;
-do not infer an installed upgrade from successful publication.
+Complete the 0.9.10 integration checklist in
+[RELEASE_0910_PLAN.md](RELEASE_0910_PLAN.md), retaining the current
+[inventory-export/recorded-stat contract](INVENTORY_EXPORT_CHARACTER_PLAN.md).
+Require the reviewed head's Windows/Linux native/package gates before merge.
+Verify the published installer, AppImage and deb against that source, archived
+images, offline OCR inventory and the shared verified public bootstrap. Record
+actual run IDs, packaged dataset generation/counts and public-download results
+in the release PR/private publication ledger. Do not infer an installed upgrade
+or separate wiki deployment from successful app publication.
 
 For native overlays, use the source map in [PNUT_UX_PLAN.md](PNUT_UX_PLAN.md) and
 repeat `npm run test:native-overlays` against the current runtime. Complete

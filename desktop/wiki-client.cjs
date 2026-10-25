@@ -7,6 +7,7 @@ const path = require('node:path');
 const {WikiAttachments}=require('./wiki-attachments.cjs');
 const PRODUCTION_ORIGIN = 'https://eqlwiki.com';
 const MAX_JSON = 2 * 1024 * 1024, MAX_PAGE = 512 * 1024, MAX_PNG = 12 * 1024 * 1024;
+const MAX_NPC_SOURCE_ITEMS=100,MAX_NPC_BACKLINK_PAGES=2,NPC_SOURCE_BATCH=10;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 function normalizeWikiSubmissionText(text) {
     // Match MediaWiki TextContent::normalizeLineEndings plus Parser's NUL
@@ -159,6 +160,48 @@ class WikiClient {
         if(kind==='item'&&/\s*\(Exaltation\)$/i.test(title))return this.contributionPage(title.replace(/\s*\(Exaltation\)$/i,''),'item');
         return state;
     }
+    async recoverNpcLoot({npcTitle,zoneTitle,instance,sourceItemHints=[]}){
+        const {contributionTitle,contributionNameKey,contributionItemSourceMatches}=await models(),warnings=[],blockers=[],items=[],targets=new Set([contributionTitle(npcTitle)]),sources=new Set(),aliasProofs=new Map();let checkedSources=0,complete=true;
+        if(!Array.isArray(sourceItemHints)||sourceItemHints.length>MAX_NPC_SOURCE_ITEMS)throw new WikiError('sources','Provide at most 100 item-title lookup hints.');
+        for(const title of sourceItemHints)sources.add(contributionTitle(title));
+        try{
+            let next=null;const seen=new Set();
+            for(let page=0;page<MAX_NPC_BACKLINK_PAGES;page++){
+                const response=await this.request({action:'query',list:'backlinks',bltitle:npcTitle,blnamespace:'0',blfilterredir:'nonredirects',blredirect:'1',bllimit:'50',...(next||{})}),records=response.query?.backlinks;
+                if(!Array.isArray(records)||records.length>50)throw new WikiError('loot-recovery','The wiki returned invalid item-source backlinks.');
+                const add=record=>{if(!record||record.ns!==0||!Number.isInteger(record.pageid)||record.pageid<1)throw new WikiError('loot-recovery','The wiki returned invalid item-source identities.');const title=contributionTitle(record.title);if(!record.redirect)sources.add(title);return title;};
+                for(const record of records){const title=add(record);if(record.redirlinks!==undefined){if(!record.redirect||!Array.isArray(record.redirlinks)||record.redirlinks.length>50)throw new WikiError('loot-recovery','The wiki returned invalid redirected item-source backlinks.');targets.add(title);for(const linked of record.redirlinks)add(linked);}}
+                if(sources.size>MAX_NPC_SOURCE_ITEMS)throw new WikiError('loot-recovery','More than 100 linked source pages need checking. Narrow the monster destination or review the remaining sources on the wiki.');
+                if(!response.continue){next=null;break;}
+                const token=response.continue.blcontinue,continuation=response.continue.continue;
+                if(typeof token!=='string'||token.length>512||typeof continuation!=='string'||continuation.length>512||seen.has(token))throw new WikiError('loot-recovery','The wiki returned invalid item-source continuation.');seen.add(token);next={blcontinue:token,continue:continuation};
+            }
+            if(next)throw new WikiError('loot-recovery','The item-source backlink check reached its two-page limit. More source pages remain; review them before publishing.');
+            const aliases=[...targets].filter(title=>title!==npcTitle);if(aliases.length>MAX_NPC_SOURCE_ITEMS)throw new WikiError('loot-recovery','Too many monster redirect aliases need checking.');
+            for(let offset=0;offset<aliases.length;offset+=NPC_SOURCE_BATCH){const batch=aliases.slice(offset,offset+NPC_SOURCE_BATCH),raw=await this.readRecoveryPages(batch,{redirects:false}),resolved=await this.readRecoveryPages(batch);
+                for(const title of batch){const page=raw.requested.get(title),target=resolved.requested.get(title);if(page.missing||!page.redirect||target.title!==npcTitle)throw new WikiError('loot-recovery','A monster redirect changed during item-source recovery. Retry Preview.');aliasProofs.set(title,{title,revision:page.revisions[0].revid,target:npcTitle});}
+            }
+            const titles=[...sources],known=new Map();
+            for(let offset=0;offset<titles.length;offset+=NPC_SOURCE_BATCH){
+                const {pages}=await this.readRecoveryPages(titles.slice(offset,offset+NPC_SOURCE_BATCH));
+                for(const page of pages){checkedSources++;if(page.missing===true)continue;if(page.invalid||page.ns!==0||!Number.isInteger(page.pageid)||page.pageid<1)throw new WikiError('loot-recovery','The wiki returned an invalid item-source page.');const content=page.revisions?.[0]?.slots?.main?.content;if(typeof content!=='string'||content.length>MAX_PAGE||!Number.isInteger(page.revisions?.[0]?.revid)||page.revisions[0].revid<1)throw new WikiError('loot-recovery','An item-source page is unavailable or too large to check.');const title=contributionTitle(page.title),key=contributionNameKey(title);if(known.has(key)){if(known.get(key)!==page.pageid)throw new WikiError('loot-recovery','Multiple source pages have equivalent item names. Choose their canonical wiki pages before publishing.');continue;}
+                    const sourceNpcTitle=[...targets].find(target=>contributionItemSourceMatches(content,{npcTitle:target,zoneTitle,instance}));if(sourceNpcTitle){known.set(key,page.pageid);items.push({title,revision:page.revisions[0].revid,npcTitle,zoneTitle,instance,...(aliasProofs.has(sourceNpcTitle)?{npcAlias:aliasProofs.get(sourceNpcTitle)}:{})});}
+                }
+            }
+        }catch(error){complete=false;blockers.push('Published item-source recovery is incomplete: '+safeMessage(error.message)+' Retry Preview before publishing.');}
+        if(items.length)warnings.push('Recovered loot from published item drop-source entries: '+items.map(item=>item.title).join(', ')+'. These additions are included in the page preview.');
+        return {items,warnings,blockers,checkedSources,complete};
+    }
+    async readRecoveryPages(titles,{redirects=true}={}){
+        if(!Array.isArray(titles)||!titles.length||titles.length>NPC_SOURCE_BATCH)throw new WikiError('loot-recovery','Invalid item-source batch.');
+        const response=await this.request({action:'query',prop:'info|revisions',rvprop:'ids|timestamp|content',rvslots:'main',titles:titles.join('|'),...(redirects?{redirects:'1',converttitles:'1'}:{})}),pages=response.query?.pages,mappings=new Map();
+        if(!Array.isArray(pages)||!pages.length||pages.length>titles.length)throw new WikiError('loot-recovery','The wiki did not return every requested source page.');
+        for(const key of ['normalized','converted',...(redirects?['redirects']:[])]){const rows=response.query?.[key]||[];if(!Array.isArray(rows)||rows.length>100)throw new WikiError('loot-recovery','The wiki returned invalid source-page normalization.');for(const row of rows){if(typeof row.from!=='string'||typeof row.to!=='string'||mappings.has(row.from)&&mappings.get(row.from)!==row.to)throw new WikiError('loot-recovery','The wiki returned ambiguous source-page identities.');mappings.set(row.from,row.to);}}
+        const byTitle=new Map();for(const page of pages){if(!page||typeof page.title!=='string'||byTitle.has(page.title)||page.invalid)throw new WikiError('loot-recovery','The wiki returned invalid source-page identities.');if(page.missing!==true&&(page.ns!==0||!Number.isInteger(page.pageid)||page.pageid<1||!Number.isInteger(page.revisions?.[0]?.revid)||page.revisions[0].revid<1||typeof page.revisions[0].slots?.main?.content!=='string'||page.revisions[0].slots.main.content.length>MAX_PAGE))throw new WikiError('loot-recovery','A source page is hidden, unavailable or too large to check.');byTitle.set(page.title,page);}
+        const requested=new Map(),expected=new Set();for(const title of titles){let target=title;const seen=new Set();while(mappings.has(target)){if(seen.has(target)||seen.size>=100)throw new WikiError('loot-recovery','The wiki returned cyclic source-page identities.');seen.add(target);target=mappings.get(target);}const page=byTitle.get(target);if(!page)throw new WikiError('loot-recovery','The wiki omitted a requested source page. Retry Preview.');requested.set(title,page);expected.add(target);}
+        if([...byTitle.keys()].some(title=>!expected.has(title)))throw new WikiError('loot-recovery','The wiki returned an unexpected source page.');
+        return {pages,requested};
+    }
     async blueprints({ force=false }={}) {
         if(!force&&this.blueprintCache&&this.now()-this.blueprintCache.checkedAt<300000)return copy(this.blueprintCache.value);
         const page=await this.page('Help:Contents');
@@ -169,8 +212,8 @@ class WikiClient {
         result.url=`${this.origin}/index.php?title=Help%3AContents&oldid=${page.revision}`;
         this.blueprintCache={checkedAt:this.now(),value:result};return copy(result);
     }
-    digest(plan) {return hash(JSON.stringify({id:plan.id,wikiOrigin:plan.wikiOrigin,expectedUser:plan.expectedUser,blueprintRevision:plan.blueprintRevision,pages:plan.pages.map(page=>({title:page.title,beforeHash:page.beforeHash,afterHash:page.afterHash,baseRevision:page.baseRevision})),...(plan.attachment?{attachment:{id:plan.attachment.id,filename:plan.attachment.filename,sha256:plan.attachment.sha256,caption:plan.attachment.caption,license:plan.attachment.license}}:{}),blockers:plan.blockers,matchesReviewed:plan.matchesReviewed}));}
-    async preparePlan({ candidate, relatedPages=[], matchesReviewed=false, editedText=null }={}) {
+    digest(plan) {return hash(JSON.stringify({id:plan.id,wikiOrigin:plan.wikiOrigin,expectedUser:plan.expectedUser,blueprintRevision:plan.blueprintRevision,pages:plan.pages.map(page=>({title:page.title,beforeHash:page.beforeHash,afterHash:page.afterHash,baseRevision:page.baseRevision})),...(plan.recoveredLoot?.length?{recoveredLoot:plan.recoveredLoot}:{}),...(plan.attachment?{attachment:{id:plan.attachment.id,filename:plan.attachment.filename,sha256:plan.attachment.sha256,caption:plan.attachment.caption,license:plan.attachment.license}}:{}),blockers:plan.blockers,matchesReviewed:plan.matchesReviewed}));}
+    async preparePlan({ candidate, relatedPages=[], matchesReviewed=false, editedText=null,sourceItemHints=[] }={}) {
         await this.load();
         const {buildContributionDraft,contributionTitle,contributionNameKey,patchContributionRelationship,patchContributionPrimary,contributionItemEffects,normalizeContributionCandidate,contributionTemplates}=await models();
         let attachment=null;
@@ -213,12 +256,22 @@ class WikiClient {
         // The search response provides the actual case-sensitive title. A
         // normalized equivalent can never be used to create a duplicate article.
         if(primary.missing&&normalizedCandidate.intent==='update'&&exactMatches.length===1)primary=await this.page(exactMatches[0].title);
+        let lootRecovery=null;
+        if(normalizedCandidate.kind==='npc'&&normalizedCandidate.zone&&['normal','raid'].includes(normalizedCandidate.instance)){
+            lootRecovery=await this.recoverNpcLoot({npcTitle:primary.title,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance,sourceItemHints});
+            if(lootRecovery.items.length){
+                const previous=candidate.fields?.knownLoot,values=normalizedCandidate.field('knownLoot'),merged=new Map((Array.isArray(values)?values:[]).map(title=>[contributionNameKey(title),title]));for(const item of lootRecovery.items)merged.set(contributionNameKey(item.title),item.title);
+                if(previous?.confirmed!==true&&Array.isArray(previous?.value)&&previous.value.length)lootRecovery.warnings.push('Unreviewed proposed loot was excluded; recovered published sources are shown separately in this preview.');
+                if(merged.size>100)lootRecovery.blockers.push('More than 100 loot entries need review. Split this contribution before publishing.');
+                candidate={...candidate,title:primary.title,fields:{...candidate.fields,knownLoot:{...previous,value:[...merged.values()].slice(0,100),confirmed:true}}};normalizedCandidate=normalizeContributionCandidate(candidate);
+            }
+        }
         // MediaWiki normalizes the first title letter. Itempage decides whether
         // to render the article or only a tooltip by exact FULLPAGENAME equality.
-        if(primary.title!==draft.title)draft=buildContributionDraft({...candidate,title:primary.title},blueprint);
+        if(primary.title!==draft.title||lootRecovery?.items.length)draft=buildContributionDraft({...candidate,title:primary.title},blueprint);
         const updating=!primary.missing&&normalizedCandidate.intent==='update';
-        let patch=null;if(updating)try{patch=patchContributionPrimary(primary.content,{...candidate,title:primary.title});}catch(error){patch={text:primary.content,warnings:[],blockers:[safeMessage(error.message)]};}
-        const plan={schemaVersion:1,id:this.id(),wikiOrigin:this.origin,expectedUser:account.user,blueprintRevision:blueprint.revision,createdAt:new Date(this.now()).toISOString(),pages:[],warnings:[...(updating?patch.warnings:draft.warnings)],blockers:[...(updating?patch.blockers||[]:draft.blockers)],matches,matchesReviewed:matchesReviewed===true,...(attachment?{attachment}:{})};
+        let patch=null;if(updating)try{patch=patchContributionPrimary(primary.content,{...candidate,title:primary.title});for(const item of lootRecovery?.items||[])patch.text=patchContributionRelationship(patch.text,{role:'npc-loot',itemTitle:item.title,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance,lootKind:normalizedCandidate.field('lootKinds')?.[item.title]}).text;}catch(error){patch={text:primary.content,warnings:[],blockers:[safeMessage(error.message)]};}
+        const plan={schemaVersion:1,id:this.id(),wikiOrigin:this.origin,expectedUser:account.user,blueprintRevision:blueprint.revision,createdAt:new Date(this.now()).toISOString(),pages:[],warnings:[...(updating?patch.warnings:draft.warnings),...(lootRecovery?.warnings||[])],blockers:[...(updating?patch.blockers||[]:draft.blockers),...(lootRecovery?.blockers||[])],matches,matchesReviewed:matchesReviewed===true,recoveredLoot:lootRecovery?.items||[],...(lootRecovery?{lootRecovery:{complete:lootRecovery.complete,checkedSources:lootRecovery.checkedSources,npcTitle:primary.title,zoneTitle:normalizedCandidate.zone,instance:normalizedCandidate.instance}}:{}),...(attachment?{attachment}:{})};
         if(normalizedCandidate.era&&!plan.blockers.some(message=>message.includes('era template name'))){const era=await this.request({action:'query',prop:'info',titles:`Template:${normalizedCandidate.era}`,redirects:'1'});if(!era.query?.pages?.some(page=>!page.missing&&page.ns===10))plan.blockers.push('The selected era template does not exist on the wiki. Choose a current canonical era template.');}
         if(!account.authenticated)plan.blockers.push('Log in, then prepare this review again before publishing.');
         if(!matchesReviewed)plan.blockers.push('Review potential matches before preparing the final publish plan.');
@@ -326,6 +379,14 @@ class WikiClient {
         const result=await this.request({action:'query',meta:'tokens',type:'csrf',assert:'user',assertuser:expected.name}),token=result.query?.tokens?.csrftoken;
         if(typeof token!=='string'||!token||token==='+\\')throw new WikiError('token','The wiki login expired. Log in and review again.');return token;
     }
+    async verifyRecoveredLoot(plan){
+        const items=plan.recoveredLoot||[];if(!items.length)return;
+        if(!Array.isArray(items)||items.length>MAX_NPC_SOURCE_ITEMS)throw new WikiError('review','The recovered source review is invalid. Prepare it again.');
+        const references=new Map();for(const item of items){references.set(item.title,item);if(item.npcAlias){if(item.npcAlias.target!==item.npcTitle)throw new WikiError('review','The recovered monster alias changed. Prepare its review again.');references.set(item.npcAlias.title,{...item.npcAlias,alias:true});}}
+        const entries=[...references.values()];for(let offset=0;offset<entries.length;offset+=NPC_SOURCE_BATCH){const batch=entries.slice(offset,offset+NPC_SOURCE_BATCH),{requested}=await this.readRecoveryPages(batch.map(item=>item.title),{redirects:false});
+            for(const item of batch){const page=requested.get(item.title),reviewed=plan.pages.find(page=>page.title===item.title),content=page?.revisions?.[0]?.slots?.main?.content,reviewedResult=!item.alias&&reviewed&&typeof content==='string'&&hash(content)===hash(normalizeWikiSubmissionText(reviewed.afterText));if(page.missing||Boolean(page.redirect)!==Boolean(item.alias)||page.revisions?.[0]?.revid!==item.revision&&!reviewedResult)throw new WikiError('source-changed',item.title+': the published drop source or monster redirect changed after review. Prepare a new Preview before publishing.');}
+        }
+    }
     async submitPlan({ planId, reviewDigest }={}) {
         await this.load();if(this.busy)throw new WikiError('busy','A wiki submission is already in progress.');
         const plan=this.plans.get(planId);if(!plan||reviewDigest!==plan.reviewDigest||reviewDigest!==this.digest(plan))throw new WikiError('review','This contribution changed. Prepare and review it again.');
@@ -334,6 +395,7 @@ class WikiClient {
         try{
             await this.expectedUser(plan.expectedUser);
             const blueprint=await this.blueprints({force:true});if(blueprint.revision!==plan.blueprintRevision)throw new WikiError('blueprint-changed','The wiki blueprints changed. Prepare a new review.');
+            await this.verifyRecoveredLoot(plan);
             if(!await this.submitPlanAttachment(plan)){plan.status=plan.pages.some(page=>page.status==='applied')?'partial':'needs-attention';await this.persist();return safePlan(plan);}
             for(const page of plan.pages){
                 if(page.status==='applied')continue;

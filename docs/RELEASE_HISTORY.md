@@ -1,5 +1,14 @@
 # Browsable release history
 
+0.9.10 archives four fresh captures: actual Electron main/native Intel shared
+wiki Itembox at Calibri 17px, plus actual integrated Chromium screenshot/inline
+icon evidence and class/slot multiselects. The form uses synthetic records and
+a one-pixel attachment placeholder. The font fixture also verifies all native
+panels, green adjusted stats, font persistence and reset. No game/player pixels
+or live wiki requests are used. The release
+plan records the remaining integration and platform/publication gates; older
+entries and image hashes remain unchanged.
+
 0.9.9 adds three visually reviewed, version-owned actual Chromium captures: filtered gap browsing, targeted source additions and Character numeric hover tier with its matching equipment badge. All records/APIs are synthetic and isolated; no player pixels, production submissions or historical image replacements. The focused fixture also checks real pointer delay and adjacent-hover cancellation.
 
 The 0.9.8 candidate adds five reviewed actual component captures: equipped-hover

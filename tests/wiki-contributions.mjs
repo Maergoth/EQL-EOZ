@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {contributionUpdateSummary} from '../app/contribution-update.js';
-import {buildContributionDraft,contributionNameKey,contributionTitle,extractContributionBlueprints,findPotentialMatches,patchContributionRelationship,contributionTemplates,patchContributionPrimary,normalizeContributionCandidate} from '../app/contribution-model.js';
+import {buildContributionDraft,contributionNameKey,contributionTitle,extractContributionBlueprints,findPotentialMatches,patchContributionRelationship,contributionTemplates,patchContributionPrimary,normalizeContributionCandidate,contributionItemEffects,contributionItemSourceMatches} from '../app/contribution-model.js';
 import {createItemBaseReview,applyItemBaseReview} from '../app/item-base-review.js';
 import {collectTierZeroEvidence,confirmTierZeroVerification,validateTierZeroVerification} from '../app/contribution-tier-zero.js';
 
@@ -16,6 +16,37 @@ const item={kind:'item',name:'Synthetic Guard',era:'Classic Era',zone:'Synthetic
 const draft=buildContributionDraft(item,blueprints);assert.deepEqual(draft.blockers,[]);assert.match(draft.text,/<onlyinclude>\{\{Itempage/);assert.match(draft.text,/\[\[Category:Warrior Equipment\]\]/);assert.match(draft.text,/\[\[Category:Secondary\]\]/);assert.match(draft.text,/\[\[a synthetic guardian\]\]/);assert.doesNotMatch(draft.text,/speculative|Category:Bard|Class: ALL|DMG Bonus/);assert.ok(draft.warnings.some(value=>value.includes('Unconfirmed')));
 assert.doesNotMatch(buildContributionDraft({...item,fields:{statLines:['AC: 5']}},blueprints).text,/AC: 5/,'Optional unreviewed stats stay unknown');
 assert.doesNotMatch(buildContributionDraft({...item,fields:{...item.fields,tier:{value:10,confirmed:true}}},blueprints).text,/AC: 5|STR: \+2/,'Tiered observations are not base stats');
+// Item blanks are empty template values, while monster facts retain visible
+// unknown markers. A stale OCR Effect:? must never hide the selected spell.
+const itemValue=(value,edited=false)=>({value,confirmed:true,...(edited?{edited:true}:{})}),emptyItem=buildContributionDraft({kind:'item',name:'Empty Synthetic Item',fields:{iconId:itemValue(''),focusEffect:itemValue('?'),statLines:itemValue(['?','Effect: ?','Weight: ?'])}},blueprints);
+const emptyItemFields=Object.fromEntries(contributionTemplates(emptyItem.text,'Itempage')[0].fields.map(field=>[field.name,field.value.trim()]));
+for(const key of ['lucy_img_ID','statsblock','focus_effect','notes','dropsfrom'])assert.equal(emptyItemFields[key],'',key+' remains empty when unknown');
+assert.doesNotMatch(emptyItem.text,/\?/);assert.equal(buildContributionDraft({kind:'item',name:'Zero Icon Item',fields:{iconId:itemValue(0)}},blueprints).text.includes('|lucy_img_ID = 0'),true,'An explicit icon zero is not blank');
+const selectedEffect={kind:'item',name:'Selected Effect Item',fields:{statLines:itemValue(['HP: 12','Effect: ?']),effectName:itemValue('Synthetic Selected Effect',true)}};
+const selectedEffectDraft=buildContributionDraft(selectedEffect,blueprints);assert.match(selectedEffectDraft.text,/HP: 12<br>\nEffect: \[\[Synthetic Selected Effect\]\]/);assert.equal((selectedEffectDraft.text.match(/Effect:/g)||[]).length,1);assert.doesNotMatch(selectedEffectDraft.text,/\?|Casting Time:|at Level|Combat/,'Absent item effect metadata is omitted rather than guessed');
+assert.deepEqual(contributionItemEffects({fields:{effects:itemValue(['Effect: ?'])}}),[],'A placeholder is never a proposed spell page');
+const rawEffects=['Combat Effect: Original Effect (Casting Time: Instant) at Level 45','Click Effect: Other Effect (Casting Time: 2)'],multiEffect={kind:'item',name:'Multi Effect Item',fields:{effects:itemValue(rawEffects),effectName:itemValue('Original Effect'),effectType:itemValue('Combat'),effectCastTime:itemValue('Instant'),effectLevel:itemValue(45),statLines:itemValue(rawEffects)}};
+assert.deepEqual(contributionItemEffects(multiEffect).map(effect=>effect.name),['Original Effect','Other Effect'],'Untouched auto-filled first effect retains additional genuine effects');
+const untouchedEffects=buildContributionDraft(multiEffect,blueprints);assert.equal((untouchedEffects.text.match(/Effect:/g)||[]).length,2);assert.match(untouchedEffects.text,/Original Effect/);assert.match(untouchedEffects.text,/Other Effect/);
+const changedEffect={...multiEffect,fields:{...multiEffect.fields,effectName:itemValue('Replacement Effect',true),effectType:itemValue('Worn'),effectCastTime:itemValue(''),effectLevel:itemValue(0)}};
+const changedEffectDraft=buildContributionDraft(changedEffect,blueprints);assert.match(changedEffectDraft.text,/Effect: \[\[Replacement Effect\]\] \(Worn\) at Level 0/);assert.match(changedEffectDraft.text,/Click Effect: Other Effect/);assert.doesNotMatch(changedEffectDraft.text,/Original Effect|\?/);assert.equal((changedEffectDraft.text.match(/Effect:/g)||[]).length,2);assert.deepEqual(contributionItemEffects(changedEffect).map(effect=>effect.name),['Replacement Effect','Other Effect'],'The old first effect is not scheduled for spell-page creation after replacement');
+const existingEffectSource='<onlyinclude>{{Itempage\n|itemname=Multi Effect Item\n|statsblock=HP: 23<br>\nEffect: ?<br>\nClick Effect: Other Effect (Casting Time: 2)<br>\n<!-- Keep this comment. -->\n|focus_effect=\n|notes=Keep this exact note.\n|dropsfrom=\n}}</onlyinclude>\n';
+assert.equal(patchContributionPrimary(existingEffectSource,multiEffect).text,existingEffectSource,'Untouched auto-filled metadata never replaces existing item content');
+const patchedEffect=patchContributionPrimary(existingEffectSource,changedEffect);assert.match(patchedEffect.text,/HP: 23<br>\nEffect: \[\[Replacement Effect\]\] \(Worn\) at Level 0<br>\nClick Effect: Other Effect \(Casting Time: 2\)/);assert(patchedEffect.text.includes('<!-- Keep this comment. -->'));assert(patchedEffect.text.includes('|notes=Keep this exact note.'));assert.equal(patchContributionPrimary(patchedEffect.text,changedEffect).changed,false,'Edited effect patches are idempotent');
+assert.throws(()=>patchContributionPrimary(existingEffectSource.replace('Effect: ?','Effect: ? <!-- do not erase -->'),changedEffect),/protected text/,'An ambiguous annotated effect line is preserved for the source editor');
+for(const name of ['Fire & Ice','Synthetic_Effect']){const escapedEffect=buildContributionDraft({kind:'item',name:'Entity Effect Item',fields:{effectName:itemValue(name),effects:itemValue(['Click Effect: '+name]),statLines:itemValue(['Effect: '+name])}},blueprints);assert.equal((escapedEffect.text.match(/Effect:/g)||[]).length,1,'Literal escaping does not duplicate the effect '+name);}
+const clearedEffect={...multiEffect,fields:{...multiEffect.fields,effectName:{value:'',confirmed:false,edited:true}}},clearedEffectDraft=buildContributionDraft(clearedEffect,blueprints);assert.doesNotMatch(clearedEffectDraft.text,/Original Effect/);assert.match(clearedEffectDraft.text,/Other Effect/);assert.deepEqual(contributionItemEffects(clearedEffect).map(effect=>effect.name),['Other Effect'],'Clearing the editable first effect cannot resurrect its raw proposal');
+const clearedExisting=patchContributionPrimary(existingEffectSource.replace('Effect: ?','Effect: Original Effect'),clearedEffect);assert.doesNotMatch(clearedExisting.text,/Original Effect/);assert.match(clearedExisting.text,/Click Effect: Other Effect/);assert.match(clearedExisting.text,/HP: 23/);assert.equal(patchContributionPrimary(clearedExisting.text,clearedEffect).changed,false);
+for(const value of ['', '?']){const clearedIcon=patchContributionPrimary('{{Itempage|itemname=Clear Icon\n|lucy_img_ID=42\n|notes=Keep.\n}}',{kind:'item',name:'Clear Icon',fields:{iconId:{value,confirmed:false,edited:true}}});assert.equal(contributionTemplates(clearedIcon.text,'Itempage')[0].fields.find(field=>field.name==='lucy_img_ID').value.trim(),'','An explicitly cleared existing icon stays blank');assert(clearedIcon.text.includes('|notes=Keep.'));}
+const selectedChoices={kind:'item',name:'Choice Stat Item',fields:{classes:itemValue(['CLR','WAR']),slots:itemValue(['FEET']),statLines:itemValue(['HP: 20','Class: ROG','Slot: PRIMARY','Skill: Piercing'])}},choiceDraft=buildContributionDraft(selectedChoices,blueprints);assert.match(choiceDraft.text,/Class: WAR CLR/);assert.match(choiceDraft.text,/Slot: FEET/);assert.doesNotMatch(choiceDraft.text,/Class: ROG|Slot: PRIMARY/);assert.match(choiceDraft.text,/Skill: Piercing/);assert.equal((choiceDraft.text.match(/Class:/g)||[]).length,1);assert.match(choiceDraft.text,/Category:Warrior Equipment/);assert.match(choiceDraft.text,/Category:Cleric Equipment/);
+const missingChoiceLines=buildContributionDraft({...selectedChoices,fields:{...selectedChoices.fields,statLines:itemValue(['HP: 20'])}},blueprints);assert.match(missingChoiceLines.text,/Class: WAR CLR/);assert.match(missingChoiceLines.text,/Slot: FEET/);
+const oldChoiceSource='{{Itempage\n|itemname=Choice Stat Item\n|statsblock=HP: 20<br>\nClass: ROG<br>\nSlot: PRIMARY<br>\nSkill: Piercing\n|notes=Keep original note.\n}}';
+assert.equal(patchContributionPrimary(oldChoiceSource,selectedChoices).text,oldChoiceSource,'Untouched auto-filled choices cannot rewrite an existing page');
+const editedChoices={...selectedChoices,fields:{...selectedChoices.fields,classes:itemValue(['CLR','WAR'],true),slots:itemValue(['FEET'],true)}},patchedChoices=patchContributionPrimary(oldChoiceSource,editedChoices);assert.match(patchedChoices.text,/Class: WAR CLR<br>\nSlot: FEET/);assert.match(patchedChoices.text,/HP: 20<br>/);assert.match(patchedChoices.text,/Skill: Piercing/);assert(patchedChoices.text.includes('|notes=Keep original note.'));assert.equal(patchContributionPrimary(patchedChoices.text,editedChoices).changed,false);
+const legacyChoices=buildContributionDraft({...selectedChoices,fields:{classes:itemValue(['CUSTOM']),statLines:itemValue(['Class: CUSTOM','HP: 20'])}},blueprints);assert.match(legacyChoices.text,/Class: CUSTOM/,'Untouched unrecognized legacy text is not silently erased');
+const clearedChoices=buildContributionDraft({...selectedChoices,fields:{...selectedChoices.fields,classes:{value:[],confirmed:false,edited:true}}},blueprints);assert.doesNotMatch(clearedChoices.text,/Class:/,'Clearing classes does not restore a stale stat-block class list');
+const scopedChoiceSource=oldChoiceSource+'\n== Raid Instance ==\n'+oldChoiceSource.replace('HP: 20','HP: 90'),scopedChoices=patchContributionPrimary(scopedChoiceSource,{...editedChoices,instance:'raid'});assert.equal(scopedChoices.text.split('== Raid Instance ==')[0],oldChoiceSource+'\n');assert.match(scopedChoices.text.split('== Raid Instance ==')[1],/HP: 90<br>\nClass: WAR CLR<br>\nSlot: FEET/,'Metadata patches respect the selected existing instance');
+const unknownMonster=buildContributionDraft({kind:'npc',name:'Unknown Facts Guardian',zone:'Synthetic Vale',instance:'normal'},blueprints);assert.match(unknownMonster.text,/\| HP = \?/);assert.match(unknownMonster.text,/\| location = \?/);assert(unknownMonster.blockers.some(message=>message.includes('spawn location')),'Unknown monster location remains required before publication');
 const injected=buildContributionDraft({...item,fields:{statLines:{value:['AC: 5|notes={{Injected}}'],confirmed:true}}},blueprints);assert.match(injected.text,/&#124;notes=&#123;/);assert.doesNotMatch(injected.text,/\{\{Injected/);
 const npc=buildContributionDraft({kind:'npc',name:'a synthetic guardian',era:'Classic Era',zone:'Synthetic Vale',instance:'raid',playerText:'I observed this guardian near the entrance.',fields:{location:{value:'1, 2, 3',confirmed:true},knownLoot:{value:['Synthetic Guard'],confirmed:true}}},blueprints);assert.deepEqual(npc.blockers,[]);assert.match(npc.text,/Category:Raid Encounters/);assert.match(npc.text,/\| factions = \?/);assert.match(npc.text,/HP = \?/);assert.doesNotMatch(npc.text,/None/);
 const zone=buildContributionDraft({kind:'zone',name:'Synthetic Vale',era:'Classic Era',playerText:'A synthetic zone used for local tests.'},blueprints);assert.ok(zone.warnings.some(value=>value.includes('allowlist')));assert.doesNotMatch(zone.text,/Special:DynamicZoneList/);
@@ -144,3 +175,44 @@ const preservePrimaryNpc=patchContributionPrimary(preserveLoot,{kind:'npc',name:
 console.log('Wiki contribution model: optional values/location gate, safe fields, active instance scoping, reviewed Common/Unique moves, verified tier-zero patches and idempotence passed.');
 
 assert.doesNotMatch(contributionUpdateSummary({kind:'item',intent:'update',reasons:['missing-source'],sources:[{npc:'Excluded Guardian',zone:'Excluded Vale',confirmed:false,edited:true,sourceEvidence:'explicit-corpse'}]}).additions.join(' '),/Excluded Guardian/,'Excluded sources are absent from promised additions');
+
+// Recovery follows real item drop-source rows, never a backlink by itself.
+const sourceProof={npcTitle:'A synthetic guardian',zoneTitle:'Synthetic Vale',instance:'normal'};
+const proofPage=dropsfrom=>`{{Itempage\n|itemname=Synthetic Source Gem\n|dropsfrom=\n${dropsfrom}\n|notes=Unrelated [[A synthetic guardian]] prose.\n}}`;
+for(const eol of ['\n','\r\n']){
+    const source=proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]\n[[Other Vale]]\n* [[Other Guardian]]\n=== Raid Instance ===\n[[Synthetic Vale]]\n* [[Raid Guardian]]').replaceAll('\n',eol);
+    assert(contributionItemSourceMatches(source,sourceProof));
+    assert(contributionItemSourceMatches(source,{...sourceProof,npcTitle:'a_SYNTHETIC_guardian',zoneTitle:'synthetic_vale'}),'First-letter case and underscore differences retain page identity.');
+    assert(!contributionItemSourceMatches(source,{...sourceProof,zoneTitle:'Other Vale'}));
+    assert(!contributionItemSourceMatches(source,{...sourceProof,instance:'raid'}));
+    assert(contributionItemSourceMatches(source,{...sourceProof,npcTitle:'Raid Guardian',instance:'raid'}));
+    assert(!contributionItemSourceMatches(source,{...sourceProof,npcTitle:'Raid Guardian'}));
+}
+assert(contributionItemSourceMatches(proofPage('[[Synthetic Vale|The Vale]]\n<ul><li>[[A synthetic guardian|Guardian]] (Rare)</li></ul>'),sourceProof));
+assert(contributionItemSourceMatches('== Raid Instance ==\n'+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),{...sourceProof,instance:'raid'}),'An externally raid-scoped item does not require a second internal Raid Instance heading.');
+assert(!contributionItemSourceMatches('== Raid Instance ==\n'+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),sourceProof));
+assert(contributionItemSourceMatches(proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]')+'\n== Raid Instance ==\n'+proofPage('[[Synthetic Vale]]\n* [[Raid Guardian]]'),sourceProof));
+for(const dropsfrom of [
+    '[[Synthetic Vale]]\nA passing mention of [[A synthetic guardian]].',
+    '[[Synthetic Vale]]\n<ul><li>A passing mention of [[A synthetic guardian]].</li></ul>',
+    '[[Synthetic Vale]]\n<ul><li>[[A synthetic guardian]]',
+    '[[Synthetic Vale]]\n<!-- * [[A synthetic guardian]] -->',
+    '[[Synthetic Vale]]\n<nowiki>* [[A synthetic guardian]]</nowiki>',
+    '[[Synthetic Vale]]\n<pre>\n* [[A synthetic guardian]]\n</pre>',
+    '[[Synthetic Vale]]\n{{Example|\n* [[A synthetic guardian]]\n}}',
+    '[[Synthetic Vale]]\n<ref>\n* [[A synthetic guardian]]\n</ref>',
+    '[[Synthetic Vale]]\n* [[Other Guardian]]\n[[Synthetic_Vale]]\n* [[A synthetic guardian]]',
+    '[[Other Vale]]\n* [[A synthetic guardian]]',
+    '[[Synthetic Vale]]\n* [[Other Guardian]]\n== Raid Instance ==\n[[Synthetic Vale]]\n* [[A synthetic guardian]]\n== Raid Instance ==\n[[Synthetic Vale]]\n* [[A synthetic guardian]]'
+])assert(!contributionItemSourceMatches(proofPage(dropsfrom),sourceProof),'Prose, protected examples and ambiguous zone/instance scopes are not source proof.');
+for(const malformed of [
+    '[[Synthetic Vale]]\n* [[A synthetic guardian]]',
+    '<!-- '+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),
+    '<nowiki>'+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]')+'</nowiki>',
+    '{{Itempage|dropsfrom=[[Synthetic Vale]]\n* [[A synthetic guardian]]',
+    proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]')+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),
+    '{{Itempage|dropsfrom=[[Synthetic Vale]]\n* [[A synthetic guardian]]\n|dropsfrom=[[Synthetic Vale]]\n* [[A synthetic guardian]]\n}}',
+    'x'.repeat(512*1024+1),'é'.repeat(256*1024)+proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),null
+])assert.equal(contributionItemSourceMatches(malformed,sourceProof),false);
+assert(!contributionItemSourceMatches(proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),{...sourceProof,instance:'unknown'}));
+assert(!contributionItemSourceMatches(proofPage('[[Synthetic Vale]]\n* [[A synthetic guardian]]'),{...sourceProof,npcTitle:'<script>'}));

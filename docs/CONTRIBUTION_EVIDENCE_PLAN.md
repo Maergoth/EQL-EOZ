@@ -1,6 +1,37 @@
 # Persistent contribution evidence
 
-## Next-release discovery and item-form follow-up
+## Current 0.9.10 evidence and review contract
+
+The release combines PR25 kill/evidence intake, PR26 form/review simplification
+and PR27 persistent capture completion. Use
+[the discovery contract](CONTRIBUTION_DISCOVERY_PLAN.md),
+[the item-form contract](CONTRIBUTION_ITEM_FORM_PLAN.md) and
+[the release checklist](RELEASE_0910_PLAN.md). Earlier next-release and 0.9.8
+candidate statements below are historical source/acceptance records.
+
+Automatic monster queue/journal admission requires fresh kill/death evidence or
+an explicit named-corpse loot source. Consider/cast events do not create monster
+submissions; known players and pets are excluded. Captured triggering lines stay
+bounded, escaped and private to local review. They never enter automatic article
+text or minimal observation telemetry. Reconciliation preserves protected drafts.
+
+Accepted encoded-chat item Contribute requests wait for fresh matching live
+item-examine OCR from the current session/source/generation. Explicit monster
+Contribute uses `queue.armSpawnLocation(id,{persistent:true})`: the next fresh
+matching `/loc` has no waiting timeout. Ordinary automatic/manual arming still
+defaults to five minutes. Source/zone/cursor/time guards, cancellation and restart
+boundaries remain; a persistent listener is not resumed after restart. Green
+completion precedes notice closure. Reader startup/cleanup preserves Character
+and preexisting contribution sessions, using native expected identity guards.
+
+Screenshot evidence and inline Icon ID paste lead item review. Classes/slots
+use multiselects and sources reuse Zone. Preview shows complete guarded page
+changes. One overall **I reviewed these page changes** checkbox sits directly
+above Publish/Retry; field, destination, live-match and per-page approvals are removed.
+Confirmed applied pages expose canonical saved-page links, including partial
+results. Captured observations remain proposals and cannot publish automatically.
+
+## Historical pre-integration follow-up
 
 The pending [kill/evidence PR #25](https://github.com/Maergoth/EQL-EOZ/pull/25)
 remains a required related change: it gates durable NPC journal intake to deaths,

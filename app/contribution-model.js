@@ -2,6 +2,7 @@
 // fields enter wikicode. No network, account state, or narrative generation.
 import { validateItemBaseReview, proposeItemBaseReview, applyItemBaseReview } from './item-base-review.js';
 import { validateTierZeroVerification } from './contribution-tier-zero.js';
+import { normalizeContributionChoices } from './contribution-choice-picker.js';
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 const TYPES = new Set(['item', 'npc', 'zone', 'spell']);
 const CLASS_NAMES = { BER:'Berserker', BRD:'Bard', BST:'Beastlord', CLR:'Cleric', DRU:'Druid', ENC:'Enchanter', MAG:'Magician', MNK:'Monk', NEC:'Necromancer', PAL:'Paladin', RNG:'Ranger', ROG:'Rogue', SHM:'Shaman', SHD:'Shadow Knight', WAR:'Warrior', WIZ:'Wizard' };
@@ -25,15 +26,32 @@ export function safeContributionFilename(value){
 }
 export function contributionItemEffects(input){
     const fields=input.fields||{},get=key=>fields[key]?.confirmed?fields[key].value:null,result=[];
-    if(get('effectName'))result.push({name:contributionTitle(get('effectName')),type:clean(get('effectType')||'Combat',40),castTime:clean(get('effectCastTime')||'?',80),level:clean(get('effectLevel')??'?',20)});
+    const selected=itemOptionalText(get('effectName'));
+    if(selected)result.push({name:contributionTitle(selected),type:itemOptionalText(get('effectType'),40),castTime:itemOptionalText(get('effectCastTime'),80),level:itemOptionalText(get('effectLevel'),20)});
+    let firstRaw=true;
     for(const line of Array.isArray(get('effects'))?get('effects'):[]){
         const match=String(line).match(/^(?:(Combat|Click|Worn|Focus|Proc)\s+)?Effect\s*:\s*(.+)$/i);if(!match)continue;
-        const name=match[2].replace(/\s*\((?:Req(?:uired)?\s*Level|Combat|Click|Worn|Must Equip|Can Equip|Casting Time)\b.*$/i,'').replace(/\s+(?:at|Req(?:uired)?)\s+Level\s+\d+.*$/i,'').trim();
-        try{const title=contributionTitle(name);if(!result.some(item=>contributionNameKey(item.name)===contributionNameKey(title)))result.push({name:title,type:match[1]||'Combat',castTime:match[2].match(/Casting Time:\s*([^),]+)/i)?.[1]||'?',level:match[2].match(/(?:Req(?:uired)?\s+Level|at Level)\s*(\d+)/i)?.[1]||'?'});}catch{/* Keep unsupported names in raw evidence rather than create malformed links. */}
+        const name=match[2].replace(/\s*\((?:Req(?:uired)?\s*Level|Combat|Click|Worn|Focus|Proc|Must Equip|Can Equip|Casting Time)\b.*$/i,'').replace(/\s+(?:at|Req(?:uired)?)\s+Level\s+\d+.*$/i,'').trim();
+        if(!itemOptionalText(name))continue;
+        // The form edits the first effect. Untouched auto-filled fields never
+        // discard additional Click/Worn/Focus effects from the observed item.
+        if(firstRaw&&(selected&&fields.effectName?.edited||itemEffectWasCleared(input))){firstRaw=false;continue;}firstRaw=false;
+        try{const title=contributionTitle(name);if(!result.some(item=>contributionNameKey(item.name)===contributionNameKey(title)))result.push({name:title,type:match[1]||match[2].match(/\((Combat|Click|Worn|Focus|Proc|Must Equip|Can Equip)\b/i)?.[1]||'',castTime:itemOptionalText(match[2].match(/Casting Time:\s*([^),]+)/i)?.[1],80),level:match[2].match(/(?:Req(?:uired)?\s+Level|at Level)\s*(\d+)/i)?.[1]||''});}catch{/* Keep unsupported names in raw evidence rather than create malformed links. */}
     }
     return result.slice(0,8);
 }
-function itemEffectWikicode(candidate){return contributionItemEffects(candidate).map(effect=>`Effect: ${link(effect.name)} (${literalWikiText(effect.type)}, Casting Time: ${literalWikiText(effect.castTime)}) at Level ${literalWikiText(effect.level)}`).join('<br>\n');}
+function itemOptionalText(value,max=4000){const text=clean(value,max);return text==='?'?'':text;}
+function itemEffectWasCleared(candidate){const field=candidate.fields?.effectName;return field?.edited===true&&!itemOptionalText(field.value);}
+const itemEffectLine=value=>/^\s*(?:(?:Combat|Click|Worn|Focus|Proc)\s+)?Effect\s*:/i.test(value);
+function itemEffectLineWikicode(effect){const metadata=[literalWikiText(effect.type),effect.castTime?'Casting Time: '+literalWikiText(effect.castTime):''].filter(Boolean);return `Effect: ${link(effect.name)}${metadata.length?' ('+metadata.join(', ')+')':''}${effect.level?' at Level '+literalWikiText(effect.level):''}`;}
+function itemLineHasEffect(line,effect){const entities={'&amp;':'&','&lt;':'<','&gt;':'>','&#124;':'|','&#123;':'{','&#125;':'}','&#91;':'[','&#93;':']','&#126;':'~','&#95;':'_'},name=String(line).replace(/&(?:amp|lt|gt|#(?:124|123|125|91|93|126|95));/g,token=>entities[token]).replace(/^\s*(?:(?:Combat|Click|Worn|Focus|Proc)\s+)?Effect\s*:\s*/i,'').replace(/^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/,'$1').replace(/\s*\((?:Req(?:uired)?\s*Level|Combat|Click|Worn|Focus|Proc|Must Equip|Can Equip|Casting Time)\b.*$/i,'').replace(/\s+(?:at|Req(?:uired)?)\s+Level\s+\d+.*$/i,'').trim();return contributionNameKey(name)===contributionNameKey(effect.name);}
+function itemChoiceStatLine(candidate,key){
+    const field=candidate.fields[key];if(!field)return null;
+    const clear=field.edited===true&&(Array.isArray(field.value)?!field.value.length:!itemOptionalText(field.value));if(!field.confirmed&&!clear)return null;
+    const parsed=normalizeContributionChoices(key,field.value);if(parsed.unrecognized.length&&!field.edited)return null;
+    return parsed.value.length?`${key==='classes'?'Class':'Slot'}: ${parsed.value.join(' ')}`:'';
+}
+const itemChoiceLine=(key,value)=>new RegExp('^\\s*'+(key==='classes'?'Class(?:es)?':'Slots?')+'\\s*:','i').test(value);
 function lootSectionRows(candidate,titles){
     const kinds=candidate.fields.lootKinds?.confirmed&&candidate.fields.lootKinds.value&&typeof candidate.fields.lootKinds.value==='object'?candidate.fields.lootKinds.value:{};
     return ['unique','common'].flatMap(kind=>{const items=titles.filter(title=>(kinds[title]||kinds[contributionNameKey(title)]||'unique')===kind);return items.length?[`! ${kind==='common'?'Common Loot':'Unique Items'}\n| ${items.map(itemTransclusion).join('<br>\n')}`]:[];});
@@ -137,13 +155,13 @@ export function buildContributionDraft(input, blueprints) {
         let lines = Array.isArray(field('statLines')) ? field('statLines').map(value => literalWikiText(value)).filter(Boolean).slice(0, 60) :
             typeof field('statsblock') === 'string' ? field('statsblock').split(/\r?\n|<br\s*\/?>/i).map(value => literalWikiText(value)).filter(Boolean).slice(0, 60) : [];
         const recovery=validateItemBaseReview(candidate),upgraded=Number(candidate.fields.tier?.value)>0||candidate.fields.augmented?.value===true||candidate.fields.modified?.value===true||candidate.fields.augmentNames?.value?.length>0;
-        if(upgraded&&!recovery.ok){lines=lines.filter(line=>!/^\s*(?:AC|HP|Mana|MP|END|Endurance|STR|STA|AGI|DEX|WIS|INT|CHA|Strength|Stamina|Agility|Dexterity|Wisdom|Intelligence|Charisma|SV\s+\w+|Weight|WT|DMG|Damage|Delay|Haste|Attack(?: Speed)?|\w+ Regen)\s*[:=]/i.test(line));warnings.push('Tiered numeric observations are omitted until base proposals are selected. Unknown fields are shown as ?.');}
+        if(upgraded&&!recovery.ok){lines=lines.filter(line=>!/^\s*(?:AC|HP|Mana|MP|END|Endurance|STR|STA|AGI|DEX|WIS|INT|CHA|Strength|Stamina|Agility|Dexterity|Wisdom|Intelligence|Charisma|SV\s+\w+|Weight|WT|DMG|Damage|Delay|Haste|Attack(?: Speed)?|\w+ Regen)\s*[:=]/i.test(line));warnings.push('Tiered numeric observations are omitted until base proposals are selected. Unknown item fields stay empty.');}
         if(candidate.baseRecovery&&!recovery.ok)blockers.push(recovery.reason);
         if(recovery.ok){
             lines=applyItemBaseReview(candidate,recovery.review).fields.statLines.value.map(literalWikiText);
             warnings.push('Base statistics are reviewed reverse-scaling inferences, not a base-item capture.',...recovery.warnings);
         }
-        const icon = field('iconId');
+        const icon = itemOptionalText(field('iconId'))===''?undefined:field('iconId');
         if (icon !== undefined && (!Number.isInteger(Number(icon)) || Number(icon) < 0 || Number(icon) > 1000000)) blockers.push('Confirm a valid existing icon ID.');
         if (icon === undefined) warnings.push('No verified wiki icon ID; the icon field stays empty.');
         for (const slot of Array.isArray(field('slots')) ? field('slots') : []) if (SLOT_CATEGORIES[String(slot).toUpperCase()]) categories.add(SLOT_CATEGORIES[String(slot).toUpperCase()]);
@@ -157,10 +175,15 @@ export function buildContributionDraft(input, blueprints) {
         for (const source of confirmedSources) categories.add(contributionTitle(source.zone));
         const sourceRows=instance=>confirmedSources.filter(source=>(source.instance==='unknown'?candidate.instance:source.instance)==='raid'?instance==='raid':instance==='normal').map(source=>`${link(source.zone)}\n* ${link(source.npc)}`).join('\n\n');
         const normalDrops=sourceRows('normal'),raidDrops=sourceRows('raid'),drops=[normalDrops,raidDrops?`=== Raid Instance ===\n${raidDrops}`:''].filter(Boolean).join('\n\n');
-        const effect=itemEffectWikicode(candidate);
-        if(effect&&!lines.some(line=>/^Effect\s*:/i.test(line)))lines.push(effect);
+        const effects=contributionItemEffects(candidate);
+        const firstEffect=lines.findIndex(itemEffectLine);
+        if(itemEffectWasCleared(candidate)){if(firstEffect>=0)lines.splice(firstEffect,1);}
+        else if(effects.length&&itemOptionalText(field('effectName'))&&['effectName','effectType','effectCastTime','effectLevel'].some(key=>candidate.fields[key]?.edited)&&firstEffect>=0)lines[firstEffect]=itemEffectLineWikicode(effects[0]);
+        lines=lines.filter(line=>itemOptionalText(line)&&!/^\s*[^:\r\n<>]{1,80}:\s*\?\s*$/.test(line));
+        for(const effect of effects)if(!lines.some(line=>itemEffectLine(line)&&itemLineHasEffect(line,effect)))lines.push(itemEffectLineWikicode(effect));
+        for(const key of ['classes','slots']){const value=itemChoiceStatLine(candidate,key);if(value===null)continue;const index=lines.findIndex(line=>itemChoiceLine(key,line));if(index>=0){if(value)lines[index]=value;else lines.splice(index,1);}else if(value)lines.push(value);}
         const tier=recovery.ok?recovery.review?.tier:Number(candidate.fields.tier?.value),recoveryNote=Number.isInteger(tier)&&tier>0&&tier<=10?`These stats are reverse calculated from a tier ${tier} item. Please confirm with a tier 0 item and remove this message`:'';
-        text = `${era}<onlyinclude>{{Itempage\n|itemname = ${candidate.title}\n|lucy_img_ID = ${icon === undefined ? '?' : Number(icon)}\n|statsblock =\n${lines.join('<br>\n')||'?'}\n|focus_effect = ${literalWikiText(field('focusEffect') || '?')}\n|notes = ${[candidate.playerText,recoveryNote].filter(Boolean).join('\n\n')||'?'}\n|dropsfrom =\n${drops||'?'}\n}}</onlyinclude>\n`;
+        text = `${era}<onlyinclude>{{Itempage\n|itemname = ${candidate.title}\n|lucy_img_ID = ${icon === undefined ? '' : Number(icon)}\n|statsblock =\n${lines.join('<br>\n')}\n|focus_effect = ${literalWikiText(itemOptionalText(field('focusEffect')))}\n|notes = ${[itemOptionalText(candidate.playerText),recoveryNote].filter(Boolean).join('\n\n')}\n|dropsfrom =\n${drops}\n}}</onlyinclude>\n`;
     } else if (candidate.kind === 'npc') {
         if (!field('location') || !/^\s*\(?\s*[-+]?\d+(?:\.\d+)?\s*[, ]+\s*[-+]?\d+(?:\.\d+)?\s*[, ]+\s*[-+]?\d+(?:\.\d+)?\s*\)?\s*$/.test(String(field('location')))) blockers.push('Enter the monster spawn location as Y, X, Z.');
         if (!candidate.playerText) warnings.push('The NPC description is empty; add player-written details when known.');
@@ -346,6 +369,9 @@ export function patchContributionRelationship(source, { role, itemTitle, npcTitl
 }
 
 function contributionScopedTemplate(source,name,instance){
+    return contributionScopedTemplateInfo(source,name,instance).template;
+}
+function contributionScopedTemplateInfo(source,name,instance){
     const all=contributionTemplates(source,name);let outline=source;
     // Headings inside protected source or a previous template argument do not
     // select an enclosing article section for another template.
@@ -357,10 +383,48 @@ function contributionScopedTemplate(source,name,instance){
         if(labels.size>1)throw Error('Choose the correct existing normal/raid template in the wiki source editor.');
         return {template,scope:[...labels][0]||null};
     });
-    if(all.length===1&&!scopes[0].scope)return all[0];
+    if(all.length===1&&!scopes[0].scope)return scopes[0];
     if(!['normal','raid'].includes(instance))throw Error('Choose the correct existing normal/raid template in the wiki source editor.');
-    const scoped=scopes.filter(({scope})=>instance==='raid'?scope==='raid':scope!=='raid').map(value=>value.template);
+    const scoped=scopes.filter(({scope})=>instance==='raid'?scope==='raid':scope!=='raid');
     if(scoped.length!==1)throw Error('Choose the correct existing normal/raid template in the wiki source editor.');return scoped[0];
+}
+
+// Read-only proof for reciprocal recovery. A backlink, prose mention or a
+// reference in another zone/instance is insufficient to establish a drop.
+// Unsupported or ambiguous layouts fail closed without blocking other pages.
+export function contributionItemSourceMatches(source,{npcTitle,zoneTitle,instance}={}){
+    if(typeof source!=='string'||source.length>512*1024||!['normal','raid'].includes(instance))return false;
+    try{
+        if(new TextEncoder().encode(source).byteLength>512*1024)return false;
+        const npcKey=contributionNameKey(contributionTitle(npcTitle)),zoneKey=contributionNameKey(contributionTitle(zoneTitle));
+        const {template,scope}=contributionScopedTemplateInfo(source,'Itempage',instance),fields=template.fields.filter(field=>field.name.toLowerCase()==='dropsfrom');
+        if(fields.length!==1)return false;
+        let current=activeContributionText(fields[0].value);
+        // Nested examples and citations do not become direct source rows.
+        const nested=[];let depth=0,start=0;
+        for(let i=0;i<current.length-1;i++){
+            const pair=current.slice(i,i+2);
+            if(pair==='{{'){if(depth===0)start=i;depth++;i++;}
+            else if(pair==='}}'&&depth){depth--;i++;if(depth===0)nested.push([start,i+1]);}
+        }
+        if(depth)return false;
+        for(const [a,b]of nested.reverse())current=current.slice(0,a)+current.slice(a,b).replace(/[^\r\n]/g,' ')+current.slice(b);
+        current=current.replace(/<(ref|code)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi,value=>value.replace(/[^\r\n]/g,' '));
+        const hasRaid=/^(={1,6})[ \t]*[^\r\n]*\bRaid\s+Instance\b[^\r\n]*\1[ \t]*\r?$/im.test(current);
+        if(hasRaid){const range=zoneContributionRange(current,instance);current=current.slice(range.start,range.end);}
+        else if(instance==='raid'){if(scope!=='raid')return false;}
+        else {const range=zoneContributionRange(current,'normal');current=current.slice(range.start,range.end);}
+        if(/^={1,6}[ \t]*[^=\r\n]*\b(?:raid|normal)[ \t]+(?:instance|zone)\b[^=\r\n]*={1,6}[ \t]*$/im.test(current))return false;
+        const headings=[...current.matchAll(/^[ \t]*\[\[([^\]|]+)(?:\|[^\]]*)?\]\][ \t]*\r?$/gm)],matching=headings.filter(heading=>contributionNameKey(heading[1])===zoneKey);
+        if(matching.length!==1)return false;
+        const heading=matching[0],index=headings.indexOf(heading),body=current.slice(heading.index+heading[0].length,headings[index+1]?.index??current.length);
+        const references=[...body.matchAll(/^[ \t]*[*#]+[ \t]*\[\[([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/gm)];
+        for(const row of body.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li\s*>/gi)){
+            if(/<li\b/i.test(row[1]))continue;
+            const reference=row[1].match(/^\s*\[\[([^\]|\r\n]+)(?:\|[^\]\r\n]*)?\]\]/);if(reference)references.push(reference);
+        }
+        return references.some(reference=>contributionNameKey(reference[1])===npcKey);
+    }catch{return false;}
 }
 function patchTemplateFields(source,name,updates,instance='normal'){
     const template=contributionScopedTemplate(source,name,instance),edits=[],additions=[];
@@ -373,6 +437,21 @@ function patchTemplateFields(source,name,updates,instance='normal'){
     if(additions.length)edits.push({start:template.end-2,end:template.end-2,text:additions.join('')});
     for(const edit of edits.sort((a,b)=>b.start-a.start))source=source.slice(0,edit.start)+edit.text+source.slice(edit.end);
     return source;
+}
+function patchItemEffectBlock(source,candidate){
+    const cleared=itemEffectWasCleared(candidate),effect=contributionItemEffects(candidate)[0];if(!cleared&&!effect)return source;
+    if(cleared){const previous=contributionItemEffects({fields:{effects:candidate.fields.effects}})[0];return patchItemStatLine(source,line=>itemEffectLine(line)&&(/^\s*(?:(?:Combat|Click|Worn|Focus|Proc)\s+)?Effect\s*:\s*\?\s*$/i.test(line)||previous&&itemLineHasEffect(line,previous)),'');}
+    return patchItemStatLine(source,itemEffectLine,itemEffectLineWikicode(effect));
+}
+function patchItemStatLine(source,matches,text){
+    const parts=source.split(/(<br\s*\/?>|\r?\n)/i);
+    for(let index=0;index<parts.length;index+=2)if(matches(activeContributionText(parts[index]))){
+        if(protectedRanges(parts[index]).length)throw Error('The existing item line contains protected text. Update this field in the wiki source editor.');
+        parts[index]=parts[index].match(/^\s*/)[0]+text+parts[index].match(/\s*$/)[0];return parts.join('');
+    }
+    if(!text)return source;
+    const eol=source.includes('\r\n')?'\r\n':'\n',body=/^\s*\?\s*$/.test(source)?'':source.trimEnd();
+    return body+(body?'<br>'+eol:'')+text+eol;
 }
 function zoneContributionRange(source,instance){
     const active=activeContributionText(source),headings=[...active.matchAll(/^(={1,6})[ \t]*(.*?)[ \t]*\1[ \t]*\r?$/gm)],raids=headings.filter(heading=>/\bRaid\s+Instance\b/i.test(heading[2])),normals=headings.filter(heading=>/\bNormal\s+(?:Zone|Instance)\b/i.test(heading[2]));
@@ -428,10 +507,15 @@ export function patchContributionPrimary(source,input){
             updates.statsblock=stats.slice(0,60).map(literalWikiText).join('<br>\n');
             const templates=contributionTemplates(text,'Itempage');if(templates.length!==1)throw Error('Select the existing item template on the wiki.');
             const notes=templates[0].fields.filter(field=>field.name.toLowerCase()==='notes');if(notes.length>1)throw Error('The item has duplicate notes fields.');
-            if(notes.length)updates.notes=notes[0].value.replace(/These stats are reverse calculated from a tier\s+\d+\s+item\.\s*Please confirm with a tier 0 item and remove this message\.?/gi,'').replace(/Base statistics were proposed by reversing a reviewed tier\s+(?:10|[0-9])\s+examine at\s+\d+\/\d+\s+progress, excluding augments and other modifiers\.\s*Rounding choices were reviewed; this is an inference, not a base-item capture\./gi,'').trim()||'?';
+            if(notes.length)updates.notes=notes[0].value.replace(/These stats are reverse calculated from a tier\s+\d+\s+item\.\s*Please confirm with a tier 0 item and remove this message\.?/gi,'').replace(/Base statistics were proposed by reversing a reviewed tier\s+(?:10|[0-9])\s+examine at\s+\d+\/\d+\s+progress, excluding augments and other modifiers\.\s*Rounding choices were reviewed; this is an inference, not a base-item capture\./gi,'').trim();
         }
-        if(candidate.fields.focusEffect?.edited&&candidate.field('focusEffect')!==undefined)updates.focus_effect=literalWikiText(candidate.field('focusEffect'))||'?';
-        if(candidate.fields.iconId?.edited&&candidate.field('iconId')!==undefined){const icon=Number(candidate.field('iconId'));if(!Number.isInteger(icon)||icon<0||icon>1000000)throw Error('Choose a valid wiki icon.');updates.lucy_img_ID=String(icon);}
+        const updateStats=transform=>{const template=contributionScopedTemplate(text,'Itempage',candidate.instance),fields=template.fields.filter(field=>field.name.toLowerCase()==='statsblock');if(fields.length>1)throw Error('The item has duplicate statistic fields. Update this field in the wiki source editor.');updates.statsblock=transform(updates.statsblock??fields[0]?.value??'').trim();};
+        if(itemEffectWasCleared(candidate)||itemOptionalText(candidate.field('effectName'))&&['effectName','effectType','effectCastTime','effectLevel'].some(key=>candidate.fields[key]?.edited)){
+            updateStats(value=>patchItemEffectBlock(value,candidate));
+        }
+        for(const key of ['classes','slots'])if(candidate.fields[key]?.edited){const line=itemChoiceStatLine(candidate,key);if(line!==null)updateStats(value=>patchItemStatLine(value,line=>itemChoiceLine(key,line),line));}
+        if(candidate.fields.focusEffect?.edited&&(candidate.field('focusEffect')!==undefined||!itemOptionalText(candidate.fields.focusEffect.value)))updates.focus_effect=literalWikiText(itemOptionalText(candidate.field('focusEffect')));
+        if(candidate.fields.iconId?.edited&&(candidate.field('iconId')!==undefined||!itemOptionalText(candidate.fields.iconId.value))){if(!itemOptionalText(candidate.fields.iconId.value))updates.lucy_img_ID='';else{const icon=Number(candidate.field('iconId'));if(!Number.isInteger(icon)||icon<0||icon>1000000)throw Error('Choose a valid wiki icon.');updates.lucy_img_ID=String(icon);}}
         if(Object.keys(updates).length)text=patchTemplateFields(text,'Itempage',updates,candidate.instance);
     }else if(candidate.kind==='npc'){
         const updates={},mapping={location:'location',level:'level',race:'race',class:'class',respawnTime:'respawn_time',AC:'AC',HP:'HP',special:'special'};

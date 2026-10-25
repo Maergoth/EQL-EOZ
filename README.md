@@ -4,20 +4,26 @@
 
 [Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
 
-**0.9.9: clearer gap reviews and Character controls.** Filter the discovery
-queue by gap type, with new monsters/items first and plain New Page / Update Page
-tags. Existing-page reviews show the specific addition and linked pages; other
-fields stay collapsed. Duplicate/case-variant matches and known Exaltation export
-names no longer become separate page work. Item tier changes update equipment
-badges immediately, with a short hover delay and compact Exaltation summaries.
-See [the release plan](docs/RELEASE_099_PLAN.md) for implementation and checks.
+**0.9.10: reliable overlays and streamlined wiki contributions.** Gently drag
+a snapped overlay to detach it; its size and neighbors stay put. Release near a
+new edge to dock. Item hovers across the app and native Intel now use the wiki's
+item frame, inline stats and linked effects, retaining Character tier and
+Exaltation controls. The minimap shows travel direction from logged movement.
 
-![Filtered discovery queue and clear page-action tags](app/assets/whats-new/0.9.9/contribution-filtered-queue.png)
+Contribute uses fixed-choice class/slot dropdowns, shared Zone, screenshot and
+inline icon paste, targeted additions and a clear Preview → Publish flow. Tiered
+item evidence prefills editable compatible base proposals. Successful changes
+link to the saved pages. Missing wiki items linked in chat offer Contribute;
+accepted item/monster prompts wait for matching live examine evidence or the
+fresh next `/loc`, show green completion and then close. Character capture and
+existing readers stay protected. See [the release record](docs/RELEASE_0910_PLAN.md)
+for integration, verification and publication status.
 
-![Targeted source update with destination card and linked-page additions](app/assets/whats-new/0.9.9/contribution-targeted-source-update.png)
+![Shared wiki-style item card in Eye of Zomm 0.9.10 with synthetic data](app/assets/whats-new/0.9.10/shared-wiki-itembox-main.png)
 
-These are actual Chromium component captures with synthetic data and isolated
-wiki/storage APIs. Earlier screenshots and browsable updates remain archived.
+The illustrated What's new archive retains every earlier update and its
+screenshots. Release captures use synthetic records and isolated profiles/APIs;
+they contain no player pixels or production wiki submissions.
 
 Keep all gear on. Enter character details, type
 `/outputfile inventory`, then let EoZ detect the fresh matching export in your
@@ -34,7 +40,7 @@ panes. See [the inventory-export flow](docs/CHARACTER_WALKTHROUGH.md) and
 
 The compact inspect and interactive wiki sharing introduced in 0.9.6 remain:
 24 equipment slots including two Any slots, clickable known gear/Exaltations,
-PNG copy/save and an explicitly reviewed interactive share. Since 0.9.8 new shares
+PNG copy/save and an interactive share with one final Share action. Since 0.9.8 new shares
 target your **User:Name** page. Character Select preserves
 separate **Character (Server)** saves. The wiki contract and activation boundary
 are documented in [the cross-repository plan](docs/CHARACTER_SHEETS_PLAN.md).
@@ -123,7 +129,13 @@ Routing is an opt-in. A line appears only after collision checks approve it; a g
 
 **Zone & loot** separates Normal Zone and Raid Zone sources, with red **Raid Zone** intel shown first. Click a section heading to collapse it. **Item Level Slider** and **My Class** stay anchored above the scrolling list. Hover or keyboard-focus a mob name for Details, Route, Copy /waypoint, Wiki and Map in the same row, without moving the list. Its Map action opens a first-person preview at that source, keeping your logged position unchanged. Use **Show More** for all matching drops. Class filtering retains usable equipment/effects and excludes statless and weight-only quest/junk records. A logged consider or named kill selects and expands its row and section with a mild visual/audio cue, without activating the window.
 
-Hover or focus an item's name or icon for its local stat block, including tier-adjusted values and base comparisons. **Through era** includes items through the chosen era. Activating a located NPC name copies a paste-ready `/waypoint Y X [Z]`; row-level Route actions start navigation when routing is enabled.
+Hover or focus an item's name or icon for its local wiki-style item card,
+including tier-adjusted values, linked effects and base comparisons. Character
+uses the same frame with its tier slider and Exaltation sockets; Exaltation
+summaries show only name/effect. Explicit font preferences still apply.
+**Through era** includes items through the chosen era. Activating a located NPC
+name copies a paste-ready `/waypoint Y X [Z]`; row-level Route actions start
+navigation when routing is enabled.
 
 Routine log and location updates retain stable mob ordering, the visible row,
 expanded drops and collapsed sections. A new named consider or kill still
@@ -188,20 +200,23 @@ contribution capture so the two modes cannot read the source concurrently.
 ### Contribute to Wiki through an explicit review
 
 Open **Contribute to Wiki** to review proposed items, monsters and zones from
-supported live log events, screenshot reads or manual entry. Review potential
-existing pages and the task reason first: an existing page may need a source,
+supported live log events, screenshot reads or manual entry. Review the matched
+destination page and task reason first: an existing page may need a source,
 population or tier-zero correction rather than a duplicate article. A shared
 resolver handles exact title aliases, apostrophes, case and supported item tiers;
 an incomplete catalog cannot prove absence. Generated pet names are excluded
-unless the wiki positively identifies a real NPC.
+unless the wiki positively identifies a real NPC. Automatic monster discovery
+requires kill/death evidence or a named-corpse loot source; a nearby spell cast
+or consider alone does not create a new-monster task. Captured evidence shows
+the triggering log line locally without adding that private text to wiki pages
+or hourly observation uploads.
 
 A fresh unknown-monster kill arms one next **/loc** and shows a noninterrupting
 prompt. Stand at that monster's spawn before typing the command. A newer eligible
 kill replaces the active target; older drafts remain available for explicit
 rearming. Locations remain proposals for review, and EoZ never types commands.
 
-The next-release work in [PR #27](https://github.com/Maergoth/EQL-EOZ/pull/27)
-also recognizes encoded item links in live chat. Missing wiki items offer
+Encoded item links in live chat also identify missing wiki items and offer
 **Contribute**; open the linked item's complete examine window. That action
 starts or reuses the contribution reader, using a configured game window or
 asking for an explicit source inside Contribute. An active Character capture
@@ -218,26 +233,35 @@ alone. Zone/log-source changes cancel an incompatible spawn request.
 
 Correct the readable fields, choose **Raid Instance** when appropriate, and
 classify observed drops as **Common Loot** or **Unique Loot**. These are wiki
-sections, not measured drop probabilities. Optional unknown fields use the
-blueprint's supported placeholders. Match review and the final page diff remain
-required; individual fields no longer need separate Verified checkboxes.
+sections, not measured drop probabilities. Classes and Equipment slots use
+multiselect dropdowns; drop sources reuse **Zone**. Empty item fields remain
+blank, while factual monster unknowns use the blueprint's supported placeholders.
+The destination check and final page preview remain. Check **I reviewed these
+page changes** once above Publish; there are no separate field, match or per-page
+approval checkboxes.
 
 Use the screenshot **+** area to select/paste a PNG, review its caption/license
 and choose whether to publish it with the article. Local OCR is separate from
-uploading. In **Icon Finder**, paste/select a crop containing **just the icon**,
-or browse/search exact artwork IDs. Matching runs locally against the wiki's
-versioned index; original aliases and IDs are preserved. No icon crop uploads.
+uploading. Inside **Icon ID**, paste a crop containing **just the icon** and
+choose a closest artwork match, or enter the exact ID. Matching runs locally
+against the wiki's versioned index; original aliases and IDs are preserved.
+No icon crop uploads.
 
 Log in through the wiki's normal dedicated window when you are ready to submit.
 The app loads the current wiki blueprints, prepares a page plan and shows every
 planned change. Review each page and fresh duplicate check before the final
 publish action. Existing permissions and edit-conflict checks apply; a partial
 result identifies unfinished pages so a retry does not repeat completed edits.
+Confirmed saved pages offer **View page** links for items, monsters, zones,
+spells and related updates. A monster created later through EoZ can recover
+published item-source relationships into its reviewed loot list. Automatic
+reverse links in wiki-rendered pages have a separate wiki deployment contract.
 Nothing publishes merely because a candidate was captured or previewed.
 
 For a tiered drop without a wiki base record, base recovery keeps the original
-numbers/evidence and lets you correct ambiguous inverse-scaled values. Unknown
-or unsupported values stay omitted. Recovered pages carry a visible request for
+numbers/evidence and prefills jointly compatible editable base proposals.
+Valid manual edits stay intact; unsupported numbers require correction before
+review. Unknown or unsupported values stay omitted. Recovered pages carry a visible request for
 verification against a tier-zero item; a genuine reviewed tier-zero reading can
 replace that proposal through a scoped patch. Missing item effects can include
 a separate spell-blueprint page in the same reviewed multi-page plan.
@@ -439,6 +463,7 @@ before changing either side of that contract.
 | Documentation | Purpose |
 | --- | --- |
 | [Contributor handoff](docs/HANDOFF.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md) | Architecture, source ownership and exact next work |
+| [0.9.10 release record](docs/RELEASE_0910_PLAN.md), [discovery](docs/CONTRIBUTION_DISCOVERY_PLAN.md) and [item forms](docs/CONTRIBUTION_ITEM_FORM_PLAN.md) | Current request/evidence lifecycle, simpler review, component source map and separate app/wiki publication gates |
 | [Product vision](docs/UX_VISION.md) and [PNUT interaction plan](docs/PNUT_UX_PLAN.md) | UX contracts and feature scope |
 | [Window/map follow-up](docs/WINDOW_MAP_POLISH.md) | Current window, map and tour changes |
 | [0.9.0 capture/contribution status](docs/CAPTURE_CONTRIBUTIONS.md) | Feature scope, ownership and acceptance contracts |

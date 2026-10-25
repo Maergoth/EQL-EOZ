@@ -7,6 +7,10 @@ const same = (resolver, kind, a, b) => {
 };
 const instance = value => ['normal','raid'].includes(value?.instance || value?.instanceType) ? value.instance || value.instanceType : typeof value?.raidInstance==='boolean' ? value.raidInstance?'raid':'normal' : 'unknown';
 const instanceMatches=(observed,cached)=>instance(observed)==='unknown'||instance(cached)==='unknown'||instance(observed)===instance(cached);
+// Reuse the gap classifier's identity/instance rules when describing the
+// destination delta; observed history is not automatically a missing fact.
+export const contributionSameIdentity=same;
+export const contributionInstanceMatches=instanceMatches;
 export function hasInferredBase(record={}) {
     return record.baseStatsInferred===true || record.baseRecovery?.inferred===true ||
         /These stats are reverse calculated from a tier (?:10|[0-9]) item\. Please confirm with a tier 0 item and remove this message/i.test(String(record.notes||'')) ||

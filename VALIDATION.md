@@ -1,4 +1,12 @@
-# Validation report — v0.9.7
+# Validation report — v0.9.10
+
+0.9.10 release preparation: source/native synthetic receipts for overlay drag,
+shared wiki cards, map trajectory/transparency, tiered item forms and persistent
+fresh-evidence discovery flows are indexed in
+[the release plan](docs/RELEASE_0910_PLAN.md). Final PR24–27 integration and
+exact-head platform/package/publication receipts are separate gates. No dataset
+producer run, installer execution, installed-profile edit or live-game
+acceptance is implied by release-note preparation.
 
 0.9.9: focused identity, import, update-planning and Character source regressions pass. The isolated native component checks match-card layout/dedup, gap filtering, compact source update forms, 350ms actual pointer hover/adjacent transitions, tier badge/focus consistency and unchanged recorded totals at ordinary/large text. These checks are synthetic; exact-head platform/package/publication receipts belong in docs/RELEASE_099_PLAN.md.
 
