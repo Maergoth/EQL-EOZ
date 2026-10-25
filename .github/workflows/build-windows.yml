@@ -115,6 +115,8 @@ jobs:
         run: npm run test:capture-workspace
       - name: Test discovery contribution capture ownership and fresh evidence
         run: npm run test:discovery-capture-workspace
+      - name: Test stable discovery rows during background verification
+        run: npm run test:discovery-queue-stability
       - name: Test current contribution and Character UI
         if: inputs.extended_ui_checks
         run: npm run test:workspace-099

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 - Stable discoveries and item pages
+
+- Match canonical item names within flattened chat instead of treating quoted sales prose as a new item. Genuine encoded item links retain their exact boundaries.
+- Keep Discovery rows, filter controls, scroll position and the selected draft stable during background updates and verification renewal. Previously unseen gaps still require live confirmation; publishing still requires fresh proof.
+- Reversibly archive proven untouched old chat-caption suggestions while preserving reviewed, edited, OCR-supported, loot and source-bearing work.
+- Generate item stat blocks in the wiki blueprint format, including canonical Atk Delay and WT labels, without inventing missing item values or flags.
+- Keep map-selection controls and their options readable against the application's dark background.
+
 ## 1.0.0 - Eye of Zomm 1.0
 
 - Use the native eye icon on desktop shortcuts, installers and application windows.

@@ -1,5 +1,7 @@
 # Eye of Zomm — Product and UX Vision
 
+Current `v1.0.1` hotfix: procedural chat identities, reversible untouched-caption cleanup, stable Discovery rows during proof renewal, and canonical outgoing wiki item formatting. The existing fresh-proof and protected-draft boundaries remain in force.
+
 1.0.0 keeps map movement prompt, shares Crawl progress across Map and Intel, compares logged combatants and preserves the last Live encounter. Contributions use one numeric form and an explicit native Screen Reading permission, with fresh live-wiki proof before publication. See [the release record](RELEASE_1_0_PLAN.md).
 
 0.9.15 keeps automatic discoveries invisible until the public live wiki confirms a missing page or exact gap. Cached data gates traffic; uncertainty never becomes a task. Device ignores and Restore live in Contribution History. Zone creation uses the shared normal/raid blueprint, log anchoring preserves readable names, and the top 3D map pans on left drag.

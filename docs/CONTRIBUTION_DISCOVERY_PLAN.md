@@ -10,6 +10,11 @@ with redirect resolution before a missing-item notice. Errors remain unverified.
 This exception does not add live loot-count classification or background wiki
 polling. The historical release records below describe their earlier behavior.
 
+Flattened chat, including square brackets and quotation marks, requires a unique
+positive catalog identity. Punctuation cannot authenticate an unknown item name.
+Genuinely new items can still be discovered from a retained encoded game link,
+actual loot, or explicit manual creation. See [chat identity rules](CHAT_ITEM_BOUNDARIES.md).
+
 ## Untouched legacy chat captions
 
 Updating the parser does not remove already saved suggestions. Queue reconciliation

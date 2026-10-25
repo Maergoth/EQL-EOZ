@@ -1,5 +1,12 @@
 # Browsable release history
 
+The 1.0.1 capture shows the actual production Contribute workspace in isolated
+Electron with synthetic item drafts and a deferred loopback verifier. Its
+version-owned image records stable queue rows during renewal; no player profile,
+game pixels or wiki publication were used for the capture. Existing history and
+artwork stay unchanged. Map selector contrast is checked separately in the real
+appearance workflow for dark and synthetic light control palettes.
+
 1.0.0 archives four reviewed actual Electron captures of the integrated runtime: shared Crawl in Intel, whole-session combatants, the single structured item form, and a native New Item Found popup. These retain their synthetic-data provenance and are copied into new version-owned paths with SHA-256 receipts; older entries and image bytes remain unchanged.
 
 0.9.15 archives four visually reviewed actual isolated Electron Chromium captures: discovery queue dismiss/forever-ignore controls, the device ignore manager inside Contribution History, the unified normal/raid zone creation form, and a real native WebGL top map with a synthetic movement arrow. All entities, account responses and storage are synthetic. The native fixture verifies the controls, Restore, shared blueprint previews, required raid choice, placeholders and large-text layout. No installed profile, game pixels or production wiki writes are used. Earlier releases and image hashes remain unchanged.

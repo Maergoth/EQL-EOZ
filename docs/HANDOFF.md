@@ -1,5 +1,7 @@
 # Eye of Zomm contributor handoff
 
+Current `v1.0.1` hotfix: procedural chat identities, reversible untouched-caption cleanup, stable Discovery rows during proof renewal, and canonical outgoing wiki item formatting. The existing fresh-proof and protected-draft boundaries remain in force.
+
 1.0.0 integrates the six reviewed icon, tier-stat, Crawl, combatant, contribution and map-latency features. Preserve exact wiki base fields, capture permission, fresh-proof publication guards and one shared session. See [the 1.0 release record](RELEASE_1_0_PLAN.md); older receipts below remain historical.
 
 0.9.15 adds native anonymous discovery verification, persistent device ignores, the unified zone creation blueprint, general log anchoring and same-visit numeric /con level suggestions. All automatic queue and popup paths must remain hidden before confirmed live absence, including Character item gaps and legacy saved automatic drafts. See [the release plan](RELEASE_0915_PLAN.md), [verification policy](CONTRIBUTION_GAP_VERIFICATION.md), [ignores](CONTRIBUTION_IGNORES.md) and [level evidence](CONSIDER_LEVEL_PREFILL.md).
