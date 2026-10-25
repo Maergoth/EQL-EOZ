@@ -108,27 +108,32 @@ try {
         const state = () => execute(owner, () => window.eyeOfZommOverlays.getState());
         const control = (action, panel, value) => execute(owner, (action, panel, value) => window.eyeOfZommOverlays.control(action, panel, value), action, panel, value);
         const action = (panel, command, payload) => execute(panels()[panel], (command, payload) => window.eyeOfZommOverlay.action(command, payload), command, payload);
-        const placeNativeBounds = async (id, bounds) => {
-            const window=panels()[id];let lastNativeChange=Date.now();
+        const placeNativeBounds = async (id, bounds, {automaticHeight=false}={}) => {
+            assert(!automaticHeight||id==='timers','Only Triggers has automatic content height');
+            const window=panels()[id];let lastNativeChange=Date.now(),lastActualBounds='',stableSince=Date.now();
             const changed=()=>{lastNativeChange=Date.now();};
             window.on('move',changed);window.on('resize',changed);
             try{
                 window.setBounds(bounds);
                 // X11's setBounds notifications create the host's native-move
                 // fallback, which completes after 250ms without movement.
-                // Wait for native geometry and persisted host geometry to
-                // agree and settle before asking a different overlay to dock
-                // against this target. Windows usually emits moved earlier.
+                // Wait for position/width agreement and actual native geometry
+                // to settle before the next drag. Automatic Triggers height is
+                // derived from content, and its native minimum/DIP rounding may
+                // differ from the stored computed request. Staging setBounds
+                // must not turn that policy into a manual height selection.
                 await until(async()=>{
-                    const current=window.getBounds(),saved=(await state()).panels[id].bounds;
-                    // Electron/Windows may round fractional physical pixels
-                    // back by 1–2 DIPs. Use the settled native rectangle as
-                    // the next gesture's origin, as the host itself does.
-                    return Date.now()-lastNativeChange>=350&&['x','y','width','height'].every(key=>Math.abs(current[key]-saved[key])<=2)&&
-                        ['x','y','width'].every(key=>Math.abs(current[key]-bounds[key])<=2)&&(id==='timers'||Math.abs(current.height-bounds.height)<=2);
+                    const current=window.getBounds(),panel=(await state()).panels[id],saved=panel.bounds,actual=JSON.stringify(current),now=Date.now();
+                    if(actual!==lastActualBounds){lastActualBounds=actual;stableSince=now;}
+                    // Retain the existing two-DIP coordinate/width rounding
+                    // bound; only automatic height has a different contract.
+                    const placement=['x','y','width'].every(key=>Math.abs(current[key]-saved[key])<=2&&Math.abs(current[key]-bounds[key])<=2);
+                    const height=automaticHeight?panel.manualHeight===false&&current.height>=window.getMinimumSize()[1]:
+                        Math.abs(current.height-saved.height)<=2&&Math.abs(current.height-bounds.height)<=2;
+                    return now-lastNativeChange>=350&&now-stableSince>=350&&placement&&height;
                 },`${id} fixture placement settles before a new drag`);
                 return window.getBounds();
-            }catch(error){throw Error(`${error.message}; requested=${JSON.stringify(bounds)} native=${JSON.stringify(window.getBounds())} host=${JSON.stringify((await state()).panels[id])} quietMs=${Date.now()-lastNativeChange}`);
+            }catch(error){throw Error(`${error.message}; automaticHeight=${automaticHeight} requested=${JSON.stringify(bounds)} native=${JSON.stringify(window.getBounds())} host=${JSON.stringify((await state()).panels[id])} nativeMinimum=${JSON.stringify(window.getMinimumSize())} quietMs=${Date.now()-lastNativeChange} stableMs=${Date.now()-stableSince}`);
             }finally{window.off('move',changed);window.off('resize',changed);}
         };
         const append = async texts => {
@@ -268,7 +273,8 @@ try {
             // that gesture. First detach the seeded/default pair, then perform
             // a fresh move toward Parse to exercise intentional reattachment.
             await action('timers','move-start');await action('timers','move-end',{cancel:true});
-            const stagedTimer=await placeNativeBounds('timers',{x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+27,width:actualTarget.width-8,height:84});
+            const stagedTimer=await placeNativeBounds('timers',{x:actualTarget.x+5,y:actualTarget.y+actualTarget.height+27,width:actualTarget.width-8,height:84},{automaticHeight:true});
+            assert.equal((await state()).panels.timers.manualHeight,false,'Staging Triggers position/width preserves automatic content height');
             await action('timers','move-start');await action('timers','move',{deltaX:actualTarget.x-stagedTimer.x,deltaY:actualTarget.y+actualTarget.height+7-stagedTimer.y});await action('timers','move-end');
             try{await until(()=>{const bounds=timerWindow.getBounds();return bounds.x===actualTarget.x&&bounds.y===actualTarget.y+actualTarget.height&&bounds.width===actualTarget.width;},'Triggers touches current resized native Parse bounds and shares its width');}catch(error){throw Error(`${error.message}; target=${JSON.stringify(actualTarget)} timer=${JSON.stringify(timerWindow.getBounds())} workAreas=${JSON.stringify(fixtureScreen.getAllDisplays().map(display=>display.workArea))} preferences=${JSON.stringify((await state()).panels)}`);}
             // Native setBounds is fixture positioning, not user height intent.
