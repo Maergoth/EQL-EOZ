@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import './inventory-parent-classification.mjs';
+import './character-storage-capacity.mjs';
 import {parseInventoryExport} from '../app/inventory-export.js';
 import {createCharacterModel,characterEquipmentEligibility,CHARACTER_STORAGE_KEY,CHARACTER_SLOTS} from '../app/character-model.js';
 
@@ -60,7 +61,7 @@ assert.equal(restart.snapshot().candidates.length,beforeEmpty.candidates.length)
 const quotaStorage=memory();let reject=false;const quotaModel=createCharacterModel({storage:{getItem:key=>quotaStorage.getItem(key),setItem:(key,value)=>{if(reject)throw Error('Synthetic quota');quotaStorage.setItem(key,value);}},now:()=>4000});
 quotaModel.setMetadata({name:'Synthetic Durable',server:'Realm'});const quotaBefore=quotaModel.snapshot(),quotaDisk=quotaStorage.getItem(CHARACTER_STORAGE_KEY);reject=true;assert.equal(quotaModel.applyInventoryExport(parsed,{resolveItem}).ok,false);assert.deepEqual(quotaModel.snapshot(),quotaBefore);assert.equal(quotaStorage.getItem(CHARACTER_STORAGE_KEY),quotaDisk);
 const oversized=fixture({extra:Array.from({length:998},(_,index)=>['General '+(index+10),'Synthetic Oversized '+index,index+1000,1,0].join('\t'))});const beforeCapacity=restart.snapshot();assert.equal(restart.applyInventoryExport(oversized,{resolveItem}).ok,false);assert.deepEqual(restart.snapshot(),beforeCapacity);
-const tooLargeBytes=fixture({extra:Array.from({length:100},(_,index)=>['General '+(index+10),catalog.name,index+2000,1,0].join('\t'))}),diskBeforeBytes=storage.getItem(CHARACTER_STORAGE_KEY);
+const tooLargeBytes=fixture({extra:Array.from({length:400},(_,index)=>['General '+(index+10),catalog.name,index+2000,1,0].join('\t'))}),diskBeforeBytes=storage.getItem(CHARACTER_STORAGE_KEY);
 assert.equal(restart.applyInventoryExport(tooLargeBytes,{resolveItem:entry=>entry.baseName===catalog.name?{item:catalog,icon:'data:image/png;base64,'+'A'.repeat(23968)}:null}).ok,false);assert.deepEqual(restart.snapshot(),beforeCapacity);assert.equal(storage.getItem(CHARACTER_STORAGE_KEY),diskBeforeBytes,'A sub-1000-card oversized export rolls back without evicting previous gear or changing disk');
 const deletedRead={kind:'ocr',id:'synthetic-old-card',sessionId:'old-session',sequence:11,capturedAt:new Date(10).toISOString(),subject:{kind:'item',name:'Synthetic Clear Guard'},fields:[{key:'name',value:'Synthetic Clear Guard'}]};restart.intake(deletedRead);const beforeClear=restart.snapshot();restart.setStatSnapshot('current',{stats:{HP:99},confirmed:true});
 assert(restart.clearInventory().ok);snapshot=restart.snapshot();assert.deepEqual(snapshot.candidates,[]);assert.deepEqual(snapshot.equipment,{});assert.equal(snapshot.inventoryExport,null);assert.equal(snapshot.statSnapshots.current,null);assert.deepEqual(snapshot.metadata,beforeClear.metadata);assert.equal(snapshot.sequence,beforeClear.sequence);assert.equal(restart.intake(deletedRead).ignored,true,'Clear keeps exact old-observation replay protection');assert.deepEqual(snapshot.statSnapshots.base,beforeClear.statSnapshots.base);

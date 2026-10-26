@@ -1,5 +1,17 @@
 # Browsable release history
 
+The 1.0.6 image shows the actual production Character workspace after a synthetic
+443-card import, with 23 equipped items and a normal delayed item tooltip. The
+full schema-1 model is 2,477,850 bytes, above the former 1.5 MB allowance. The
+isolated main app uses native preload and a disposable private profile; a second
+process verifies disk restoration, including all item/icon, socket, origin,
+manual, numeric and achievement facts. Only the normal timestamp update and
+exact catalog enrichment of previously empty loose-item slot arrays may differ.
+No player exports, installed profile, game pixels or live wiki requests appear.
+The version-owned PNG has SHA-256
+`b1eadad4ae7903e04ddfbac0249141399149b6a24c9cad04787d0566f5f5e124`;
+earlier history and image bytes remain unchanged.
+
 The 1.0.5 image shows actual production Contribute components in isolated,
 sandboxed Electron Chromium after three synthetic old trade captions retire
 on catalog refresh. One unrelated verified discovery remains visible. The

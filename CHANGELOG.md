@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.6 - Larger Character inventories
+
+- Raise saved Character capacity from 1.5 MB to 8 MiB per character and from 8 MB to 32 MiB for the character roster, consistently across imports, profiles and desktop persistence.
+- Keep the existing inventory JSON format, item/socket relationships and import flow. Existing exports and saved characters remain supported.
+- Preserve the previous inventory when an actual storage/quota failure prevents a save; native desktop storage remains authoritative when the browser mirror is full.
+
 ## 1.0.5 - Cleaner chat discoveries
 
 - Keep trade captions containing one or several known items out of automatic new-item suggestions. Whole catalog titles and aliases retain their exact identity; genuine new encoded item links remain supported.

@@ -6,7 +6,7 @@ import { CHARACTER_WALKTHROUGH_KEY } from './character-walkthrough.js';
 const PROFILE_STORAGE_KEY='eql-eye-of-zomm-character-profiles-v1';
 const CONTRIBUTION_STORAGE_KEY='eql-eye-of-zomm-contributions-v1';
 const KEYS=new Set([CHARACTER_STORAGE_KEY,CHARACTER_WALKTHROUGH_KEY,PROFILE_STORAGE_KEY,CONTRIBUTION_STORAGE_KEY]);
-const valueLimit=key=>key===PROFILE_STORAGE_KEY?8000000:key===CONTRIBUTION_STORAGE_KEY?1800000:1500000;
+const valueLimit=key=>key===PROFILE_STORAGE_KEY?32*1024*1024:key===CONTRIBUTION_STORAGE_KEY?1800000:key===CHARACTER_STORAGE_KEY?8*1024*1024:1500000;
 export async function createCharacterStorage({api=globalThis.eyeOfZommCharacterStorage,legacyStorage=globalThis.localStorage,onWarning=()=>{}}={}) {
     const values=new Map(),pending=new Set(),failedKeys=new Set(),blockedKeys=new Set();let hostReady=false,writeWarning=false,localWarning=false;
     const warn=message=>{try{onWarning(message);}catch{/* A warning must not break editing. */}};
@@ -48,6 +48,12 @@ export async function createCharacterStorage({api=globalThis.eyeOfZommCharacterS
             if(blockedKeys.has(key))throw Error('This saved Character entry is preserved until its malformed or unsupported data is recovered.');
             const limit=valueLimit(key);
             if(typeof value!=='string'||value.length>limit||new TextEncoder().encode(value).length>limit)throw Error('Character storage value exceeds its limit.');
+            if(!hostReady){
+                // Browser storage is the only authority in this fallback. Let
+                // quota failures reach the atomic model/profile transaction.
+                if(typeof legacyStorage?.setItem!=='function')throw Error('Character storage is unavailable.');
+                legacyStorage.setItem(key,value);values.set(key,value);return;
+            }
             values.set(key,value);mirror(key,value);persist(key,value);
         },
         removeItem(key){if(!KEYS.has(key))throw Error('Unsupported Character storage key.');if(blockedKeys.has(key))throw Error('This saved Character entry is preserved until its malformed or unsupported data is recovered.');values.set(key,null);mirror(key,null);persist(key,null);},

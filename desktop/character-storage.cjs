@@ -8,7 +8,7 @@ const {randomUUID} = require('node:crypto');
 const PROFILE_STORAGE_KEY='eql-eye-of-zomm-character-profiles-v1';
 const CONTRIBUTION_STORAGE_KEY='eql-eye-of-zomm-contributions-v1';
 const CHARACTER_STORAGE_KEYS=Object.freeze(['eql-eye-of-zomm-character-v1','eql-eye-of-zomm-character-walkthrough-v1',PROFILE_STORAGE_KEY,CONTRIBUTION_STORAGE_KEY]);
-const MAX_VALUE_BYTES=1500000,MAX_ROSTER_BYTES=8000000,MAX_CONTRIBUTION_BYTES=1800000;
+const MAX_VALUE_BYTES=8*1024*1024,MAX_ROSTER_BYTES=32*1024*1024,MAX_CONTRIBUTION_BYTES=1800000;
 // Inner values are JSON strings. Any one-byte character can require six bytes
 // when escaped in the fixed outer envelope; allow every bounded key at once.
 const MAX_FILE_BYTES=(MAX_VALUE_BYTES*2+MAX_ROSTER_BYTES+MAX_CONTRIBUTION_BYTES)*6+4096;

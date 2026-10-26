@@ -2,7 +2,7 @@ import { CHARACTER_STORAGE_KEY } from './character-model.js';
 import { CHARACTER_WALKTHROUGH_KEY } from './character-walkthrough.js';
 
 export const CHARACTER_PROFILES_KEY='eql-eye-of-zomm-character-profiles-v1';
-export const CHARACTER_PROFILE_LIMITS=Object.freeze({profiles:32,storageBytes:8000000,valueBytes:1500000});
+export const CHARACTER_PROFILE_LIMITS=Object.freeze({profiles:32,storageBytes:32*1024*1024,valueBytes:8*1024*1024});
 const INNER_KEYS=new Map([[CHARACTER_STORAGE_KEY,'model'],[CHARACTER_WALKTHROUGH_KEY,'walkthrough']]);
 const object=value=>Boolean(value&&typeof value==='object'&&!Array.isArray(value));
 const bytes=value=>new TextEncoder().encode(value).length;

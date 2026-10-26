@@ -1,6 +1,8 @@
 # Eye of Zomm contributor handoff
 
-Current `v1.0.5`: retire untouched historical trade captions when exact sequential catalog names cover at least half their words and a separate trade cue proves surrounding prose. Preserve real encoded item links, exact full titles, edited/OCR/loot/source-backed drafts and all raw evidence. Full archives keep false captions quiet; failed saves preserve the prior queue. See [chat item boundaries](CHAT_ITEM_BOUNDARIES.md).
+Current `v1.0.6`: raise saved Character capacity to 8 MiB per character and 32 MiB per roster across model, profiles, renderer storage and native persistence. Preserve the existing JSON format, inventory relationships and import flow. Browser-only quota failures must preserve the previous data; native file storage remains authoritative when its browser mirror is full. See [Character storage](CHARACTER_STORAGE.md).
+
+Previous `v1.0.5`: retire untouched historical trade captions when exact sequential catalog names cover at least half their words and a separate trade cue proves surrounding prose. Preserve real encoded item links, exact full titles, edited/OCR/loot/source-backed drafts and all raw evidence. Full archives keep false captions quiet; failed saves preserve the prior queue. See [chat item boundaries](CHAT_ITEM_BOUNDARIES.md).
 
 Previous `v1.0.4`: Character requests inventory and achievement exports together and loads both with one Import files action. Categories, explicit completion, objectives and progress counters stay saved per character; the wiki inspect adds a collapsible achievements section below gear/stats. Combined imports are atomic and do not poll in the background. See [the achievement guide](CHARACTER_ACHIEVEMENTS.md) for ownership, limits and wiki activation.
 

@@ -6,7 +6,7 @@ import { normalizeAchievementExport, ACHIEVEMENT_LIMITS } from './achievement-ex
 // Local, versioned data only. This module has no DOM, capture, network or wiki
 // write dependency. One candidate represents one physical copy, not a title.
 export const CHARACTER_STORAGE_KEY = 'eql-eye-of-zomm-character-v1';
-export const CHARACTER_LIMITS = Object.freeze({ candidates:1000, evidence:6, stats:48, augments:8, observationRefs:6000, removedObservations:1000, removedInstances:100, storageBytes:1500000, iconBytes:24000, rawStatBlock:8192, rawStatLines:60 });
+export const CHARACTER_LIMITS = Object.freeze({ candidates:1000, evidence:6, stats:48, augments:8, observationRefs:6000, removedObservations:1000, removedInstances:100, storageBytes:8*1024*1024, iconBytes:24000, rawStatBlock:8192, rawStatLines:60 });
 export const CHARACTER_STAT_KEYS = Object.freeze(['AC','AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','HP','MP','END','ATK','ATK_OFFENSE','ATK_ACCURACY','STR','STA','AGI','DEX','WIS','INT','CHA','SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE','HP_REGEN','MANA_REGEN','END_REGEN','HASTE','ACCURACY','AVOIDANCE','COMBAT_EFFECTS','STRIKETHROUGH','STUN_RESIST','DAMAGE_SHIELD','DAMAGE_SHIELD_MITIGATION','DOT_SHIELDING','MELEE_SHIELDING','SPELL_SHIELDING']);
 const STAT_LABELS=Object.freeze({MP:'Mana',END:'Endurance',ATK:'Attack',AC_MITIGATION:'Mitigation AC',AC_MITIGATION_SOFTCAP:'AC softcap',AC_EVASION:'Evasion AC',
     ATK_OFFENSE:'Offense',ATK_ACCURACY:'Accuracy',SV_MAGIC:'Magic resist',SV_FIRE:'Fire resist',SV_COLD:'Cold resist',SV_POISON:'Poison resist',SV_DISEASE:'Disease resist',

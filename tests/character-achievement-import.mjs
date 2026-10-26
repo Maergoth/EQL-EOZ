@@ -35,12 +35,14 @@ assert.deepEqual(createCharacterModel({storage:{getItem:()=>JSON.stringify(parti
 function unchanged(operation,label){const state=restored.snapshot(),disk=storage.getItem(KEY),count=storage.writes.length;assert.equal(operation().ok,false,label);assert.deepEqual(restored.snapshot(),state,label);assert.equal(storage.getItem(KEY),disk,label);assert.equal(storage.writes.length,count,label);}
 for(const invalid of [null,{}, {...achievements,schemaVersion:2},{...achievements,categories:[]},{...achievements,categories:[{name:'Bad',achievements:[{name:'Bad',completed:'yes',objectives:[]}]}]}])unchanged(()=>restored.applyAchievementExport(invalid),'Invalid DTO preserves all state');
 for(const invalidFile of [{name:''},{name:'bad\nname'},{...file,sha256:'bad'},{...file,bytes:-1},{...file,modifiedAt:-1}])unchanged(()=>restored.applyAchievementExport(achievements,{file:invalidFile}),'Invalid file identity preserves all state');
-const oversized={kind:achievements.kind,schemaVersion:1,categories:[{name:'Large',achievements:[{name:'Large tree',completed:false,objectives:Array.from({length:900},(_,i)=>({text:`Objective ${i}: ${'x'.repeat(1800)}`,completed:false}))}]}]};
-assert(normalizeAchievementExport(oversized),'The export itself is valid within parser limits');assert(JSON.stringify(oversized).length>CHARACTER_LIMITS.storageBytes);
-unchanged(()=>restored.applyAchievementExport(oversized),'Oversized complete tree is rejected, never truncated');
-const unicodeLarge={...oversized,categories:[{name:'Unicode',achievements:[{name:'Unicode tree',completed:false,objectives:Array.from({length:400},(_,i)=>({text:`${i}: ${'界'.repeat(1300)}`,completed:false}))}]}]};
-assert(normalizeAchievementExport(unicodeLarge));assert(JSON.stringify(unicodeLarge).length<CHARACTER_LIMITS.storageBytes);assert(Buffer.byteLength(JSON.stringify(unicodeLarge))>CHARACTER_LIMITS.storageBytes);
-unchanged(()=>restored.applyAchievementExport(unicodeLarge),'The Character bound counts UTF-8 bytes');
+const large={kind:achievements.kind,schemaVersion:1,categories:[{name:'Large',achievements:[{name:'Large tree',completed:false,objectives:Array.from({length:900},(_,i)=>({text:`Objective ${i}: ${'x'.repeat(1800)}`,completed:false}))}]}]};
+assert(normalizeAchievementExport(large),'The export itself is valid within parser limits');assert(JSON.stringify(large).length>1500000);assert(JSON.stringify(large).length<CHARACTER_LIMITS.storageBytes);
+assert(restored.applyAchievementExport(large,{file}).ok,'Previously rejected complete achievement trees fit the increased allowance');assert.deepEqual(restored.snapshot().achievements,normalizeAchievementExport(large));
+const unicodeLarge={...large,categories:[{name:'Unicode',achievements:[{name:'Unicode tree',completed:false,objectives:Array.from({length:400},(_,i)=>({text:`${i}: ${'界'.repeat(1300)}`,completed:false}))}]}]};
+assert(normalizeAchievementExport(unicodeLarge));assert(Buffer.byteLength(JSON.stringify(unicodeLarge))>1500000);assert(Buffer.byteLength(JSON.stringify(unicodeLarge))<CHARACTER_LIMITS.storageBytes);
+assert(restored.applyAchievementExport(unicodeLarge,{file}).ok,'Previously oversized UTF-8 achievement trees remain complete');
+const oversized={...large,categories:[{name:'Too large',achievements:[{name:'Too large tree',completed:false,objectives:Array.from({length:4800},(_,i)=>({text:`Objective ${i}: ${'x'.repeat(1800)}`,completed:false}))}]}]};
+assert.equal(normalizeAchievementExport(oversized),null,'The independent export parser still rejects its own oversized input');unchanged(()=>restored.applyAchievementExport(oversized),'Oversized complete tree is rejected, never truncated');
 const baseline=restored.snapshot(),diskBefore=storage.getItem(KEY);storage.fail(true);assert.equal(restored.applyAchievementExport(achievements,{file}).ok,false);assert.deepEqual(restored.snapshot(),baseline);assert.equal(storage.getItem(KEY),diskBefore);storage.fail(false);
 
 const combinedStorage=memory(),combined=createCharacterModel({storage:combinedStorage,now:()=>3000});combined.setMetadata({name:'Synthetic combined',server:'Realm'});

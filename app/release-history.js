@@ -2,6 +2,27 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.6",
+  "title": "Larger Character inventories",
+  "changes": [
+    "Save up to 8 MiB per Character and 32 MiB across your Character roster, with matching import, profile and desktop storage limits.",
+    "Keep the existing JSON format, inventory flow, equipment, Exaltations, manual changes and achievements.",
+    "Preserve prior data if a browser-only save hits its quota. Native desktop files remain authoritative when the browser mirror is full."
+  ],
+  "steps": [
+    {
+      "title": "Import your inventory with more room",
+      "image": "1.0.6/large-inventory-import",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Import your inventory and achievements as usual. Character now has an 8 MiB saved-data allowance and a 32 MiB roster allowance, without changing the file format or how your equipment and stats work.",
+      "alt": "Actual Character review after a synthetic inventory import above the former saved-data limit, with 443 saved cards and 23 equipped items.",
+      "caption": "Actual production Character workflow in isolated Electron with native preload and synthetic game exports/catalog. The import exceeds the former 1.5 MB saved-state bound; a separate process verifies restoration from the private native storage file. No player exports, installed profile, game pixels or live wiki requests.",
+      "imageSha256": "b1eadad4ae7903e04ddfbac0249141399149b6a24c9cad04787d0566f5f5e124"
+    }
+  ]
+},
+{
   "version": "1.0.5",
   "title": "Cleaner chat discoveries",
   "changes": [
