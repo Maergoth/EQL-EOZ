@@ -1,10 +1,10 @@
 # Changelog
 
-## 1.0.6 - Larger Character inventories
+## 1.0.6 - Expandable private inventories
 
-- Raise saved Character capacity from 1.5 MB to 8 MiB per character and from 8 MB to 32 MiB for the character roster, consistently across imports, profiles and desktop persistence.
-- Keep the existing inventory JSON format, item/socket relationships and import flow. Existing exports and saved characters remain supported.
-- Preserve the previous inventory when an actual storage/quota failure prevents a save; native desktop storage remains authoritative when the browser mirror is full.
+- Store full desktop inventories in a private database with no aggregate item-count or inventory-byte limit. Search and browse carried gear, bank, depot, keyring and unmatched exports in pages.
+- Stream inventory exports and commit them together with achievements. Failed or canceled imports preserve the saved character; item copies, sockets, manual changes and recorded stats keep their meaning.
+- Migrate existing characters with a verified recovery backup. Save changed records without rewriting the entire inventory or mirroring it to browser storage. Wiki sharing continues to use equipped gear and reviewed totals.
 
 ## 1.0.5 - Cleaner chat discoveries
 

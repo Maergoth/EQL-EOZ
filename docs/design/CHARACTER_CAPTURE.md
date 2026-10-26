@@ -1,5 +1,13 @@
 # Character inventory, observed stats and sharing
 
+## Current desktop storage authority
+
+Version 1.0.6 uses the private paged SQLite worker, streamed paired-file imports
+and backup-verified legacy migration in [Character storage](../CHARACTER_STORAGE.md)
+and the [acceptance contract](../SCALABLE_INVENTORY_STORAGE.md). Full inventory
+collections do not pass through the bounded JSON model/roster or localStorage.
+The older limits and persistence audit below describe the legacy/fallback path.
+
 ## Current 0.9.7 data contract
 
 Character uses **details → inventory → stats → review → complete**, with all gear

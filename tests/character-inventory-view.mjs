@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './character-inventory-pager.mjs';
 import { createCharacterModel, characterLooseCandidates, CHARACTER_SLOTS } from '../app/character-model.js';
 import { characterCatalogCard } from '../app/character-catalog.js';
 import { characterItemLabel, updateCharacterItemTierMarkup, characterEquipmentMarkup, characterLooseInventoryMarkup, characterIdentityMarkup, characterStatSummaryMarkup, characterItemTooltipMarkup, characterTierControlsMarkup, characterItemStatBodyMarkup, CHARACTER_EQUIPMENT_ROWS } from '../app/character-inventory-view.js';

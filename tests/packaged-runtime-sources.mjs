@@ -24,6 +24,7 @@ const requiredModules = [
     'app/capture-png.worker.js','app/inventory-export.js','desktop/inventory-file-host.cjs',
     'app/achievement-export.js','app/character-export-import.js','app/character-achievements-view.js','desktop/achievement-file-host.cjs',
     'app/character-inventory-view.js','app/character-storage.js','app/character-profiles.js','desktop/character-storage.cjs',
+    'app/character-inventory-pager.js','app/character-inventory-pager.css','app/character-repository-client.js','app/inventory-stream-parser.js','app/inventory-import-record.js','app/inventory-legacy-migration.js','desktop/character-repository-contract.cjs','desktop/character-repository-worker.cjs','desktop/character-repository.cjs','desktop/character-import-files.cjs',
     'desktop/live-wiki-cache.cjs','desktop/wiki-item-existence.cjs','app/live-wiki-overlay.js',
     'desktop/contribution-gap-verifier.cjs','app/contribution-discovery-gate.js',
     'app/zone-blueprint.js','app/zone-creation-view.js','app/contribution-queue-controls.js','app/log-context.js','desktop/log-context-history.cjs',

@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
-const {randomUUID} = require('node:crypto');
+const {randomUUID,createHash} = require('node:crypto');
 
 const PROFILE_STORAGE_KEY='eql-eye-of-zomm-character-profiles-v1';
 const CONTRIBUTION_STORAGE_KEY='eql-eye-of-zomm-contributions-v1';
@@ -62,7 +62,7 @@ class CharacterStorage {
                 this.electron.ipcMain.handle(CHANNEL,(event,action,value)=>{
                     const main=this.getMainWindow?.();
                     if(!main||main.isDestroyed()||event.sender!==main.webContents||event.senderFrame!==main.webContents.mainFrame||event.senderFrame?.url!==`${this.origin}/`)throw Error('Character storage request is unavailable.');
-                    if(action==='read')return this.read();
+                    if(action==='read')return this.read(value);
                     if(action==='write')return this.write(value);
                     if(action==='flush')return this.flush();
                     throw Error('Unknown Character storage request.');
@@ -72,16 +72,29 @@ class CharacterStorage {
         })();return this.initializing;
     }
     failRead(){this.error='Saved Character data could not be read. The existing file was preserved; new edits are kept locally until recovery.';this.warn(this.error);}
-    read(){return {values:{...this.values},error:this.error};}
+    read(options){if(options===undefined)return {values:{...this.values},error:this.error};if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(key=>key!=='keys')||!Array.isArray(options.keys)||options.keys.length>CHARACTER_STORAGE_KEYS.length||options.keys.some(key=>!CHARACTER_STORAGE_KEYS.includes(key)))throw Error('Invalid Character storage read.');return {values:Object.fromEntries(options.keys.filter(key=>Object.hasOwn(this.values,key)).map(key=>[key,this.values[key]])),error:this.error};}
     async write(input){
         if(!this.initialized||!this.accepting)throw Error('Character storage is unavailable.');
         if(this.error)throw Error(this.error);
         if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length!==2||!own(input,'key')||!own(input,'value'))throw Error('Invalid Character storage write.');
         const {key,value}=input;checkedValues({[key]:value});
+        if((this.characterRetired||this.retiringCharacter)&&key!==CONTRIBUTION_STORAGE_KEY)throw Error('Character inventory is now stored in its native repository.');
         // A present null is a deletion tombstone: legacy browser storage must
         // never resurrect data deliberately removed from this file.
         this.values={...this.values,[key]:value};this.revision++;
         return this.flush();
+    }
+    async retireCharacterData({directory,source}={}){
+        if(this.error)throw Error('The old Character file could not be read safely. It was preserved for recovery.');
+        const keys=CHARACTER_STORAGE_KEYS.filter(key=>key!==CONTRIBUTION_STORAGE_KEY),current=keys.map(key=>this.values[key]??null);
+        if(current.every(value=>value===null)){this.characterRetired=true;return {ok:true,alreadyRetired:true,source};}
+        if(!source||typeof source.name!=='string'||path.basename(source.name)!==source.name||!/^character-legacy-[a-f0-9]{64}\.json$/u.test(source.name)||!/^[a-f0-9]{64}$/u.test(source.sha256))throw Error('A verified original Character backup is required before retiring legacy data.');
+        const file=path.join(directory,source.name),stat=await fsp.lstat(file);if(!stat.isFile()||stat.isSymbolicLink())throw Error('Original Character backup is unavailable.');const raw=await fsp.readFile(file);if(raw.length!==source.bytes||createHash('sha256').update(raw).digest('hex')!==source.sha256)throw Error('Original Character backup did not match its migration proof.');const saved=JSON.parse(raw.toString('utf8'));
+        if(saved.schemaVersion!==1||!saved.values||keys.some((key,index)=>(saved.values[key]??null)!==current[index])||keys.some((key,index)=>(this.values[key]??null)!==current[index]))throw Error('Legacy Character values changed after migration. They were preserved.');
+        this.retiringCharacter=true;const previous={...this.values};
+        try{this.values={...this.values,...Object.fromEntries(keys.map(key=>[key,null]))};this.revision++;await this.flush();this.characterRetired=true;return {ok:true,source,retiredKeys:keys,contributionPreserved:this.values[CONTRIBUTION_STORAGE_KEY]===previous[CONTRIBUTION_STORAGE_KEY]};}
+        catch(error){this.values={...this.values,...Object.fromEntries(keys.map((key,index)=>[key,current[index]]))};this.revision++;throw error;}
+        finally{this.retiringCharacter=false;}
     }
     async flush(){
         if(this.error)throw Error(this.error);

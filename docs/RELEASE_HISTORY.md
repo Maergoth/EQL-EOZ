@@ -1,16 +1,18 @@
 # Browsable release history
 
-The 1.0.6 image shows the actual production Character workspace after a synthetic
-443-card import, with 23 equipped items and a normal delayed item tooltip. The
-full schema-1 model is 2,477,850 bytes, above the former 1.5 MB allowance. The
-isolated main app uses native preload and a disposable private profile; a second
-process verifies disk restoration, including all item/icon, socket, origin,
-manual, numeric and achievement facts. Only the normal timestamp update and
-exact catalog enrichment of previously empty loose-item slot arrays may differ.
-No player exports, installed profile, game pixels or live wiki requests appear.
-The version-owned PNG has SHA-256
-`b1eadad4ae7903e04ddfbac0249141399149b6a24c9cad04787d0566f5f5e124`;
-earlier history and image bytes remain unchanged.
+The 1.0.6 image shows the actual production Character workspace with a searchable
+50-item page from 2,503 physical cards, location filters, native paging controls,
+achievements and an edited item. An isolated real main/preload migrates 1,003
+legacy cards and imports 22,537 source rows, including 21,030 keyring entries,
+sparse empty/occupied sockets and an unmatched item. A separate process checks
+restored IDs, the acknowledged tier edit, reviewed totals and all counts. The
+sharing assertion builds the equipment-only DTO from native rows; it does not
+claim a wiki publication or a clicked Preview. A separate three-process fixture
+checks migration, contribution independence, cache upgrade, changed app origin
+and foreign-frame denial. No player export, installed profile, game pixel or live
+wiki request is used. This version-owned PNG has SHA-256 `84e7962f65eaa903390f45cbde76bc660be1ac839366830132d40fdd30d31fda`;
+earlier published release entries and image bytes remain unchanged. The earlier
+unpublished capacity-only 1.0.6 capture is superseded.
 
 The 1.0.5 image shows actual production Contribute components in isolated,
 sandboxed Electron Chromium after three synthetic old trade captions retire

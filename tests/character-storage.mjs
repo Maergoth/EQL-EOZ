@@ -4,6 +4,13 @@ import {createCharacterModel,CHARACTER_STORAGE_KEY as KEY} from '../app/characte
 import {createCharacterWalkthrough,CHARACTER_WALKTHROUGH_KEY as FLOW} from '../app/character-walkthrough.js';
 const ROSTER='eql-eye-of-zomm-character-profiles-v1';
 const CONTRIBUTIONS='eql-eye-of-zomm-contributions-v1';
+{
+    const reads=[],localReads=[],localWrites=[];
+    const bridge=await createCharacterStorage({repositoryMode:true,api:{read:async request=>{reads.push(request);return {values:{[KEY]:'legacy must not enter renderer',[ROSTER]:'nested legacy must not enter renderer',[CONTRIBUTIONS]:JSON.stringify({schemaVersion:1,candidates:[]})}};},write:async()=>({ok:true}),flush:async()=>({ok:true})},legacyStorage:{getItem:key=>{localReads.push(key);return null;},setItem:(key,value)=>localWrites.push([key,value]),removeItem:key=>localWrites.push([key,null])}});
+    assert.deepEqual(reads,[{keys:[CONTRIBUTIONS]}]);assert.equal(bridge.getItem(KEY),null);assert.equal(bridge.getItem(ROSTER),null);
+    assert(!localReads.some(key=>key===KEY||key===ROSTER));assert(!localWrites.some(([key])=>key===KEY||key===ROSTER));
+    assert.throws(()=>bridge.setItem(KEY,'{}'),/Unsupported/);assert((await bridge.flush()).ok);
+}
 const memory=()=>{const values=new Map();return{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};};
 const draft=label=>JSON.stringify({schemaVersion:1,label});
 const legacy=memory(),disk={},writes=[],warnings=[];legacy.setItem(KEY,draft('legacy inventory'));legacy.setItem(FLOW,draft('legacy flow'));legacy.setItem(ROSTER,draft('legacy roster'));legacy.setItem(CONTRIBUTIONS,JSON.stringify({schemaVersion:1,candidates:[{id:'synthetic-draft',kind:'npc',name:'a saved watcher'}]}));

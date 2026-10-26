@@ -36,6 +36,14 @@ and save successfully together; cancellation, bad data or a character change
 cannot leave a half-imported character. File timestamps are private provenance,
 not a claim that the player has just rerun either command.
 
+Desktop inventory is stored in a private database and streamed from the export;
+it is not limited by one browser-storage value or a fixed total card count.
+Use Search inventory and Location to browse one page at a time, including bank,
+depot, keyring and unmatched exports. The latter two are read-only source records.
+Existing characters migrate with a verified private backup. Wait for pending
+changes to save before sharing or changing character; a failed import leaves the
+previous saved inventory available. See [private storage](CHARACTER_STORAGE.md).
+
 Achievements retain categories, completion markers, objectives and optional
 current/required counters. A completed achievement can have unfinished optional
 objectives; its own exported completion marker remains authoritative.

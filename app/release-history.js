@@ -3,22 +3,22 @@ const freeze = value => { if(value && typeof value === "object") { Object.values
 export const RELEASE_HISTORY = freeze([
 {
   "version": "1.0.6",
-  "title": "Larger Character inventories",
+  "title": "Expandable private inventories",
   "changes": [
-    "Save up to 8 MiB per Character and 32 MiB across your Character roster, with matching import, profile and desktop storage limits.",
-    "Keep the existing JSON format, inventory flow, equipment, Exaltations, manual changes and achievements.",
-    "Preserve prior data if a browser-only save hits its quota. Native desktop files remain authoritative when the browser mirror is full."
+    "Keep your full desktop inventory in a private database without an aggregate item-count or inventory-byte ceiling.",
+    "Search and browse carried items, bank, depot, keyring and unmatched exports in bounded pages. Existing characters migrate with a verified recovery backup.",
+    "Stream inventory and achievement imports into one transaction. Failed imports keep your saved character; sharing continues to include equipped gear and reviewed totals."
   ],
   "steps": [
     {
-      "title": "Import your inventory with more room",
+      "title": "Browse your saved inventory",
       "image": "1.0.6/large-inventory-import",
       "view": "character",
       "action": "Open Character",
-      "copy": "Import your inventory and achievements as usual. Character now has an 8 MiB saved-data allowance and a 32 MiB roster allowance, without changing the file format or how your equipment and stats work.",
-      "alt": "Actual Character review after a synthetic inventory import above the former saved-data limit, with 443 saved cards and 23 equipped items.",
-      "caption": "Actual production Character workflow in isolated Electron with native preload and synthetic game exports/catalog. The import exceeds the former 1.5 MB saved-state bound; a separate process verifies restoration from the private native storage file. No player exports, installed profile, game pixels or live wiki requests.",
-      "imageSha256": "b1eadad4ae7903e04ddfbac0249141399149b6a24c9cad04787d0566f5f5e124"
+      "copy": "Import your inventory and achievements as usual. Search or choose a location to find saved items. Full inventories stay on your device; the screen loads one page at a time. Existing item copies, Exaltations, manual changes and recorded stats remain available.",
+      "alt": "Actual Character inventory showing a searchable 50-item page from 2,503 saved physical cards, location filters, next-page controls, achievements and an edited item.",
+      "caption": "Actual production Character workspace in isolated Electron with native preload, a private SQLite worker and synthetic exports/catalog. The fixture migrates 1,003 legacy cards, imports 22,537 source rows, verifies paged navigation and a saved tier edit, then checks restoration in a separate process. Equipment-only sharing is checked from the native projection; no player data, installed profile or live wiki requests.",
+      "imageSha256": "84e7962f65eaa903390f45cbde76bc660be1ac839366830132d40fdd30d31fda"
     }
   ]
 },

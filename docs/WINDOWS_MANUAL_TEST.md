@@ -1,6 +1,6 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current `v1.0.6`: raise saved Character capacity to 8 MiB per character and 32 MiB per roster across model, profiles, renderer storage and native persistence. Preserve the existing JSON format, inventory relationships and import flow. Browser-only quota failures must preserve the previous data; native file storage remains authoritative when its browser mirror is full. See [Character storage](CHARACTER_STORAGE.md).
+Current `v1.0.6`: move full desktop inventories to a private SQLite worker with streamed paired imports, revision-checked record saves and bounded pages. Migrate all existing profiles and the draft with verified backups; retain item/socket/manual data and equipped-only sharing. No aggregate inventory item/byte ceiling applies to the native path. See [Character storage](CHARACTER_STORAGE.md) and its acceptance contract. Final native/package/CI observations must refer to the final implementation, not the superseded capacity-only checkpoint.
 
 Previous `v1.0.5`: retire untouched historical trade captions when exact sequential catalog names cover at least half their words and a separate trade cue proves surrounding prose. Preserve real encoded item links, exact full titles, edited/OCR/loot/source-backed drafts and all raw evidence. Full archives keep false captions quiet; failed saves preserve the prior queue. See [chat item boundaries](CHAT_ITEM_BOUNDARIES.md).
 

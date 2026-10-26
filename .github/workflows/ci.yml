@@ -40,6 +40,7 @@ jobs:
       - run: npm run test:map-location-latency -- --screenshots ci-screenshots/map-location-latency
       - run: npm run test:map-loot -- --screenshots ci-screenshots/map-loot
       - run: npm run test:character-storage
+      - run: npm run test:character-repository -- --screenshots ci-screenshots/character-repository
       - run: npm run test:main-cache
       - run: npm run test:map-overlay-3d
       - run: npm run test:native-overlays -- --screenshots ci-screenshots

@@ -54,6 +54,17 @@ export function characterLooseInventoryMarkup(cards,selectedId){
     }).join('')||'<p class="empty-state">No loose items. Equipped gear appears in the slots above.</p>';
 }
 
+/** Raw keyring/unmatched records are deliberately not equipment candidates. */
+export function characterExportRowsMarkup(rows,kinds={}){
+    return rows.filter(row=>kinds[row.id]&&kinds[row.id]!=='card').map(row=>{
+        const entry=row.entry||row,name=entry.name||entry.baseName||'Unnamed export row',location=entry.location||entry.inventoryOrigin?.location||'Export location not recorded';
+        return `<article class="character-export-row" data-export-row="${escape(row.id)}"><strong>${escape(name)}</strong><span>${escape(location)}${Number.isSafeInteger(entry.count)?` · ${escape(entry.count)} recorded`:''}</span><small>${kinds[row.id]==='keyring'?'Keyring entry':'Unmatched export · stored privately'}</small></article>`;
+    }).join('');
+}
+export function characterLargeRowsMarkup(rows,kinds={}){
+    return rows.filter(row=>row.repositoryLarge&&(!kinds[row.id]||kinds[row.id]==='card')).map(row=>`<article class="character-export-row"><button type="button" class="text-button" data-load-character-item="${escape(row.id)}">${escape(row.name||'Saved item')}</button><small>Open saved item details</small></article>`).join('');
+}
+
 export function characterIdentityMarkup(metadata){
     const classes=metadata.classes?.length?metadata.classes:[],initials=classes.map(value=>String(value).slice(0,3).toUpperCase());
     return `<div class="character-identity-heading"><div class="character-class-crest" aria-label="${escape(classes.join(' / ')||'Class not set')}">${initials.length?initials.map(value=>`<span>${escape(value)}</span>`).join(''):'<span>?</span>'}</div><div class="character-identity-copy"><h3>${escape(metadata.name||'Your character')}</h3><p>${escape([metadata.level===null?'Level unknown':`Level ${metadata.level}`,classes.join(' / ')||'Class not set'].join(' · '))}</p><p>${escape([metadata.server,metadata.race].filter(Boolean).join(' · ')||'Server not set')}<span class="character-aa-count">${metadata.aaCount===null?'AA count unknown':`${escape(metadata.aaCount)} AAs`}</span></p></div></div>`;

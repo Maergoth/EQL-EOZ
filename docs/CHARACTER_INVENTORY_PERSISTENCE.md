@@ -1,5 +1,15 @@
 # Character tier controls and durable inventory
 
+## Current 1.0.6 authority
+
+Desktop inventory now uses the paged SQLite repository described in
+[Character storage](CHARACTER_STORAGE.md) and the
+[scalable inventory contract](SCALABLE_INVENTORY_STORAGE.md). The JSON-host,
+32-profile/1,000-card limits and three-process receipts below describe historical
+behavior and the explicit limited fallback. They do not define the native
+repository capacity or prove its migration/restart behavior. Preserve their
+historical evidence separately from new repository validation.
+
 Current Character behavior is described in [the inspect-sheet plan](CHARACTER_SHEETS_PLAN.md).
 Version 0.9.6 keeps these persistence and profile guarantees, removes per-item
 fractional progress controls and Power Source placement, and preserves the old
