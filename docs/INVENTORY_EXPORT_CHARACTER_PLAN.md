@@ -45,7 +45,10 @@ and maps, and the dirty user checkout in `D:\EQLWiki`.
 The actual local export was inspected read-only. Fixtures must be synthetic.
 The first section is tab-separated `Location, Name, ID, Count, Slots`, with 23
 worn rows (including repeated Ear/Wrist/Fingers/Any Slot), followed by General
-bags/nested locations, Held, Bank and SharedBank. A blank line then introduces
+bags/nested locations, Held, Bank, SharedBank and Personal-Depot storage. Depot
+rows retain their locations and counts as private stored items, never worn gear;
+their container/socket children follow the same catalog classification rules.
+A blank line then introduces
 `KeyRing, Name, ID`; its Equipment/Augmentation rows are keyring entries and must
 never be mistaken for worn gear. Empty/id-zero rows are explicit empty slots.
 The Slots column is ambiguous and does not establish augment capacity. Preserve

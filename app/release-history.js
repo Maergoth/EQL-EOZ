@@ -2,6 +2,26 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.2",
+  "title": "Personal depot inventory imports",
+  "changes": [
+    "Import numbered Personal-Depot locations from /outputfile inventory instead of rejecting an otherwise complete inventory export.",
+    "Keep personal depot items in loose inventory with their exported tier, quantity and physical storage identity. Worn equipment and attached Exaltations retain their existing import rules."
+  ],
+  "steps": [
+    {
+      "title": "Import your personal depot items",
+      "image": "1.0.2/personal-depot-inventory",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Type /outputfile inventory in EverQuest, then import the fresh export in Character. Items listed in your personal depot now appear in saved loose inventory alongside your other stored items.",
+      "alt": "Actual Character inventory component with three synthetic loose items, including two imported from Personal-Depot locations, and a tier-three depot item's wiki-style preview.",
+      "caption": "Actual isolated Electron Chromium capture of production Character components. The real export parser and Character model import synthetic Personal-Depot1 and Personal-Depot47 rows, retain quantity and tier, and keep those cards loose. Synthetic icon pixels and a disposable profile; no installed profile, game capture or live wiki request.",
+      "imageSha256": "889412f07a55e77a7f06245b20de6fd2a381cd386bc2f3b63a06e40d6067700f"
+    }
+  ]
+},
+{
   "version": "1.0.1",
   "title": "Stable discoveries, combat and maps",
   "changes": [

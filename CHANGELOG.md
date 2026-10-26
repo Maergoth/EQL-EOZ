@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2 - Personal depot inventory imports
+
+- Accept `Personal-DepotN` storage locations in `/outputfile inventory` exports instead of stopping the entire import at the first depot entry.
+- Preserve depot item counts, tiers, locations and physical copies across reimport and restart. Depot contents remain unequipped; container contents and attached Exaltations retain their existing roles.
+
 ## 1.0.1 - Stable discoveries, combat and maps
 
 - Match canonical item names within flattened chat instead of treating quoted sales prose as a new item. Genuine encoded item links retain their exact boundaries.

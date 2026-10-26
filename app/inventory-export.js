@@ -38,6 +38,7 @@ function groupFor(location){
     if(/^General [1-9]\d*(?:-Slot[1-9]\d*)*$/.test(location))return 'inventory';
     if(/^Bank[1-9]\d*(?:-Slot[1-9]\d*)*$/.test(location))return 'bank';
     if(/^SharedBank[1-9]\d*(?:-Slot[1-9]\d*)*$/.test(location))return 'shared-bank';
+    if(/^Personal-Depot[1-9]\d*(?:-Slot[1-9]\d*)*$/.test(location))return 'personal-depot';
     if(/^Held(?:-Slot[1-9]\d*)*$/.test(location))return 'held';
     const root=location.split('-Slot')[0];
     if(Object.hasOwn(SLOT_LABELS,root)&&new RegExp(`^${root}(?:-Slot[1-9]\\d*)+$`).test(location))return 'augment';

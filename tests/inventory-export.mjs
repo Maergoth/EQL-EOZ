@@ -47,6 +47,21 @@ assert.equal(socketResult.inventory[1].augmentSlots,2);assert.deepEqual(socketRe
 const manySockets=worn().flatMap((value,index)=>index===2?[row('Head','Synthetic Many Sockets',500,1,11),...Array.from({length:9},(_,n)=>row(`Head-Slot${n+1}`))]:[value]);
 assert.equal(parseInventoryExport(exportText(manySockets)).equipment.find(item=>item.slot==='head').augments.length,9,'Observed sockets beyond a UI cap must never be silently truncated');
 
+const depot=parseInventoryExport(exportText(worn(),[
+    row('Personal-Depot1','Synthetic Depot Token +2',901,47,11),row('Personal-Depot2'),
+    row('Personal-Depot3','Synthetic Depot Bag',902,1,8),row('Personal-Depot3-Slot1','Synthetic Stored Token',903,5,11),
+    row('Personal-Depot47','Synthetic Depot Blade +4',904,1,11),row('Personal-Depot47-Slot7','Synthetic Depot Rune (Exaltation)',905,1,11),row('Personal-Depot47-Slot10')
+]),{classifyParent:entry=>entry.baseName==='Synthetic Depot Bag'?'container':entry.baseName==='Synthetic Depot Blade'?'equipment':'unknown'});
+assert.equal(depot.inventory.length,4);assert(depot.inventory.every(item=>item.group==='personal-depot'));
+assert.deepEqual([depot.inventory[0].location,depot.inventory[0].itemId,depot.inventory[0].tier,depot.inventory[0].count],['Personal-Depot1',901,2,47]);
+assert.equal(depot.inventory[2].location,'Personal-Depot3-Slot1');assert.equal(depot.inventory[2].count,5,'Depot container contents remain separate storage');
+assert.equal(depot.inventory[3].augmentSlots,2);assert.deepEqual(depot.inventory[3].augments.map(item=>[item.sourceSlot,item.empty]),[[7,false],[10,true]]);
+assert.equal(depot.emptyEquipmentCount,23,'Depot gear never becomes equipped');assert(!Object.hasOwn(depot.inventory[0],'augmentSlots'),'Slots=11 does not imply depot sockets');
+for(const storage of [
+    [row('Personal-Depot0')],[row('Personal-Depot-1')],[row('Personal-Depot1-Slot0')],[row('Personal-Depot1'),row('Personal-Depot1')],
+    [row('Personal-Depot1-Slot1','Synthetic Orphan',906,1,11)],[row('Unknown-Depot1','Synthetic Unsupported',907,1,11)]
+])assert.throws(()=>parseInventoryExport(exportText(worn(),storage)),/Inventory export/,'Malformed or unknown depot locations still reject the whole import');
+
 const rejects=[
     null,{},'','Location,Name,ID,Count,Slots\n',exportText(worn().slice(0,-1)),exportText([...worn(),row('Head')]),
     exportText(worn().map((value,index)=>index===0?row('Charm'):value)),exportText(worn(),['General 1\tCutoff']),
