@@ -99,7 +99,7 @@ const crossPage=automaticRestart.intake(automaticRead('other-page','session-e',5
 const previewStorage=memory(),previewModel=createCharacterModel({storage:previewStorage}),previewCard=previewModel.intake(automaticRead('preview-original','preview-session',1000,2,1),{wikiItem:automaticCatalog}).candidate;
 previewModel.assign(previewCard.id,'any1');const originalPreviewStats=structuredClone(previewCard.observedStats),originalPreviewEvidence=structuredClone(previewCard.evidence);
 const catalogPreview=previewModel.setTierPreview(previewCard.id,{tier:3,fraction:0}).candidate,previewStats=characterItemStats(catalogPreview);
-assert.equal(previewStats.basis,'catalog-tier-preview');assert.equal(previewStats.stats.HP,130);assert.equal(previewStats.stats.HASTE,null,'An observed-only stat has no fabricated catalog preview');assert.equal(previewStats.stats.SV_CORRUPTION,4,'An explicit catalog Void value stays authoritative under wiki rules');assert.deepEqual(catalogPreview.observedStats,originalPreviewStats);assert.deepEqual(catalogPreview.evidence,originalPreviewEvidence);assert.equal(catalogPreview.observedTier,2);assert.equal(catalogPreview.observedFraction,null,'Character no longer collects fractional progress from OCR');
+assert.equal(previewStats.basis,'catalog-tier-preview');assert.equal(previewStats.stats.HP,130);assert.equal(previewStats.stats.HASTE,null,'An observed-only stat has no fabricated catalog preview');assert.equal(previewStats.stats.SV_CORRUPTION,7,'Positive catalog Void gains the preview tier without changing its stored base');assert.deepEqual(catalogPreview.observedStats,originalPreviewStats);assert.deepEqual(catalogPreview.evidence,originalPreviewEvidence);assert.equal(catalogPreview.observedTier,2);assert.equal(catalogPreview.observedFraction,null,'Character no longer collects fractional progress from OCR');
 assert.equal(previewModel.setTierPreview(previewCard.id,{tier:2,fraction:1}).candidate.statBasis,'observed','Returning to reliable original tier restores captured values');assert.equal(characterItemStats(previewModel.snapshot().candidates[0]).stats.HP,80);
 previewModel.setTierPreview(previewCard.id,{tier:6,fraction:0});
 const previewFresh=previewModel.intake(automaticRead('preview-new','new-preview-session',2000,4,2,{hp:89}),{wikiItem:automaticCatalog}).candidate;
@@ -315,12 +315,17 @@ assert.equal(afterReferenceReset.intake({item:{name:'Synthetic manual after rese
 const pressureStorage=memory(),pressureReferences=[];
 let pressureSeed={schemaVersion:1,candidates:[referenceCandidate],observationRefs:pressureReferences};
 for(let index=1;index<=4500;index++)pressureReferences.push({observationId:'r'.repeat(140)+index,sessionId:'s'.repeat(100),candidateId:referenceCandidate.id,sequence:index});
+// With8MiB storage, ID references alone cannot fill the model. Add ordinary
+// retained image-bearing cards so this still exercises real storage pressure.
+const filler=createCharacterModel({storage:null}).intake({item:{name:'Synthetic pressure filler',icon:'data:image/png;base64,'+'A'.repeat(23970),rawStatBlock:'x'.repeat(8192)}}).candidate;
+const fillerBytes=JSON.stringify(filler).length+40,fillerCount=Math.floor((CHARACTER_LIMITS.storageBytes-10000-JSON.stringify(pressureSeed).length)/fillerBytes);
+for(let index=0;index<fillerCount;index++)pressureSeed.candidates.push({...filler,id:'pressure-filler-'+index});
 while(JSON.stringify(pressureSeed).length>CHARACTER_LIMITS.storageBytes-10000)pressureReferences.pop();
 pressureStorage.setItem(CHARACTER_STORAGE_KEY,JSON.stringify(pressureSeed));
 const pressureModel=createCharacterModel({storage:pressureStorage}),beforeReferencePressure=pressureModel.snapshot().observationRefs.length;
 const pressureStats=Object.fromEntries(Array.from({length:48},(_,index)=>[`SYNTHETIC_STAT_${String(index).padStart(17,'0')}`,1000000000]));
 pressureModel.updateCandidate(referenceCandidate.id,{rawStatBlock:'x'.repeat(8192),icon:'data:image/png;base64,'+'A'.repeat(23970),baseStats:pressureStats,augments:Array.from({length:8},()=>({name:'Synthetic bounded augment',stats:pressureStats,statsComplete:true}))});
-const afterReferencePressure=pressureModel.snapshot();assert.equal(afterReferencePressure.candidates.length,1,'Inventory is preserved before expiring ID-only metadata');
+const afterReferencePressure=pressureModel.snapshot();assert.equal(afterReferencePressure.candidates.length,pressureSeed.candidates.length,'Inventory is preserved before expiring ID-only metadata');
 assert(afterReferencePressure.observationRefs.length<beforeReferencePressure);assert(afterReferencePressure.observationFloor>0);assert(pressureStorage.getItem(CHARACTER_STORAGE_KEY).length<=CHARACTER_LIMITS.storageBytes);
 const pressureRestart=createCharacterModel({storage:pressureStorage});assert.equal(pressureRestart.intake(journalItem('r'.repeat(140)+'1',1,'s'.repeat(100))).ignored,true,'Storage pressure expiration remains replay-safe after reload');
 const progressStorage=memory(),progressModel=createCharacterModel({storage:progressStorage});
@@ -488,12 +493,16 @@ for(const slot of CHARACTER_SLOTS){const longName=`${slot.id} `+'N'.repeat(220),
     protectedOnly.updateCandidate(card.id,{icon:'data:image/png;base64,'+'A'.repeat(23970),notes:'X'.repeat(600),baseStats:largeStats,observedStats:largeStats,augments:Array.from({length:8},()=>({name:'A'.repeat(240),stats:largeStats,statsComplete:true}))});}
 assert.equal(Object.keys(protectedOnly.snapshot().equipment).length,24);
 assert(protectedStorage.getItem(CHARACTER_STORAGE_KEY).length<=CHARACTER_LIMITS.storageBytes,'Protected equipment cannot defeat the serialized state bound');
-const denseStorage=memory(),denseWarnings=[],dense=createCharacterModel({storage:denseStorage,now:()=>1,onWarning:message=>denseWarnings.push(message)}),denseAugments=count=>Array.from({length:count},()=>({name:'Synthetic dense augment',stats:largeStats,statsComplete:true}));
-let denseRejected=false;for(let index=0;index<120;index++){
+const denseStorage=memory(),denseWarnings=[],denseAugments=count=>Array.from({length:count},()=>({name:'Synthetic dense augment',stats:largeStats,statsComplete:true}));
+const denseTemplate=createCharacterModel({storage:null,now:()=>1}).intake(item('Dense template',{observedStats:largeStats,baseStats:largeStats,rawStatBlock:'x'.repeat(8192),augments:denseAugments(4)})).candidate;
+const denseCount=Math.floor((CHARACTER_LIMITS.storageBytes-2000)/(JSON.stringify(denseTemplate).length+20));
+denseStorage.setItem(CHARACTER_STORAGE_KEY,JSON.stringify({schemaVersion:1,sequence:denseCount,candidates:Array.from({length:denseCount},(_,index)=>({...denseTemplate,id:'dense-existing-'+index}))}));
+const dense=createCharacterModel({storage:denseStorage,now:()=>1,onWarning:message=>denseWarnings.push(message)});
+let denseRejected=false;for(let index=0;index<3;index++){
     const before=dense.snapshot(),diskBefore=denseStorage.getItem(CHARACTER_STORAGE_KEY),outcome=dense.intake(item(`Dense synthetic ${index}`,{observedStats:largeStats,baseStats:largeStats,rawStatBlock:'x'.repeat(8192),augments:denseAugments(4)}));
     if(!outcome.ok){assert.deepEqual(dense.snapshot(),before,'An oversized new addition rolls back only that addition');assert.equal(denseStorage.getItem(CHARACTER_STORAGE_KEY),diskBefore);assert.match(outcome.error,/storage/);denseRejected=true;break;}
 }
-assert(denseRejected&&dense.snapshot().candidates.length<120,'Serialized byte capacity is independently enforced before card count');
+assert(denseRejected&&dense.snapshot().candidates.length<CHARACTER_LIMITS.candidates,'Serialized byte capacity is independently enforced before card count');
 const denseIds=dense.snapshot().candidates.map(card=>card.id);let denseEditFailed=false;
 for(const id of denseIds){const diskBefore=denseStorage.getItem(CHARACTER_STORAGE_KEY),outcome=dense.updateCandidate(id,{augments:denseAugments(8)});if(!outcome.saved){assert.equal(denseStorage.getItem(CHARACTER_STORAGE_KEY),diskBefore,'Oversized edits preserve the last complete on-disk inventory');assert.deepEqual(dense.snapshot().candidates.map(card=>card.id),denseIds,'In-memory review retains every card when an edit cannot persist');denseEditFailed=true;break;}}
 assert(denseEditFailed);assert(denseWarnings.length>0,'An unsavable oversized state is visible instead of silently deleting cards');

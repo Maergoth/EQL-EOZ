@@ -1,5 +1,7 @@
 # EQLWiki — Eye of Zomm
 
+**1.0.6: Expandable private inventories.** Full desktop inventories live in a private database and load in searchable pages. Stream inventory and achievement exports together, preserve physical copies and manual work, and migrate existing characters with a verified backup. Item previews also scale a listed positive base Void resist like other resists. Sharing still includes equipped gear and reviewed character stats. See [Character storage](docs/CHARACTER_STORAGE.md) and [shared item formulas](docs/SHARED_ITEM_SCALING.md).
+
 **1.0.5: Cleaner chat discoveries.** Trade captions combining known items no longer remain as false new-item tasks. Untouched old captions are archived reversibly; actual item links, screenshots and your edited work keep their evidence. See [chat item boundaries](docs/CHAT_ITEM_BOUNDARIES.md).
 
 **1.0.4: Character achievement exports.** Run `/outputfile inventory` and
@@ -570,6 +572,7 @@ the trusted native service, and wiki IPC admits only the exact main frame.
 | Auth and API transport | [WikiHost](desktop/wiki-host.cjs), [WikiClient](desktop/wiki-client.cjs) | Fixed wiki origin/session, current-account assertions, bounded requests and tokens kept outside renderer/draft state. |
 | Reviewed contributions | [workspace](app/capture-workspace.js), [draft builder](app/contribution-model.js), [queue](app/contribution-queue.js) | Resolve identity/task reasons, load current Help blueprints, preview every page, then publish scoped changes with revision/create-only guards and persisted partial retry. |
 | Character sharing | [model](app/character-model.js), [totals](app/character-totals.js), [sheet serializer](app/character-wiki-sheet.js) | Import known gear separately from confirmed recorded totals; share only a bounded managed Character (Server) block on the authenticated User page. |
+| Private Character inventory | [repository host](desktop/character-repository.cjs), [SQLite worker](desktop/character-repository-worker.cjs), [renderer client](app/character-repository-client.js), [pager](app/character-inventory-pager.js) | Stream validated exports into inactive generations, migrate original saves with verified backups, commit per-record edits with revision checks, and load bounded pages without an aggregate inventory cap. See [the contract](docs/SCALABLE_INVENTORY_STORAGE.md). |
 | Observation sync | [collector](app/drop-observations.js), [storage](desktop/drop-observation-storage.cjs), [sender](desktop/drop-observation-host.cjs) | Separate minimal schema-1 kill/loot outbox, stable IDs, account-bound receipts and due hourly batches; no article edits or raw-log upload. |
 | Published wiki data | [producer/host contract](server/README.md), [bootstrap fetch](scripts/fetch-bootstrap-pack.mjs), [client cache](desktop/main.cjs) | Wiki-local export → filtered GitHub `dataset` manifest/gzip → SHA-256-verified bootstrap/cache. Dataset refresh, observation ingestion and application releases are separate operations. |
 

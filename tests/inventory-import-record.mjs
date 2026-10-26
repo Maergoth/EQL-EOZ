@@ -1,0 +1,68 @@
+import assert from 'node:assert/strict';
+import {parseInventoryExport} from '../app/inventory-export.js';
+import {createCharacterModel,normalizeCharacterCandidate} from '../app/character-model.js';
+import {inventoryOriginKey,inventoryLooseGroup,prepareInventoryParent,mergeImportedInventoryRow,mergeImportedKeyringRow} from '../app/inventory-import-record.js';
+
+const labels=['Any Slot','Ear','Head','Face','Ear','Neck','Shoulders','Arms','Back','Wrist','Wrist','Range','Hands','Primary','Secondary','Fingers','Fingers','Chest','Legs','Feet','Waist','Ammo','Any Slot'];
+const text=['Location\tName\tID\tCount\tSlots',...labels.flatMap((label,index)=>index===2?[`${label}\tSynthetic Cap +3\t101\t1\t0`,'Head-Slot2\tSynthetic Effect (Exaltation) +2\t202\t1\t0','Head-Slot9\tEmpty\t0\t0\t0','Head-Slot20\tSynthetic Missing\t203\t1\t0']:[`${label}\tEmpty\t0\t0\t0`]),'Bank1\tSynthetic Cap +3\t101\t1\t0'].join('\n');
+const parsed=parseInventoryExport(text);
+const cap={name:'Synthetic Cap',wikiTitle:'Synthetic Cap',slots:['HEAD'],iconId:'41',stats:{HP:50}},effect={name:'Synthetic Effect (Exaltation)',wikiTitle:'Synthetic Effect (Exaltation)',stats:{STR:2}};
+const resolver=entry=>entry.baseName===cap.name?{item:cap}:entry.baseName===effect.name?{item:effect}:null;
+const store=new Map(),storage={getItem:key=>store.get(key)||null,setItem:(key,value)=>store.set(key,value)};
+let now=1000;const model=createCharacterModel({storage,now:()=>now});
+assert(model.applyInventoryExport(parsed,{resolveItem:resolver}).ok);
+let expected=model.snapshot();
+for(const raw of [...parsed.equipment.filter(entry=>!entry.empty),...parsed.inventory]){
+    const entry={...raw,group:raw.slot?'equipment':raw.group,slot:raw.slot||null};
+    const card=expected.candidates.find(card=>card.inventoryOrigin.key===inventoryOriginKey(entry));
+    const actual=mergeImportedInventoryRow({entry,id:card.id,now,resolveItem:resolver});
+    assert.deepEqual(actual.card,card,'The shared per-card merge matches the existing model on first import');
+    assert.equal(actual.known,true);assert.equal(actual.slot,entry.slot);
+}
+const first=expected.candidates.find(card=>card.id===expected.equipment.head);
+model.updateCandidate(first.id,{observedStats:{HP:77},rawStatBlock:'Synthetic retained manual prose',augmentSlots:3});
+now=2000;const prior=model.snapshot().candidates.find(card=>card.id===first.id);
+assert(model.applyInventoryExport(parsed,{resolveItem:resolver}).ok);expected=model.snapshot();
+const entry={...parsed.equipment.find(row=>row.slot==='head'),group:'equipment'};
+const priorCopy=structuredClone(prior),entryCopy=structuredClone(entry);
+const merged=mergeImportedInventoryRow({entry,previousCard:prior,now,resolveItem:resolver});
+assert.deepEqual(merged.card,expected.candidates.find(card=>card.id===first.id),'Reimport preserves reviewed stats, manual text, IDs, sparse socket positions and evidence exactly');
+assert.deepEqual(prior,priorCopy);assert.deepEqual(entry,entryCopy,'Shared helpers never mutate staged rows or saved cards');
+assert.equal(merged.card.augments[0].sourceSlot,2);assert.equal(merged.card.augmentSlots,3);assert.equal(merged.card.emptyAugmentSlots,2);
+assert.deepEqual(merged.rejected.map(row=>[row.name,row.slot,row.reason]),[['Synthetic Missing','head','wiki-item-missing']]);
+const unknown=mergeImportedInventoryRow({entry,previousCard:prior,now,resolution:{item:{name:'Synthetic Cap Typo'}}});
+assert.equal(unknown.known,false);assert.equal(unknown.slot,null);assert.equal(unknown.card.id,prior.id);assert.equal(unknown.card.catalogIdentity,null);assert.equal(unknown.card.observedStats.HP,77);
+assert.equal(unknown.rejected.filter(row=>row.reason==='parent-item-missing').length,2);
+assert.throws(()=>mergeImportedInventoryRow({entry,previousCard:{...prior,inventoryOrigin:{...prior.inventoryOrigin,key:'unrelated'}},now}),/physical inventory binding/);
+
+const row=(name,location='Bank9',itemId=900)=>({name,baseName:name,tier:0,location,itemId,count:1,empty:false,group:'bank',slot:null});
+const children=[{...row('Synthetic Ornament','Bank9-Slot2',901),sourceSlot:2},{...row('Empty','Bank9-Slot8',0),sourceSlot:8,count:0,empty:true}];
+const stored=prepareInventoryParent(row('Synthetic Cap'),children,{parentKind:'equipment'});
+assert.equal(stored.attached,true);assert.deepEqual(stored.entry.augments.map(child=>[child.index,child.sourceSlot]),[[0,2],[1,8]],'Known stored equipment retains non-Exaltation ornaments and sparse source positions');
+const bag=prepareInventoryParent(row('Synthetic Bag'),[],{parentKind:'container',childCount:100000,allChildrenAreLeafSingles:false});
+assert.equal(bag.attached,false);assert.equal(bag.entry.contentsSeparate,'container');
+assert.equal(prepareInventoryParent(row('Synthetic Bag'),[],{parentKind:'container'}).entry.contentsSeparate,'container','An empty known bag also repairs prior export-origin pollution');
+assert.equal(prepareInventoryParent(row('Synthetic Unknown'),children).entry.contentsSeparate,'unverified');
+assert.equal(prepareInventoryParent(row('Synthetic Gear'),[{...children[0],count:20}],{parentKind:'equipment'}).attached,false);
+assert.throws(()=>prepareInventoryParent(row('Synthetic Gear'),[],{parentKind:'equipment',childCount:9,allChildrenAreLeafSingles:true}),/maximum 8/);
+assert.throws(()=>prepareInventoryParent(row('Synthetic Gear'),[],{parentKind:'equipment',childCount:9}),/Complete direct-child/);
+assert.throws(()=>prepareInventoryParent({...row('Synthetic Cap'),slot:'head',group:'equipment'},[{...children[0],hasChildren:true}],{parentKind:'equipment'}),/nested socket/);
+const polluted=normalizeCharacterCandidate({id:'stable',name:'Synthetic Bag',inventoryOrigin:{...row('Synthetic Bag'),key:inventoryOriginKey(row('Synthetic Bag')),importedAt:1},augments:[{name:'Synthetic False Socket',inventoryOrigin:{...row('Synthetic False Socket','Bank9-Slot1',902),key:'old-socket',importedAt:1}},{name:'Synthetic Manual Socket'}],augmentSlots:7,editedFields:['augmentSlots'],observedStats:{HP:12},rawStatBlock:'Keep manually entered prose'});
+polluted.customPrivate={retained:true};
+const repair=mergeImportedInventoryRow({entry:bag.entry,previousCard:polluted,now:3000,resolution:{item:{name:'Synthetic Bag',wikiTitle:'Synthetic Bag'}}}).card;
+assert.equal(repair.augments.length,1);assert.equal(repair.augments[0].name,'Synthetic Manual Socket');assert.equal(repair.augmentSlots,7);assert.equal(repair.emptyAugmentSlots,null);assert.deepEqual(repair.customPrivate,{retained:true});
+const unknownRepair=mergeImportedInventoryRow({entry:{...bag.entry,contentsSeparate:'unverified'},previousCard:{...polluted,augments:polluted.augments.slice(0,1),editedFields:[]},now:3000}).card;
+assert.equal(unknownRepair.augmentStatus,'unknown');assert.equal(unknownRepair.emptyAugmentSlots,null);assert.equal(unknownRepair.augmentSlots,5);assert.deepEqual(unknownRepair.augments,[]);
+
+const loose={...row('Synthetic Cap (Exaltation)','General 1-Slot2'),group:'augment'};
+const alias=mergeImportedInventoryRow({entry:loose,id:'loose',now:4000,resolution:{item:cap,exaltationAlias:true}});
+assert.equal(alias.known,true);assert.equal(alias.card.itemRole,'exaltation');assert.equal(alias.card.name,cap.name);
+assert.equal(mergeImportedInventoryRow({entry:{...loose,group:'inventory'},id:'ordinary',now:4000,resolution:{item:cap,exaltationAlias:true}}).known,false,'The same suffix alias cannot turn ordinary equipment into a different item');
+assert.equal(inventoryLooseGroup({...loose,group:'personal-depot'}),'augment');assert.equal(inventoryLooseGroup({...row('Synthetic Ornament'),group:'augment'}),'inventory');
+const legacy={...alias.card,inventoryOrigin:{...alias.card.inventoryOrigin,group:'inventory',key:JSON.stringify(['inventory',loose.location,loose.itemId,0,0])}};
+assert.equal(mergeImportedInventoryRow({entry:loose,previousCard:legacy,now:5000,resolution:{item:cap,exaltationAlias:true}}).card.id,'loose','Unique caller-provided legacy physical-role binding keeps its ID');
+const keyring={...row('Synthetic Cap','Equipment'),group:'keyring'};
+assert.equal(mergeImportedKeyringRow({entry:keyring,resolution:{item:cap},now:5000,occurrence:1}).entry.key,JSON.stringify(['keyring','Equipment',900,0,1]));
+assert.equal(mergeImportedKeyringRow({entry:{...keyring,itemId:0,name:'Empty',baseName:'Empty',empty:true},now:5000}).entry,null,'KeyRing empty markers use the original count1 convention but create no record');
+assert.throws(()=>mergeImportedKeyringRow({entry:{...keyring,itemId:0,name:'Empty',baseName:'Empty',empty:true,location:'bad\u0000location'},now:5000}),/invalid physical/);
+console.log('Physical inventory merge: legacy equivalence, manual preservation, exact aliases, unknown repair and bounded socket groups passed.');

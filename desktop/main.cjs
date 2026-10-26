@@ -28,6 +28,7 @@ const { IconFinderHost } = require('./icon-finder-host.cjs');
 const { RendererDrain } = require('./renderer-drain.cjs');
 const { ShareHost } = require('./share-host.cjs');
 const { CharacterStorage } = require('./character-storage.cjs');
+const { CharacterRepository } = require('./character-repository.cjs');
 const { InventoryFileHost } = require('./inventory-file-host.cjs');
 const { AchievementFileHost } = require('./achievement-file-host.cjs');
 const { installLocalFontPermissions } = require('./font-permissions.cjs');
@@ -76,6 +77,7 @@ let rendererDrain = null;
 let reloading = false;
 let shareHost = null;
 let characterStorage = null;
+let characterRepository = null;
 let inventoryFileHost = null;
 let achievementFileHost = null;
 let quitting = false;
@@ -931,6 +933,8 @@ async function bootstrap() {
     characterStorage = new CharacterStorage({directory:userDataDir(),electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
         warn:message=>console.warn('[Eye of Zomm]',message)});
     await characterStorage.initialize();
+    characterRepository=new CharacterRepository({directory:path.join(userDataDir(),'character-repository'),electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig,getPack:automaticWikiCatalog,retireLegacy:source=>characterStorage.retireCharacterData({directory:path.join(userDataDir(),'character-repository'),source}),warn:message=>console.warn('[Eye of Zomm]',message)});
+    await characterRepository.initialize();
     inventoryFileHost = new InventoryFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig});
     achievementFileHost = new AchievementFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig});
     captureHost = new CaptureHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readingEnabled:config.screenReadingEnabled,
@@ -1042,7 +1046,7 @@ app.on('before-quit', event => {
         }
         stopDataPackRefresh();logContextHistory.dispose();automaticLogReader?.dispose();automaticLootSources?.dispose();overlayHost?.dispose();discoveryHost?.dispose();wikiHost?.dispose();iconFinderHost?.dispose();shareHost?.dispose();inventoryFileHost?.dispose();achievementFileHost?.dispose();appUpdater?.shutdown();
         try { server?.close(); } catch {}
-        await Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain,characterStorage?.close(),observationHost?.close()]);
+        await Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain,characterRepository?.close(),characterStorage?.close(),observationHost?.close()]);
         rendererDrain?.dispose();electron.session.defaultSession.flushStorageData();quitReady=true;app.quit();
     })().finally(()=>{quitFlush=null;});
 });

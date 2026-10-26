@@ -9,9 +9,30 @@ contextBridge.exposeInMainWorld('eyeOfZommAchievements',{
 });
 
 contextBridge.exposeInMainWorld('eyeOfZommCharacterStorage', {
-    read:()=>ipcRenderer.invoke('eye-of-zomm:character-storage','read'),
+    read:value=>ipcRenderer.invoke('eye-of-zomm:character-storage','read',value),
     write:value=>ipcRenderer.invoke('eye-of-zomm:character-storage','write',value),
     flush:()=>ipcRenderer.invoke('eye-of-zomm:character-storage','flush')
+});
+
+// Narrow paged inventory operations; no renderer-provided SQL or disk paths.
+contextBridge.exposeInMainWorld('eyeOfZommCharacterRepository', {
+    bootstrap:()=>ipcRenderer.invoke('eye-of-zomm:character-repository','bootstrap',{}),
+    listProfiles:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','listProfiles',value||{}),
+    createProfile:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','createProfile',value),
+    selectProfile:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','selectProfile',value),
+    getCore:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','getCore',value),
+    transaction:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','transaction',value),
+    list:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','list',value),
+    get:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','get',value),
+    getChunk:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','getChunk',value),
+    beginLegacySeed:()=>ipcRenderer.invoke('eye-of-zomm:character-repository','beginLegacySeed',{}),
+    appendLegacySeed:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','appendLegacySeed',value),
+    commitLegacySeed:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','commitLegacySeed',value),
+    cancelLegacySeed:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','cancelLegacySeed',value||{}),
+    importFiles:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','importFiles',value),
+    cancelImport:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','cancelImport',value||{}),
+    flush:()=>ipcRenderer.invoke('eye-of-zomm:character-repository','flush',{}),
+    onProgress:callback=>{if(typeof callback!=='function')return()=>{};const listener=(_event,value)=>callback(value);ipcRenderer.on('eye-of-zomm:character-repository:progress',listener);return()=>ipcRenderer.removeListener('eye-of-zomm:character-repository:progress',listener);}
 });
 
 contextBridge.exposeInMainWorld('eyeOfZommWindow', {

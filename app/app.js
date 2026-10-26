@@ -54,7 +54,7 @@ async function flushObservations(){
         catch{if(!observationWarning){observationWarning=true;showNotice('Drop observations could not be saved yet. They will retry while the app stays open.',{tone:'warning'});}if(!observationRetry)observationRetry=setTimeout(()=>{observationRetry=null;void flushObservations();},30000);return false;}
     })();observationSending=task;const saved=await task;if(observationSending===task)observationSending=null;return saved&&observationPending.length?flushObservations():saved;
 }
-window.eyeOfZommLifecycle?.onDrain(async()=>{sessionDraining=true;clearTimeout(pollTimer);while(observationPending.length){if(!await flushObservations())return false;}return true;},()=>{sessionDraining=false;schedulePoll(0);});
+window.eyeOfZommLifecycle?.onDrain(async()=>{sessionDraining=true;clearTimeout(pollTimer);while(observationPending.length){if(!await flushObservations())return false;}try{await captureWorkspace.drainCharacterForClose?.();}catch{return false;}return true;},()=>{sessionDraining=false;captureWorkspace.resumeCharacterAfterCloseDrain?.();schedulePoll(0);});
 let lootByNpcZone = new Map();
 let lootByNpcName = new Map();
 let itemByName = new Map();

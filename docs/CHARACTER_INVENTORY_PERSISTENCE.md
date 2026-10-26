@@ -1,5 +1,15 @@
 # Character tier controls and durable inventory
 
+## Current 1.0.6 authority
+
+Desktop inventory now uses the paged SQLite repository described in
+[Character storage](CHARACTER_STORAGE.md) and the
+[scalable inventory contract](SCALABLE_INVENTORY_STORAGE.md). The JSON-host,
+32-profile/1,000-card limits and three-process receipts below describe historical
+behavior and the explicit limited fallback. They do not define the native
+repository capacity or prove its migration/restart behavior. Preserve their
+historical evidence separately from new repository validation.
+
 Current Character behavior is described in [the inspect-sheet plan](CHARACTER_SHEETS_PLAN.md).
 Version 0.9.6 keeps these persistence and profile guarantees, removes per-item
 fractional progress controls and Power Source placement, and preserves the old
@@ -154,9 +164,11 @@ recognition and does not claim that every unobserved tooltip was readable.
 `userData/eye-of-zomm-character-storage.json` file. The preload bridge
 `eyeOfZommCharacterStorage` exposes only `read()`, `write({key,value})` and
 `flush()`, restricted to the exact trusted main window/root frame. It accepts
-only `eql-eye-of-zomm-character-v1` and
-`eql-eye-of-zomm-character-walkthrough-v1`, each bounded to 1,500,000 UTF-8 bytes,
-and `eql-eye-of-zomm-character-profiles-v1`, bounded to 8,000,000 UTF-8 bytes.
+only fixed keys, including `eql-eye-of-zomm-character-v1` (8 MiB of UTF-8),
+`eql-eye-of-zomm-character-walkthrough-v1` (its existing 1,500,000-byte progress
+budget), and `eql-eye-of-zomm-character-profiles-v1` (32 MiB of UTF-8).
+The separately bounded contribution-draft key retains its existing capacity.
+See [the 1.0.6 capacity change](CHARACTER_STORAGE.md); JSON formats are unchanged.
 The roster supports 32 named characters without evicting prior records.
 One active atomic, synced write and one coalesced current state bound pending
 work; normal Quit drains accepted writes and flushes DOM storage.
@@ -180,7 +192,7 @@ Migration does not scan abandoned earlier ephemeral origins. Data there remains
 untouched and may require explicit recovery. Ordinary relaunch/cache upgrade is
 tested; sudden power loss, a killed process before a write is accepted, every
 filesystem failure and installed-player recovery are not certified by this
-fixture. Inventory remains bounded to 120 cards; full/oversized additions are
+fixture. Inventory remains bounded to 1,000 cards; full/oversized additions are
 refused rather than silently deleting existing physical cards.
 
 ## Validation and release boundary

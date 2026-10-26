@@ -2,6 +2,28 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.6",
+  "title": "Expandable private inventories",
+  "changes": [
+    "Keep your full desktop inventory in a private database without an aggregate item-count or inventory-byte ceiling.",
+    "Search and browse carried items, bank, depot, keyring and unmatched exports in bounded pages. Existing characters migrate with a verified recovery backup.",
+    "Stream inventory and achievement imports into one transaction. Failed imports keep your saved character; sharing continues to include equipped gear and reviewed totals.",
+    "Item previews scale a listed base Void resist with the same formula as other resists. Recorded character stats stay unchanged."
+  ],
+  "steps": [
+    {
+      "title": "Browse your saved inventory",
+      "image": "1.0.6/large-inventory-import",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Import your inventory and achievements as usual. Search or choose a location to find saved items. Full inventories stay on your device; the screen loads one page at a time. Existing item copies, Exaltations, manual changes and recorded stats remain available.",
+      "alt": "Actual Character inventory showing a searchable 50-item page from 2,503 saved physical cards, location filters, next-page controls, achievements and an edited item.",
+      "caption": "Actual production Character workspace in isolated Electron with native preload, a private SQLite worker and synthetic exports/catalog. The fixture migrates 1,003 legacy cards, imports 22,537 source rows, verifies paged navigation and a saved tier edit, then checks restoration in a separate process. Equipment-only sharing is checked from the native projection; no player data, installed profile or live wiki requests.",
+      "imageSha256": "84e7962f65eaa903390f45cbde76bc660be1ac839366830132d40fdd30d31fda"
+    }
+  ]
+},
+{
   "version": "1.0.5",
   "title": "Cleaner chat discoveries",
   "changes": [

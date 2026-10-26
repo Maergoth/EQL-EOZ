@@ -80,10 +80,10 @@ assert.throws(()=>loadedProfiles.storage.setItem(MODEL,'{bad'),/malformed/);asse
 // Fixed count and UTF-8 capacity fail closed without evicting any profile.
 const full=memory(),fullStore=createCharacterProfiles({storage:full,id:ids});for(let n=0;n<LIMITS.profiles;n++){assert(fullStore.register({name:`Synthetic ${n}`,server:'Capacity'}).ok);assert(fullStore.newCharacter().ok);}
 const fullBefore=full.getItem(ROSTER);assert.equal(fullStore.register({name:'Overflow',server:'Capacity'}).ok,false);assert.equal(fullStore.list().length,32);assert.equal(full.getItem(ROSTER),fullBefore);
-const large=json({payload:'界'.repeat(490000)}),capacity=memory(),capacityStore=createCharacterProfiles({storage:capacity,id:ids});
-for(let n=0;n<5;n++){assert(capacityStore.register({name:`Byte ${n}`,server:'Capacity'}).ok);capacityStore.storage.setItem(MODEL,large);assert(capacityStore.newCharacter().ok);}
+const large=json({payload:'界'.repeat(2500000)}),capacity=memory(),capacityStore=createCharacterProfiles({storage:capacity,id:ids});
+for(let n=0;n<4;n++){assert(capacityStore.register({name:`Byte ${n}`,server:'Capacity'}).ok);capacityStore.storage.setItem(MODEL,large);assert(capacityStore.newCharacter().ok);}
 assert(capacityStore.register({name:'Last',server:'Capacity'}).ok);const capacityBefore=capacity.getItem(ROSTER),capacityMirror=capacity.getItem(MODEL);
-assert.throws(()=>capacityStore.storage.setItem(MODEL,large),/roster is full/);assert.equal(capacity.getItem(ROSTER),capacityBefore);assert.equal(capacity.getItem(MODEL),capacityMirror);assert.equal(capacityStore.list().length,6);
-assert.throws(()=>capacityStore.storage.setItem(MODEL,json({payload:'界'.repeat(500000)})),/limit/,'inner size uses UTF-8 bytes');
+assert.throws(()=>capacityStore.storage.setItem(MODEL,large),/roster is full/);assert.equal(capacity.getItem(ROSTER),capacityBefore);assert.equal(capacity.getItem(MODEL),capacityMirror);assert.equal(capacityStore.list().length,5);
+assert.throws(()=>capacityStore.storage.setItem(MODEL,json({payload:'界'.repeat(Math.floor(LIMITS.valueBytes/3)+1)})),/limit/,'inner size uses UTF-8 bytes');
 const collision=memory(),collisionStore=createCharacterProfiles({storage:collision,id:()=> 'same-id'});assert(collisionStore.register(metadata).ok);assert(collisionStore.newCharacter().ok);assert.equal(collisionStore.register({name:'Different',server:'Server'}).ok,false);assert.equal(collisionStore.list().length,1);
 console.log('Character profiles: isolated persistent model/flow records, first-step registration/migration, preserved draft, identity collisions, atomic quota rollback, corruption preservation and fixed count/UTF-8 bounds passed.');

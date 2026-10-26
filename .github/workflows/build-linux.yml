@@ -53,6 +53,7 @@ jobs:
           dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' bash -euc '
             openbox >/tmp/eoz-openbox.log 2>&1 &
             npm run test:desktop-worker
+            npm run test:character-repository -- --screenshots ci-screenshots/linux-character-repository
             npm run test:window-lifecycle
             npm run test:map-location-latency -- --screenshots ci-screenshots/linux-map-location-latency
             npm run test:discovery-capture-workspace
@@ -107,6 +108,7 @@ jobs:
           dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' bash -euc '
             openbox >/tmp/eoz-packaged-openbox.log 2>&1 &
             node scripts/test-linux-package.mjs
+            npm run test:character-repository -- --packaged-root dist/linux-unpacked/resources/app.asar --screenshots ci-screenshots/linux-packaged-character-repository
             if [ "$EXTENDED_UI_CHECKS" = "true" ]; then
             npm run test:appearance -- --packaged-root dist/linux-unpacked/resources/app.asar --screenshots ci-screenshots/linux-packaged
             npm run test:capture-native -- --packaged-root dist/linux-unpacked/resources/app.asar

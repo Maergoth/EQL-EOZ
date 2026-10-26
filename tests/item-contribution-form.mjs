@@ -23,6 +23,7 @@ try{
  let draft=review();assert.doesNotMatch(draft.text,/SV Void:|HP:|AC:/);assert.equal(Object.hasOwn(candidate.fields,'resistCorruption'),false);
  edit('hp','12');edit('str','0');edit('resistFire','-5');edit('resistCorruption','0');draft=review();
  for(const line of ['HP: 12','STR: 0','SV Fire: -5','SV Void: 0'])assert(draft.text.includes(line));
+ edit('resistCorruption','7');draft=review();assert.deepEqual(draft.blockers,[]);assert.match(draft.text,/SV Void: 7/,'An authored tier-zero positive Void value is retained');edit('resistCorruption','0');draft=review();assert.match(draft.text,/SV Void: 0/);
  assert.equal(candidate.fields.tier.edited,false,'Editing a stat never claims the OCR tier was manually edited');
  edit('hp','');draft=review();assert.doesNotMatch(draft.text,/HP:/);assert.equal(candidate.fields.hp.value,null);assert(candidate.fields.hp.edited,'Explicit blanks remain protected from later OCR');
 
@@ -48,7 +49,7 @@ try{
  assert.equal(candidate.fields.itemStatDraft.value.values.hp,31,'An invalid correction is preserved as a draft, not lost or posted');
  widget.dispose();widget=mountItemBaseReview({host,getCandidate:()=>candidate,onChange:patch=>candidate={...candidate,...patch}});assert.equal(input('hp').value,'31','Reopening preserves the exact invalid typed value');
  host.querySelector('[data-base-refresh]').click();assert.equal(input('hp').value,'29','Use updated reading deliberately discards the invalid draft and recalculates from current evidence');assert.equal(Object.hasOwn(candidate.fields,'itemStatDraft'),false);assert(validateItemBaseReview(candidate).ok);
- edit('hp','30');edit('resistCorruption','0');draft=review();assert.deepEqual(draft.blockers,[]);assert.match(draft.text,/SV Void: 0/,'A deliberate zero survives ranked review');
+ edit('hp','30');edit('resistCorruption','0');draft=review();assert(draft.blockers.length,'Typed zero cannot certify an intrinsic base for observed ranked Void');assert.equal(candidate.fields.itemStatDraft.value.values.resistCorruption,0,'The invalid zero remains editable instead of being discarded');assert.match(host.querySelector('[data-base-status]').textContent,/supported base value/);assert.doesNotMatch(draft.text||'',/SV Void: 0/);
  edit('hp','');edit('resistCorruption','');draft=review();assert.deepEqual(draft.blockers,[]);assert.doesNotMatch(draft.text,/HP:|SV Void:/,'Reviewed empty choices omit all numeric observations without publishing them');
 
  mount({tier:wrap(4),hp:wrap(42)});const saved=structuredClone(candidate);

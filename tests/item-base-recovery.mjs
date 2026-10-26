@@ -76,3 +76,11 @@ assert.deepEqual(source,unchanged);assert.equal(aggregate.autoPublish,false);ass
 const conflicting=recoverItemBaseStats({HP:42,hp:43,Mana:18,MP:18},options);assert.equal(conflicting.fields.HP.reason,'conflicting-stat-aliases');assert.equal(conflicting.fields.HP.value,null);assert.equal(conflicting.fields.MP.status,'exact');
 const many=recoverItemBaseStats(Object.fromEntries(Array.from({length:ITEM_BASE_RECOVERY_LIMITS.fields+1},(_,index)=>[`UNKNOWN_${index}`,0])),options);assert.equal(Object.keys(many.fields).length,64);assert.deepEqual(many.warnings,['stat-block-truncated']);
 console.log('Item base recovery: forward-verified integer families, disjoint negative/clamped ranges, bounded samples, reviewed contexts, weight parity limits and canonical aliases passed.');
+
+for(const alias of ['SV_CORRUPTION','SV Void','SV\tVoid','SV\nVoid','SV\u00a0Void','SV_VOID','SVVoid','SVCorruption','Void','Corruption','ResistVoid']){
+    for(const observed of [0,5,37,-3]){
+        const result=recoverItemBaseStat(alias,observed,{tier:5,fraction:0,augmentStatus:'excluded'});
+        assert.equal(result.status,'unsupported');assert.equal(result.reason,'contextual-void-resist-not-an-independent-base');
+        assert.equal(isItemBaseCandidate(alias,0,observed,{tier:5,fraction:0,augmentStatus:'excluded'}),false,'A shared forward family does not certify the contextual inverse');
+    }
+}

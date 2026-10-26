@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.6 - Expandable private inventories
+
+- Store full desktop inventories in a private database with no aggregate item-count or inventory-byte limit. Search and browse carried gear, bank, depot, keyring and unmatched exports in pages.
+- Stream inventory exports and commit them together with achievements. Failed or canceled imports preserve the saved character; item copies, sockets, manual changes and recorded stats keep their meaning.
+- Migrate existing characters with a verified recovery backup. Save changed records without rewriting the entire inventory or mirroring it to browser storage. Wiki sharing continues to use equipped gear and reviewed totals.
+- Scale an item's listed base Void resist with the same formula as other resists. Preserve explicit zero and unknown bases, and retain conditional rank-based Void when the base field is absent.
+
 ## 1.0.5 - Cleaner chat discoveries
 
 - Keep trade captions containing one or several known items out of automatic new-item suggestions. Whole catalog titles and aliases retain their exact identity; genuine new encoded item links remain supported.

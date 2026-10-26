@@ -4,6 +4,13 @@ import {createCharacterModel,CHARACTER_STORAGE_KEY as KEY} from '../app/characte
 import {createCharacterWalkthrough,CHARACTER_WALKTHROUGH_KEY as FLOW} from '../app/character-walkthrough.js';
 const ROSTER='eql-eye-of-zomm-character-profiles-v1';
 const CONTRIBUTIONS='eql-eye-of-zomm-contributions-v1';
+{
+    const reads=[],localReads=[],localWrites=[];
+    const bridge=await createCharacterStorage({repositoryMode:true,api:{read:async request=>{reads.push(request);return {values:{[KEY]:'legacy must not enter renderer',[ROSTER]:'nested legacy must not enter renderer',[CONTRIBUTIONS]:JSON.stringify({schemaVersion:1,candidates:[]})}};},write:async()=>({ok:true}),flush:async()=>({ok:true})},legacyStorage:{getItem:key=>{localReads.push(key);return null;},setItem:(key,value)=>localWrites.push([key,value]),removeItem:key=>localWrites.push([key,null])}});
+    assert.deepEqual(reads,[{keys:[CONTRIBUTIONS]}]);assert.equal(bridge.getItem(KEY),null);assert.equal(bridge.getItem(ROSTER),null);
+    assert(!localReads.some(key=>key===KEY||key===ROSTER));assert(!localWrites.some(([key])=>key===KEY||key===ROSTER));
+    assert.throws(()=>bridge.setItem(KEY,'{}'),/Unsupported/);assert((await bridge.flush()).ok);
+}
 const memory=()=>{const values=new Map();return{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};};
 const draft=label=>JSON.stringify({schemaVersion:1,label});
 const legacy=memory(),disk={},writes=[],warnings=[];legacy.setItem(KEY,draft('legacy inventory'));legacy.setItem(FLOW,draft('legacy flow'));legacy.setItem(ROSTER,draft('legacy roster'));legacy.setItem(CONTRIBUTIONS,JSON.stringify({schemaVersion:1,candidates:[{id:'synthetic-draft',kind:'npc',name:'a saved watcher'}]}));
@@ -21,13 +28,14 @@ fallbackOrigin.setItem(CONTRIBUTIONS,JSON.stringify({schemaVersion:1,candidates:
 restored.removeItem(KEY);assert((await restored.flush()).ok);assert.equal(disk[KEY],null);
 fallbackOrigin.setItem(KEY,draft('stale resurrection'));const tombstone=await createCharacterStorage({api,legacyStorage:fallbackOrigin});assert.equal(tombstone.getItem(KEY),null);assert.equal(fallbackOrigin.getItem(KEY),null);
 restored.removeItem(ROSTER);assert((await restored.flush()).ok);fallbackOrigin.setItem(ROSTER,draft('stale removed roster'));const rosterTombstone=await createCharacterStorage({api,legacyStorage:fallbackOrigin});assert.equal(rosterTombstone.getItem(ROSTER),null);assert.equal(fallbackOrigin.getItem(ROSTER),null,'A roster tombstone prevents stale browser migration');
-assert.throws(()=>first.setItem('other-app-key','x'),/Unsupported/);assert.throws(()=>first.setItem(KEY,'x'.repeat(1500001)),/limit/);assert.throws(()=>first.setItem(KEY,'界'.repeat(500001)),/limit/);
+assert.throws(()=>first.setItem('other-app-key','x'),/Unsupported/);assert.throws(()=>first.setItem(KEY,'x'.repeat(8*1024*1024+1)),/limit/);assert.throws(()=>first.setItem(KEY,'界'.repeat(Math.floor(8*1024*1024/3)+1)),/limit/);
 assert.throws(()=>first.setItem(FLOW,'x'.repeat(1500001)),/limit/,'The original walkthrough cap does not grow with the roster');
+const exactModel=JSON.stringify({schemaVersion:1,padding:''}),modelAtLimit=JSON.stringify({schemaVersion:1,padding:'a'.repeat(8*1024*1024-exactModel.length)});first.setItem(KEY,modelAtLimit);assert((await first.flush()).ok);assert.equal(disk[KEY],modelAtLimit,'The bridge accepts an8MiB model without changing its schema');
 assert.throws(()=>first.setItem(CONTRIBUTIONS,'x'.repeat(1800001)),/limit/);assert.throws(()=>first.setItem(CONTRIBUTIONS,'界'.repeat(600001)),/limit/);
 const exactContributions=JSON.stringify({schemaVersion:1,candidates:[],padding:''}),contributionsAtLimit=JSON.stringify({schemaVersion:1,candidates:[],padding:'a'.repeat(1800000-exactContributions.length)});first.setItem(CONTRIBUTIONS,contributionsAtLimit);assert((await first.flush()).ok);assert.equal(disk[CONTRIBUTIONS],contributionsAtLimit,'A full bounded contribution entry is independent of Character and roster limits');
-const exactRoster=JSON.stringify({schemaVersion:1,padding:''}),rosterAtLimit=JSON.stringify({schemaVersion:1,padding:'a'.repeat(8000000-exactRoster.length)});
-assert.equal(Buffer.byteLength(rosterAtLimit,'utf8'),8000000);first.setItem(ROSTER,rosterAtLimit);assert((await first.flush()).ok);assert.equal(disk[ROSTER],rosterAtLimit,'An eight-megabyte roster is supported independently of original key limits');
-assert.throws(()=>first.setItem(ROSTER,rosterAtLimit+' '),/limit/);assert.throws(()=>first.setItem(ROSTER,'界'.repeat(2666667)),/limit/,'Roster bounds count UTF-8 bytes, not only JS characters');
+const exactRoster=JSON.stringify({schemaVersion:1,padding:''}),rosterAtLimit=JSON.stringify({schemaVersion:1,padding:'a'.repeat((32*1024*1024)-exactRoster.length)});
+assert.equal(Buffer.byteLength(rosterAtLimit,'utf8'),(32*1024*1024));first.setItem(ROSTER,rosterAtLimit);assert((await first.flush()).ok);assert.equal(disk[ROSTER],rosterAtLimit,'A32MiB roster is supported independently of original key limits');
+assert.throws(()=>first.setItem(ROSTER,rosterAtLimit+' '),/limit/);assert.throws(()=>first.setItem(ROSTER,'界'.repeat((Math.floor(32*1024*1024/3)+1))),/limit/,'Roster bounds count UTF-8 bytes, not only JS characters');
 const oversizedLocal=memory(),oversizedWarnings=[];oversizedLocal.setItem(ROSTER,rosterAtLimit+' ');const oversized=await createCharacterStorage({api:null,legacyStorage:oversizedLocal,onWarning:value=>oversizedWarnings.push(value)});assert.equal(oversized.getItem(ROSTER),null);assert.throws(()=>oversized.removeItem(ROSTER),/preserved/);assert.equal(oversizedLocal.getItem(ROSTER),rosterAtLimit+' ');assert(oversizedWarnings.some(value=>value.includes('limit')));
 assert.equal(first.getItem('other-app-key'),null);
 const priorWrites=writes.length,corrupt=memory();corrupt.setItem(KEY,draft('recoverable local gear'));

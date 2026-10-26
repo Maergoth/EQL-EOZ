@@ -13,12 +13,14 @@ export const ITEM_BASE_RECOVERY_CONTRACT = Object.freeze({
 const STATIC = new Set(['DELAY','COLD_DMG','FIRE_DMG','MAGIC_DMG','POISON_DMG','DISEASE_DMG','CORRUPTION_DMG','CHROMATIC_DMG','PRISMATIC_DMG','ELEMENTAL_DMG','BANE_DMG']);
 const ALIASES = Object.freeze({MANA:'MP',ENDURANCE:'END',WEIGHT:'WT',DAMAGE:'DMG',BASE_DMG:'DMG',
     STRENGTH:'STR',STAMINA:'STA',AGILITY:'AGI',DEXTERITY:'DEX',WISDOM:'WIS',INTELLIGENCE:'INT',CHARISMA:'CHA',
-    RESISTMAGIC:'SV_MAGIC',RESISTFIRE:'SV_FIRE',RESISTCOLD:'SV_COLD',RESISTPOISON:'SV_POISON',RESISTDISEASE:'SV_DISEASE',RESISTCORRUPTION:'SV_CORRUPTION',SV_VOID:'SV_CORRUPTION',
+    RESISTMAGIC:'SV_MAGIC',RESISTFIRE:'SV_FIRE',RESISTCOLD:'SV_COLD',RESISTPOISON:'SV_POISON',RESISTDISEASE:'SV_DISEASE',RESISTCORRUPTION:'SV_CORRUPTION',SV_VOID:'SV_CORRUPTION',SVVOID:'SV_CORRUPTION',SVCORRUPTION:'SV_CORRUPTION',VOID:'SV_CORRUPTION',CORRUPTION:'SV_CORRUPTION',RESISTVOID:'SV_CORRUPTION',RESIST_VOID:'SV_CORRUPTION',
     HPREGEN:'HP_REGEN',MANAREGEN:'MANA_REGEN',ENDURANCEREGEN:'END_REGEN',ENDURANCE_REGEN:'END_REGEN',MP_REGEN:'MANA_REGEN',
     DAMAGEBONUS:'DMG_BONUS',DAMAGE_BONUS:'DMG_BONUS',BACKSTAB:'BACKSTAB_DMG',BACKSTAB_DAMAGE:'BACKSTAB_DMG',BACKSTABDAMAGE:'BACKSTAB_DMG',ATTACKSPEED:'ATTACK_SPEED',ATTACK:'ATK'});
-const canonical = value => {const key=String(value??'').trim().replace(/[ .-]+/g,'_').toUpperCase().slice(0,80);return ALIASES[key]||key;};
+const canonical = value => {const key=String(value??'').trim().replace(/[\s.-]+/g,'_').toUpperCase().slice(0,80);return ALIASES[key]||key;};
 const finite = value => typeof value==='number'&&Number.isFinite(value);
-const familyOf = key => STATIC.has(key)?'static':['primary','flat','damage','backstab','range','weight'].includes(itemStatFamily(key))?itemStatFamily(key):null;
+// Authored Void shares the forward resist family, but an isolated observation
+// cannot distinguish an intrinsic base from context-generated Void.
+const familyOf = key => key==='SV_CORRUPTION'?null:STATIC.has(key)?'static':['primary','flat','damage','backstab','range','weight'].includes(itemStatFamily(key))?itemStatFamily(key):null;
 const point = (index,unit) => index/unit;
 
 function context(options={}) {

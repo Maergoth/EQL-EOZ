@@ -79,6 +79,22 @@ distinct qualifying base fields still earn one Void per whole rank. Aliases
 count once; unknown fields do not qualify. Weapon damage, Backstab, Haste,
 Attack, delay and weight stay outside that whitelist.
 
+Rules revision 4 also handles items with an intrinsic Void/Corruption resist.
+A listed base uses the same primary-stat formula as Fire, Cold and the other
+ordinary resists: base Void 7 becomes 12 at rank 5; base 25 becomes 37.
+Larger bases use the same fractional progress and flooring, and negative values
+use the same penalty reduction. This works even when Void is the item's only
+numeric stat and does not add the conditional generated bonus a second time.
+Explicit zero stays zero; an unknown value remains unknown. When the base field
+is absent, the existing two-stat qualification and generated whole-rank bonus
+still apply. The rank-ten cap applies. The wiki and app use the same rule and
+preserve the actual recorded examine values and character totals.
+
+Void captured from a ranked item still does not independently establish a base:
+the reading may contain the conditional generated resist or other modifiers.
+Recovery omits an uncertified contextual value rather than assuming zero.
+Direct tier-zero item fields and known wiki base values remain authoritative.
+
 Focused checks cover canonical math/wiki DOM behavior, Character/cards/recovery,
 release snapshot integrity and the shared Windows/Linux artifact contract.
 Synthetic checks do not constitute new game calibration or live-site testing.

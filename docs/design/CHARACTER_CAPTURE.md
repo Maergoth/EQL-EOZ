@@ -1,5 +1,13 @@
 # Character inventory, observed stats and sharing
 
+## Current desktop storage authority
+
+Version 1.0.6 uses the private paged SQLite worker, streamed paired-file imports
+and backup-verified legacy migration in [Character storage](../CHARACTER_STORAGE.md)
+and the [acceptance contract](../SCALABLE_INVENTORY_STORAGE.md). Full inventory
+collections do not pass through the bounded JSON model/roster or localStorage.
+The older limits and persistence audit below describe the legacy/fallback path.
+
 ## Current 0.9.7 data contract
 
 Character uses **details → inventory → stats → review → complete**, with all gear
@@ -489,10 +497,10 @@ visible; a preview cannot certify the effects included in an examined item.
 ### Bounds and persistence
 
 The model key is `eql-eye-of-zomm-character-v1`; the walkthrough key is
-`eql-eye-of-zomm-character-walkthrough-v1`. Up to 120 cards
+`eql-eye-of-zomm-character-walkthrough-v1`. Up to 1,000 cards
 persist, with six evidence records/card, 48 supplied stat fields/block and eight
 augments/card. Strings and numerics have explicit bounds. The serialized state
-has a 1,500,000-character model budget. Reference history, redundant evidence and
+has an 8 MiB saved-model budget as of 1.0.6. Reference history, redundant evidence and
 cached icon pixels yield before inventory. Full/oversized additions are refused
 without deleting saved physical cards; an oversized edit stays in memory with a
 save warning. Duplicate assignments are removed on normalization. Pending legacy
@@ -505,9 +513,11 @@ and other browser preferences retain their stores. The main host writes fixed
 `userData/eye-of-zomm-character-storage.json`, independent of loopback port.
 `eyeOfZommCharacterStorage.read()` returns `{values,error}`;
 `write({key,value})` and `flush()` acknowledge `{ok:true}` after persistence or
-reject. The two legacy keys above remain bounded to 1,500,000 UTF-8 bytes each.
+reject. The Character model key allows 8 MiB of UTF-8; walkthrough progress retains
+its existing 1,500,000-byte budget.
 The third fixed key, `eql-eye-of-zomm-character-profiles-v1`, stores up to 32
-characters in an 8,000,000-byte UTF-8 roster. Only the exact trusted main
+characters in a 32 MiB UTF-8 roster. The JSON schema and import flow are unchanged;
+see [Character storage capacity](../CHARACTER_STORAGE.md). Only the exact trusted main
 window/root frame can access these keys. Null is a present
 deletion tombstone, so stale browser data cannot resurrect a removed key.
 

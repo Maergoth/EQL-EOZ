@@ -76,7 +76,7 @@ export function itemBaseReviewChoices(preview={},fixed={}){
         let preferred=null;
         for(const fraction of fractions){
             const options={tier:preview.options.tier,fraction,augmentStatus:'excluded'},calculation=recoverItemBaseStats(preview.observed,options);
-            if(!Object.entries(fixed).every(([key,base])=>key==='SV_CORRUPTION'&&base===0||isItemBaseCandidate(key,base,preview.observed[key],options)))continue;
+            if(!Object.entries(fixed).every(([key,base])=>isItemBaseCandidate(key,base,preview.observed[key],options)))continue;
             if(!keys.every(key=>['exact','range'].includes(calculation.fields[key]?.status)))continue;
             const next=Object.fromEntries(keys.map(key=>[key,Object.hasOwn(fixed,key)?fixed[key]:calculation.fields[key].ranges[0].min]));
             const difference=preferred?keys.find(key=>next[key]!==preferred[key]):null;
@@ -85,8 +85,9 @@ export function itemBaseReviewChoices(preview={},fixed={}){
         if(!preferred)throw Error('Review the edited base statistics: they must be supported values from one possible item progress state.');
         choices={...preferred,...fixed};
     }
-    // Contextual Void has no certified inverse. Omit it unless the contributor
-    // explicitly enters a supported value; absence never manufactures zero.
+    // Contextual Void has no certified inverse. Omit it until a certified
+    // inverse supports it; entering zero is not proof of a base.
+    // Directly authored tier-zero item fields are independent of this review.
     return choices;
 }
 const baseLabelKey=label=>String(label).toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -119,13 +120,13 @@ export function createItemBaseReview(candidate,{tier,fraction,choices={},modifie
         if(preview.blockedReason)throw Error('Review the observed tier and remove known Exaltation or modified values before proposing base statistics.');
         for(const [key,base]of Object.entries(choices).slice(0,40)){
             const result=preview.fields?.[key];
-            if(!(key==='SV_CORRUPTION'&&base===0)&&(!result||!['exact','range'].includes(result.status)||numeric(base)===null||!result.ranges.some(range=>base>=range.min&&base<=range.max&&Math.abs((base-range.min)/range.step-Math.round((base-range.min)/range.step))<1e-7)))throw Error(`Review a supported base value for ${itemRecoveryLabel(key)}.`);
+            if(!result||!['exact','range'].includes(result.status)||numeric(base)===null||!result.ranges.some(range=>base>=range.min&&base<=range.max&&Math.abs((base-range.min)/range.step-Math.round((base-range.min)/range.step))<1e-7))throw Error(`Review a supported base value for ${itemRecoveryLabel(key)}.`);
             selected[key]=base;
         }
         // An explicitly reviewed empty selection omits every numeric value.
         // It remains fingerprint-bound and cannot authorize observed numbers.
         const fractions=preview.options.fraction===null?Array.from({length:preview.options.tier===10?1:2**preview.options.tier},(_,index)=>index):[preview.options.fraction];
-        if(!fractions.some(progress=>Object.entries(selected).every(([key,base])=>key==='SV_CORRUPTION'&&base===0||isItemBaseCandidate(key,base,preview.observed[key],{tier:preview.options.tier,fraction:progress,augmentStatus:'excluded'}))))throw Error('The selected base values do not match one possible item progress state. Review the choices together.');
+        if(!fractions.some(progress=>Object.entries(selected).every(([key,base])=>isItemBaseCandidate(key,base,preview.observed[key],{tier:preview.options.tier,fraction:progress,augmentStatus:'excluded'}))))throw Error('The selected base values do not match one possible item progress state. Review the choices together.');
         return {schemaVersion:2,reviewMode:'provisional',sourceFingerprint:itemRecoveryFingerprint(candidate),tier:preview.options.tier,fraction:preview.options.fraction,modifiersExcluded:null,reviewed:true,choices:selected};
     }
     if(reviewed!==true||modifiersExcluded!==true)throw Error('Review the observed values and confirm they exclude augments and other modifiers.');

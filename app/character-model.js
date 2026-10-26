@@ -6,7 +6,7 @@ import { normalizeAchievementExport, ACHIEVEMENT_LIMITS } from './achievement-ex
 // Local, versioned data only. This module has no DOM, capture, network or wiki
 // write dependency. One candidate represents one physical copy, not a title.
 export const CHARACTER_STORAGE_KEY = 'eql-eye-of-zomm-character-v1';
-export const CHARACTER_LIMITS = Object.freeze({ candidates:1000, evidence:6, stats:48, augments:8, observationRefs:6000, removedObservations:1000, removedInstances:100, storageBytes:1500000, iconBytes:24000, rawStatBlock:8192, rawStatLines:60 });
+export const CHARACTER_LIMITS = Object.freeze({ candidates:1000, evidence:6, stats:48, augments:8, observationRefs:6000, removedObservations:1000, removedInstances:100, storageBytes:8*1024*1024, iconBytes:24000, rawStatBlock:8192, rawStatLines:60 });
 export const CHARACTER_STAT_KEYS = Object.freeze(['AC','AC_MITIGATION','AC_MITIGATION_SOFTCAP','AC_EVASION','HP','MP','END','ATK','ATK_OFFENSE','ATK_ACCURACY','STR','STA','AGI','DEX','WIS','INT','CHA','SV_MAGIC','SV_FIRE','SV_COLD','SV_POISON','SV_DISEASE','HP_REGEN','MANA_REGEN','END_REGEN','HASTE','ACCURACY','AVOIDANCE','COMBAT_EFFECTS','STRIKETHROUGH','STUN_RESIST','DAMAGE_SHIELD','DAMAGE_SHIELD_MITIGATION','DOT_SHIELDING','MELEE_SHIELDING','SPELL_SHIELDING']);
 const STAT_LABELS=Object.freeze({MP:'Mana',END:'Endurance',ATK:'Attack',AC_MITIGATION:'Mitigation AC',AC_MITIGATION_SOFTCAP:'AC softcap',AC_EVASION:'Evasion AC',
     ATK_OFFENSE:'Offense',ATK_ACCURACY:'Accuracy',SV_MAGIC:'Magic resist',SV_FIRE:'Fire resist',SV_COLD:'Cold resist',SV_POISON:'Poison resist',SV_DISEASE:'Disease resist',
@@ -213,7 +213,13 @@ function statSnapshot(value) {
 function emptyState() {
     return {schemaVersion:1, sequence:0, metadata:metadata(), candidates:[], equipment:{}, pendingEquipment:{},inventoryExport:null,achievements:null,achievementExport:null,statSnapshots:{base:null,equipped:null,current:null}, observationRefs:[],observationFloor:0,removedObservations:[],removedInstances:[],updatedAt:null};
 }
-function normalizeState(value) {
+/** Replay identity needs no artwork, statistics or evidence. Native migration
+ * retains rich originals separately; its working projection uses this shape. */
+export function characterRemovalVariant(value){
+    const normalized=normalizeCandidate(value);
+    return {tier:normalized.tier,fraction:normalized.fraction,augments:normalized.augments.map(augment=>({name:augment.name,id:augment.id}))};
+}
+function normalizeState(value,{workingSet=false}={}) {
     const result = emptyState();
     if (value?.schemaVersion !== 1) return result;
     result.metadata = metadata(value.metadata); result.sequence = Math.max(0,Math.min(1e9,Math.floor(numeric(value.sequence)||0)));
@@ -243,12 +249,12 @@ function normalizeState(value) {
     const references=new Map();
     for(const record of list(value.observationRefs)) {
         const observationId=clean(record?.observationId,180),sessionId=clean(record?.sessionId,180),candidateId=clean(record?.candidateId,100),sequence=journalSequence(record?.sequence);
-        if(observationId)references.set(JSON.stringify([sessionId,observationId]),{observationId,sessionId,candidateId:seen.has(candidateId)?candidateId:'',sequence});
+        if(observationId)references.set(JSON.stringify([sessionId,observationId]),{observationId,sessionId,candidateId:workingSet||seen.has(candidateId)?candidateId:'',sequence});
     }
     result.observationRefs=[...references.values()];
     for(const record of result.observationRefs.splice(0,Math.max(0,result.observationRefs.length-CHARACTER_LIMITS.observationRefs)))result.observationFloor=Math.max(result.observationFloor,record.sequence||0);
     result.removedObservations=list(value.removedObservations).slice(-CHARACTER_LIMITS.removedObservations).map(record=>({observationId:clean(record?.observationId,180),sessionId:clean(record?.sessionId,180)})).filter(record=>record.observationId);
-    result.removedInstances=list(value.removedInstances).slice(-CHARACTER_LIMITS.removedInstances).map(record=>({instanceKey:clean(record?.instanceKey,200),variant:normalizeCandidate(record?.variant),at:atTime(record?.at)})).filter(record=>record.instanceKey&&record.at!==null);
+    result.removedInstances=list(value.removedInstances).slice(-CHARACTER_LIMITS.removedInstances).map(record=>({instanceKey:clean(record?.instanceKey,200),variant:workingSet?characterRemovalVariant(record?.variant):normalizeCandidate(record?.variant),at:atTime(record?.at)})).filter(record=>record.instanceKey&&record.at!==null);
     result.updatedAt=atTime(value.updatedAt); return result;
 }
 
@@ -378,16 +384,30 @@ export function characterTotals(snapshot) {
  * characterCatalogCard. Typed wiki titles/match checkboxes are not identities.
  * Only a stable item.instanceKey or identical observation id deduplicates cards.
  */
-export function createCharacterModel({storage=globalThis.localStorage,now=Date.now,onWarning=()=>{}}={}) {
+export const normalizeCharacterCandidate=value=>normalizeCandidate(value);
+export const normalizeCharacterAugment=(value,index=0)=>augmentRecord(value,index);
+export function characterCatalogPatch(item,{match='manual',icon}={}) {
+    const identity=catalogIdentity({...item,match});
+    if(!identity)return null;
+    const baseStats=normalizeCharacterStats(catalogBaseStats(item));
+    return {name:identity.name,wikiTitle:identity.wikiTitle,catalogIdentity:identity,wikiMatch:match==='fuzzy'?'suggested':'confirmed',
+        baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,details:characterCatalogDetails(item),
+        unscaledStatKeys:[],accuracyPercent:item.accuracyPercent===true,iconId:clean(item.iconId,120),icon:safeCharacterIcon(icon)};
+}
+export function createCharacterModel({storage=globalThis.localStorage,now=Date.now,onWarning=()=>{},workingSet=false,id:makeId}={}) {
     let state=emptyState(), warned=false;
     const warn = message => { try { onWarning(message); } catch { /* UI warnings cannot break the model. */ } };
-    try { const raw=storage?.getItem(CHARACTER_STORAGE_KEY); if (raw && raw.length<=CHARACTER_LIMITS.storageBytes) state=normalizeState(JSON.parse(raw)); }
+    try { const raw=storage?.getItem(CHARACTER_STORAGE_KEY); if (raw && (workingSet||raw.length<=CHARACTER_LIMITS.storageBytes)) state=normalizeState(JSON.parse(raw),{workingSet}); }
     catch { warn('Saved character data could not be read. A new local snapshot is available.'); }
     const timestamp = () => atTime(now());
-    const nextId = () => { let id; do { id=`character-${++state.sequence}`; } while (state.candidates.some(candidate=>candidate.id===id)); return id; };
+    const nextId = () => { let id; do { id=makeId?clean(makeId(),100):`character-${++state.sequence}`;if(!id)throw Error('A physical item ID is required.'); } while (state.candidates.some(candidate=>candidate.id===id)); return id; };
     const expireReference = () => {const record=state.observationRefs.shift();if(record)state.observationFloor=Math.max(state.observationFloor,record.sequence||0);return record;};
     const trim = () => {
         while(state.observationRefs.length>CHARACTER_LIMITS.observationRefs)expireReference();
+        // Native repository projections are already bounded per page/record.
+        // They are not a persistence envelope and must never lose pixels or
+        // evidence merely because equipment and a page coexist in memory.
+        if(workingSet)return;
         while (JSON.stringify(state).length>CHARACTER_LIMITS.storageBytes) {
             // ID-only history yields to inventory under storage pressure. A
             // monotonic journal floor expires those old replay records without
@@ -408,7 +428,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     };
     const save = () => {
         state.updatedAt=timestamp(); trim();
-        try { const serialized=JSON.stringify(state);if(serialized.length>CHARACTER_LIMITS.storageBytes)throw Error('Character storage bound exceeded.');storage?.setItem(CHARACTER_STORAGE_KEY,serialized); return true; }
+        try { const serialized=JSON.stringify(state);if(!workingSet&&serialized.length>CHARACTER_LIMITS.storageBytes)throw Error('Character storage bound exceeded.');storage?.setItem(CHARACTER_STORAGE_KEY,serialized); return true; }
         catch { if (!warned) { warned=true;warn('Character changes remain in memory because local storage could not save them.'); } return false; }
     };
     const get = id => state.candidates.find(candidate=>candidate.id===id);
@@ -459,18 +479,11 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     const capacityError=()=>({ok:false,error:`Inventory holds ${CHARACTER_LIMITS.candidates} cards. Remove an unused card before adding another copy.`});
     const addedResult=(candidate,before,extra={})=>{
         const outcome=result(candidate,extra);
-        if(JSON.stringify(state).length>CHARACTER_LIMITS.storageBytes){state=before;return {ok:false,error:'This item exceeds the bounded inventory storage. Existing cards were kept; remove an unused card before adding it.',saved:false};}
+        if(!workingSet&&JSON.stringify(state).length>CHARACTER_LIMITS.storageBytes){state=before;return {ok:false,error:'This item exceeds the bounded inventory storage. Existing cards were kept; remove an unused card before adding it.',saved:false};}
         return outcome;
     };
     const detach=id=>{for(const assignments of [state.equipment,state.pendingEquipment])for(const [slot,assigned]of Object.entries(assignments))if(assigned===id)delete assignments[slot];};
-    function catalogPatch(item,{match='manual',icon}={}) {
-        const identity=catalogIdentity({...item,match});
-        if(!identity)return null;
-        const baseStats=normalizeCharacterStats(catalogBaseStats(item));
-        return {name:identity.name,wikiTitle:identity.wikiTitle,catalogIdentity:identity,wikiMatch:match==='fuzzy'?'suggested':'confirmed',
-            baseStats,baseStatsComplete:Object.keys(baseStats).length>0&&item.statsComplete!==false,details:characterCatalogDetails(item),
-            unscaledStatKeys:[],accuracyPercent:item.accuracyPercent===true,iconId:clean(item.iconId,120),icon:safeCharacterIcon(icon)};
-    }
+    const catalogPatch=characterCatalogPatch;
     function resolveCatalog(id,item,options={}) {
         const current=get(id);if(!current)return {ok:false,error:'Item card no longer exists.'};
         const patch=catalogPatch(item,options);if(!patch)return {ok:false,error:'Choose a known cached item.'};
@@ -651,7 +664,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             rememberObservation(prior.id,observation,evidence);
             return result(prior,{deduplicated:true});
         }
-        if(state.candidates.length>=CHARACTER_LIMITS.candidates)return capacityError();
+        if(!workingSet&&state.candidates.length>=CHARACTER_LIMITS.candidates)return capacityError();
         const beforeAddition=clone(state);
         const identity=options.wikiItem?catalogPatch(wiki,{match:options.catalogMatch||'exact',icon:options.icon}):null;
         const candidate=normalizeCandidate({id:nextId(),instanceKey,origin:automaticObservation(observation)?'automatic':'manual',lastObservedAt:evidence.at,lastObservedSequence:journalSequence(observation.sequence),observedTier:automaticObservation(observation)?fullTier(source.tier):null,observedFraction:automaticObservation(observation)?source.fraction:null,name:source.name || wiki.name,observedName:source.observedName ?? (!source.catalogIdentity&&(Array.isArray(observation.fields)||evidence.observationId)?source.name:''),wikiTitle:source.wikiTitle || wiki.wikiTitle || wiki.name,catalogIdentity:source.catalogIdentity,
@@ -812,7 +825,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
     return {intake,lookupObservation,updateCandidate,mergeObservation,setTierPreview,setObservedBasis,setAugmentSlots,setAugment,removeAugment,resolveCatalog,invalidateCatalog,reconcileCatalog,assign,autoAssign,
         snapshot:()=>clone(state), totals:()=>characterTotals(state),applyInventoryExport,applyAchievementExport,applyCharacterExports,
         duplicateCandidate(id) { const source=get(id);if(!source)return {ok:false,error:'Item card no longer exists.'};
-            if(state.candidates.length>=CHARACTER_LIMITS.candidates)return capacityError();const beforeAddition=clone(state);
+            if(!workingSet&&state.candidates.length>=CHARACTER_LIMITS.candidates)return capacityError();const beforeAddition=clone(state);
             const candidate=normalizeCandidate({...source,id:nextId(),origin:'manual',instanceKey:'',inventoryOrigin:null,evidence:[],seenCount:1,createdAt:timestamp(),updatedAt:timestamp()});
             state.candidates.push(candidate);return addedResult(candidate,beforeAddition); },
         removeCandidate(id) { if (!get(id)) return {ok:false,error:'Item card no longer exists.'};rememberRemoval(get(id));
