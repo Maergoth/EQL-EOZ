@@ -94,6 +94,10 @@ contextBridge.exposeInMainWorld('eyeOfZommObservations',{
     configure:value=>ipcRenderer.invoke('eye-of-zomm:observations','configure',value)
 });
 contextBridge.exposeInMainWorld('eyeOfZommWiki', {
+    characterScreenshot:value=>ipcRenderer.invoke('eye-of-zomm:wiki','character-screenshot',value),
+    prepareCharacterScreenshot:value=>ipcRenderer.invoke('eye-of-zomm:wiki','prepare-character-screenshot',value),
+    removeCharacterScreenshot:value=>ipcRenderer.invoke('eye-of-zomm:wiki','remove-character-screenshot',value),
+    reviewCharacterScreenshot:value=>ipcRenderer.invoke('eye-of-zomm:wiki','review-character-screenshot',value),
     prepareAttachment:value=>ipcRenderer.invoke('eye-of-zomm:wiki','prepare-attachment',value),
     prepareCapturedItem:value=>ipcRenderer.invoke('eye-of-zomm:wiki','prepare-captured-item',value),
     submitCapturedItem:value=>ipcRenderer.invoke('eye-of-zomm:wiki','submit-captured-item',value),

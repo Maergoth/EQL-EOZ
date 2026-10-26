@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {WikiAttachments}=require('./wiki-attachments.cjs');
+const {CharacterScreenshots}=require('./character-screenshots.cjs');
 const {ContributionHistory}=require('./contribution-history.cjs');
 const PRODUCTION_ORIGIN = 'https://eqlwiki.com';
 const MAX_JSON = 2 * 1024 * 1024, MAX_PAGE = 512 * 1024, MAX_PNG = 12 * 1024 * 1024;
@@ -49,9 +50,10 @@ class WikiClient {
         this.fetch=fetchImpl || (session && session.fetch.bind(session));
         if(typeof this.fetch!=='function') throw new WikiError('transport','The dedicated wiki session is unavailable.');
         this.session=session;this.version=version;this.stateDir=stateDir;this.now=now;this.id=id;this.getItemCatalog=getItemCatalog;this.isContributionIgnored=isContributionIgnored;this.onWikiPageChanged=onWikiPageChanged;
-        this.plans=new Map();this.uploads=new Map();this.sheets=new Map();this.blueprintCache=null;this.busy=false;
+        this.plans=new Map();this.uploads=new Map();this.sheets=new Map();this.screenshotReviews=new Map();this.blueprintCache=null;this.busy=false;
         this.loaded=false;this.persistChain=Promise.resolve();
         this.attachments=new WikiAttachments({stateDir,validate:validatePNG,now,id});
+        this.characterScreenshots=new CharacterScreenshots({stateDir,validate:validatePNG,now,id});
         this.history=new ContributionHistory({stateDir,now});
     }
     async load() {
@@ -65,13 +67,14 @@ class WikiClient {
             for(const plan of (value.plans||[]).slice(-30)) if(typeof plan?.id==='string' && Array.isArray(plan.pages) && plan.pages.length<=12 && plan.wikiOrigin===this.origin) this.plans.set(plan.id,plan);
             for(const item of (value.uploads||[]).slice(-30)) if(typeof item?.snapshotId==='string'&&item.origin===this.origin)this.uploads.set(item.snapshotId,item);
             for(const item of (value.sheets||[]).slice(-20)) if(typeof item?.shareId==='string'&&/^[A-Za-z0-9_-]{8,100}$/.test(item.shareId)&&item.origin===this.origin&&namedUser(item.user))this.sheets.set(item.shareId,item);
+            for(const item of (value.screenshotReviews||[]).slice(-20))if(typeof item?.reviewId==='string'&&/^[A-Za-z0-9_-]{8,100}$/.test(item.reviewId)&&item.origin===this.origin&&namedUser(item.user))this.screenshotReviews.set(item.reviewId,item);
         }catch(error){if(error.code!=='ENOENT')this.loadWarning='Saved wiki plans could not be read. Existing drafts remain on disk.';}finally{await this.history.recordPlans([...this.plans.values()]);this.loaded=true;}})();
         return this.loading;
     }
     async persist() {
         await this.history.recordPlans([...this.plans.values()]);
         if(!this.stateDir)return;
-        const value=JSON.stringify({schemaVersion:1,plans:[...this.plans.values()].slice(-30),uploads:[...this.uploads.values()].slice(-30),sheets:[...this.sheets.values()].slice(-20)});
+        const value=JSON.stringify({schemaVersion:1,plans:[...this.plans.values()].slice(-30),uploads:[...this.uploads.values()].slice(-30),sheets:[...this.sheets.values()].slice(-20),screenshotReviews:[...this.screenshotReviews.values()].slice(-20)});
         if(Buffer.byteLength(value)>4*1024*1024)throw new WikiError('storage','The local contribution plan store is full.');
         const task=async()=>{await fs.mkdir(this.stateDir,{recursive:true});const file=path.join(this.stateDir,'wiki-contribution-plans.json'),temp=`${file}.tmp`;await fs.writeFile(temp,value,{mode:0o600});await fs.rename(temp,file);};
         this.persistChain=this.persistChain.then(task,task);await this.persistChain;
@@ -776,27 +779,60 @@ class WikiClient {
             return result();
         }finally{this.busy=false;}
     }
-    async characterSheetCapability({achievements=false}={}){
+    async canonicalScreenshotFile(value){
+        const {normalizeCharacterScreenshotFile}=await import('../app/character-screenshot.js'),requested=normalizeCharacterScreenshotFile(value),result=await this.request({action:'query',prop:'imageinfo',titles:requested,iiprop:'sha1|user'}),pages=result.query?.pages;
+        if(result.warnings||result.continue||!Array.isArray(pages)||pages.length!==1||pages[0].invalid||pages[0].redirect||pages[0].ns!==6||typeof pages[0].title!=='string'||!pages[0].title.startsWith('File:'))throw new WikiError('image-title','The wiki could not validate this image filename. Choose a shorter character name/server or add an image later on the wiki.');
+        return {file:normalizeCharacterScreenshotFile(pages[0].title),info:pages[0].imageinfo?.[0]||null};
+    }
+    async reviewCharacterScreenshot({metadata,attachmentId,sha256}={}){
+        const {characterWikiIdentity}=await characterSheets(),{defaultCharacterScreenshotFile}=await import('../app/character-screenshot.js');await this.load();if(this.busy)throw new WikiError('busy','Wait for the current wiki submission.');
+        const key=hash(characterWikiIdentity(metadata)),selected=await this.characterScreenshots.get(key,{attachmentId,sha256});if(!selected)throw new WikiError('image-review','Select a character screenshot first.');
+        const status=await this.expectedUser();if(!status.canUpload)throw new WikiError('upload-permission','This account cannot upload a character screenshot. You can remove the local selection and share without one.');
+        const page=await this.page(`User:${status.user.name}`,{maxBytes:MAX_CHARACTER_PAGE});if(page.namespace!==2||page.redirect||page.title!==`User:${status.user.name}`)throw new WikiError('sheet-user','Resolve your User-page redirect before reviewing the character image.');
+        const sha1=crypto.createHash('sha1').update(selected.bytes).digest('hex'),saved=[...[...this.sheets.values()].map(record=>record.screenshot),...this.screenshotReviews.values()].reverse().find(record=>record?.origin===this.origin&&record.key===key&&record.attachmentId===attachmentId&&record.sha256===sha256&&record.user?.id===status.user.id&&record.user?.name===status.user.name);
+        let target=await this.canonicalScreenshotFile(saved?`File:${saved.filename}`:defaultCharacterScreenshotFile(page.title,metadata)),collision=Boolean(saved?.collision);
+        if(target.info&&(target.info.sha1!==sha1||target.info.user!==status.user.name)){if(saved)throw new WikiError('file-exists','A different image now occupies the previously reviewed filename. No image was overwritten.');collision=true;target=await this.canonicalScreenshotFile(target.file.replace(/\.png$/i,` - ${sha256.slice(0,16)}.png`));if(target.info&&(target.info.sha1!==sha1||target.info.user!==status.user.name))throw new WikiError('file-exists','A different image already occupies this screenshot’s reviewed filename. No file was overwritten.');}
+        const review={reviewId:this.id(),origin:this.origin,user:status.user,key,attachmentId,sha256,sha1,filename:target.file.slice(5),collision};if(!/^[A-Za-z0-9_-]{8,100}$/.test(review.reviewId))throw new WikiError('image-review','Invalid screenshot review identifier.');this.screenshotReviews.set(review.reviewId,review);if(this.screenshotReviews.size>20)this.screenshotReviews.delete(this.screenshotReviews.keys().next().value);await this.persist();return copy(review);
+    }
+    async submitCharacterScreenshot(record){
+        const image=record.screenshot;if(!image)return true;
+        try{
+            const status=await this.expectedUser(record.user);if(!status.canUpload)throw new WikiError('upload-permission','This account cannot upload the reviewed character screenshot.');
+            const target=await this.canonicalScreenshotFile(`File:${image.filename}`);if(target.file!==`File:${image.filename}`)throw new WikiError('image-review','The canonical screenshot filename changed. Review it again.');
+            if(target.info){if(target.info.sha1!==image.sha1||target.info.user!==record.user.name)throw new WikiError('file-exists','A different file now uses this reviewed filename. No image was overwritten.');image.status='applied';delete image.error;await this.persist();return true;}
+            const selected=await this.characterScreenshots.get(record.key,image);if(!selected)throw new WikiError('image-review','The selected screenshot is unavailable. Select it again.');
+            const {literalWikiText}=await models(),token=await this.csrf(record.user),form=new FormData();
+            for(const [key,value]of Object.entries({action:'upload',format:'json',formatversion:'2',errorformat:'plaintext',filename:image.filename,text:`Character screenshot supplied by [[User:${literalWikiText(record.user.name)}]].\nPlayer-selected game screenshot.`,comment:'Player-reviewed Eye of Zomm character screenshot',assert:'user',assertuser:record.user.name,token}))form.set(key,value);
+            form.set('file',new Blob([selected.bytes],{type:'image/png'}),image.filename);image.status='unknown';record.status='unknown';await this.persist();
+            const response=await this.request({},{post:true,form});if(response.upload?.result!=='Success')throw new WikiError('upload-warning','The wiki did not accept the screenshot. Review its warning before retrying.');image.status='applied';delete image.error;await this.persist();return true;
+        }catch(error){image.status=error.code==='unknown-write'?'unknown':'failed';image.error={code:error.code||'image',message:safeMessage(error.message)};record.status=image.status;record.error=image.error;await this.persist();return false;}
+    }
+    async characterSheetCapability({achievements=false,screenshot=false}={}){
         const {CHARACTER_WIKI_SHEET_CAPABILITY:contract}=await characterSheets();
         const [template,item]=await Promise.all([this.page(contract.template),this.page(contract.itemTemplate)]);
         if(template.missing||template.redirect||item.missing||item.redirect||!new RegExp(`\\b${contract.templateMarker}\\b`).test(template.content)||!new RegExp(`\\b${contract.itemMarker}\\b`).test(item.content))throw new WikiError('sheet-unavailable','The wiki interactive character sheet templates are not installed at the supported version.');
         if(achievements&&!new RegExp(`\\b${contract.achievementMarker}\\b`).test(template.content))throw new WikiError('sheet-unavailable','The wiki achievement renderer is not installed yet. Your character has not been shared.');
-        const result=await this.request({action:'parse',text:'{{Character_sheet|name=EoZ capability probe|server=Fixture|head_item=EoZ Capability Item|head_tier=0|head_stats=HP: 1'+(achievements?'|achievements=<p>EoZ achievement capability probe</p>':'')+'}}',contentmodel:'wikitext',prop:'text|modules',disablelimitreport:'1'}),parsed=result.parse,html=typeof parsed?.text==='string'?parsed.text:parsed?.text?.['*'];
+        if(screenshot&&!new RegExp(`\\b${contract.screenshotMarker}\\b`).test(template.content))throw new WikiError('sheet-unavailable','The wiki character image renderer is not installed yet. Nothing was uploaded.');
+        const result=await this.request({action:'parse',text:'{{Character_sheet|name=EoZ capability probe|server=Fixture|head_item=EoZ Capability Item|head_tier=0|head_stats=HP: 1'+(achievements?'|achievements=<p>EoZ achievement capability probe</p>':'')+(screenshot?'|screenshot=EoZ capability probe.png':'')+'}}',contentmodel:'wikitext',prop:'text|modules',disablelimitreport:'1'}),parsed=result.parse,html=typeof parsed?.text==='string'?parsed.text:parsed?.text?.['*'];
         if(typeof html!=='string'||!/<[^>]+class=["'][^"']*\beql-character-sheet-v1\b/.test(html)||!/<[^>]+class=["'][^"']*\beql-character-inspect-v1\b/.test(html)||!Array.isArray(parsed?.modules)||!parsed.modules.includes(contract.module))throw new WikiError('sheet-unavailable','The wiki interactive character sheet renderer is unavailable. No talk-page changes were made.');
         if(achievements&&(!/<[^>]+class=["'][^"']*\beql-character-achievements-v1\b/.test(html)||!html.includes('EoZ achievement capability probe')))throw new WikiError('sheet-unavailable','The wiki achievement renderer is unavailable. Your character has not been shared.');
+        if(screenshot&&!/<[^>]+class=["'][^"']*\beql-character-screenshot-v1\b/.test(html))throw new WikiError('sheet-unavailable','The wiki character image renderer is unavailable. Nothing was uploaded.');
         return {schemaVersion:1,templateRevision:template.revision,itemTemplateRevision:item.revision,module:contract.module,achievements};
     }
-    async shareCharacter({sheet:input,caption='',confirmed=false,shareId=null}={}){
+    async shareCharacter({sheet:input,caption='',confirmed=false,shareId=null,screenshotReviewId=null}={}){
         if(confirmed!==true)throw new WikiError('review','Review the interactive character sheet and confirm sharing first.');
         const {normalizeCharacterWikiSheet,normalizeCharacterWikiCaption,characterWikiIdentity,serializeCharacterWikiSheet,patchCharacterWikiSheet}=await characterSheets();
         let sheet,note;try{sheet=normalizeCharacterWikiSheet(input);note=normalizeCharacterWikiCaption(caption);}catch(error){throw new WikiError('sheet',error.message);}
         await this.load();if(this.busy)throw new WikiError('busy','A wiki submission is already in progress.');this.busy=true;
         try{
-            const status=await this.expectedUser();await this.characterSheetCapability({achievements:Boolean(sheet.achievements)});
-            const destination=`User:${status.user.name}`,key=hash(characterWikiIdentity(sheet.metadata)),payloadHash=hash(JSON.stringify({sheet,caption:note}));
+            const status=await this.expectedUser(),key=hash(characterWikiIdentity(sheet.metadata));let photo=null;
+            if(screenshotReviewId!==null){photo=this.screenshotReviews.get(screenshotReviewId);if(!photo||photo.origin!==this.origin||photo.key!==key||photo.user.id!==status.user.id||photo.user.name!==status.user.name)throw new WikiError('image-review','The screenshot review belongs to another character or account. Preview it again.');sheet=normalizeCharacterWikiSheet({...sheet,screenshotFile:`File:${photo.filename}`});}
+            await this.characterSheetCapability({achievements:Boolean(sheet.achievements),screenshot:Boolean(sheet.screenshotFile)});
+            const destination=`User:${status.user.name}`,payloadHash=hash(JSON.stringify({sheet,caption:note,...(photo?{screenshot:{attachmentId:photo.attachmentId,sha256:photo.sha256,filename:photo.filename}}:{})}));
             const prior=shareId===null?[...this.sheets.values()].reverse().find(item=>item.destination===destination&&item.user?.id===status.user.id&&item.key===key&&item.payloadHash===payloadHash&&['pending','unknown'].includes(item.status)):null;
             const id=prior?.shareId||(shareId===null?this.id():String(shareId));if(!/^[A-Za-z0-9_-]{8,100}$/.test(id))throw new WikiError('sheet-id','Invalid character sheet review identifier.');
             let record=this.sheets.get(id);
+            if(!record&&photo&&!await this.characterScreenshots.get(key,photo))throw new WikiError('image-review','The selected character screenshot is unavailable. Select it again.');
             if(shareId!==null&&!record)throw new WikiError('sheet-review','That saved character sheet review is unavailable. Preview and share it again.');
             if(record&&(record.origin!==this.origin||record.user?.id!==status.user.id||record.user?.name!==status.user.name||record.key!==key||record.payloadHash!==payloadHash))throw new WikiError('sheet-review','That character sheet review belongs to different content or a different account.');
             if(record&&record.destination!==destination)throw new WikiError('sheet-destination','This saved review targets the old talk page. Prepare a fresh review for your User page; existing talk-page content stays unchanged.');
@@ -805,13 +841,17 @@ class WikiClient {
             if(page.missing&&!status.canCreate)throw new WikiError('permission','This account cannot create its missing User page.');
             let replacement;try{replacement=patchCharacterWikiSheet(page.content,key,serializeCharacterWikiSheet(sheet,{caption:note}),{metadata:sheet.metadata});}catch(error){throw new WikiError('sheet-conflict',error.message);}
             if(Buffer.byteLength(replacement.text,'utf8')>MAX_CHARACTER_PAGE)throw new WikiError('size','Your User page would exceed the safe character-sheet edit limit. No changes were made.');
-            const reused=Boolean(record);if(!record){record={shareId:id,origin:this.origin,user:status.user,destination,key,payloadHash,status:'pending',beforeRevision:null,beforeHash:null};this.sheets.set(id,record);if(this.sheets.size>20)this.sheets.delete(this.sheets.keys().next().value);}
+            const reused=Boolean(record);if(!record){record={shareId:id,origin:this.origin,user:status.user,destination,key,payloadHash,status:'pending',beforeRevision:null,beforeHash:null,...(photo?{screenshot:{...photo,status:'pending'}}:{})};this.sheets.set(id,record);if(this.sheets.size>20)this.sheets.delete(this.sheets.keys().next().value);}
             const result=()=>({...copy(record),reused,userPageUrl:`${this.origin}/User:${encodeURIComponent(record.user.name)}`,pageUrl:`${this.origin}/User:${encodeURIComponent(record.user.name)}`});
-            if(!replacement.changed){const reconciled=record.status==='unknown';record.status='applied';record.revision=page.revision;record.reconciled=reconciled;delete record.error;await this.persist();return result();}
+            const wasUnknown=record.status==='unknown';
             // A retry may only resend the identical reviewed before-state. A
             // matching applied block above reconciles even unrelated later edits.
-            if(record.beforeHash!==null&&(record.beforeRevision!==page.revision||record.beforeHash!==hash(page.content))){record.status='failed';record.error={code:'editconflict',message:'The User page changed after this share attempt. Preview the sheet again before replacing it.'};await this.persist();return result();}
+            if(replacement.changed&&record.beforeHash!==null&&(record.beforeRevision!==page.revision||record.beforeHash!==hash(page.content))){record.status='failed';record.error={code:'editconflict',message:'The User page changed after this share attempt. Preview the sheet again before replacing it.'};await this.persist();return result();}
+            // Reconcile an already-applied exact block even after unrelated
+            // human page edits; the image still needs its own digest proof.
+            if(!replacement.changed){if(!await this.submitCharacterScreenshot(record))return result();record.status='applied';record.revision=page.revision;record.reconciled=wasUnknown;delete record.error;await this.persist();return result();}
             record.beforeRevision=page.revision;record.beforeHash=hash(page.content);record.afterHash=hash(normalizeWikiSubmissionText(replacement.text));
+            if(!await this.submitCharacterScreenshot(record))return result();
             await this.expectedUser(record.user);const token=await this.csrf(record.user);
             record.status='unknown';record.reconciled=false;delete record.error;await this.persist();
             try{

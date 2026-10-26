@@ -1,5 +1,16 @@
 # Browsable release history
 
+The 1.0.8 image shows the optional Character screenshot section in the actual
+Share review, with a generated synthetic portrait and reviewed public filename.
+An isolated sandboxed Electron window uses the production preload and native
+wiki/image bridge, a fixture file chooser and a loopback wiki. Its native check
+keeps Screen Reading off, forbids OCR, verifies BMP/JPEG normalization and local
+PNG export followed by sharing, then reopens the native journal without duplicate
+writes. No player pixels, installed profile or public wiki writes are used.
+The visually reviewed, version-owned PNG has SHA-256
+`1a19b00bc056092fc2b834bd3fef0e585f980353b881a7537bea9c8537514f81`.
+All earlier release entries and image bytes remain unchanged.
+
 The 1.0.7 tour archives two visually reviewed production Character captures from
 isolated Electron Chromium: the full-name class checkboxes at 17px and the
 Default/Default Modern stat-preparation instructions before acquisition. The

@@ -136,6 +136,12 @@ revision and permission checks remain; no automatic publication or image upload
 is implied. A successful completion stops Character reading. Cancel/source loss
 does not fabricate stats or restart capture without the user's action.
 
+The Share review also offers an [optional character screenshot](CHARACTER_SCREENSHOTS.md).
+Select or paste it with Screen Reading off, review the entire local preview and
+public filename, then explicitly Share. Skipping keeps the current wiki image or
+its Add an image placeholder; **Remove selected image** only clears the private
+selection. Copy/Save PNG remains the separate local equipment/statistics export.
+
 ## Persistence and clear
 
 The atomic private Character roster retains identity, imported inventory,

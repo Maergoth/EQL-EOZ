@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './character-screenshot.mjs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,6 +24,13 @@ try{
  const pasted=await host.handle(event,'prepare-attachment',{candidateId:'candidate_01',kind:'item',source:'clipboard'});assert.equal(imports,1);assert.equal(pasted.id,pasted.attachmentId);assert.match(pasted.thumbnail,/^data:image\/png/);assert(!JSON.stringify(pasted).includes(stateDir));
  await host.handle(event,'prepare-attachment',{candidateId:'candidate_02',kind:'npc',source:'file'});assert.equal(imports,1,'NPC pictures never enter item OCR');assert.equal(dialogs,1);
  cancel=true;assert.equal((await host.handle(event,'prepare-attachment',{candidateId:'candidate_01',kind:'item',source:'file'})).cancelled,true);assert.equal(imports,1);
+ const photoMetadata={name:'Synthetic Keeper',server:'Fixture'},beforePhotoImports=imports;
+ await assert.rejects(host.handle({...event,senderFrame:{url:webContents.mainFrame.url}},'prepare-character-screenshot',{metadata:photoMetadata,source:'file'}),/main app/);
+ assert.equal((await host.handle(event,'prepare-character-screenshot',{metadata:photoMetadata,source:'file'})).cancelled,true);
+ cancel=false;const photo=await host.handle(event,'prepare-character-screenshot',{metadata:photoMetadata,source:'clipboard'});assert(photo.selection.attachmentId);assert.equal(imports,beforePhotoImports,'Character photo selection never invokes OCR, including when no Screen Reading owner exists');
+ const photoRestored=await host.handle(event,'character-screenshot',{metadata:photoMetadata,full:true});assert.equal(photoRestored.selection.attachmentId,photo.selection.attachmentId);assert.match(photoRestored.selection.preview,/^data:image\/png/);assert(!JSON.stringify(photoRestored).includes(stateDir),'native local filenames never cross the image bridge');
+ await host.handle(event,'remove-character-screenshot',{metadata:photoMetadata,attachmentId:photo.selection.attachmentId});assert.equal((await host.handle(event,'character-screenshot',{metadata:photoMetadata})).selection,null);
+ await host.handle(event,'prepare-character-screenshot',{metadata:photoMetadata,source:'file'});assert.equal(imports,beforePhotoImports,'explicit file chooser is independent of item reading too');await assert.rejects(host.handle(event,'prepare-character-screenshot',{metadata:photoMetadata,source:'capture'}),/Select or paste/);
  assert.equal((await host.handle(event,'icon-catalog',{page:0})).action,'icon-catalog');assert.equal(icons,1);
  await host.handle(event,'discard-attachment',{attachmentId:pasted.attachmentId});await assert.rejects(client.attachments.get(pasted.id),/unavailable/);
  const proof={token:'native-owned-crop'},beforeImports=imports,beforeDialogs=dialogs;let evidenceReads=0;

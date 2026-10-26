@@ -60,6 +60,7 @@ jobs:
       - run: npm run test:discovery-capture-workspace
       - run: npm run test:discovery-queue-stability
       - run: npm run test:screen-reading-master
+      - run: npm run test:character-screenshot -- --screenshots ci-screenshots/character-screenshot
       - run: npm run test:chat-item-boundaries -- --screenshots ci-screenshots/chat-boundaries
       - run: npm run test:consider-level-workspace
       - run: npm run test:zone-creation-workspace -- --screenshots ci-screenshots/zone-creation

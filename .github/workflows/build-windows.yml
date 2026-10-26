@@ -58,6 +58,8 @@ jobs:
         run: |
           npm run test:screen-reading-master
           npm run test:chat-item-boundaries
+      - name: Test optional Character image review and guarded sharing without OCR
+        run: npm run test:character-screenshot -- --screenshots ci-screenshots/character-screenshot
       - name: Test native overlay windows
         if: inputs.extended_ui_checks
         run: npm run test:native-overlays
