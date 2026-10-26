@@ -1,5 +1,11 @@
 # EQLWiki — Eye of Zomm
 
+**1.0.4: Character achievement exports.** Run `/outputfile inventory` and
+`/outputfile achievements`, then click one **Import files** button. Save both
+exports per character and share achievement progress in a collapsible section
+below equipment and recorded stats on your wiki User page. See
+[the achievement guide](docs/CHARACTER_ACHIEVEMENTS.md).
+
 **1.0.3: Character Exaltation effects.** Character and new wiki shares show each Exaltation's name and effects, including Focus effects and Worn labels. Saved effects refresh from exact local wiki matches while item tiers, socket numbers and recorded character totals stay intact. See [the Character walkthrough](docs/CHARACTER_WALKTHROUGH.md).
 
 **1.0.2: Personal depot inventory imports.** Import `/outputfile inventory` exports containing `Personal-Depot` storage. Depot items keep their counts and saved locations alongside carried and banked inventory. See [the inventory walkthrough](docs/CHARACTER_WALKTHROUGH.md).
@@ -95,9 +101,10 @@ The illustrated What's new archive retains every earlier update and its
 screenshots. Release captures use synthetic records and isolated profiles/APIs;
 they contain no player pixels or production wiki submissions.
 
-Keep all gear on. Enter character details, type
-`/outputfile inventory`, then let EoZ detect the fresh matching export in your
-chosen game folder. Next, **Open your Inventory → Scroll down → Click off your
+Keep all gear on. Enter character details, run both
+`/outputfile inventory` and `/outputfile achievements`, then click **Import files**
+to load both matching exports from your chosen game folder. A missing file
+opens its native chooser. Next, **Open your Inventory → Scroll down → Click off your
 buffs**, select the game window and review its fully equipped, unbuffed stats.
 Character totals use only that reviewed reading; item/catalog values and older
 baselines are never added. Character does not collect gear by item OCR.

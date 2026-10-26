@@ -22,6 +22,7 @@ const requiredModules = [
     'desktop/discovery-notice-window.cjs','desktop/discovery-notice-preload.cjs','app/discovery-notices.html','app/discovery-notices.js','app/discovery-notices.css',
     'app/character-itembox.js','app/catalog-itembox.js','app/wiki-itembox.css','app/overlay-drag.js','app/discovery-contribution-flow.js',
     'app/capture-png.worker.js','app/inventory-export.js','desktop/inventory-file-host.cjs',
+    'app/achievement-export.js','app/character-export-import.js','app/character-achievements-view.js','desktop/achievement-file-host.cjs',
     'app/character-inventory-view.js','app/character-storage.js','app/character-profiles.js','desktop/character-storage.cjs',
     'desktop/live-wiki-cache.cjs','desktop/wiki-item-existence.cjs','app/live-wiki-overlay.js',
     'desktop/contribution-gap-verifier.cjs','app/contribution-discovery-gate.js',

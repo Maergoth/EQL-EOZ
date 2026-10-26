@@ -1,6 +1,8 @@
 # Eye of Zomm contributor handoff
 
-Current `v1.0.3` hotfix: keep Exaltations to their names and direct effects, including typed Focus effects and literal Worn labels. Exact local dataset refresh updates saved socket effects without changing private numeric data, tiers or recorded character totals; new wiki exports omit child stats and unrelated item fields.
+Current `v1.0.4`: Character requests inventory and achievement exports together and loads both with one Import files action. Categories, explicit completion, objectives and progress counters stay saved per character; the wiki inspect adds a collapsible achievements section below gear/stats. Combined imports are atomic and do not poll in the background. See [the achievement guide](CHARACTER_ACHIEVEMENTS.md) for ownership, limits and wiki activation.
+
+Previous `v1.0.3` hotfix: keep Exaltations to their names and direct effects, including typed Focus effects and literal Worn labels. Exact local dataset refresh updates saved socket effects without changing private numeric data, tiers or recorded character totals; new wiki exports omit child stats and unrelated item fields.
 
 Previous `v1.0.2` hotfix: accept Personal-Depot inventory export locations and preserve their storage provenance, quantities and physical copies across reimport and restart. Depot contents remain unequipped, and recorded character totals keep their existing source.
 

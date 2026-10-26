@@ -122,3 +122,17 @@
 
 .contribution-row{position:relative}.contribution-row-controls{position:absolute;right:6px;top:6px;display:flex;gap:4px;z-index:1}.contribution-row-controls button{display:grid;place-items:center;min-width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:5px;background:var(--panel,#101720);color:#f18585;cursor:pointer;font:inherit}.contribution-row-controls button:hover,.contribution-row-controls button:focus-visible{border-color:#f18585;background:#38252c;outline:1px solid #f18585}.contribution-row-controls button:disabled{opacity:.4;cursor:default}.contribution-row-controls .contribution-dismiss{font-size:25px;line-height:1}.contribution-row-controls+.contribution-row-select{padding-top:42px}.ignore-forever-symbol{position:relative;display:block;width:28px;height:28px;line-height:26px}.ignore-forever-symbol>span{font-size:31px;color:var(--muted,#b9c4d1)}.ignore-forever-symbol>b{position:absolute;left:9px;top:1px;font-size:17px;line-height:26px;text-shadow:0 0 3px #101720}
 #capture-settings .screen-reading-master-warning{color:#ff8484;line-height:1.5;margin:10px 0;font-weight:600}
+/* Imported character achievements remain read-only and independently collapsible. */
+.character-achievements-panel{margin-top:14px}
+.character-achievements{margin-top:14px;text-align:left}
+.character-achievements summary{cursor:pointer;color:var(--gold2,#dec67a);padding:10px 0;line-height:1.45;overflow-wrap:anywhere}
+.character-achievements summary small{font-weight:normal;color:var(--muted,#a6afbf);margin-left:8px;white-space:nowrap}
+.character-achievement-category{border-top:1px solid #39404b;margin-top:8px}
+.character-achievement{margin-left:12px;border-top:1px solid #272e38}
+.character-achievement>summary{font-size:.95em;color:var(--text,#e1e5eb)}
+.character-achievement-status{font-size:.8em;font-weight:normal;color:var(--muted,#a6afbf);margin-left:12px;white-space:nowrap}
+.character-achievement-status.is-complete{color:#a8da9a}
+.character-achievement-heading{padding:8px 12px}
+.character-achievement ul{margin:5px 0 12px;padding-left:28px}
+.character-achievement li{margin:7px 0;line-height:1.5;overflow-wrap:anywhere}
+.character-achievement-progress{color:var(--gold2,#dec67a);font-weight:normal;margin-left:12px;white-space:nowrap}

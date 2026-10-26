@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import './character-totals.mjs';
 import './character-inventory-import.mjs';
+import './character-achievement-import.mjs';
 import { CHARACTER_SLOTS, CHARACTER_LIMITS, CHARACTER_STORAGE_KEY, createCharacterModel, characterAutoAssignment, characterBaseItemName, characterEquipmentEligibility, characterLooseCandidates, characterItemStats, characterObservationInput, characterShareSummary, characterSlotCompatibility, characterStatLabel, normalizeCharacterStats, safeCharacterIcon } from '../app/character-model.js';
 import {characterCatalogCard,resolveCharacterCatalog} from '../app/character-catalog.js';
 import { CHARACTER_SHARE_LIMITS, characterShareLayout } from '../app/character-share.js';

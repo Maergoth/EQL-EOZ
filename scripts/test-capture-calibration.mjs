@@ -41,7 +41,9 @@ async function run({root,temporary,screenshots}){
             const inventoryReads=[],labels=['Any Slot','Ear','Head','Face','Ear','Neck','Shoulders','Arms','Back','Wrist','Wrist','Range','Hands','Primary','Secondary','Fingers','Fingers','Chest','Legs','Feet','Waist','Any Slot','Ammo'];
             const inventoryText=['Location\tName\tID\tCount\tSlots',...labels.map(label=>label+'\tEmpty\t0\t0\t0')].join('\n');
             const inventory={read:async value=>{inventoryReads.push(value);return{ok:true,text:inventoryText,file:{name:'Synthetic Calibration_Example Realm-Inventory.txt',bytes:inventoryText.length,modifiedAt:Date.now(),sha256:'a'.repeat(64)}};}};
-            const mount=()=>mountCaptureWorkspace({capture:api,inventory,wiki:null,share:null,notify:value=>notices.push(value)});
+            const achievementText='Synthetic calibration\nI\tSynthetic achievement\nI\t\tSynthetic objective\t0/1';
+            const achievements={read:async()=>({ok:true,text:achievementText,file:{name:'Synthetic Calibration_Example Realm-Achievements.txt',bytes:achievementText.length,modifiedAt:Date.now(),sha256:'b'.repeat(64)}})};
+            const mount=()=>mountCaptureWorkspace({capture:api,inventory,achievements,wiki:null,share:null,notify:value=>notices.push(value)});
             window.fixture={api,source,calls,starts,notices,inventoryReads,emit,mount,get state(){return state;},workspace:mount()};
         });
         assert.equal(await execute(()=>document.querySelector('[data-capture-calibrate]').disabled),true);
