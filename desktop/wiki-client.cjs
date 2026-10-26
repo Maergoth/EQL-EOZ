@@ -8,6 +8,7 @@ const {WikiAttachments}=require('./wiki-attachments.cjs');
 const {ContributionHistory}=require('./contribution-history.cjs');
 const PRODUCTION_ORIGIN = 'https://eqlwiki.com';
 const MAX_JSON = 2 * 1024 * 1024, MAX_PAGE = 512 * 1024, MAX_PNG = 12 * 1024 * 1024;
+const MAX_CHARACTER_PAGE = 2 * 1024 * 1024, MAX_CHARACTER_JSON = 8 * 1024 * 1024;
 const MAX_NPC_SOURCE_ITEMS=100,MAX_NPC_BACKLINK_PAGES=2,NPC_SOURCE_BATCH=10;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 function normalizeWikiSubmissionText(text) {
@@ -81,7 +82,8 @@ class WikiClient {
         const result=await this.history.list({user:status.authenticated?status.user:null,wikiOrigin:this.origin,...value});
         if(!result.warning&&status.warning)result.warning=status.warning;return result;
     }
-    async request(params, { post=false, form=null } = {}) {
+    async request(params, { post=false, form=null, maxResponseBytes=MAX_JSON } = {}) {
+        if(![MAX_JSON,MAX_CHARACTER_JSON].includes(maxResponseBytes))throw new WikiError('size','Invalid wiki response size limit.');
         const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
         try{
             const data=new URLSearchParams({format:'json',formatversion:'2',errorformat:'plaintext',...params});
@@ -89,10 +91,10 @@ class WikiClient {
                 headers:{'User-Agent':`EQLWiki-EyeOfZomm/${this.version}`,Accept:'application/json',...(post&&!form?{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}:{})},body:post?(form||data.toString()):undefined});
             if(response.url && new URL(response.url).origin!==this.origin)throw new WikiError('redirect','The wiki redirected outside its configured origin.');
             if(!response.ok)throw new WikiError(`http-${response.status}`,`The wiki returned HTTP ${response.status}. Please try again later.`);
-            if(Number(response.headers.get('content-length'))>MAX_JSON)throw new WikiError('size','The wiki response exceeded the size limit.');
+            if(Number(response.headers.get('content-length'))>maxResponseBytes)throw new WikiError('size','The wiki response exceeded the size limit.');
             let bytes;
-            if(response.body?.getReader){const reader=response.body.getReader(),chunks=[];let size=0;try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>MAX_JSON){await reader.cancel();throw new WikiError('size','The wiki response exceeded the size limit.');}chunks.push(Buffer.from(value));}bytes=Buffer.concat(chunks);}finally{reader.releaseLock();}}
-            else {bytes=Buffer.from(await response.text());if(bytes.length>MAX_JSON)throw new WikiError('size','The wiki response exceeded the size limit.');}
+            if(response.body?.getReader){const reader=response.body.getReader(),chunks=[];let size=0;try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxResponseBytes){await reader.cancel();throw new WikiError('size','The wiki response exceeded the size limit.');}chunks.push(Buffer.from(value));}bytes=Buffer.concat(chunks);}finally{reader.releaseLock();}}
+            else {bytes=Buffer.from(await response.text());if(bytes.length>maxResponseBytes)throw new WikiError('size','The wiki response exceeded the size limit.');}
             const result=JSON.parse(bytes.toString('utf8'));
             if(result.error)throw new WikiError(String(result.error.code||'api'),result.error.info||result.error.text);
             if(Array.isArray(result.errors)&&result.errors.length)throw new WikiError(String(result.errors[0].code||'api'),result.errors[0].text);
@@ -131,12 +133,13 @@ class WikiClient {
         if(acknowledged.length!==ids.length||new Set(acknowledged).size!==ids.length||acknowledged.some(id=>!ids.includes(id))||result.rejected.some(entry=>typeof entry?.code!=='string'))throw new WikiError('observation-ack','The wiki receipt omitted, repeated or added event IDs. Pending events were retained.');
         return copy(result);
     }
-    async page(title,{resolveRedirects=false}={}) {
-        const data=await this.request({action:'query',prop:'info|revisions',rvprop:'ids|timestamp|content',rvslots:'main',titles:title,curtimestamp:'1',...(resolveRedirects?{redirects:'1',converttitles:'1'}:{})});
+    async page(title,{resolveRedirects=false,maxBytes=MAX_PAGE}={}) {
+        if(![MAX_PAGE,MAX_CHARACTER_PAGE].includes(maxBytes))throw new WikiError('size','Invalid wiki page size limit.');
+        const data=await this.request({action:'query',prop:'info|revisions',rvprop:'ids|timestamp|content',rvslots:'main',titles:title,curtimestamp:'1',...(resolveRedirects?{redirects:'1',converttitles:'1'}:{})},{maxResponseBytes:maxBytes===MAX_CHARACTER_PAGE?MAX_CHARACTER_JSON:MAX_JSON});
         const page=data.query?.pages?.[0];
         if(!page||page.invalid)throw new WikiError('title','The wiki rejected this page title.');
         const revision=page.revisions?.[0],content=revision?.slots?.main?.content||'';
-        if(content.length>MAX_PAGE)throw new WikiError('size','The wiki page is too large for an automatic contribution.');
+        if(Buffer.byteLength(content,'utf8')>maxBytes)throw new WikiError('size','The wiki page is too large for an automatic contribution.');
         return {title:page.title,pageId:page.pageid??null,namespace:page.ns,missing:page.missing===true,redirect:page.redirect===true,content,revision:revision?.revid??null,timestamp:revision?.timestamp??null,startTimestamp:data.curtimestamp||new Date(this.now()).toISOString()};
     }
     async findMatches({ name, kind='item',requireComplete=false }={}) {
@@ -773,13 +776,15 @@ class WikiClient {
             return result();
         }finally{this.busy=false;}
     }
-    async characterSheetCapability(){
+    async characterSheetCapability({achievements=false}={}){
         const {CHARACTER_WIKI_SHEET_CAPABILITY:contract}=await characterSheets();
         const [template,item]=await Promise.all([this.page(contract.template),this.page(contract.itemTemplate)]);
         if(template.missing||template.redirect||item.missing||item.redirect||!new RegExp(`\\b${contract.templateMarker}\\b`).test(template.content)||!new RegExp(`\\b${contract.itemMarker}\\b`).test(item.content))throw new WikiError('sheet-unavailable','The wiki interactive character sheet templates are not installed at the supported version.');
-        const result=await this.request({action:'parse',text:'{{Character_sheet|name=EoZ capability probe|server=Fixture|head_item=EoZ Capability Item|head_tier=0|head_stats=HP: 1}}',contentmodel:'wikitext',prop:'text|modules',disablelimitreport:'1'}),parsed=result.parse,html=typeof parsed?.text==='string'?parsed.text:parsed?.text?.['*'];
+        if(achievements&&!new RegExp(`\\b${contract.achievementMarker}\\b`).test(template.content))throw new WikiError('sheet-unavailable','The wiki achievement renderer is not installed yet. Your character has not been shared.');
+        const result=await this.request({action:'parse',text:'{{Character_sheet|name=EoZ capability probe|server=Fixture|head_item=EoZ Capability Item|head_tier=0|head_stats=HP: 1'+(achievements?'|achievements=<p>EoZ achievement capability probe</p>':'')+'}}',contentmodel:'wikitext',prop:'text|modules',disablelimitreport:'1'}),parsed=result.parse,html=typeof parsed?.text==='string'?parsed.text:parsed?.text?.['*'];
         if(typeof html!=='string'||!/<[^>]+class=["'][^"']*\beql-character-sheet-v1\b/.test(html)||!/<[^>]+class=["'][^"']*\beql-character-inspect-v1\b/.test(html)||!Array.isArray(parsed?.modules)||!parsed.modules.includes(contract.module))throw new WikiError('sheet-unavailable','The wiki interactive character sheet renderer is unavailable. No talk-page changes were made.');
-        return {schemaVersion:1,templateRevision:template.revision,itemTemplateRevision:item.revision,module:contract.module};
+        if(achievements&&(!/<[^>]+class=["'][^"']*\beql-character-achievements-v1\b/.test(html)||!html.includes('EoZ achievement capability probe')))throw new WikiError('sheet-unavailable','The wiki achievement renderer is unavailable. Your character has not been shared.');
+        return {schemaVersion:1,templateRevision:template.revision,itemTemplateRevision:item.revision,module:contract.module,achievements};
     }
     async shareCharacter({sheet:input,caption='',confirmed=false,shareId=null}={}){
         if(confirmed!==true)throw new WikiError('review','Review the interactive character sheet and confirm sharing first.');
@@ -787,7 +792,7 @@ class WikiClient {
         let sheet,note;try{sheet=normalizeCharacterWikiSheet(input);note=normalizeCharacterWikiCaption(caption);}catch(error){throw new WikiError('sheet',error.message);}
         await this.load();if(this.busy)throw new WikiError('busy','A wiki submission is already in progress.');this.busy=true;
         try{
-            const status=await this.expectedUser();await this.characterSheetCapability();
+            const status=await this.expectedUser();await this.characterSheetCapability({achievements:Boolean(sheet.achievements)});
             const destination=`User:${status.user.name}`,key=hash(characterWikiIdentity(sheet.metadata)),payloadHash=hash(JSON.stringify({sheet,caption:note}));
             const prior=shareId===null?[...this.sheets.values()].reverse().find(item=>item.destination===destination&&item.user?.id===status.user.id&&item.key===key&&item.payloadHash===payloadHash&&['pending','unknown'].includes(item.status)):null;
             const id=prior?.shareId||(shareId===null?this.id():String(shareId));if(!/^[A-Za-z0-9_-]{8,100}$/.test(id))throw new WikiError('sheet-id','Invalid character sheet review identifier.');
@@ -795,11 +800,11 @@ class WikiClient {
             if(shareId!==null&&!record)throw new WikiError('sheet-review','That saved character sheet review is unavailable. Preview and share it again.');
             if(record&&(record.origin!==this.origin||record.user?.id!==status.user.id||record.user?.name!==status.user.name||record.key!==key||record.payloadHash!==payloadHash))throw new WikiError('sheet-review','That character sheet review belongs to different content or a different account.');
             if(record&&record.destination!==destination)throw new WikiError('sheet-destination','This saved review targets the old talk page. Prepare a fresh review for your User page; existing talk-page content stays unchanged.');
-            const page=await this.page(destination);
+            const page=await this.page(destination,{maxBytes:MAX_CHARACTER_PAGE});
             if(page.redirect||page.title!==destination)throw new WikiError('sheet-user','Resolve your User-page redirect on the wiki before sharing.');
             if(page.missing&&!status.canCreate)throw new WikiError('permission','This account cannot create its missing User page.');
             let replacement;try{replacement=patchCharacterWikiSheet(page.content,key,serializeCharacterWikiSheet(sheet,{caption:note}),{metadata:sheet.metadata});}catch(error){throw new WikiError('sheet-conflict',error.message);}
-            if(replacement.text.length>MAX_PAGE||Buffer.byteLength(replacement.text,'utf8')>MAX_PAGE)throw new WikiError('size','Your User page would exceed the safe automatic-edit limit. No changes were made.');
+            if(Buffer.byteLength(replacement.text,'utf8')>MAX_CHARACTER_PAGE)throw new WikiError('size','Your User page would exceed the safe character-sheet edit limit. No changes were made.');
             const reused=Boolean(record);if(!record){record={shareId:id,origin:this.origin,user:status.user,destination,key,payloadHash,status:'pending',beforeRevision:null,beforeHash:null};this.sheets.set(id,record);if(this.sheets.size>20)this.sheets.delete(this.sheets.keys().next().value);}
             const result=()=>({...copy(record),reused,userPageUrl:`${this.origin}/User:${encodeURIComponent(record.user.name)}`,pageUrl:`${this.origin}/User:${encodeURIComponent(record.user.name)}`});
             if(!replacement.changed){const reconciled=record.status==='unknown';record.status='applied';record.revision=page.revision;record.reconciled=reconciled;delete record.error;await this.persist();return result();}

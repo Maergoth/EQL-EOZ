@@ -1,5 +1,6 @@
 import {characterItemboxTitleMarkup,characterItemboxBodyMarkup,characterItemboxExaltationMarkup} from './character-itembox.js';
 import {isItemStatModified} from './item-stat-presentation.js';
+import {characterAchievementsMarkup} from './character-achievements-view.js';
 import { CHARACTER_SLOTS, safeCharacterIcon } from './character-model.js';
 import { CHARACTER_EQUIPMENT_ROWS, characterIdentityMarkup, characterStatSummaryMarkup } from './character-inventory-view.js';
 
@@ -20,5 +21,5 @@ export function characterInspectMarkup(sheet,{icons={},items:catalogItems=[]}={}
         return `<div class="character-inspect-slot"><span class="character-slot-label">${escape(slot.label)}</span>${item?`<a class="character-inspect-icon" href="${escape(url(item.title))}" target="_blank" rel="noopener" aria-label="${escape(itemName(item))}">${icon(item)}<small>${item.tier>0?'+'+item.tier:''}</small></a><div class="character-inspect-item wiki-itembox">${hover(item)}</div>`:'<span class="character-inspect-empty">·</span>'}</div>`;
     }).join('')}</div>`).join('');
     const computed=Object.fromEntries(Object.entries(sheet.totals).map(([key,record])=>[key,{...record,caveats:[]}])) ,current={stats:Object.fromEntries(Object.keys(sheet.totals).map(key=>[key,null]))};
-    return `<div class="character-inspect"><div class="character-inspect-top"><div class="character-profile-panel">${characterIdentityMarkup(sheet.metadata)}</div><div class="character-inspect-gear">${gear}</div></div><div class="character-totals-panel"><div class="character-mini-stats">${characterStatSummaryMarkup({current,observed:current,computed})}</div></div></div>`;
+    return `<div class="character-inspect"><div class="character-inspect-top"><div class="character-profile-panel">${characterIdentityMarkup(sheet.metadata)}</div><div class="character-inspect-gear">${gear}</div></div><div class="character-totals-panel"><div class="character-mini-stats">${characterStatSummaryMarkup({current,observed:current,computed})}</div></div>${sheet.achievements?characterAchievementsMarkup(sheet.achievements):''}</div>`;
 }

@@ -1,10 +1,11 @@
 import {normalizeCharacterItemDetails,characterEffectDetails} from './character-item-card.js';
 import { CHARACTER_SLOTS, CHARACTER_STAT_KEYS, characterEquipmentEligibility, characterItemStats, characterExaltationStats, characterTotals, characterStatLabel } from './character-model.js';
 import { characterTotalGroups } from './character-totals.js';
+import { normalizeAchievementExport } from './achievement-export.js';
 
 export const CHARACTER_WIKI_SHEET_SCHEMA=1;
-export const CHARACTER_WIKI_SHEET_CAPABILITY=Object.freeze({template:'Template:Character_sheet',templateMarker:'EQL_CHARACTER_SHEET_V1',itemTemplate:'Template:Character_sheet_item',itemMarker:'EQL_CHARACTER_SHEET_ITEM_V1',module:'skins.EQLImmersive.characterSheet'});
-export const CHARACTER_WIKI_SHEET_LIMITS=Object.freeze({bytes:64000,items:24,stats:48});
+export const CHARACTER_WIKI_SHEET_CAPABILITY=Object.freeze({template:'Template:Character_sheet',templateMarker:'EQL_CHARACTER_SHEET_V1',itemTemplate:'Template:Character_sheet_item',itemMarker:'EQL_CHARACTER_SHEET_ITEM_V1',achievementMarker:'EQL_CHARACTER_ACHIEVEMENTS_V1',module:'skins.EQLImmersive.characterSheet'});
+export const CHARACTER_WIKI_SHEET_LIMITS=Object.freeze({bytes:512*1024,templateBytes:1024*1024,pageBytes:2*1024*1024,items:24,stats:48});
 export const CHARACTER_WIKI_SHEET_SLOTS=Object.freeze(CHARACTER_SLOTS.filter(slot=>slot.id!=='power').map(slot=>slot.id));
 const SLOTS=new Set(CHARACTER_WIKI_SHEET_SLOTS);
 const ITEM_STATS=new Set([...CHARACTER_STAT_KEYS,'SV_CORRUPTION','WT','DMG','DELAY','DMG_BONUS','BACKSTAB_DMG','ATTACK_SPEED'].filter(key=>!/_CURRENT$|_MAXIMUM$/.test(key)));
@@ -54,6 +55,7 @@ export function normalizeCharacterWikiSheet(input){
         bySlot.set(item.slot,{slot:item.slot,title,tier,iconId:number(item.iconId,{integer:true,min:0,max:1000000}),level:number(item.level,{integer:true,min:0,max:125}),basis:item.basis,complete:item.complete,stats:stats(item.stats,ITEM_STATS),details:normalizeCharacterItemDetails(item.details,{strict:true}),augmentSlots,augments});
     }
     const result={schemaVersion:CHARACTER_WIKI_SHEET_SCHEMA,metadata,totals,equipment:CHARACTER_WIKI_SHEET_SLOTS.filter(slot=>bySlot.has(slot)).map(slot=>bySlot.get(slot))};
+    if(input.achievements!==undefined&&input.achievements!==null){const achievements=normalizeAchievementExport(input.achievements);if(!achievements)throw Error('Review the character achievement export.');result.achievements=achievements;}
     if(size(result)>CHARACTER_WIKI_SHEET_LIMITS.bytes)throw Error('The interactive character sheet exceeds its size limit.');return result;
 }
 
@@ -75,13 +77,24 @@ export function buildCharacterWikiSheet(snapshot){
     }
     const totals={};for(const group of characterTotalGroups(characterTotals(snapshot)))for(const row of group.rows){const key=row.key.replace(/_MAXIMUM$/,'');if(TOTAL_STATS.has(key))totals[key]={value:row.value??null,complete:row.complete===true};}
     const metadata=snapshot.metadata||{};
-    return normalizeCharacterWikiSheet({schemaVersion:CHARACTER_WIKI_SHEET_SCHEMA,metadata:{name:metadata.name||'',server:metadata.server||'',level:metadata.level??null,race:metadata.race||'',classes:metadata.classes||[],aaCount:metadata.aaCount??null},totals,equipment});
+    return normalizeCharacterWikiSheet({schemaVersion:CHARACTER_WIKI_SHEET_SCHEMA,metadata:{name:metadata.name||'',server:metadata.server||'',level:metadata.level??null,race:metadata.race||'',classes:metadata.classes||[],aaCount:metadata.aaCount??null},totals,equipment,...(snapshot?.achievements?{achievements:snapshot.achievements}:{})});
 }
 
 const literal=value=>String(value).replace(/[&<>"'{}|\[\]~_]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','{':'&#123;','}':'&#125;','|':'&#124;','[':'&#91;',']':'&#93;','~':'&#126;','_':'&#95;'}[character]));
 const numericText=(value,complete=true)=>value===null?'?':`${value}${complete?'':' *'}`;
 const detailLines=value=>normalizeCharacterItemDetails(value,{strict:true}).map(detail=>`${literal(detail.label)}: ${detail.linkTitle?`[[${literal(detail.linkTitle)}|${literal(detail.value)}]]`:literal(detail.value)}`).join('<br>');
 const statLines=(value,complete)=>Object.entries(value).map(([key,value])=>`${literal(characterStatLabel(key))}: ${numericText(value,complete)}`).join('<br>');
+/** Generated fixed HTML only. Export text cannot introduce templates, links,
+ * parameters, headings, attributes or parser switches. Completion of a parent
+ * achievement is taken from its own export marker, never its objectives. */
+export function characterAchievementsWikiMarkup(input){
+    const data=normalizeAchievementExport(input);if(!data)throw Error('Review the character achievement export.');
+    const status=value=>`<span class="eql-character-achievement-status">${value?'Complete':'Incomplete'}</span>`;
+    return `<p class="eql-character-achievements-summary">${data.completedCount} / ${data.achievementCount} achievements complete</p>`+data.categories.map(category=>
+        `<div class="eql-character-achievement-category"><div class="eql-character-achievement-category-heading">${literal(category.name)} (${category.achievements.filter(value=>value.completed).length} / ${category.achievements.length})</div><ul class="eql-character-achievement-list">`+category.achievements.map(achievement=>
+            `<li class="eql-character-achievement${achievement.completed?' is-complete':''}"><div class="eql-character-achievement-heading"><strong>${literal(achievement.name)}</strong> ${status(achievement.completed)}</div>`+(achievement.objectives.length?'<ul class="eql-character-achievement-objectives">'+achievement.objectives.map(objective=>
+                `<li class="${objective.completed?'is-complete':'is-incomplete'}">${status(objective.completed)} ${literal(objective.text)}${Object.hasOwn(objective,'current')?` <span class="eql-character-achievement-progress">${objective.current} / ${objective.required}</span>`:''}</li>`).join('')+'</ul>':'')+'</li>').join('')+'</ul></div>').join('');
+}
 /** Only fixed parameter names and generated numeric/stat markup enter source.
  * User text is entity-escaped before MediaWiki parameter/template parsing. */
 export function normalizeCharacterWikiCaption(value=''){
@@ -98,13 +111,15 @@ export function serializeCharacterWikiSheet(input,{caption=''}={}){
         // public socket cards contain only their identity and direct effects.
         for(const augment of item.augments){const key=`${prefix}_augment_${augment.index+1}`;parameters.push([`${key}_item`,literal(augment.title)],[`${key}_details`,detailLines(characterEffectDetails(augment.details))]);}
     }
-    return `{{Character_sheet\n${parameters.map(([key,value])=>`|${key}=${value}`).join('\n')}\n}}`;
+    if(sheet.achievements)parameters.push(['achievements',characterAchievementsWikiMarkup(sheet.achievements)]);
+    const source=`{{Character_sheet\n${parameters.map(([key,value])=>`|${key}=${value}`).join('\n')}\n}}`;
+    if(new TextEncoder().encode(source).length>CHARACTER_WIKI_SHEET_LIMITS.templateBytes)throw Error('The interactive character sheet exceeds its wiki text size limit.');return source;
 }
 
 /** Managed marker boundaries are the only source this app may replace. Literal
  * examples/comments stay untouched; malformed or nested markers need review. */
 export function patchCharacterWikiSheet(source,key,template,{metadata=null}={}){
-    if(typeof source!=='string'||source.length>512*1024||!/^[a-f0-9]{64}$/.test(key)||typeof template!=='string'||template.length>128000)throw Error('Invalid character sheet replacement input.');
+    if(typeof source!=='string'||new TextEncoder().encode(source).length>CHARACTER_WIKI_SHEET_LIMITS.pageBytes||!/^[a-f0-9]{64}$/.test(key)||typeof template!=='string'||new TextEncoder().encode(template).length>CHARACTER_WIKI_SHEET_LIMITS.templateBytes)throw Error('Invalid character sheet replacement input.');
     const protectedRanges=[],comments=[],regions=/<!--|<(nowiki|pre|source|syntaxhighlight|code)\b[^>]*>/gi;
     for(let match;(match=regions.exec(source));){
         if(match[0]==='<!--'){const end=source.indexOf('-->',regions.lastIndex);if(end<0)throw Error('An unclosed wiki comment needs manual review before sharing.');comments.push({0:source.slice(match.index,end+3),index:match.index});regions.lastIndex=end+3;}
@@ -128,5 +143,7 @@ export function patchCharacterWikiSheet(source,key,template,{metadata=null}={}){
         }
     }
     const block=`<!-- EQL-EOZ-CHARACTER-SHEET:${key}:BEGIN -->\n${template}\n<!-- EQL-EOZ-CHARACTER-SHEET:${key}:END -->`,beforeBlock=target?source.slice(target.start,target.end):null;
-    return {text:target?source.slice(0,target.start)+block+source.slice(target.end):source+(source.endsWith('\n\n')||!source?'':source.endsWith('\n')?'\n':'\n\n')+block,block,beforeBlock,changed:beforeBlock!==block};
+    const updated=target?source.slice(0,target.start)+block+source.slice(target.end):source+(source.endsWith('\n\n')||!source?'':source.endsWith('\n')?'\n':'\n\n')+block;
+    if(new TextEncoder().encode(updated).length>CHARACTER_WIKI_SHEET_LIMITS.pageBytes)throw Error('The updated User page exceeds the character sheet size limit.');
+    return {text:updated,block,beforeBlock,changed:beforeBlock!==block};
 }

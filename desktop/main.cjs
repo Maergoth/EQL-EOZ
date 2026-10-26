@@ -29,6 +29,7 @@ const { RendererDrain } = require('./renderer-drain.cjs');
 const { ShareHost } = require('./share-host.cjs');
 const { CharacterStorage } = require('./character-storage.cjs');
 const { InventoryFileHost } = require('./inventory-file-host.cjs');
+const { AchievementFileHost } = require('./achievement-file-host.cjs');
 const { installLocalFontPermissions } = require('./font-permissions.cjs');
 const { normalizeWindowPlacement, WindowPlacement } = require('./window-placement.cjs');
 const {
@@ -76,6 +77,7 @@ let reloading = false;
 let shareHost = null;
 let characterStorage = null;
 let inventoryFileHost = null;
+let achievementFileHost = null;
 let quitting = false;
 let sessionNeedsReload = false;
 let windowPlacement = null;
@@ -930,6 +932,7 @@ async function bootstrap() {
         warn:message=>console.warn('[Eye of Zomm]',message)});
     await characterStorage.initialize();
     inventoryFileHost = new InventoryFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig});
+    achievementFileHost = new AchievementFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig});
     captureHost = new CaptureHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readingEnabled:config.screenReadingEnabled,
         onReadingDisabled:()=>discoveryHost?.cancelScreenshot(),onReadingEnabledChange:enabled=>updateConfig({screenReadingEnabled:enabled})});
     contributionIgnoresHost=new ContributionIgnoresHost({ipcMain,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,store:getContributionIgnores(),
@@ -1037,7 +1040,7 @@ app.on('before-quit', event => {
             quitting=false;rendererDrain.resume();
             dialog.showErrorBox('Eye of Zomm could not save pending observations','The app has been left open. Check available disk space and try closing it again.');return;
         }
-        stopDataPackRefresh();logContextHistory.dispose();automaticLogReader?.dispose();automaticLootSources?.dispose();overlayHost?.dispose();discoveryHost?.dispose();wikiHost?.dispose();iconFinderHost?.dispose();shareHost?.dispose();inventoryFileHost?.dispose();appUpdater?.shutdown();
+        stopDataPackRefresh();logContextHistory.dispose();automaticLogReader?.dispose();automaticLootSources?.dispose();overlayHost?.dispose();discoveryHost?.dispose();wikiHost?.dispose();iconFinderHost?.dispose();shareHost?.dispose();inventoryFileHost?.dispose();achievementFileHost?.dispose();appUpdater?.shutdown();
         try { server?.close(); } catch {}
         await Promise.allSettled([windowPlacement?.dispose(),configWriteQueue,overlayHost?.writeQueue,captureHost?.dispose(),wikiHost?.client.persistChain,characterStorage?.close(),observationHost?.close()]);
         rendererDrain?.dispose();electron.session.defaultSession.flushStorageData();quitReady=true;app.quit();

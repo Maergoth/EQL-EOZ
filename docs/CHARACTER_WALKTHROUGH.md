@@ -1,14 +1,13 @@
-# Character inventory export and stat review
+# Character inventory, achievement exports and stat review
 
-## Current contract and 0.9.8 candidate
+## Current contract
 
-0.9.7 is published. The 0.9.8 follow-up keeps its inventory/current-stat flow and
-adds richer cards, Exaltations and User-page sharing. The changes below describe
-the candidate source; publication and wiki activation remain release gates in
-[the active execution plan](RELEASE_098_PLAN.md).
+Character combines inventory and achievement files in one explicit import.
+The [achievement guide](CHARACTER_ACHIEVEMENTS.md) records the format,
+persistence, public sharing contract and separate wiki template activation.
 
 The current flow is **details → inventory → stats → review → complete**.
-Keep all gear equipped throughout. Character imports the game's inventory file;
+Keep all gear equipped throughout. Character imports the game's inventory and achievement files;
 it does not ask users to unequip, capture a No Equipment baseline, or read items
 with OCR. The unreleased baseline-retry proposal was replaced, not shipped.
 See [the execution plan](INVENTORY_EXPORT_CHARACTER_PLAN.md).
@@ -20,13 +19,26 @@ registers a saved **Character (Server)** after the first valid step; same names
 on different servers remain independent. Switching profiles stops Character
 capture and invalidates pending work. Selecting a character never restarts it.
 
-### 2. Equipped inventory export
+### 2. Export inventory and achievements
 
-Keep every item equipped and type `/outputfile inventory` in the game. EoZ
-automatically looks for the fresh matching `Name_server-Inventory.txt` under the
-configured game folder while this explicit step is active. An older export does
-not satisfy a newly started import. **Check now** and the native file chooser
-provide recovery without giving renderer code arbitrary filesystem access.
+Keep every item equipped and run both commands in the game:
+
+```text
+/outputfile inventory
+/outputfile achievements
+```
+
+When both exports are ready, click **Import files** once. EoZ reads the current
+`Name_server-Inventory.txt` and `Name_server-Achievements.txt` under the configured
+game folder, matching the selected Character (Server). Missing files open a
+native file picker. There is no background import loop. Both exports must parse
+and save successfully together; cancellation, bad data or a character change
+cannot leave a half-imported character. File timestamps are private provenance,
+not a claim that the player has just rerun either command.
+
+Achievements retain categories, completion markers, objectives and optional
+current/required counters. A completed achievement can have unfinished optional
+objectives; its own exported completion marker remains authoritative.
 
 The parser validates the complete worn table before an atomic replacement.
 Preserve counts, IDs, exact worn locations, paired slots and physical duplicates.
@@ -109,24 +121,25 @@ does not fabricate stats or restart capture without the user's action.
 ## Persistence and clear
 
 The atomic private Character roster retains identity, imported inventory,
-equipment, stat reading and flow independently of renderer cache/local port.
+equipment, achievements, stat reading and flow independently of renderer cache/local port.
 Legacy cards and base/equipped evidence remain recoverable privately, but cannot
 be promoted to current totals. Older active flows migrate to inventory import.
 The red **Clear inventory** action clears only the selected character's imported
-gear/evidence and mismatched current stats, retaining identity and other profiles.
+gear/evidence and mismatched current stats, retaining achievements, identity and other profiles.
 
 ## Source ownership and acceptance
 
-The main process reads the bounded inventory file; the renderer parses/imports
+The main process reads the bounded inventory and achievement files; the renderer parses/imports
 only returned text and public metadata. `app/inventory-export.js` separates worn
-and nonworn tables, `desktop/inventory-file-host.cjs` restricts paths, and
-`app/character-model.js` commits the complete import/current stats. The walkthrough
+and nonworn tables. `app/achievement-export.js` validates the achievement hierarchy;
+the inventory/achievement file hosts share protected reads.
+`app/character-export-import.js` guards selected-character ownership;
+`app/character-model.js` commits the combined import once. The walkthrough
 and `capture-workspace.js` own phase/profile guards. `character-totals.js` supplies
 the same observed-only values to the inspect, PNG and normalized wiki payload.
 
-0.9.7 source/native/platform/package receipts establish that released baseline.
-Final 0.9.8 source/native/Windows/Linux/package and wiki activation checks remain
-pending release-owner acceptance. Test fresh/stale exports, malformed input, paired/Any slots, missing
+Release receipts certify only the versions and environments they name.
+Test combined exports, malformed input, cancellation, paired/Any slots, missing
 wiki items/sockets, profile changes during imports, lower-rate stat capture,
 scroll/buff preparation, edited values, all modifiers and clear/relaunch. Live
 game skin/scale/compositing, production authentication and native Wayland remain

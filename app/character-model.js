@@ -1,6 +1,7 @@
 import {characterCatalogDetails,normalizeCharacterItemDetails,characterEffectDetails} from './character-item-card.js';
 import { catalogBaseStats, scaledItemStats } from './item-scaling.js';
 import { parseItemAugmentSlots } from './screen-read-parser.js';
+import { normalizeAchievementExport, ACHIEVEMENT_LIMITS } from './achievement-export.js';
 
 // Local, versioned data only. This module has no DOM, capture, network or wiki
 // write dependency. One candidate represents one physical copy, not a title.
@@ -69,6 +70,20 @@ function exportedExaltationOrigin(value){
 function inventoryFile(value){
     if(!value||typeof value!=='object')return null;
     return {name:clean(String(value.name||'').split(/[\\/]/).at(-1)),bytes:Number.isSafeInteger(value.bytes)&&value.bytes>=0?value.bytes:null,modifiedAt:atTime(value.modifiedAt),sha256:/^[a-f\d]{64}$/i.test(value.sha256||'')?value.sha256.toLowerCase():''};
+}
+function achievementFile(value){
+    if(value===undefined||value===null)return null;
+    if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Achievement file information is invalid.');
+    const name=typeof value.name==='string'?value.name.split(/[\\/]/).at(-1):'';
+    if(!name||name.length>240||name!==clean(name)||/[\u0000-\u001f\u007f]/.test(name)||
+        value.bytes!==undefined&&value.bytes!==null&&(!Number.isSafeInteger(value.bytes)||value.bytes<0||value.bytes>ACHIEVEMENT_LIMITS.characters*4)||
+        value.modifiedAt!==undefined&&value.modifiedAt!==null&&atTime(value.modifiedAt)===null||
+        value.sha256!==undefined&&value.sha256!==''&&(typeof value.sha256!=='string'||!/^[a-f\d]{64}$/i.test(value.sha256)))throw Error('Achievement file information is invalid.');
+    return {name,bytes:value.bytes??null,modifiedAt:atTime(value.modifiedAt),sha256:typeof value.sha256==='string'?value.sha256.toLowerCase():''};
+}
+function achievementExportRecord(value){
+    if(!value||value.schemaVersion!==1||atTime(value.importedAt)===null)return null;
+    try{return {schemaVersion:1,importedAt:value.importedAt,file:achievementFile(value.file)};}catch{return null;}
 }
 function inventoryExportRecord(value){
     if(!value||value.schemaVersion!==1)return null;
@@ -196,7 +211,7 @@ function statSnapshot(value) {
         notes:clean(value.notes,600), evidence:evidenceRecord(value.evidence || value), confirmed:value.confirmed === true};
 }
 function emptyState() {
-    return {schemaVersion:1, sequence:0, metadata:metadata(), candidates:[], equipment:{}, pendingEquipment:{},inventoryExport:null,statSnapshots:{base:null,equipped:null,current:null}, observationRefs:[],observationFloor:0,removedObservations:[],removedInstances:[],updatedAt:null};
+    return {schemaVersion:1, sequence:0, metadata:metadata(), candidates:[], equipment:{}, pendingEquipment:{},inventoryExport:null,achievements:null,achievementExport:null,statSnapshots:{base:null,equipped:null,current:null}, observationRefs:[],observationFloor:0,removedObservations:[],removedInstances:[],updatedAt:null};
 }
 function normalizeState(value) {
     const result = emptyState();
@@ -222,6 +237,8 @@ function normalizeState(value) {
     }
     result.statSnapshots = {base:statSnapshot(value.statSnapshots?.base),equipped:statSnapshot(value.statSnapshots?.equipped),current:statSnapshot(value.statSnapshots?.current)};
     result.inventoryExport=inventoryExportRecord(value.inventoryExport);
+    result.achievements=normalizeAchievementExport(value.achievements);
+    result.achievementExport=result.achievements?achievementExportRecord(value.achievementExport):null;
     result.observationFloor=journalSequence(value.observationFloor)||0;
     const references=new Map();
     for(const record of list(value.observationRefs)) {
@@ -492,7 +509,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
      * exact local catalog resolver supply data, never filesystem paths. All
      * validation/resolution/storage checks finish before replacing live state.
      */
-    function applyInventoryExport(parsed,{resolveItem=()=>null,file}={}) {
+    function applyInventory(parsed,{resolveItem=()=>null,file}={},achievementImport=null) {
         const fail=message=>({ok:false,saved:false,error:message});
         try{
             if(parsed?.schemaVersion!==1||parsed.kind!=='eql-inventory-export'||!Array.isArray(parsed.equipment)||parsed.equipment.length!==23||parsed.equipmentSlotCount!==23||!Array.isArray(parsed.inventory)||!Array.isArray(parsed.keyring)||parsed.inventory.length>CHARACTER_LIMITS.candidates||parsed.keyring.length>CHARACTER_LIMITS.candidates||!Number.isSafeInteger(parsed.rowCount)||parsed.rowCount<23+parsed.inventory.length+parsed.keyring.length||parsed.rowCount>20000||typeof resolveItem!=='function')return fail('A complete supported inventory export is required. Existing inventory was kept.');
@@ -575,10 +592,37 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             const exportedKeyring=keyring.map(entry=>{const patch=resolve(entry);if(!patch)reject(entry);return {...entry,importedAt:at,known:Boolean(patch),wikiTitle:patch?.wikiTitle||'',iconId:patch?.iconId||''};});
             draft.equipment=equipment;draft.pendingEquipment={};draft.statSnapshots.current=null;
             draft.inventoryExport=inventoryExportRecord({schemaVersion:1,importedAt:at,file,candidateIds,rowCount:parsed.rowCount,equipmentSlotCount:23,emptyEquipmentCount:parsed.emptyEquipmentCount,inventoryCount:parsed.inventory.length,keyring:exportedKeyring,rejectedItems,warnings:parsed.warnings});draft.updatedAt=at;
+            if(achievementImport){draft.achievements=achievementImport.data;draft.achievementExport={schemaVersion:1,importedAt:at,file:achievementImport.file};}
             const serialized=JSON.stringify(draft);if(new TextEncoder().encode(serialized).length>CHARACTER_LIMITS.storageBytes)return fail('This export exceeds the bounded Character storage. Existing inventory was kept.');
+            if(achievementImport&&typeof storage?.setItem!=='function')return fail('Character storage is unavailable. Existing inventory and achievements were kept.');
             try{storage?.setItem(CHARACTER_STORAGE_KEY,serialized);}catch{return fail('The inventory export could not be saved. Existing inventory was kept.');}
-            state=draft;return {ok:true,saved:true,importedCount:candidateIds.length,equippedCount:Object.keys(equipment).length,keyringCount:exportedKeyring.length,unknownCount:rejectedItems.length,rejectedCount:rejectedItems.length,inventoryExport:clone(draft.inventoryExport)};
+            state=draft;return {ok:true,saved:true,importedCount:candidateIds.length,equippedCount:Object.keys(equipment).length,keyringCount:exportedKeyring.length,unknownCount:rejectedItems.length,rejectedCount:rejectedItems.length,inventoryExport:clone(draft.inventoryExport),...(achievementImport?{achievements:clone(draft.achievements),achievementExport:clone(draft.achievementExport)}:{})};
         }catch(error){return fail(error?.message||'The inventory export could not be applied. Existing inventory was kept.');}
+    }
+    function prepareAchievements(parsed,file){
+        const data=normalizeAchievementExport(parsed);
+        if(!data)throw Error('A complete supported achievement export is required. Existing Character data was kept.');
+        return {data,file:achievementFile(file)};
+    }
+    function applyInventoryExport(parsed,options={}){return applyInventory(parsed,options);}
+    function applyAchievementExport(parsed,{file}={}){
+        try{
+            const prepared=prepareAchievements(parsed,file),at=timestamp();
+            if(at===null)throw Error('The achievement import time is invalid.');
+            const draft=clone(state);draft.achievements=prepared.data;draft.achievementExport={schemaVersion:1,importedAt:at,file:prepared.file};draft.updatedAt=at;
+            const serialized=JSON.stringify(draft);
+            if(new TextEncoder().encode(serialized).length>CHARACTER_LIMITS.storageBytes)throw Error('This achievement export exceeds the bounded Character storage. Existing Character data was kept.');
+            if(typeof storage?.setItem!=='function')throw Error('Character storage is unavailable.');
+            storage.setItem(CHARACTER_STORAGE_KEY,serialized);state=draft;
+            return {ok:true,saved:true,achievements:clone(draft.achievements),achievementExport:clone(draft.achievementExport)};
+        }catch(error){return {ok:false,saved:false,error:error?.message||'The achievement export could not be saved. Existing Character data was kept.'};}
+    }
+    function applyCharacterExports({inventory,achievements}={}, {inventoryFile,achievementFile,resolveItem}={}){
+        try{
+            const prepared=prepareAchievements(achievements,achievementFile);
+            if(timestamp()===null)throw Error('The achievement import time is invalid.');
+            return applyInventory(inventory,{file:inventoryFile,resolveItem},prepared);
+        }catch(error){return {ok:false,saved:false,error:error?.message||'The Character exports could not be saved. Existing Character data was kept.'};}
     }
     function intake(observation={},options={}) {
         const source=characterObservationInput(observation);
@@ -766,7 +810,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
         return outcome.ok ? {...decision,saved:outcome.saved} : {...decision,ok:false,assigned:false,slot:null,error:outcome.error};
     }
     return {intake,lookupObservation,updateCandidate,mergeObservation,setTierPreview,setObservedBasis,setAugmentSlots,setAugment,removeAugment,resolveCatalog,invalidateCatalog,reconcileCatalog,assign,autoAssign,
-        snapshot:()=>clone(state), totals:()=>characterTotals(state),applyInventoryExport,
+        snapshot:()=>clone(state), totals:()=>characterTotals(state),applyInventoryExport,applyAchievementExport,applyCharacterExports,
         duplicateCandidate(id) { const source=get(id);if(!source)return {ok:false,error:'Item card no longer exists.'};
             if(state.candidates.length>=CHARACTER_LIMITS.candidates)return capacityError();const beforeAddition=clone(state);
             const candidate=normalizeCandidate({...source,id:nextId(),origin:'manual',instanceKey:'',inventoryOrigin:null,evidence:[],seenCount:1,createdAt:timestamp(),updatedAt:timestamp()});

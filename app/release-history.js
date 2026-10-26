@@ -2,6 +2,37 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.4",
+  "title": "Character achievement exports",
+  "changes": [
+    "Run /outputfile inventory and /outputfile achievements, then load both current character files with one Import files button. Missing exports open a file picker.",
+    "Keep achievements and objective progress saved separately for each Character (Server). Failed or canceled imports preserve the previous character data.",
+    "Browse collapsible achievement categories and objectives in Character and new interactive wiki sheets, below the character's inventory and recorded statistics."
+  ],
+  "steps": [
+    {
+      "title": "Import both game exports",
+      "image": "1.0.4/character-exports",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Keep your gear equipped. Run /outputfile inventory and /outputfile achievements in EverQuest, then click Import files. EoZ finds both matching character files in your game folder; choose a file only when one is missing.",
+      "alt": "Actual Character walkthrough showing both outputfile commands and one Import files button for a synthetic character.",
+      "caption": "Actual production Character workspace in isolated Electron Chromium, with sandbox enabled, synthetic file APIs and a disposable profile. The fixture verifies that no file is read before the single explicit import action. No player exports, installed profile, game pixels or live wiki requests.",
+      "imageSha256": "5e878d1f94b224cf1e040778f662faa2108072c4f2c9a76b9a30cadd7ab08da4"
+    },
+    {
+      "title": "Browse saved achievement progress",
+      "image": "1.0.4/character-achievements",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Expand Achievements, a category and an achievement to inspect its recorded objectives and progress. These records stay with the selected character and appear in the collapsible section of new wiki character shares.",
+      "alt": "Actual Character inventory with expanded synthetic achievement categories, completion states and objective progress counters.",
+      "caption": "Actual production Character components after the same paired synthetic file import. The real parsers and atomic model import supply three achievements, independent completion states and objective counters. Sandbox-enabled isolated Electron; no player data or live wiki request.",
+      "imageSha256": "4227a7c675a0d6d34457d9d33add24ca7cb62ff4905b890ed11f4d420aded773"
+    }
+  ]
+},
+{
   "version": "1.0.3",
   "title": "Character Exaltation effects",
   "changes": [

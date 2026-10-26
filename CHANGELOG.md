@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4 - Character achievement exports
+
+- Run `/outputfile inventory` and `/outputfile achievements`, then import both current-character files with one button. Missing files open a native chooser; malformed or canceled imports preserve the saved character.
+- Save achievement categories, explicit completion, objectives and progress counters per character across sessions.
+- Review and share achievements in a collapsible section below the character's equipment and recorded stats. Existing sheets remain compatible, with wiki renderer support checked before publishing achievements.
+
 ## 1.0.3 - Character Exaltation effects
 
 - Show Exaltations as their name and effects, including Focus effects and Worn labels, without repeating equipment stats or restrictions.

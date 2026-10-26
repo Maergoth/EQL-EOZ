@@ -4,6 +4,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('eyeOfZommInventory',{
     read:value=>ipcRenderer.invoke('eye-of-zomm:inventory-file','read',value)
 });
+contextBridge.exposeInMainWorld('eyeOfZommAchievements',{
+    read:value=>ipcRenderer.invoke('eye-of-zomm:achievement-file','read',value)
+});
 
 contextBridge.exposeInMainWorld('eyeOfZommCharacterStorage', {
     read:()=>ipcRenderer.invoke('eye-of-zomm:character-storage','read'),

@@ -1,5 +1,16 @@
 # Character inventory export and observed statistics
 
+## Achievement extension
+
+The current walkthrough combines inventory and achievements. Run
+`/outputfile inventory` and `/outputfile achievements`, then click one
+**Import files** button to read both matching character files from the configured
+game folder, with native picker fallback. Both records commit atomically.
+Automatic inventory polling and separate import buttons are retired.
+The [current walkthrough](CHARACTER_WALKTHROUGH.md) and
+[achievement contract](CHARACTER_ACHIEVEMENTS.md) supersede conflicting details
+in the historical inventory-only plan below.
+
 ## Current request and priority
 
 This replaces the unreleased 0.9.7 baseline-retry design. Do not ship that older
