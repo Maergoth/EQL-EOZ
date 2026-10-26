@@ -48,6 +48,11 @@ try{
     clock+=8*86400000;await timers[0].callback();assert.equal((await readdir(maintainedRoot)).filter(name=>name.endsWith('.ndjson')).length,0,'hourly idle maintenance removes the expired current segment without any read or append');assert.equal(maintained.segment,null);assert.equal(maintained.sequence,1);
     clock=Date.now();await Promise.all([maintained.maintain(),maintained.append(observation('after-maintenance'))]);assert.equal(maintained.sequence,2);assert.equal((await maintained.read({afterSequence:1})).records[0].id,'after-maintenance');
     await maintained.close();assert.equal(timers[0].cleared,true,'shutdown clears idle cleanup scheduling');
+    const layoutRoot=join(root,'layout-metadata');let layouts=new ScreenReadJournal({root:layoutRoot});
+    const inputs=['default','default_modern'].map(uiLayout=>({uiLayout,sourceId:'window:synthetic',captureGeneration:7,frameId:'synthetic-frame',region:{x:0,y:0,width:100,height:80},sourceSize:{width:100,height:80}}));
+    for(const [index,input]of inputs.entries())await layouts.append({...observation('layout-'+index),owner:'character',sessionId:'synthetic-layout-session',subject:{kind:'character',name:'Synthetic'},input});
+    assert.deepEqual((await layouts.read()).records.map(record=>record.input),inputs,'Layout metadata is additive to native frame provenance');await layouts.close();
+    layouts=new ScreenReadJournal({root:layoutRoot});assert.deepEqual((await layouts.read()).records.map(record=>record.input),inputs,'Restart/replay preserves both Default and Modern layout metadata without replacing source proof');await layouts.close();
     const invalid=new ScreenReadJournal({root:join(root,'unsafe')});await invalid.initialize();
     await writeFile(join(root,'unsafe','screen-read-20261022-0000000000000000.ndjson'),'x'.repeat(5*1024*1024));
     await assert.rejects(invalid.read(),/size/);await invalid.close();

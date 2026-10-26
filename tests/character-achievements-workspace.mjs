@@ -26,7 +26,7 @@ const visible=node=>!node.closest('[hidden]');
 const importButton=()=>stage().querySelector('[data-inventory-read]');
 try{
     await tick();assert.equal(reads.length,0);assert(stage().querySelector('[data-character-metadata]'));
-    const details=stage().querySelector('form');for(const [name,value]of Object.entries({name:'Synthetic',server:'Realm',race:'Human',classes:'WAR',level:50,aaCount:12}))details.elements[name].value=String(value);
+    const details=stage().querySelector('form');for(const [name,value]of Object.entries({name:'Synthetic',server:'Realm',race:'Human',level:50,aaCount:12}))details.elements[name].value=String(value);for(const code of ['WAR','CLR'])details.querySelector('[data-character-class][value="'+code+'"]').click();
     details.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));await until(()=>importButton(),'export instructions');
     assert.equal(stage().querySelector('pre').textContent,'/outputfile inventory\n/outputfile achievements');
     assert.equal([...document.querySelectorAll('#character-workspace button')].filter(button=>button.textContent.trim()==='Import files'&&visible(button)).length,1,'The combined export step has one visible Import files button');

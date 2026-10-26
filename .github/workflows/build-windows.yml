@@ -106,6 +106,9 @@ jobs:
       - name: Test Default Modern pane geometry through real offline OCR
         if: inputs.extended_ui_checks
         run: npm run test:modern-ocr
+      - name: Test Default Stats-tab geometry through real offline OCR
+        if: inputs.extended_ui_checks
+        run: npm run test:default-ocr
       - name: Test compact hover tooltips and mixed panes through real offline OCR
         if: inputs.extended_ui_checks
         run: npm run test:hover-ocr

@@ -2,8 +2,11 @@
 
 The 0.9.7 [inventory-export flow](../INVENTORY_EXPORT_CHARACTER_PLAN.md) keeps
 gear equipped: Character imports `/outputfile inventory`, then reads the fully
-equipped, unbuffed stat panel. **Open Inventory → Scroll down → Click off buffs**
-must precede the explicit stat read. Character totals use reviewed current stats
+equipped, unbuffed stat panel. **Open Inventory → Show the full stat panel →
+Click off buffs** must precede the explicit stat read. Default uses Inventory's
+**Stats** tab; Default Modern uses its scrolled stat panel and Additional
+Modifiers. Visible pane identity selects the layout automatically; unidentified
+or ambiguous panes cannot establish a layout. Character totals use reviewed current stats
 only; item OCR is for Contribute and cannot populate Character gear.
 
 Optional acquisition now requests **1 FPS**, with one-second sampling/encoding

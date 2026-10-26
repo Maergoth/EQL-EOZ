@@ -1,6 +1,6 @@
 # Eye of Zomm implementation status
 
-Current `v1.0.6`: move full desktop inventories to a private SQLite worker with streamed paired imports, revision-checked record saves and bounded pages. Migrate all existing profiles and the draft with verified backups; retain item/socket/manual data and equipped-only sharing. No aggregate inventory item/byte ceiling applies to the native path. See [Character storage](CHARACTER_STORAGE.md) and its acceptance contract. Final native/package/CI observations must refer to the final implementation, not the superseded capacity-only checkpoint.
+Current `v1.0.7` candidate: choose two or three Character classes with checkboxes and automatically recognize the Default Stats tab or Default Modern stat panel. Preserve unfinished class choices and reviewed stat edits; unread or conflicting OCR values stay unknown for review. Existing private inventories and equipment-only sharing retain their contracts. See [the Character walkthrough](CHARACTER_WALKTHROUGH.md). Final source, native, package and publication receipts must identify the released commit.
 
 Previous `v1.0.5`: retire untouched historical trade captions when exact sequential catalog names cover at least half their words and a separate trade cue proves surrounding prose. Preserve real encoded item links, exact full titles, edited/OCR/loot/source-backed drafts and all raw evidence. Full archives keep false captions quiet; failed saves preserve the prior queue. See [chat item boundaries](CHAT_ITEM_BOUNDARIES.md).
 

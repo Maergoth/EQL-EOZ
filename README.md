@@ -1,5 +1,7 @@
 # EQLWiki — Eye of Zomm
 
+**1.0.7: Easier Character setup.** Choose two or three classes with checkboxes. Read your equipped, unbuffed stats from the Default inventory's **Stats** tab or the Default Modern stat panel; the visible layout is recognized automatically. Review unread numbers before saving. See [the Character walkthrough](docs/CHARACTER_WALKTHROUGH.md).
+
 **1.0.6: Expandable private inventories.** Full desktop inventories live in a private database and load in searchable pages. Stream inventory and achievement exports together, preserve physical copies and manual work, and migrate existing characters with a verified backup. Item previews also scale a listed positive base Void resist like other resists. Sharing still includes equipped gear and reviewed character stats. See [Character storage](docs/CHARACTER_STORAGE.md) and [shared item formulas](docs/SHARED_ITEM_SCALING.md).
 
 **1.0.5: Cleaner chat discoveries.** Trade captions combining known items no longer remain as false new-item tasks. Untouched old captions are archived reversibly; actual item links, screenshots and your edited work keep their evidence. See [chat item boundaries](docs/CHAT_ITEM_BOUNDARIES.md).
@@ -135,8 +137,10 @@ production wiki submissions. Older tours remain available in What's new.
 ![Contribution matches and readable page details before publication](app/assets/whats-new/0.9.8/contribution-matching-and-loot.png)
 
 In **Settings → Screen reading**, explicitly select the source you want to read.
-The supported calibration is **Default Modern (`default_modern`)**; other game
-skins remain unverified. Calibration can select a complete stat or examine pane,
+The reader automatically detects **Default** and **Default Modern**. In Default,
+open Inventory's **Stats** tab; in Default Modern, scroll down to show the full
+stat panel and Additional Modifiers. Review unread values before saving. Other
+custom skins remain unverified. Calibration can select a complete stat or examine pane,
 and **Full frame** resets it. Original source/session/generation and timestamp
 checks still apply. Ordinary log parsing does not require screen reading.
 

@@ -94,7 +94,32 @@ async function run({root,temporary,screenshots}){
         });
         await until(()=>execute(()=>fixture.reads.length===1),'journal replay');
         assert.equal(await execute(()=>fixture.starts.length),0,'Opening Character never starts screen acquisition');
-        const details=async(name,server)=>{await execute((name,server)=>{const form=document.querySelector('[data-character-metadata]');for(const[key,value]of Object.entries({name,server,classes:'RNG / CLR / ENC',level:58,aaCount:123,race:'Human'}))form.elements[key].value=String(value);form.requestSubmit();},name,server);await step('inventory');};
+        const classState=()=>execute(()=>{const form=document.querySelector('[data-character-metadata]'),boxes=[...form.querySelectorAll('input[name="classes"][data-character-class]')];return{total:boxes.length,checked:boxes.filter(box=>box.checked).map(box=>box.value),checkedDisabled:boxes.filter(box=>box.checked&&box.disabled).length,uncheckedDisabled:boxes.filter(box=>!box.checked&&box.disabled).length,valid:form.checkValidity(),profiles:[...document.querySelector('[data-character-select]').options].filter(option=>option.value&&option.value!=='__new__').length};});
+        const chooseClasses=values=>execute(values=>{const form=document.querySelector('[data-character-metadata]');for(const box of form.querySelectorAll('input[name="classes"][data-character-class]:checked'))box.click();for(const code of values){const box=form.querySelector(`input[name="classes"][data-character-class][value="${code}"]`);if(!box||box.disabled)throw Error('Missing available Character class checkbox');box.click();}},values);
+        const fillDetails=(name,server)=>execute((name,server)=>{const form=document.querySelector('[data-character-metadata]');for(const[key,value]of Object.entries({name,server,level:58,aaCount:123,race:'Human'}))form.elements[key].value=String(value);},name,server);
+        const details=async(name,server,classes=['RNG','CLR','ENC'])=>{await fillDetails(name,server);await chooseClasses(classes);await execute(()=>document.querySelector('[data-character-metadata]').requestSubmit());await step('inventory');assert.deepEqual((await model()).metadata.classes,classes,'Submitted Character classes are the selected canonical codes');};
+        await fillDetails('Synthetic Pathfinder','Example Realm');
+        assert.equal((await classState()).total,16,'Character details exposes all sixteen class checkboxes');
+        assert.deepEqual((await classState()).checked,[]);
+        await execute(()=>document.querySelector('[data-character-metadata]').requestSubmit());
+        assert.equal((await classState()).valid,false,'Zero classes cannot submit');assert.equal((await classState()).profiles,0,'Zero classes cannot create a saved profile');await step('details');
+        await chooseClasses(['WAR']);await execute(()=>document.querySelector('[data-character-metadata]').requestSubmit());
+        assert.equal((await classState()).valid,false,'One class cannot submit');assert.equal((await classState()).profiles,0,'One class cannot create a saved profile');await step('details');
+        assert.equal(await execute(()=>fixture.fileReads.length),0,'Invalid class choices never read game exports');
+        // Existing saved names and codes both preselect real controls without
+        // rewriting their stored legacy representation before a user submits.
+        for(const classes of [['Ranger','Cleric'],['RNG','CLR']]){
+            await execute(async classes=>{fixture.workspace.dispose();const {createCharacterProfiles}=await import('/app/character-profiles.js'),{createCharacterModel}=await import('/app/character-model.js');const profiles=createCharacterProfiles(),character=createCharacterModel({storage:profiles.storage});character.setMetadata({classes});fixture.workspace=fixture.mount();},classes);
+            assert.deepEqual((await classState()).checked.sort(),['CLR','RNG'],'Saved class names/codes preselect matching checkboxes');assert.deepEqual((await model()).metadata.classes,classes,'Preselection preserves existing stored class values');
+        }
+        await fillDetails('Synthetic Pathfinder','Example Realm');await chooseClasses(['RNG','CLR']);assert.equal((await classState()).valid,true,'Two classes are valid');assert.equal((await classState()).uncheckedDisabled,0);
+        await click('input[data-character-class][value="ENC"]');let classes=await classState();assert.equal(classes.checked.length,3);assert.equal(classes.checkedDisabled,0,'Selected classes remain available to deselect');assert.equal(classes.uncheckedDisabled,13,'Only unchecked classes disable at the third choice');
+        await click('input[data-character-class][value="WAR"]');assert.equal((await classState()).checked.length,3,'A disabled fourth checkbox cannot change the combination');
+        await execute(()=>fixture.workspace.refresh());assert.deepEqual((await classState()).checked.sort(),['CLR','ENC','RNG'],'Unsubmitted checkbox choices survive an unrelated workspace refresh');
+        await click('input[data-character-class][value="ENC"]');assert.equal((await classState()).uncheckedDisabled,0,'Removing a class makes unchecked choices available again');await click('input[data-character-class][value="SHD"]');assert.deepEqual((await classState()).checked.sort(),['CLR','RNG','SHD']);
+        await snapshot('character-class-details.png');
+        await snapshot('character-class-details-17px.png',{font:17});
+        assert.equal(await execute(()=>[...document.querySelectorAll('.character-class-option')].every(option=>{const box=option.querySelector('input'),label=option.querySelector('span'),control=box.getBoundingClientRect(),text=label.getBoundingClientRect();return getComputedStyle(option).flexDirection==='row'&&control.right<=text.left+1&&text.right<=innerWidth;})),true,'Class checkboxes stay beside their labels and fit the native 1024px content width at 17px');
         await details('Synthetic Pathfinder','Example Realm');
         const profileId=await execute(()=>document.querySelector('[data-character-select]').value);
         assert.equal(await execute(()=>document.querySelector('[data-character-select]').selectedOptions[0].textContent),'Synthetic Pathfinder (Example Realm)');
@@ -113,7 +138,8 @@ async function run({root,temporary,screenshots}){
         assert.equal(saved.candidates.find(c=>c.id===saved.equipment.ear2).tier,5,'Paired physical items retain individual tier');
         assert.equal(saved.candidates.some(c=>c.name==='Synthetic Keyring Blade'),false,'Keyring is never equipped');
         assert.equal(await execute(()=>fixture.starts.length),0,'Preparation appears before capture');
-        assert.deepEqual(await execute(()=>[...document.querySelectorAll('.character-preparation strong')].map(n=>n.textContent)),['Open your Inventory.','Scroll down.','Click off your buffs.']);
+        assert.deepEqual(await execute(()=>[...document.querySelectorAll('.character-preparation strong')].map(n=>n.textContent)),['Open your Inventory.','Show your full stat panel.','Click off your buffs.']);
+        assert.match(await execute(()=>document.querySelector('[data-character-stat-preparation]').textContent),/Default: select the Stats tab.*Default Modern: scroll down/s,'Preparation explains both automatic layouts before a reading');
         assert.equal(await execute(()=>document.querySelectorAll('[data-inventory-contribute]').length),0,'Automatic inventory gaps are hidden until their exact live absence is confirmed');await until(()=>execute(()=>fixture.wikiChecks.length===2),'bounded missing parent/socket verification');await execute(()=>fixture.releaseWikiProof());await until(()=>execute(()=>document.querySelectorAll('[data-inventory-contribute]').length===2),'live-confirmed inventory gaps');assert.equal(await execute(()=>document.querySelectorAll('[data-inventory-contribute]').length),2,'Live-confirmed missing parent and socket are queued independently');
         await snapshot('character-recorded-stats.png');
         await click('[data-inventory-contribute="0"]');assert.equal(await execute(()=>fixture.navigations.at(-1)),'contribute');assert.equal(await execute(()=>fixture.starts.length),0,'Wiki gap does not start item capture');assert.equal(await execute(()=>fixture.imports.length),0);
@@ -123,8 +149,22 @@ async function run({root,temporary,screenshots}){
         const contributionCount=await execute(()=>JSON.parse(localStorage.getItem('eql-eye-of-zomm-contributions-v1')).candidates.length);
         await click('[data-walkthrough-read-stats]');await until(()=>execute(()=>fixture.state.phase==='running'),'explicit stat capture');
         const afterStart=await model();await observe('item',{name:'Synthetic Trail Boots',hp:777777,slots:['FEET']});assert.deepEqual((await model()).candidates,afterStart.candidates,'Character ignores item OCR');
-        await observe('character',{hpMaximum:5432,hpCurrent:5000,acMitigation:401,acMitigationSoftcap:374,acEvasion:500,atkOffense:358,atkAccuracy:828,str:269,accuracy:7,attackSpeed:150,spellShielding:0});
+        const currentStats={hpMaximum:5432,hpCurrent:5000,acMitigation:401,acMitigationSoftcap:374,acEvasion:500,atkOffense:358,atkAccuracy:828,str:269,accuracy:7,attackSpeed:150,spellShielding:0};
+        const layoutObservation=async(uiLayout,patch={})=>{const state=await execute(()=>fixture.state);return observe('character',currentStats,{...patch,input:{sourceId:state.source?.id,captureGeneration:state.generation,uiLayout,...patch.input}});};
+        await layoutObservation('default');
         await until(()=>execute(()=>document.querySelector('[data-walkthrough-stats-values]').value.includes('5432')),'fresh current stats proposal');
+        const preparation=()=>execute(()=>document.querySelector('[data-character-stat-preparation]').textContent);
+        assert.match(await preparation(),/Default layout detected/);assert.match(await preparation(),/Select the Stats tab and keep both stat columns visible/);assert.doesNotMatch(await preparation(),/Default Modern layout detected/);
+        const defaultGuidance=await preparation();
+        await layoutObservation('default_modern',{sessionId:'retired-character-session'});assert.equal(await preparation(),defaultGuidance,'A wrong-session layout cannot replace current guidance');
+        await layoutObservation('default_modern',{input:{captureGeneration:-1}});assert.equal(await preparation(),defaultGuidance,'A stale capture generation cannot replace current guidance');
+        await layoutObservation('default_modern',{capturedAt:new Date(0).toISOString()});assert.equal(await preparation(),defaultGuidance,'An old frame cannot replace current layout guidance');
+        const editedStats=await execute(()=>{const area=document.querySelector('[data-walkthrough-stats-values]');fixture.layoutStatsArea=area;area.value+='\nHP_REGEN: 11';area.dispatchEvent(new Event('input',{bubbles:true}));return area.value;});
+        await layoutObservation('default_modern');assert.match(await preparation(),/Default Modern layout detected/);assert.match(await preparation(),/Scroll down to include the full stat panel and Additional Modifiers/);
+        assert.equal(await execute(()=>document.querySelector('[data-walkthrough-stats-values]')===fixture.layoutStatsArea),true,'Layout guidance does not remount the editable stats field');assert.equal(await execute(()=>document.querySelector('[data-walkthrough-stats-values]').value),editedStats,'Changing detected layout preserves reviewed edits');
+        await layoutObservation('<img src=x onerror="fixture.untrustedLayout=true">');assert.match(await preparation(),/Default and Default Modern are detected automatically/);assert.doesNotMatch(await preparation(),/layout detected/);assert.equal(await execute(()=>document.querySelectorAll('[data-character-stat-preparation] img').length),0,'An unknown layout remains generic and cannot render markup');
+        assert.equal(await execute(()=>document.querySelector('[data-walkthrough-stats-values]').value),editedStats,'Unknown layout metadata also preserves reviewed stats');
+        await layoutObservation('default');assert.match(await preparation(),/Default layout detected/);assert.equal(await execute(()=>document.querySelector('[data-walkthrough-stats-values]').value),editedStats);
         assert.doesNotMatch(await execute(()=>document.querySelector('[data-walkthrough-stats-values]').value),/HP CURRENT/i);
         await execute(()=>document.querySelector('[data-walkthrough-stats]').requestSubmit());await step('review');
         saved=await model();assert.equal(saved.statSnapshots.base,null);assert.equal(saved.statSnapshots.equipped,null);assert.equal(saved.statSnapshots.current.stats.HP_MAXIMUM,5432);assert.equal(saved.statSnapshots.current.stats.ACCURACY,7);
@@ -155,7 +195,7 @@ async function run({root,temporary,screenshots}){
         await click('[data-share-save]');await step('complete');await click('[data-share-close]');
         const original=await model();
         const selectProfile=async value=>{await until(()=>execute(()=>!document.querySelector('[data-character-select]').disabled),'character selector enabled');await execute(value=>{const select=document.querySelector('[data-character-select]');select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));},value);await until(()=>execute(value=>document.querySelector('[data-character-select]').value===value,value),'profile switch');};
-        await selectProfile('__new__');await step('details');await execute(()=>fixture.fileMode='missing');await details('Synthetic Pathfinder','Second Realm');
+        await selectProfile('__new__');await step('details');await execute(()=>fixture.fileMode='missing');await details('Synthetic Pathfinder','Second Realm',['PAL','CLR']);
         const secondId=await execute(()=>document.querySelector('[data-character-select]').value);assert.notEqual(secondId,profileId);assert.equal((await model()).candidates.length,0);
         await execute(()=>fixture.fileMode='defer');await click('[data-inventory-read]');await until(()=>execute(()=>Boolean(fixture.resolveFile)),'deferred inventory read');
         // Cancel invalidates an in-flight file read before it can affect another profile.

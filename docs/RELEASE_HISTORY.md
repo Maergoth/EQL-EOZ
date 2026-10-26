@@ -1,5 +1,15 @@
 # Browsable release history
 
+The 1.0.7 tour archives two visually reviewed production Character captures from
+isolated Electron Chromium: the full-name class checkboxes at 17px and the
+Default/Default Modern stat-preparation instructions before acquisition. The
+walkthrough uses a disposable synthetic profile and fixture APIs; neither image
+contains game/player pixels or installed-profile data. The version-owned PNGs
+have SHA-256 `3fd8efa7a2c8b784151198032b46ada3e5a13a4f3f2d7826bea36442cf5d48d8`
+and `512840f1ef89504abfacb1109108ef841e8d9fdec16011ebd08280ef0d27d130`.
+Separate actual offline OCR tests verify generated Default-layout pixels;
+unread values require review. Earlier tour entries and image bytes are unchanged.
+
 The 1.0.6 image shows the actual production Character workspace with a searchable
 50-item page from 2,503 physical cards, location filters, native paging controls,
 achievements and an edited item. An isolated real main/preload migrates 1,003
