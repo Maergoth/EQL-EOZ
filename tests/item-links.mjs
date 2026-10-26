@@ -5,7 +5,7 @@ import {createContributionQueue} from '../app/contribution-queue.js';
 import {logContributionObservation} from '../app/contribution-evidence.js';
 import {collectDropObservation} from '../app/drop-observations.js';
 import {buildContributionDraft} from '../app/contribution-model.js';
-import {canonicalChatItemMatch} from '../app/chat-item-mentions.js';
+import {canonicalChatItemMatch,coveredTradeChatCaption} from '../app/chat-item-mentions.js';
 
 const escaped=(name,id=123)=>`\\aITEM ${id} 0:${name}\\/a`;
 const native=(name,id=123)=>'\x12'+'0'+id.toString(16).padStart(5,'0')+'0'.repeat(50)+name+'\x12';
@@ -142,3 +142,43 @@ assert(mentionCandidate.evidence.some(e=>e.itemLinkFormat==='plain-tiered-chat')
 assert(createContributionQueue(options).snapshot().find(row=>row.name==='Example Gauntlets')?.evidence.some(e=>e.itemLinkFormat==='plain-tiered-chat'),'The flattened origin flag survives storage/reload');
 assert(captured.candidates.every(candidate=>candidate.evidence.every(e=>e.itemLinkFormat===undefined)),'Authentic encoded links are not relabelled as flattened guesses');
 console.log('Sales prose boundaries: reported bracket/quote variants, longest bounded titles/aliases, exact genuine Free/Then titles, disjoint/overlap ambiguity, Unicode word boundaries, encoded unknown preservation and downstream no-notice regression passed.');
+
+// Coverage is only a positive, reversible legacy-chat classifier. It must not
+// turn shared or reordered words into identity, nor reinterpret genuine links.
+const tradeNames=['Brown Chitin Protector','Crimson Robe of Alendine','Efreeti War Axe','Wurmslayer'];
+const tradePack={meta:{wikiEntitiesComplete:true,sample:false},items:tradeNames.map(name=>({name})),wikiEntities:{items:tradeNames,npcs:[],titles:tradeNames}};
+tradePack.items[0].aliases=['Brown Protector'];
+const tradeLine=name=>`Marketvoice tells General:1, '${name}'`;
+for(const [name,names,covered,total]of[
+    ['FREE Crimson Robe of Alendine Efreeti War Axe',tradeNames.slice(1,3),7,8],
+    ['Free Brown Chitin Protector',[tradeNames[0]],3,4],
+    ['Trading Wurmslayer',['Wurmslayer'],1,2],
+    ['Selling Brown Protector',['Brown Chitin Protector'],2,3],
+    ['WTS: Crimson Robe of Alendine / Efreeti War Axe',tradeNames.slice(1,3),7,8]
+])assert.deepEqual(coveredTradeChatCaption(name,tradeLine(name),tradePack),{names,coveredWords:covered,totalWords:total},name);
+for(const name of ['Free Brown Chitin Protectorate','Free Brown Chitin Protecter','Trading Wurmslayre','Trading Protector Brown Chitin','Free Brown extra Chitin Protector','Free many many many many words before Wurmslayer','TradingWurmslayer','An Uncatalogued Trading Relic','Earlier FREE Crimson Robe of Alendine Efreeti War Axe'])assert.equal(coveredTradeChatCaption(name,tradeLine(name),tradePack),null,name+' has no sufficient sequential, trade-cued evidence');
+for(const format of [escaped,native]){
+    const name='FREE Crimson Robe of Alendine Efreeti War Axe';
+    assert.equal(coveredTradeChatCaption(name,tradeLine(format(name)),tradePack),null,'Encoded identity is never reinterpreted as a caption');
+}
+assert.equal(coveredTradeChatCaption('Trading Wurmslayer','System message: Trading Wurmslayer',tradePack),null,'A supported ordinary chat wrapper is required');
+assert.equal(coveredTradeChatCaption('Trading Wurmslayer',tradeLine('NotTrading Wurmslayer'),tradePack),null,'The complete saved caption needs whole-word boundaries');
+const exactTrade={items:[...tradePack.items,...['Trading Wurmslayer','FREE Crimson Robe of Alendine Efreeti War Axe'].map(name=>({name}))]};
+for(const name of ['Trading Wurmslayer','FREE Crimson Robe of Alendine Efreeti War Axe'])assert.equal(coveredTradeChatCaption(name,tradeLine(name),exactTrade),null,'Full known titles outrank their contained names and trade words');
+assert.equal(coveredTradeChatCaption('Free Shield of Fire Walker',tradeLine('Free Shield of Fire Walker'),overlapping),null,'Overlapping titles cannot manufacture coverage');
+assert.equal(coveredTradeChatCaption('Free Shared Relic',tradeLine('Free Shared Relic'),ambiguousCatalog),null,'Ambiguous aliases cannot manufacture coverage');
+assert.equal(coveredTradeChatCaption('Free Spirit Wurmslayer',tradeLine('Free Spirit Wurmslayer'),{items:[{name:'Free Spirit'},{name:'Wurmslayer'}]}),null,'A trade-like word inside a known title is not an outside-title cue');
+const freshTradeParser=new EQLogParser({getPack:()=>tradePack}),freshTradeQueue=createContributionQueue({storage:null,getPack:()=>tradePack,now:()=>now});let freshTradeLookups=0;
+const freshTradeDiscovery=createWikiDiscovery({storage:null,getPack:()=>tradePack,now:()=>now,verifyItem:()=>{freshTradeLookups++;return{status:'missing'};}});
+for(const name of ['Free Brown Chitin Protector','FREE Crimson Robe of Alendine Efreeti War Axe','Trading Wurmslayer']){
+    for(const payload of [name,name+' +3','['+name+' +3]','"'+name+' +3"']){
+        const event=freshTradeParser.parse(line(tradeLine(payload)));if(event){freshTradeQueue.consumeLog(event,context());freshTradeDiscovery.consume(event,context());}
+    }
+}
+assert.equal(freshTradeQueue.snapshot().length,0);assert.equal(freshTradeLookups,0,'Reported fresh sales prose never reaches missing-item proof');
+for(const format of [escaped,native]){
+    const name='Genuinely New Crimson Robe of Alendine';
+    const event=freshTradeParser.parse(line(tradeLine(format(name))));assert.deepEqual(event.items,[name]);
+    assert(freshTradeQueue.consumeLog(event,context()).candidate,'A real delimited new item with a known substring is still discoverable');
+}
+console.log('Trade caption coverage: sequential whole-title union, exact 50% boundary, aliases, multi-item prose, authentic/overlap/unknown negatives and zero fresh false discovery traffic passed.');

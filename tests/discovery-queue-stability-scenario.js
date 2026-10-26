@@ -1,6 +1,6 @@
 // Shared mounted-browser scenario; all observations, storage and wiki replies
 // are synthetic. This module is test code, never part of the app bundle.
-export async function discoveryQueueStabilityScenario({document,mountCaptureWorkspace,assert,onPending=async()=>{}}){
+export async function discoveryQueueStabilityScenario({document,mountCaptureWorkspace,assert,onPending=async()=>{},onTradeCleanup=async()=>{}}){
     const flush=async()=>{for(let index=0;index<16;index++)await Promise.resolve();};
     const saved={dateNow:Date.now,setTimeout:globalThis.setTimeout,clearTimeout:globalThis.clearTimeout};
     let at=1770000000000,sequence=0;const timers=new Map(),checks=[],values=new Map(),calls={prepare:0,submit:0};
@@ -85,18 +85,22 @@ export async function discoveryQueueStabilityScenario({document,mountCaptureWork
         view.dispose();values.clear();
         pack={meta:{schemaVersion:3,version:'caption-stability',sample:false,wikiEntitiesComplete:true},items:[],npcs:[],zones:[],wikiEntities:{items:[],npcs:[],titles:[]}};
         const legacy=(id,name)=>({id,kind:'item',name,title:name,zone:'',status:'needs-review',fields:{name:{value:name,confirmed:false},tier:{value:3,confirmed:false}},sources:[],relations:[],evidence:[{id:'log-'+id,kind:'game-log',event:'item-link',text:`Marketvoice tells General:1, '[${name} +3]'`,logLine:`[Sun Oct 25 18:00:00 2026] Marketvoice tells General:1, '[${name} +3]'`}]});
-        const caption=legacy('old-caption','Free Brown Chitin Protector'),unrelated=legacy('untouched-gap','Stable Untouched Relic');
+        const caption=legacy('old-caption','Free Brown Chitin Protector'),multi=legacy('old-multi','FREE Crimson Robe of Alendine Efreeti War Axe'),trading=legacy('old-trading','Trading Wurmslayer'),unrelated=legacy('untouched-gap','Stable Untouched Relic');
+        for(const candidate of [multi,trading])candidate.evidence[0].logLine=candidate.evidence[0].text=`Marketvoice tells General:1, '${candidate.name}'`;
         const archive=Array.from({length:200},(_,index)=>({...legacy('archived-'+index,'Archived Unknown '+index),archive:{reason:'old'}}));
-        storage.setItem('eql-eye-of-zomm-contributions-v1',JSON.stringify({schemaVersion:1,candidates:[caption,unrelated],archive}));
+        storage.setItem('eql-eye-of-zomm-contributions-v1',JSON.stringify({schemaVersion:1,candidates:[caption,multi,trading,unrelated],archive}));
         const beforeCaption=checks.length;view=mountCaptureWorkspace(options);await flush();view.refresh();await flush();
         for(const check of checks.slice(beforeCaption))answer(check);await flush();
         const captionRow=row(caption.name),unrelatedRow=row(unrelated.name);
-        assert(captionRow&&unrelatedRow,'Both historical suggestions were previously verified and displayed');
-        pack={...pack,items:[{name:'Brown Chitin Protector',wikiTitle:'Brown Chitin Protector'}],wikiEntities:{...pack.wikiEntities,items:['Brown Chitin Protector']}};view.refresh();await flush();
-        assert(!row(caption.name)&&row(unrelated.name)===unrelatedRow,'A raw gap cleared by caption cleanup retires only its retained display row even when the archive is full');
+        assert(captionRow&&row(multi.name)&&row(trading.name)&&unrelatedRow,'Historical single and multi-item suggestions were previously verified and displayed');
+        const titles=['Brown Chitin Protector','Crimson Robe of Alendine','Efreeti War Axe','Wurmslayer'];
+        pack={...pack,items:titles.map(name=>({name,wikiTitle:name})),wikiEntities:{...pack.wikiEntities,items:titles}};view.refresh();await flush();
+        assert(!row(caption.name)&&!row(multi.name)&&!row(trading.name)&&row(unrelated.name)===unrelatedRow,'Single and multiple trade captions retire only their retained rows even when the archive is full');
         assert(document.querySelector('[data-candidate-form]')?.querySelector('h2')?.textContent!==caption.name,'The retired false caption cannot retain an active editor lease');
         const retained=JSON.parse(storage.getItem('eql-eye-of-zomm-contributions-v1'));
-        assert(retained.archive.length===200&&retained.candidates.find(candidate=>candidate.id===caption.id)?.reasons.length===0,'The quiet legacy record and complete full archive remain saved');
-        return{verifiedRows:3,unchangedRefreshes:17,pendingAndUnavailableStable:true,equivalentPackWrapperStable:true,selectableReviewOnly:true,newRowsRequireProof:true,coveredRetiresOnlyAffected:true,sourceAndPackInvalidate:true,fullArchiveCaptionRetired:true,calls};
+        assert(retained.archive.length===200&&[caption,multi,trading].every(candidate=>retained.candidates.find(value=>value.id===candidate.id)?.reasons.length===0),'The quiet legacy records and complete full archive remain saved');
+        unrelatedRow.querySelector('[data-candidate-id]').click();await flush();
+        await onTradeCleanup();
+        return{verifiedRows:3,unchangedRefreshes:17,pendingAndUnavailableStable:true,equivalentPackWrapperStable:true,selectableReviewOnly:true,newRowsRequireProof:true,coveredRetiresOnlyAffected:true,sourceAndPackInvalidate:true,fullArchiveCaptionRetired:true,multiTradeCaptionRetired:true,calls};
     }finally{view.dispose();Date.now=saved.dateNow;globalThis.setTimeout=saved.setTimeout;globalThis.clearTimeout=saved.clearTimeout;}
 }

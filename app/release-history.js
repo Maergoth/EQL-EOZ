@@ -2,6 +2,27 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.5",
+  "title": "Cleaner chat discoveries",
+  "changes": [
+    "Recognize trade captions combining one or several known items without inventing a new item title.",
+    "Reversibly archive untouched old chat captions, including unranked sales text. Exact whole catalog titles and genuine encoded new-item links keep their identity.",
+    "Preserve your edited, reviewed, screenshot-backed, loot and source-bearing work. Full archives retain the original evidence without showing a false gap."
+  ],
+  "steps": [
+    {
+      "title": "Keep real discoveries in view",
+      "image": "1.0.5/trade-discovery-cleanup",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Open Contribute to review actual gaps. Untouched old trade captions are retired when exact known item names cover at least half their words. Your genuine discoveries and edited drafts stay available; new unknown items still require a real item link, loot evidence or manual creation.",
+      "alt": "Actual Contribute workspace with one unrelated synthetic new-item task retained after three old single and combined trade captions are removed from view.",
+      "caption": "Actual production Contribute components in isolated sandboxed Electron Chromium, using synthetic logs, catalog and verifier replies. The fixture first displays three old trade captions, then confirms that catalog refresh retires only those rows even with a full archive, preserving the unrelated row and all raw evidence. No player data or live wiki requests.",
+      "imageSha256": "24e05c8e6202f86dd0920aee36c304523fb9f2c2ad15fb917ba738e4aed6f36a"
+    }
+  ]
+},
+{
   "version": "1.0.4",
   "title": "Character achievement exports",
   "changes": [

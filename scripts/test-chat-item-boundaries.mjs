@@ -36,12 +36,13 @@ async function run({root,temporary,screenshots}){
         await main.loadURL(origin+'/');
         const result=await execute(async()=>{
             const {EQLogParser}=await import('/app/parser.js'),{createWikiDiscovery}=await import('/app/wiki-discovery.js'),{createContributionQueue}=await import('/app/contribution-queue.js');
-            const name='Signet Ring of Lord Everling',pack={meta:{sample:false,wikiEntitiesComplete:true},wikiEntities:{items:[name],npcs:[],titles:[name]},items:[{name}],npcs:[],zones:[]};
+            const name='Signet Ring of Lord Everling',names=[name,'Brown Chitin Protector','Crimson Robe of Alendine','Efreeti War Axe','Wurmslayer'],pack={meta:{sample:false,wikiEntitiesComplete:true},wikiEntities:{items:names,npcs:[],titles:names},items:names.map(name=>({name})),npcs:[],zones:[]};
             const parser=new EQLogParser({getPack:()=>pack}),queue=createContributionQueue({storage:null,getPack:()=>pack}),pending=[],prompts=[];
             const discovery=createWikiDiscovery({storage:null,getPack:()=>pack,verifyItem:()=>({status:'missing'}),onMissing:prompt=>{prompts.push(prompt.name);pending.push(window.eyeOfZommDiscovery.show(prompt));}});
             let cursor=0;const consume=payload=>{const at=Date.now(),event=parser.parse(`[${new Date(at).toISOString()}] Syntheticplayer tells General:1, '${payload}'`),context={live:true,at,cursor:++cursor,logId:'synthetic-source'};if(event){queue.consumeLog(event,context);discovery.consume(event,context);}return event;};
             const known=consume('Then '+name+' +3');consume('Earlier I linked: '+name+' +3');consume('Then Unbounded Unknown Relic +3');
             consume('[Free '+name+' +3]');consume('"WTS FULL SET OF '+name+' +3"');
+            for(const caption of ['Free Brown Chitin Protector','FREE Crimson Robe of Alendine Efreeti War Axe','Trading Wurmslayer'])for(const payload of [caption,caption+' +3','['+caption+' +3]'])consume(payload);
             const unknownMarked=['Try [Synthetic Bounded Charm +4], please.','[Free Genuinely Unknown Blade +3]','"WTS FULL SET OF Uncatalogued Breastplate +4"'];
             for(const payload of unknownMarked)if(consume(payload)!==null)throw Error('Unknown marked prose became an item');
             if(prompts.length||queue.snapshot().length)throw Error('Prose generated a false discovery');
