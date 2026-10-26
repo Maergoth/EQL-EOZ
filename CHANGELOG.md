@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Choose two or three Character classes with checkboxes instead of typing class codes. Saved combinations are preselected, unfinished selections survive background refreshes, and wiki sharing formats the codes automatically.
+
 ## 1.0.6 - Expandable private inventories
 
 - Store full desktop inventories in a private database with no aggregate item-count or inventory-byte limit. Search and browse carried gear, bank, depot, keyring and unmatched exports in pages.

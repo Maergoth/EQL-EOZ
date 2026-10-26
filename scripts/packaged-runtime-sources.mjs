@@ -19,6 +19,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/app.js',
     'app/crawl-mode.js',
     'app/capture-workspace.js',
+    'app/character-class-picker.js',
     'app/contribution-history.js',
     'desktop/contribution-history.cjs',
     'app/contribution-ignore-identity.js',

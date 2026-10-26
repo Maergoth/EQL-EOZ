@@ -94,7 +94,32 @@ async function run({root,temporary,screenshots}){
         });
         await until(()=>execute(()=>fixture.reads.length===1),'journal replay');
         assert.equal(await execute(()=>fixture.starts.length),0,'Opening Character never starts screen acquisition');
-        const details=async(name,server)=>{await execute((name,server)=>{const form=document.querySelector('[data-character-metadata]');for(const[key,value]of Object.entries({name,server,classes:'RNG / CLR / ENC',level:58,aaCount:123,race:'Human'}))form.elements[key].value=String(value);form.requestSubmit();},name,server);await step('inventory');};
+        const classState=()=>execute(()=>{const form=document.querySelector('[data-character-metadata]'),boxes=[...form.querySelectorAll('input[name="classes"][data-character-class]')];return{total:boxes.length,checked:boxes.filter(box=>box.checked).map(box=>box.value),checkedDisabled:boxes.filter(box=>box.checked&&box.disabled).length,uncheckedDisabled:boxes.filter(box=>!box.checked&&box.disabled).length,valid:form.checkValidity(),profiles:[...document.querySelector('[data-character-select]').options].filter(option=>option.value&&option.value!=='__new__').length};});
+        const chooseClasses=values=>execute(values=>{const form=document.querySelector('[data-character-metadata]');for(const box of form.querySelectorAll('input[name="classes"][data-character-class]:checked'))box.click();for(const code of values){const box=form.querySelector(`input[name="classes"][data-character-class][value="${code}"]`);if(!box||box.disabled)throw Error('Missing available Character class checkbox');box.click();}},values);
+        const fillDetails=(name,server)=>execute((name,server)=>{const form=document.querySelector('[data-character-metadata]');for(const[key,value]of Object.entries({name,server,level:58,aaCount:123,race:'Human'}))form.elements[key].value=String(value);},name,server);
+        const details=async(name,server,classes=['RNG','CLR','ENC'])=>{await fillDetails(name,server);await chooseClasses(classes);await execute(()=>document.querySelector('[data-character-metadata]').requestSubmit());await step('inventory');assert.deepEqual((await model()).metadata.classes,classes,'Submitted Character classes are the selected canonical codes');};
+        await fillDetails('Synthetic Pathfinder','Example Realm');
+        assert.equal((await classState()).total,16,'Character details exposes all sixteen class checkboxes');
+        assert.deepEqual((await classState()).checked,[]);
+        await execute(()=>document.querySelector('[data-character-metadata]').requestSubmit());
+        assert.equal((await classState()).valid,false,'Zero classes cannot submit');assert.equal((await classState()).profiles,0,'Zero classes cannot create a saved profile');await step('details');
+        await chooseClasses(['WAR']);await execute(()=>document.querySelector('[data-character-metadata]').requestSubmit());
+        assert.equal((await classState()).valid,false,'One class cannot submit');assert.equal((await classState()).profiles,0,'One class cannot create a saved profile');await step('details');
+        assert.equal(await execute(()=>fixture.fileReads.length),0,'Invalid class choices never read game exports');
+        // Existing saved names and codes both preselect real controls without
+        // rewriting their stored legacy representation before a user submits.
+        for(const classes of [['Ranger','Cleric'],['RNG','CLR']]){
+            await execute(async classes=>{fixture.workspace.dispose();const {createCharacterProfiles}=await import('/app/character-profiles.js'),{createCharacterModel}=await import('/app/character-model.js');const profiles=createCharacterProfiles(),character=createCharacterModel({storage:profiles.storage});character.setMetadata({classes});fixture.workspace=fixture.mount();},classes);
+            assert.deepEqual((await classState()).checked.sort(),['CLR','RNG'],'Saved class names/codes preselect matching checkboxes');assert.deepEqual((await model()).metadata.classes,classes,'Preselection preserves existing stored class values');
+        }
+        await fillDetails('Synthetic Pathfinder','Example Realm');await chooseClasses(['RNG','CLR']);assert.equal((await classState()).valid,true,'Two classes are valid');assert.equal((await classState()).uncheckedDisabled,0);
+        await click('input[data-character-class][value="ENC"]');let classes=await classState();assert.equal(classes.checked.length,3);assert.equal(classes.checkedDisabled,0,'Selected classes remain available to deselect');assert.equal(classes.uncheckedDisabled,13,'Only unchecked classes disable at the third choice');
+        await click('input[data-character-class][value="WAR"]');assert.equal((await classState()).checked.length,3,'A disabled fourth checkbox cannot change the combination');
+        await execute(()=>fixture.workspace.refresh());assert.deepEqual((await classState()).checked.sort(),['CLR','ENC','RNG'],'Unsubmitted checkbox choices survive an unrelated workspace refresh');
+        await click('input[data-character-class][value="ENC"]');assert.equal((await classState()).uncheckedDisabled,0,'Removing a class makes unchecked choices available again');await click('input[data-character-class][value="SHD"]');assert.deepEqual((await classState()).checked.sort(),['CLR','RNG','SHD']);
+        await snapshot('character-class-details.png');
+        await snapshot('character-class-details-17px.png',{font:17});
+        assert.equal(await execute(()=>[...document.querySelectorAll('.character-class-option')].every(option=>{const box=option.querySelector('input'),label=option.querySelector('span'),control=box.getBoundingClientRect(),text=label.getBoundingClientRect();return getComputedStyle(option).flexDirection==='row'&&control.right<=text.left+1&&text.right<=innerWidth;})),true,'Class checkboxes stay beside their labels and fit the native 1024px content width at 17px');
         await details('Synthetic Pathfinder','Example Realm');
         const profileId=await execute(()=>document.querySelector('[data-character-select]').value);
         assert.equal(await execute(()=>document.querySelector('[data-character-select]').selectedOptions[0].textContent),'Synthetic Pathfinder (Example Realm)');
@@ -155,7 +180,7 @@ async function run({root,temporary,screenshots}){
         await click('[data-share-save]');await step('complete');await click('[data-share-close]');
         const original=await model();
         const selectProfile=async value=>{await until(()=>execute(()=>!document.querySelector('[data-character-select]').disabled),'character selector enabled');await execute(value=>{const select=document.querySelector('[data-character-select]');select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));},value);await until(()=>execute(value=>document.querySelector('[data-character-select]').value===value,value),'profile switch');};
-        await selectProfile('__new__');await step('details');await execute(()=>fixture.fileMode='missing');await details('Synthetic Pathfinder','Second Realm');
+        await selectProfile('__new__');await step('details');await execute(()=>fixture.fileMode='missing');await details('Synthetic Pathfinder','Second Realm',['PAL','CLR']);
         const secondId=await execute(()=>document.querySelector('[data-character-select]').value);assert.notEqual(secondId,profileId);assert.equal((await model()).candidates.length,0);
         await execute(()=>fixture.fileMode='defer');await click('[data-inventory-read]');await until(()=>execute(()=>Boolean(fixture.resolveFile)),'deferred inventory read');
         // Cancel invalidates an in-flight file read before it can affect another profile.

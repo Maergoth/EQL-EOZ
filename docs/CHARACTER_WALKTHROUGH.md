@@ -14,7 +14,12 @@ See [the execution plan](INVENTORY_EXPORT_CHARACTER_PLAN.md).
 
 ### 1. Character details
 
-Enter character name, server, race, classes, level and AA count. Character Select
+Enter character name, server, race, level and AA count, then check **two or three
+classes**. The picker shows full class names and handles the three-letter codes
+and slash formatting automatically. At three selections, uncheck a class before
+adding another. Existing saved names or codes are preselected; opening the form
+does not rewrite the saved character. Unrecognized legacy values require review
+before replacement. Character Select
 registers a saved **Character (Server)** after the first valid step; same names
 on different servers remain independent. Switching profiles stops Character
 capture and invalidates pending work. Selecting a character never restarts it.
@@ -277,7 +282,7 @@ capture starts outside an explicit user-started walkthrough.
 
 ### Intended flow
 
-1. **Character details**: name, server, class combination, level, AA count; retain
+1. **Character details**: name, server, two or three checked classes, level, AA count; retain
    optional race for calculations. One clear Start/Continue entry point.
 2. **Capture source**: discover the actual game window and present its selected
    source inside the walkthrough, with manual source choice and inline optional

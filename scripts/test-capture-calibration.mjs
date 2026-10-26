@@ -59,7 +59,7 @@ async function run({root,temporary,screenshots}){
         await click('[data-capture-sources]');await click('[data-capture-start]');
         await until(()=>execute(()=>fixture.starts.length===1),'restored area start');
         assert.deepEqual(await execute(()=>fixture.starts[0].region),{x:.1,y:.2,width:.3,height:.4});
-        await execute(()=>{const form=document.querySelector('[data-character-metadata]');for(const[key,value]of Object.entries({name:'Synthetic Calibration',server:'Example Realm',classes:'WAR',level:10,aaCount:0}))form.elements[key].value=String(value);form.requestSubmit();});
+        await execute(()=>{const form=document.querySelector('[data-character-metadata]');for(const[key,value]of Object.entries({name:'Synthetic Calibration',server:'Example Realm',level:10,aaCount:0}))form.elements[key].value=String(value);for(const box of form.querySelectorAll('input[name="classes"][data-character-class]:checked'))box.click();for(const code of ['WAR','CLR']){const box=form.querySelector(`input[name="classes"][data-character-class][value="${code}"]`);if(!box||box.disabled)throw Error('Missing available Character class checkbox');box.click();}form.requestSubmit();});
         await until(()=>execute(()=>Boolean(document.querySelector('[data-inventory-read]'))),'Character inventory export step');
         assert.equal(await execute(()=>fixture.starts.length),1,'Character metadata does not start screen reading');
         await click('[data-inventory-read]');
