@@ -1,5 +1,7 @@
 # Browsable release history
 
+The 1.0.3 image is a visually reviewed actual production Character review in isolated Electron Chromium. A synthetic inventory export supplies an equipped item and Exaltation; replacing the local synthetic dataset hydrates the saved Focus effect through the production refresh callback. The fixture checks the exact canonical effect link, compact name/effect-only public output, and unchanged parent/socket numeric data, tiers and recorded totals. No player pixels, installed profile or live wiki requests were used. The new version-owned PNG has SHA-256 `4871c6601f5a031bc5459bdb6c4f2e5e9bfd21eef6f636073bfccddf748eb814`; all prior history and images remain unchanged.
+
 The 1.0.1 capture shows the actual production Contribute workspace in isolated
 Electron with synthetic item drafts and a deferred loopback verifier. Its
 version-owned image records stable queue rows during renewal; no player profile,

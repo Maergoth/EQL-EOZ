@@ -15,6 +15,8 @@ assert(parser.includes('final class EqlNpcLootWikitext'), 'The matching source p
 assert(parser.includes('static function contributionCoverage'), 'Producer and parser share affected-field coverage.');
 assert(parser.includes('static function authoredPageKind'), 'Actual entity identity is independent from field capability.');
 assert(parser.includes('static function itemContributionCard'), 'Quiet-card completeness has a shared pure authored-source proof.');
+assert(parser.includes('static function itemEffects'), 'The mirrored parser retains literal typed item effects.');
+assert(source.includes('EqlNpcLootWikitext::itemEffects( $text )')&&source.includes("'details' => $effectDetails"), 'Producer keeps separately authored Focus effects in item metadata.');
 assert(source.includes("'contributionCard' => $contributionCard"), 'Every rich item carries source proof, including incomplete cards.');
 assert(source.includes("'lootSourceCountsVersion' => 2"), 'The producer marks verified real-NPC count metadata.');
 assert(source.includes("'lootSourceCounts' => (object)$lootSourceCounts"), 'The catalog includes statless item counts, preserving an empty JSON object.');
@@ -62,6 +64,14 @@ const fixtures = [
     ['1208, -714', [1208, -714]],
     ['X 1208, Y -714, Z 12.5', [1208, -714, 12.5]],
     ['', null]
+];
+const effectFixtures=[
+    ['{{Itempage|itemname=Synthetic stone|statsblock=HP: 77<br>Effect: [[Synthetic Spark]] (Worn)<br>Class: WAR|focus_effect=[[Synthetic Clarity]]}}', [{label:'Effect',value:'Synthetic Spark (Worn)',linkTitle:'Synthetic Spark'},{label:'Focus effect',value:'Synthetic Clarity',linkTitle:'Synthetic Clarity'}]],
+    ['{{Itempage|statsblock=Focus Effect: Synthetic Clarity (Worn)}}', [{label:'Focus effect',value:'Synthetic Clarity (Worn)',linkTitle:'Synthetic Clarity'}]],
+    ['{{Itempage|focus_effect=None}}', []],
+    ['{{Itempage|focus_effect=[[Synthetic Clarity]]}}{{Itempage|focus_effect=[[Other effect]]}}', []],
+    ['{{Itempage|focus_effect={{Dynamic effect}}}}', []],
+    ['{{Itempage|focus_effect=[https://other.example effect]}}', []]
 ];
 const php = `<?php
 class LocationParserHarness {
@@ -184,12 +194,13 @@ echo json_encode(['locations'=>$out, 'five'=>$five, 'six'=>$six, 'incomplete'=>$
     'candidateMemo'=>$candidateIdentity->memo(),
     'literalCard'=>EqlNpcLootWikitext::itemContributionCard('{{Itempage|itemname=Basic card|statsblock=AC: 2<br>WT: 0.1|relatedquests=* [[Synthetic quest]]|foraged=* [[Synthetic Vale]]|soldby={{ItemWhereTable|{{ItemWhereRow|[[Synthetic Vale]]|[[Merchant]]}}}}}}'),
     'unknownCard'=>EqlNpcLootWikitext::itemContributionCard('{{Itempage|itemname=Basic card|statsblock=AC: 2|custom_modifier=Hidden}}'),
-    'truncatedCard'=>EqlNpcLootWikitext::itemContributionCard('{{Itempage|itemname=Basic card|statsblock='.implode('<br>',array_fill(0,16,'WT: 0.1')).'<br>Effect: Hidden}}')]);
+    'truncatedCard'=>EqlNpcLootWikitext::itemContributionCard('{{Itempage|itemname=Basic card|statsblock='.implode('<br>',array_fill(0,16,'WT: 0.1')).'<br>Effect: Hidden}}'),
+    'effects'=>array_map(static fn($fixture)=>EqlNpcLootWikitext::itemEffects($fixture[0]),json_decode(getenv('EOZ_EFFECT_FIXTURES'),true))]);
 `;
 const result = spawnSync('php', [], {
     input:php,
     encoding:'utf8',
-    env:{ ...process.env, EOZ_EXPORTER_FIXTURES:JSON.stringify(fixtures), EOZ_LOOT_PARSER:parserPath, EOZ_LOOT_COLLECTOR:collectorPath }
+    env:{ ...process.env, EOZ_EXPORTER_FIXTURES:JSON.stringify(fixtures), EOZ_EFFECT_FIXTURES:JSON.stringify(effectFixtures), EOZ_LOOT_PARSER:parserPath, EOZ_LOOT_COLLECTOR:collectorPath }
 });
 if (result.error?.code === 'ENOENT') {
     console.log('Exporter source checks passed (PHP runtime unavailable for fixtures).');
@@ -234,4 +245,5 @@ assert.deepEqual(actual.candidateMemo, {'Guardian 1':{title:'Guardian 1',pageId:
 assert.deepEqual(actual.literalCard, {schemaVersion:1, complete:true, questContext:true}, 'Known acquisition and quest-link context is represented without inventing importance.');
 assert.equal(actual.unknownCard.complete, false, 'Omitted auxiliary modifiers cannot authorize quiet decisions.');
 assert.equal(actual.truncatedCard.complete, false, 'Effects beyond the sixteen-line rich bound cannot hide behind complete proof.');
+assert.deepEqual(actual.effects,effectFixtures.map(([,expected])=>expected),'Literal statsblock and separate focus_effect facts survive while variants, dynamic values and external links remain unproved.');
 console.log('Exporter schema, location and mirrored global loot-count fixtures passed.');

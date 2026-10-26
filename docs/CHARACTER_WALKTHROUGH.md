@@ -76,7 +76,17 @@ change character totals.
 
 ### 4. Review and share
 
-Review imported equipment, known Exaltations and the recorded stat panel. Hover
+Review imported equipment, known Exaltations and the recorded stat panel.
+Exaltations show their name and direct effects, including a separately authored
+Focus effect and literal `(Worn)` text. Their numeric stats, tier and unrelated
+restrictions stay out of the compact Exaltation card and newly shared wiki
+parameters; the private model and validated schema-1 review retain that data.
+When the local wiki dataset changes, saved sockets refresh only positively known
+effect metadata from an exact item or supported exact Exaltation alias. Unknown
+or ambiguous items retain their saved facts. This does not query the live wiki,
+change socket numbers or item tiers, or recalculate recorded character totals.
+
+Hover
 an equipped item to use its tier slider directly below its name; keyboard focus
 keeps the controls usable. Adjusted numeric previews are green. Cards also show
 real catalog restrictions, flags, procs/effects, cast times and required levels,

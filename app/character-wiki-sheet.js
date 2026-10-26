@@ -1,4 +1,4 @@
-import {normalizeCharacterItemDetails} from './character-item-card.js';
+import {normalizeCharacterItemDetails,characterEffectDetails} from './character-item-card.js';
 import { CHARACTER_SLOTS, CHARACTER_STAT_KEYS, characterEquipmentEligibility, characterItemStats, characterExaltationStats, characterTotals, characterStatLabel } from './character-model.js';
 import { characterTotalGroups } from './character-totals.js';
 
@@ -94,7 +94,9 @@ export function serializeCharacterWikiSheet(input,{caption=''}={}){
     for(const [key,record]of Object.entries(sheet.totals))parameters.push([`total_${key.toLowerCase()}`,numericText(record.value,record.complete)]);
     for(const item of sheet.equipment){
         const prefix=item.slot;parameters.push([`${prefix}_item`,literal(item.title)],[`${prefix}_tier`,numericText(item.tier)],[`${prefix}_icon`,item.iconId===null?'':String(item.iconId)],[`${prefix}_stats`,statLines(item.stats,item.complete)],[`${prefix}_details`,detailLines(item.details)],[`${prefix}_augment_slots`,item.augmentSlots===null?'':String(item.augmentSlots)]);
-        for(const augment of item.augments){const key=`${prefix}_augment_${augment.index+1}`;parameters.push([`${key}_item`,literal(augment.title)],[`${key}_tier`,numericText(augment.tier)],[`${key}_icon`,augment.iconId===null?'':String(augment.iconId)],[`${key}_stats`,statLines(augment.stats,augment.complete)],[`${key}_details`,detailLines(augment.details)]);}
+        // Schema-1 rich socket values remain private/validated for compatibility;
+        // public socket cards contain only their identity and direct effects.
+        for(const augment of item.augments){const key=`${prefix}_augment_${augment.index+1}`;parameters.push([`${key}_item`,literal(augment.title)],[`${key}_details`,detailLines(characterEffectDetails(augment.details))]);}
     }
     return `{{Character_sheet\n${parameters.map(([key,value])=>`|${key}=${value}`).join('\n')}\n}}`;
 }

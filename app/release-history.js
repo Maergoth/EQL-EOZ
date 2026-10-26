@@ -2,6 +2,27 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.3",
+  "title": "Character Exaltation effects",
+  "changes": [
+    "Show Exaltations as their name and effects, including Focus effects and Worn labels, without repeating equipment stats or restrictions.",
+    "Refresh saved Exaltation effects from exact matches in the updated local wiki dataset. Keep item tiers, socket values and recorded character totals unchanged.",
+    "Keep newly shared wiki Exaltations compact, with canonical links and effect metadata. Existing private numeric data stays available inside Character."
+  ],
+  "steps": [
+    {
+      "title": "Review your Exaltation effects",
+      "image": "1.0.3/character-exaltation-effects",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Open your Character review and hover or focus an equipped item. Its Exaltations show their names and effects, including Focus effects and Worn labels. Saved effects refresh from known local wiki records; your recorded totals stay unchanged.",
+      "alt": "Actual Character review with a synthetic ear item and its Exaltation showing one linked Focus effect with a Worn label, above the recorded character totals.",
+      "caption": "Actual production Character components in isolated Electron Chromium. A synthetic inventory export is imported, then the local dataset is replaced to verify saved Focus-effect refresh, the canonical effect link, compact public export and unchanged item/socket numbers and recorded totals. Disposable synthetic profile; no player pixels or live wiki request.",
+      "imageSha256": "4871c6601f5a031bc5459bdb6c4f2e5e9bfd21eef6f636073bfccddf748eb814"
+    }
+  ]
+},
+{
   "version": "1.0.2",
   "title": "Personal depot inventory imports",
   "changes": [

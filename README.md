@@ -1,5 +1,7 @@
 # EQLWiki — Eye of Zomm
 
+**1.0.3: Character Exaltation effects.** Character and new wiki shares show each Exaltation's name and effects, including Focus effects and Worn labels. Saved effects refresh from exact local wiki matches while item tiers, socket numbers and recorded character totals stay intact. See [the Character walkthrough](docs/CHARACTER_WALKTHROUGH.md).
+
 **1.0.2: Personal depot inventory imports.** Import `/outputfile inventory` exports containing `Personal-Depot` storage. Depot items keep their counts and saved locations alongside carried and banked inventory. See [the inventory walkthrough](docs/CHARACTER_WALKTHROUGH.md).
 
 **1.0.1: Stable discoveries, combat and maps.** Canonical chat item matching, stable Discovery rows and edits, blueprint-style item pages, corrected healing and DoT attribution, restored Nektropos 3D maps, and bag imports that keep loose Exaltations separate from item sockets. See [queue stability](docs/DISCOVERY_QUEUE_STABILITY.md), [item formatting](docs/ITEM_CONTRIBUTION_FORM.md) and [combat attribution](docs/COMBATANT_OVERVIEW.md).

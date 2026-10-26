@@ -1,4 +1,4 @@
-import {normalizeCharacterItemDetails,safeCharacterDetailTitle} from './character-item-card.js';
+import {normalizeCharacterItemDetails,safeCharacterDetailTitle,characterEffectDetails} from './character-item-card.js';
 import {safeCharacterIcon,characterStatLabel} from './character-model.js';
 
 // Presentation only. Values are supplied by the existing item-tier model;
@@ -48,7 +48,10 @@ export function characterItemboxBodyMarkup({stats={},baseStats={},details=[],ico
 /** Socket children are identities/effects only, never nested full Itemboxes. */
 export function characterItemboxExaltationMarkup({title='',details=[]}={}){
     const canonical=safeCharacterDetailTitle(title);if(!canonical)return '';
-    const effects=normalizeCharacterItemDetails(details).filter(detail=>/^(?:Effect|Combat effect|Proc effect|Click effect|Worn effect|Focus effect|Focus Exaltation|Proc Exaltation|Rune Exaltation)$/.test(detail.label));
-    const values=effects.map(detail=>{const linked=detail.linkTitle?`<a href="https://eqlwiki.com/${encodeURIComponent(detail.linkTitle)}" target="_blank" rel="noopener">${e(detail.value)}</a>`:e(detail.value);return `<div class="wiki-itembox-exaltation-effect">Effect: ${linked}</div>`;}).join('');
+    const values=characterEffectDetails(details).map(detail=>{
+        const link=text=>`<a href="https://eqlwiki.com/${encodeURIComponent(detail.linkTitle)}" target="_blank" rel="noopener">${e(text)}</a>`;
+        const linked=detail.linkTitle?detail.value.startsWith(detail.linkTitle)?link(detail.linkTitle)+e(detail.value.slice(detail.linkTitle.length)):link(detail.value):e(detail.value);
+        return `<div class="wiki-itembox-exaltation-effect">${e(detail.label)}: ${linked}</div>`;
+    }).join('');
     return `<div data-character-exaltation><span class="character-exaltation-label">Exaltation</span> <a href="https://eqlwiki.com/${encodeURIComponent(canonical)}" target="_blank" rel="noopener">${e(canonical)}</a>${values}</div>`;
 }

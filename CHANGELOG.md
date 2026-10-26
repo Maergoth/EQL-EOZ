@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 - Character Exaltation effects
+
+- Show Exaltations as their name and effects, including Focus effects and Worn labels, without repeating equipment stats or restrictions.
+- Refresh saved Exaltation effects from exact matches in the updated local wiki dataset. Keep item tiers, socket values and recorded character totals unchanged.
+- Keep newly shared wiki Exaltations compact, with canonical links and effect metadata. Existing private numeric data stays available inside Character.
+
 ## 1.0.2 - Personal depot inventory imports
 
 - Accept `Personal-DepotN` storage locations in `/outputfile inventory` exports instead of stopping the entire import at the first depot entry.
