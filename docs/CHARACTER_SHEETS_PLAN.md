@@ -51,7 +51,10 @@ wiki sharing should publish structured equipment, rather than append screenshots
 Use `{{Character_sheet|schema=1|name=...|server=...|...}}` with hand-editable flat
 parameters. `total_<lowercase stat key>` contains one equipped value; each of the
 24 named equipment IDs accepts `_item`, `_tier`, `_icon`, `_stats`,
-`_augment_slots`, and `_augment_1..8_item/tier/icon/stats`. Only existing numeric
+`_augment_slots`, and `_augment_1..8_item/details`. Exaltation parameters contain
+only identity and direct effect metadata (including Focus effects); their tier,
+icon, numeric stats and unrelated item details remain in the compatible private
+schema-1 DTO and model. Parent equipment parameters are unchanged. Only existing numeric
 wiki icon IDs are emitted. Host code validates and serializes;
 renderer-supplied raw wikitext is not an edit authority. Exclude OCR text, paths,
 capture sessions and loose inventory. Use existing wiki item icon IDs/artwork;

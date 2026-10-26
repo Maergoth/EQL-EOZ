@@ -24,8 +24,12 @@ export function normalizeCharacterItemDetails(input,{strict=false}={}){
 }
 const EFFECT=/^(Effect|Combat Effect|Proc Effect|Click Effect|Worn Effect|Focus Effect|Focus Exaltation|Proc Exaltation|Rune Exaltation)\s*:\s*(.+)$/i;
 const labels={'effect':'Effect','combat effect':'Combat effect','proc effect':'Proc effect','click effect':'Click effect','worn effect':'Worn effect','focus effect':'Focus effect','focus exaltation':'Focus Exaltation','proc exaltation':'Proc Exaltation','rune exaltation':'Rune Exaltation'};
+const EFFECT_LABELS=new Set(['Effect','Combat effect','Proc effect','Click effect','Worn effect','Focus effect']);
+export function characterEffectDetails(input){return normalizeCharacterItemDetails(input).filter(detail=>EFFECT_LABELS.has(detail.label));}
 export function characterCatalogDetails(item={}){
-    const details=normalizeCharacterItemDetails(item.details||item.cardDetails),add=(label,value,linkTitle)=>{if(value)details.push({label,value:clean(value,400),...(linkTitle?{linkTitle}:{})});};
+    // Typed exporter facts retain their canonical targets. Display-text and
+    // legacy focus fallbacks may repeat that fact with a guessed link target.
+    const details=normalizeCharacterItemDetails(item.details||item.cardDetails),typed=new Set(details.map(detail=>JSON.stringify([detail.label,detail.value]))),add=(label,value,linkTitle)=>{const text=clean(value,400);if(text&&!typed.has(JSON.stringify([label,text])))details.push({label,value:text,...(linkTitle?{linkTitle}:{})});};
     for(const raw of (Array.isArray(item.displayLines)?item.displayLines:[]).slice(0,32)){
         const line=clean(raw,400);if(!line)continue;
         const effect=line.match(EFFECT);

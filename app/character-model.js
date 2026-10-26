@@ -1,4 +1,4 @@
-import {characterCatalogDetails,normalizeCharacterItemDetails} from './character-item-card.js';
+import {characterCatalogDetails,normalizeCharacterItemDetails,characterEffectDetails} from './character-item-card.js';
 import { catalogBaseStats, scaledItemStats } from './item-scaling.js';
 import { parseItemAugmentSlots } from './screen-read-parser.js';
 
@@ -468,12 +468,22 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
      * recover their old slot; fuzzy/ambiguous/missing cards remain loose. */
     function reconcileCatalog(resolve) {
         if(typeof resolve!=='function')return {ok:false,error:'A local catalog resolver is required.'};
-        let resolutions;try{resolutions=state.candidates.map(candidate=>resolve(clone(candidate)));}catch{return {ok:false,error:'The local catalog could not be read.'};}
+        let resolutions;try{resolutions=state.candidates.map(candidate=>({parent:resolve(clone(candidate)),augments:candidate.augments.map(augment=>resolve(clone(augment),{socket:true}))}));}catch{return {ok:false,error:'The local catalog could not be read.'};}
+        const refreshEffects=(augment,resolution)=>{
+            if(resolution?.status!=='exact'||!resolution.item)return augment;
+            const item=resolution.item,exact=value=>String(value||'').normalize('NFKC').replace(/_/g,' ').replace(/\s+/gu,' ').trim().toLowerCase();
+            const identities=[augment.name,augment.wikiTitle,augment.catalogIdentity?.wikiTitle].filter(Boolean).map(exact);
+            if(resolution.exaltationAlias===true&&/\(Exaltation\)$/i.test(augment.name))identities.push(exact(augment.name.replace(/\s*\(Exaltation\)$/i,'')));
+            if(![item.name,item.wikiTitle].some(name=>name&&identities.includes(exact(name))))return augment;
+            const effects=characterEffectDetails(characterCatalogDetails(item));if(!effects.length)return augment;
+            const replaced=new Set(effects.map(detail=>detail.label));
+            return {...augment,details:normalizeCharacterItemDetails([...effects,...augment.details.filter(detail=>!replaced.has(detail.label))])};
+        };
         const exact=new Set();
         state.candidates=state.candidates.map((candidate,index)=>{
-            const resolution=resolutions[index],patch=resolution?.status==='exact'&&resolution.item?catalogPatch(resolution.item,{match:candidate.catalogIdentity?.match||'exact',icon:resolution.icon}):null;
-            if(!patch){const next=normalizeCandidate({...candidate,catalogIdentity:null,wikiMatch:'unmatched'});if(!characterEquipmentEligibility(next).canEquip)detach(candidate.id);return next;}
-            exact.add(candidate.id);return normalizeCandidate({...candidate,...patch,...(Object.keys(candidate.baseStats).length?{baseStats:catalogBaseStats(resolution.item,candidate.baseStats),baseStatsComplete:candidate.baseStatsComplete,unscaledStatKeys:candidate.unscaledStatKeys}:{}),slots:candidate.slots.length?candidate.slots:resolution.item.slots});
+            const resolution=resolutions[index].parent,augments=candidate.augments.map((augment,position)=>refreshEffects(augment,resolutions[index].augments[position])),patch=resolution?.status==='exact'&&resolution.item?catalogPatch(resolution.item,{match:candidate.catalogIdentity?.match||'exact',icon:resolution.icon}):null;
+            if(!patch){const next=normalizeCandidate({...candidate,augments,catalogIdentity:null,wikiMatch:'unmatched'});if(!characterEquipmentEligibility(next).canEquip)detach(candidate.id);return next;}
+            exact.add(candidate.id);return normalizeCandidate({...candidate,augments,...patch,...(Object.keys(candidate.baseStats).length?{baseStats:catalogBaseStats(resolution.item,candidate.baseStats),baseStatsComplete:candidate.baseStatsComplete,unscaledStatKeys:candidate.unscaledStatKeys}:{}),slots:candidate.slots.length?candidate.slots:resolution.item.slots});
         });
         for(const [slot,id]of Object.entries(state.pendingEquipment))if(exact.has(id)&&characterSlotCompatibility(get(id),slot).compatible&&!state.equipment[slot]&&!Object.values(state.equipment).includes(id))state.equipment[slot]=id;
         state.pendingEquipment={};return {ok:true,saved:save()};
