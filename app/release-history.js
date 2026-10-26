@@ -2,6 +2,27 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.8",
+  "title": "Character screenshots",
+  "changes": [
+    "Add an optional picture when sharing your Character sheet. Select or paste an image, review the entire picture and publish it with your sheet.",
+    "Existing wiki sheets gain an Add an image upload link beside the stats and equipment. Pictures added later to the suggested filename appear automatically.",
+    "Keep your local selection private until Share. Skipping the picture keeps your current wiki image, and interrupted sharing checks the saved result before retrying."
+  ],
+  "steps": [
+    {
+      "title": "Add a picture to your wiki sheet",
+      "image": "1.0.8/character-screenshot",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Preview your Character snapshot, then choose Select image or Paste image in the optional screenshot section. Review the full picture and public filename before clicking Share on my User page. You can skip it and use Add an image on the wiki later. Screen Reading can stay off.",
+      "alt": "Actual Character Share review showing the optional screenshot controls, a generated synthetic portrait, its reviewed public filename and the reminder that only Share publishes the image.",
+      "caption": "Production Character components and native image bridge in isolated sandboxed Electron Chromium, using a generated portrait, synthetic profile and loopback wiki with a fixture file chooser. The native check verifies BMP and JPEG normalization, Screen Reading off with zero OCR calls, Copy and Save followed by sharing, explicit image upload and native-host reopen without duplicate writes. No player pixels, installed profile or public wiki write.",
+      "imageSha256": "1a19b00bc056092fc2b834bd3fef0e585f980353b881a7537bea9c8537514f81"
+    }
+  ]
+},
+{
   "version": "1.0.7",
   "title": "Easier Character setup",
   "changes": [

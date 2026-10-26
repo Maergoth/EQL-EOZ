@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.8 - Character screenshots
+
+- Select or paste an optional Character screenshot in the Share review. Review the picture and destination before publishing; skipping it keeps your existing wiki image or placeholder.
+- Display a picture beside the stats and equipment on your wiki sheet. Existing sheets gain an Add an image upload link, and pictures uploaded later to the suggested filename appear automatically.
+- Keep the local selection separate from inventory and screen reading. Uploads use new files, preserve existing images and reconcile interrupted sharing before retrying.
+
 ## 1.0.7 - Easier Character setup
 
 - Automatically read the Default inventory Stats tab alongside Default Modern, with layout-specific guidance and the same equipped, unbuffed stat-review flow.

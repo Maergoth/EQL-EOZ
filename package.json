@@ -1,7 +1,7 @@
 {
   "name": "eqlwiki-eye-of-zomm",
   "productName": "EQLWiki - Eye of Zomm",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "desktopName": "com.eqlwiki.eyeofzomm.desktop",
   "homepage": "https://github.com/Maergoth/EQL-EOZ",
   "description": "Local-first EQLWiki desktop app for EverQuest Legends logs, maps, NPCs, items, and wiki intelligence.",
@@ -54,6 +54,7 @@
     "test:intel-stability": "node scripts/test-intel-stability.mjs",
     "test:overlay-resize": "node scripts/test-overlay-resize.mjs",
     "test:character-walkthrough": "node scripts/test-character-walkthrough.mjs",
+    "test:character-screenshot": "node scripts/test-character-screenshot.mjs",
     "test:capture-priority": "node scripts/test-capture-priority.mjs",
     "test:character-storage": "node scripts/test-character-storage.mjs",
     "test:workspace-098": "node scripts/test-098-workspace.mjs",

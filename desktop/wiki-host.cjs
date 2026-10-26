@@ -2,6 +2,7 @@
 const path=require('node:path');
 const {WikiClient,WikiError,PRODUCTION_ORIGIN,validatePNG}=require('./wiki-client.cjs');
 const {readBoundedFile}=require('./wiki-attachments.cjs');
+const {decodeCharacterScreenshot,MAX_SOURCE_BYTES}=require('./character-screenshot-image.cjs');
 const {ContributionGapVerifier}=require('./contribution-gap-verifier.cjs');
 const {LiveWikiCache}=require('./live-wiki-cache.cjs');
 const CHANNEL='eye-of-zomm:wiki';
@@ -51,6 +52,10 @@ class WikiHost {
             case 'get-plan':return await this.client.getPlan(String(value?.planId||''));
             case 'submit-plan':return await this.client.submitPlan(value);
             case 'character-sheet-capability':return await this.client.characterSheetCapability();
+            case 'character-screenshot':return await this.characterScreenshot(value);
+            case 'prepare-character-screenshot':return await this.prepareCharacterScreenshot(value);
+            case 'remove-character-screenshot':return await this.removeCharacterScreenshot(value);
+            case 'review-character-screenshot':return await this.client.reviewCharacterScreenshot(value);
             case 'share-character':return await this.client.shareCharacter(value);
             case 'upload-character':{
                 if(!value||typeof value!=='object')throw new WikiError('png','Invalid character snapshot.');
@@ -61,8 +66,18 @@ class WikiHost {
             }
             default:throw new WikiError('action','Unknown wiki action.');
             }
-        }catch(error){if(['prepare-attachment','discard-attachment'].includes(action)&&typeof error.code==='string'&&/^E[A-Z]+$/.test(error.code))throw new Error('[attachment] The screenshot could not be read or saved. Select it again.');throw new Error(`${error.code?`[${error.code}] `:''}${String(error.message||'The wiki action failed.').slice(0,600)}`);}
+        }catch(error){if(['prepare-attachment','discard-attachment','character-screenshot','prepare-character-screenshot','remove-character-screenshot'].includes(action)&&typeof error.code==='string'&&/^E[A-Z]+$/.test(error.code))throw new Error('[attachment] The screenshot could not be read or saved. Select it again.');throw new Error(`${error.code?`[${error.code}] `:''}${String(error.message||'The wiki action failed.').slice(0,600)}`);}
     }
+    async characterScreenshotKey(metadata){const {characterWikiIdentity}=await import('../app/character-wiki-sheet.js');return require('node:crypto').createHash('sha256').update(characterWikiIdentity(metadata)).digest('hex');}
+    screenshotDescriptor(value,{full=false}={}){if(!value)return {selection:null};const image=this.electron.nativeImage.createFromBuffer(value.bytes),size=image.getSize(),ratio=Math.min(1,480/size.width,320/size.height);if(image.isEmpty())throw Error('The private screenshot could not be decoded. Select it again.');return {selection:{...value.record,thumbnail:image.resize({width:Math.max(1,Math.round(size.width*ratio)),height:Math.max(1,Math.round(size.height*ratio)),quality:'good'}).toDataURL(),...(full?{preview:image.toDataURL()}:{})}};}
+    async characterScreenshot({metadata,full=false}={}){return this.screenshotDescriptor(await this.client.characterScreenshots.get(await this.characterScreenshotKey(metadata)),{full:full===true});}
+    async prepareCharacterScreenshot({metadata,source}={}){
+        if(!['file','clipboard'].includes(source))throw Error('Select or paste a character screenshot.');if(this.client.busy)throw Error('Wait for the current wiki submission before replacing the screenshot.');const key=await this.characterScreenshotKey(metadata);let bytes;
+        if(source==='clipboard'){const image=this.electron.clipboard.readImage();if(image.isEmpty())throw Error('The clipboard does not contain an image.');const size=image.getSize();if(size.width>8192||size.height>8192||size.width*size.height>15000000)throw Error('Choose a screenshot under 15 megapixels.');bytes=image.toPNG();}
+        else{const selected=await this.electron.dialog.showOpenDialog(this.getMainWindow(),{title:'Select optional character screenshot',properties:['openFile'],filters:[{name:'Character image',extensions:['png','jpg','jpeg','bmp']}]});if(selected.canceled||!selected.filePaths?.[0])return {cancelled:true};try{bytes=await readBoundedFile(selected.filePaths[0],MAX_SOURCE_BYTES);}catch{throw Error('The image could not be read. Choose a PNG, JPEG or BMP smaller than 48 MiB.');}}
+        if(this.disposed)throw Error('The app closed before the image was selected.');const decoded=decodeCharacterScreenshot(bytes,this.electron.nativeImage),record=await this.client.characterScreenshots.prepare(key,decoded.png,decoded);return this.screenshotDescriptor({record,bytes:decoded.png});
+    }
+    async removeCharacterScreenshot({metadata,attachmentId}={}){if(this.client.busy)throw Error('Wait for the current wiki submission before removing the selection.');return this.client.characterScreenshots.remove(await this.characterScreenshotKey(metadata),attachmentId);}
     async liveEntries(){return this.liveCache.snapshot(await this.onBaseCatalog()||{});}
     scheduleLiveEntriesChanged(){
         if(this.disposed||this.liveEntriesTimer)return;

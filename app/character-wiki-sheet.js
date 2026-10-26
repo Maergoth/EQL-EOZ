@@ -2,9 +2,10 @@ import {normalizeCharacterItemDetails,characterEffectDetails} from './character-
 import { CHARACTER_SLOTS, CHARACTER_STAT_KEYS, characterEquipmentEligibility, characterItemStats, characterExaltationStats, characterTotals, characterStatLabel } from './character-model.js';
 import { characterTotalGroups } from './character-totals.js';
 import { normalizeAchievementExport } from './achievement-export.js';
+import { normalizeCharacterScreenshotFile } from './character-screenshot.js';
 
 export const CHARACTER_WIKI_SHEET_SCHEMA=1;
-export const CHARACTER_WIKI_SHEET_CAPABILITY=Object.freeze({template:'Template:Character_sheet',templateMarker:'EQL_CHARACTER_SHEET_V1',itemTemplate:'Template:Character_sheet_item',itemMarker:'EQL_CHARACTER_SHEET_ITEM_V1',achievementMarker:'EQL_CHARACTER_ACHIEVEMENTS_V1',module:'skins.EQLImmersive.characterSheet'});
+export const CHARACTER_WIKI_SHEET_CAPABILITY=Object.freeze({template:'Template:Character_sheet',templateMarker:'EQL_CHARACTER_SHEET_V1',itemTemplate:'Template:Character_sheet_item',itemMarker:'EQL_CHARACTER_SHEET_ITEM_V1',achievementMarker:'EQL_CHARACTER_ACHIEVEMENTS_V1',screenshotMarker:'EQL_CHARACTER_SCREENSHOT_V1',module:'skins.EQLImmersive.characterSheet'});
 export const CHARACTER_WIKI_SHEET_LIMITS=Object.freeze({bytes:512*1024,templateBytes:1024*1024,pageBytes:2*1024*1024,items:24,stats:48});
 export const CHARACTER_WIKI_SHEET_SLOTS=Object.freeze(CHARACTER_SLOTS.filter(slot=>slot.id!=='power').map(slot=>slot.id));
 const SLOTS=new Set(CHARACTER_WIKI_SHEET_SLOTS);
@@ -55,6 +56,7 @@ export function normalizeCharacterWikiSheet(input){
         bySlot.set(item.slot,{slot:item.slot,title,tier,iconId:number(item.iconId,{integer:true,min:0,max:1000000}),level:number(item.level,{integer:true,min:0,max:125}),basis:item.basis,complete:item.complete,stats:stats(item.stats,ITEM_STATS),details:normalizeCharacterItemDetails(item.details,{strict:true}),augmentSlots,augments});
     }
     const result={schemaVersion:CHARACTER_WIKI_SHEET_SCHEMA,metadata,totals,equipment:CHARACTER_WIKI_SHEET_SLOTS.filter(slot=>bySlot.has(slot)).map(slot=>bySlot.get(slot))};
+    if(input.screenshotFile!==undefined)result.screenshotFile=normalizeCharacterScreenshotFile(input.screenshotFile);
     if(input.achievements!==undefined&&input.achievements!==null){const achievements=normalizeAchievementExport(input.achievements);if(!achievements)throw Error('Review the character achievement export.');result.achievements=achievements;}
     if(size(result)>CHARACTER_WIKI_SHEET_LIMITS.bytes)throw Error('The interactive character sheet exceeds its size limit.');return result;
 }
@@ -104,6 +106,7 @@ export function normalizeCharacterWikiCaption(value=''){
 export function serializeCharacterWikiSheet(input,{caption=''}={}){
     const sheet=normalizeCharacterWikiSheet(input),meta=sheet.metadata,parameters=[['name',literal(meta.name)],['server',literal(meta.server)],['level',numericText(meta.level)],['race',literal(meta.race)],['classes',literal(meta.classes.join(' / '))],['aa',numericText(meta.aaCount)]];
     const note=normalizeCharacterWikiCaption(caption);if(note)parameters.push(['caption',note.split('\n').map(literal).join('<br>')]);
+    if(sheet.screenshotFile)parameters.push(['screenshot',literal(sheet.screenshotFile.slice(5))]);
     for(const [key,record]of Object.entries(sheet.totals))parameters.push([`total_${key.toLowerCase()}`,numericText(record.value,record.complete)]);
     for(const item of sheet.equipment){
         const prefix=item.slot;parameters.push([`${prefix}_item`,literal(item.title)],[`${prefix}_tier`,numericText(item.tier)],[`${prefix}_icon`,item.iconId===null?'':String(item.iconId)],[`${prefix}_stats`,statLines(item.stats,item.complete)],[`${prefix}_details`,detailLines(item.details)],[`${prefix}_augment_slots`,item.augmentSlots===null?'':String(item.augmentSlots)]);
@@ -140,6 +143,18 @@ export function patchCharacterWikiSheet(source,key,template,{metadata=null}={}){
             if(hidden.some(([a,b])=>match.index>=a&&match.index<b))continue;
             const braces=/\{\{|\}\}/g;braces.lastIndex=match.index;let depth=0,end=null;for(let token;(token=braces.exec(source));){if(hidden.some(([a,b])=>token.index>=a&&token.index<b))continue;depth+=token[0]==='{{'?1:-1;if(depth===0){end=braces.lastIndex;break;}}
             const found=end===null?null:identityOf(source.slice(match.index,end));if(found===null||found===expected)throw Error('An unmarked matching or ambiguous character sheet needs manual wiki review before sharing.');
+        }
+    }
+    // A new image explicitly replaces this parameter. Equipment-only shares
+    // retain a manually selected image from this exact managed block.
+    if(target&&!/\n\|screenshot\s*=/.test(template)){
+        const body=source.slice(target.contentStart,target.contentEnd),fields=[],literalRanges=[...protectedRanges,...comments.map(match=>[match.index,match.index+match[0].length])];let depth=0,links=0,start=0;
+        for(let at=0;at<body.length;at++){const hidden=literalRanges.find(([begin,end])=>at+target.contentStart>=begin&&at+target.contentStart<end);if(hidden){at=hidden[1]-target.contentStart-1;continue;}const pair=body.slice(at,at+2);if(pair==='{{'){depth++;at++;}else if(pair==='}}'){depth--;at++;}else if(pair==='[['){links++;at++;}else if(pair===']]'){links--;at++;}else if(body[at]==='|'&&depth===1&&links===0){fields.push(body.slice(start,at));start=at+1;}}
+        fields.push(body.slice(start,body.lastIndexOf('}}')));const screenshots=fields.map(field=>field.match(/^\s*screenshot\s*=([\s\S]*)$/i)).filter(Boolean);
+        if(screenshots.length>1)throw Error('Duplicate character image parameters need manual wiki review.');
+        if(screenshots.length&&screenshots[0][1].trim()){
+            const decoded=screenshots[0][1].trim().replace(/&(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);/gi,entity=>{const named={'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&apos;':"'"};if(named[entity.toLowerCase()])return named[entity.toLowerCase()];const hex=/^&#x/i.test(entity),code=Number.parseInt(entity.slice(hex?3:2,-1),hex?16:10);return code<=0x10ffff?String.fromCodePoint(code):entity;});
+            const filename=normalizeCharacterScreenshotFile(decoded).slice(5);template=template.replace(/\n\}\}$/,'\n|screenshot='+literal(filename)+'\n}}');
         }
     }
     const block=`<!-- EQL-EOZ-CHARACTER-SHEET:${key}:BEGIN -->\n${template}\n<!-- EQL-EOZ-CHARACTER-SHEET:${key}:END -->`,beforeBlock=target?source.slice(target.start,target.end):null;

@@ -1,5 +1,7 @@
 # EQLWiki — Eye of Zomm
 
+**1.0.8: Character screenshots.** Add an optional picture when sharing your Character sheet. Select or paste an image, review the full picture and publish it with your sheet. Existing wiki sheets gain an **Add an image** placeholder so a picture can also be uploaded later. See [Character screenshots](docs/CHARACTER_SCREENSHOTS.md).
+
 **1.0.7: Easier Character setup.** Choose two or three classes with checkboxes. Read your equipped, unbuffed stats from the Default inventory's **Stats** tab or the Default Modern stat panel; the visible layout is recognized automatically. Review unread numbers before saving. See [the Character walkthrough](docs/CHARACTER_WALKTHROUGH.md).
 
 **1.0.6: Expandable private inventories.** Full desktop inventories live in a private database and load in searchable pages. Stream inventory and achievement exports together, preserve physical copies and manual work, and migrate existing characters with a verified backup. Item previews also scale a listed positive base Void resist like other resists. Sharing still includes equipped gear and reviewed character stats. See [Character storage](docs/CHARACTER_STORAGE.md) and [shared item formulas](docs/SHARED_ITEM_SCALING.md).
