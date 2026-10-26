@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.5 - Cleaner chat discoveries
+
+- Keep trade captions containing one or several known items out of automatic new-item suggestions. Whole catalog titles and aliases retain their exact identity; genuine new encoded item links remain supported.
+- Reversibly archive untouched old chat captions when exact sequential catalog names cover at least half their words and a separate trade cue identifies the surrounding prose, including unranked captions.
+- Preserve edited, reviewed, screenshot-backed, loot and source-bearing drafts. A full archive keeps the raw record quiet without discarding its evidence.
+
 ## 1.0.4 - Character achievement exports
 
 - Run `/outputfile inventory` and `/outputfile achievements`, then import both current-character files with one button. Missing files open a native chooser; malformed or canceled imports preserve the saved character.

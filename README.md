@@ -1,5 +1,7 @@
 # EQLWiki — Eye of Zomm
 
+**1.0.5: Cleaner chat discoveries.** Trade captions combining known items no longer remain as false new-item tasks. Untouched old captions are archived reversibly; actual item links, screenshots and your edited work keep their evidence. See [chat item boundaries](docs/CHAT_ITEM_BOUNDARIES.md).
+
 **1.0.4: Character achievement exports.** Run `/outputfile inventory` and
 `/outputfile achievements`, then click one **Import files** button. Save both
 exports per character and share achievement progress in a collapsible section

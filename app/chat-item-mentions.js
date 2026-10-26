@@ -34,6 +34,21 @@ function catalogIndex(pack) {
 const chatPayload=text=>String(text||'').slice(0,16384).match(/^(?:You|[\p{L}][\p{L}'’-]{0,63}) (?:tells? (?:you|the (?:guild|group|raid)|[\p{L}][\p{L}\d_-]{0,40}:\d{1,3})|says?(?: out of character)?|shouts?|auctions?),[ \t]*'([^\r\n]{1,2048})'$/u)?.[1];
 
 const wordCharacter=character=>character!==undefined&&/[\p{L}\p{N}\p{M}]/u.test(character);
+function catalogSpans(value,catalog,{suffixOnly=false}={}) {
+    const characters=[...value],matches=[];let offset=0;
+    for(let start=0;start<characters.length;start++){
+        const position=offset;offset+=characters[start].length;
+        if(wordCharacter(characters[start-1]))continue;
+        for(const entry of catalog.initials.get(characters[start])||[]){
+            const end=position+entry.key.length,next=end<value.length?String.fromCodePoint(value.codePointAt(end)):undefined;
+            if(value.startsWith(entry.key,position)&&!wordCharacter(next)&&(!suffixOnly||end===value.length)){
+                matches.push({start:position,end,entry});break;
+            }
+        }
+    }
+    let furthestEnd=-1;
+    return matches.filter(match=>{if(match.end<=furthestEnd)return false;furthestEnd=match.end;return true;});
+}
 // Catalog identities can bound a flattened label; English prefix lists cannot.
 // This is deliberately not used to reinterpret authentic encoded item labels.
 // Exact full titles win. Otherwise discard contained shorter names, and keep
@@ -49,20 +64,36 @@ export function canonicalChatItemMatch(text,pack=EMPTY,{suffixOnly=false}={}) {
         return titles.size===1?{state:'matched',name:[...titles.values()][0],exact:isExact}: {state:'ambiguous'};
     };
     if(exact)return resolved([exact],true);
-    const characters=[...value],matches=[];let offset=0;
-    for(let start=0;start<characters.length;start++){
-        const position=offset;offset+=characters[start].length;
-        if(wordCharacter(characters[start-1]))continue;
-        for(const entry of catalog.initials.get(characters[start])||[]){
-            const end=position+entry.key.length,next=end<value.length?String.fromCodePoint(value.codePointAt(end)):undefined;
-            if(value.startsWith(entry.key,position)&&!wordCharacter(next)&&(!suffixOnly||end===value.length)){
-                matches.push({start:position,end,entry});break;
-            }
-        }
-    }
-    let furthestEnd=-1;
-    const longest=matches.filter(match=>{if(match.end<=furthestEnd)return false;furthestEnd=match.end;return true;});
+    const longest=catalogSpans(value,catalog,{suffixOnly});
     return longest.length?resolved(longest.map(match=>match.entry),false):{state:'none'};
+}
+
+// Reversible legacy cleanup only, never an unknown-item identity parser. Sales
+// words alone prove nothing. Require the whole saved caption in ordinary chat,
+// an outside-title trade cue, and >= half its words in disjoint exact item spans.
+// A genuine whole catalog title/alias always wins, even if it starts with Free.
+export function coveredTradeChatCaption(caption,text,pack=EMPTY) {
+    const raw=String(text||'');
+    if(/[\x12]|\\a(?:ITEM|PC)\b|[a-f0-9]{56}/i.test(raw))return null;
+    const payload=chatPayload(raw.replace(/^\[[^\]\r\n]{1,80}\]\s*/,''));
+    if(!payload||!safeName(caption))return null;
+    const value=normalizeWikiIdentity(caption),body=normalizeWikiIdentity(payload),catalog=catalogIndex(pack);
+    if(catalog.byName.has(value))return null;
+    let at=body.indexOf(value),present=false;
+    while(at>=0){
+        const before=[...body.slice(0,at)].at(-1),after=[...body.slice(at+value.length)][0];
+        if(!wordCharacter(before)&&!wordCharacter(after)){present=true;break;}
+        at=body.indexOf(value,at+1);
+    }
+    if(!present)return null;
+    const cue=value.match(/^(?:wts|wtt|wtb|selling|sell|trading|trade|buying|free|giving(?: away)?)(?=$|[^\p{L}\p{N}\p{M}])/u);
+    if(!cue)return null;
+    const spans=catalogSpans(value,catalog);
+    if(!spans.length||spans.some((span,index)=>span.entry.titles.size!==1||span.start<cue[0].length||index>0&&span.start<spans[index-1].end))return null;
+    const words=[...value.matchAll(/[\p{L}\p{N}\p{M}]+(?:'?[\p{L}\p{N}\p{M}]+)*/gu)];
+    const coveredWords=words.filter(word=>spans.some(span=>word.index>=span.start&&word.index+word[0].length<=span.end)).length;
+    if(!words.length||coveredWords*2<words.length)return null;
+    return {names:[...new Map(spans.map(span=>[...span.entry.titles][0])).values()],coveredWords,totalWords:words.length};
 }
 
 export function rankedChatItemMentions(text, pack=EMPTY) {

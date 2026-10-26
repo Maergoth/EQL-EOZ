@@ -81,3 +81,42 @@ catalog-backed flattened identities survive. It does not claim that
 the screenshot's source used brackets, escaped links or a particular binary
 encoding; that requires the original bytes. Stored `plain-tiered-chat` evidence
 identifies a parser interpretation, not authenticated game-link provenance.
+
+## Untouched historical trade captions (1.0.5)
+
+Flattened input already requires a known catalog identity and cannot create a
+new title from `Free`, `WTS` or other prose. Historical cleanup formerly handled
+only one unambiguous known item and a ranked source line; it retained combined
+captions and unranked sales text. Screenshots of the false names do not establish
+the original link encoding or whether the records came from an older release.
+
+`coveredTradeChatCaption(caption, logLine, pack)` now supplies a separate,
+positive-only cleanup decision. It requires the complete saved caption at whole
+word boundaries in a supported ordinary chat wrapper, a leading trade cue
+(`Free`, `Selling`, `Trading`, `WTS`, `WTT`, `WTB`, `Buying`, `Sell`, `Trade` or
+`Giving away`) outside any known item title, and exact sequential catalog title
+or alias spans covering at least half the caption's Unicode words. The count
+uses non-overlapping spans; repeated/contained names cannot double-count words.
+Partial overlaps, ambiguous aliases, reordered/shared words, low coverage and
+unknown-only text provide no cleanup proof. An exact whole catalog title always
+wins, even a genuine title starting with `Free` or `Trading`.
+
+The decision suppresses a caption rather than renaming it into one of its known
+items. It applies only to untouched chat-only queue entries with name/tier
+fields. Native/escaped link controls and retained legacy hex bodies preserve
+their exact or uncertain provenance. Loot, sources, screenshot/OCR evidence,
+manual entries, confirmed/edited fields and reviewed/submitted work stay intact.
+Each retained chat evidence line must independently support cleanup.
+
+Old captions move reversibly into the bounded private archive with their names
+and evidence unchanged. If the archive is full, the original record remains
+saved with no false gap claim; the existing visible-row and editor-lease guards
+retire its task. A failed storage write rolls the transaction back without
+discarding evidence. No installer/profile migration, live wiki calls or ordinary
+bag-of-words suppression is added.
+
+The parser/queue suites include both reported captions and `Trading Wurmslayer`,
+the exact 50% boundary, aliases and protected-work negatives. The mounted and
+native queue-stability scenario covers retirement of previously visible rows
+after catalog refresh with a full archive. The native chat-boundaries fixture
+confirms zero false lookups while authentic unknown links still reach the popup.

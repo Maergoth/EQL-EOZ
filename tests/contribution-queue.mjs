@@ -113,3 +113,35 @@ hints=createContributionQueue({storage:hintStorage,getPack:()=>hintPack});assert
     assert.notEqual(genuine.reconcile().rows[0].classification,'chat-caption-covered','A full exact catalog title takes priority over its shorter suffix');
     console.log('Legacy chat cleanup: exact procedural matches, reversible untouched-only archive, protected/encoded/ambiguous evidence, save rollback, archive bounds and restart idempotence passed.');
 }
+
+{
+    const key='eql-eye-of-zomm-contributions-v1',names=['Crimson Robe of Alendine','Efreeti War Axe','Wurmslayer','Brown Chitin Protector'];
+    const catalog={meta:{wikiEntitiesComplete:true,sample:false},items:names.map(name=>({name})),wikiEntities:{items:names,npcs:[],titles:names}};
+    const legacy=(id,name,patch={})=>({id,kind:'item',name,title:name,zone:'',status:'needs-review',fields:{name:{value:name,confirmed:false}},sources:[],relations:[],evidence:[{id:'log-'+id,kind:'game-log',event:'item-link',logLine:`[Sun Oct 25 18:00:00 2026] Marketvoice tells General:1, '${name}'`}],...patch});
+    const caption='FREE Crimson Robe of Alendine Efreeti War Axe',multi=legacy('multi',caption),single=legacy('single','Trading Wurmslayer'),free=legacy('free','Free Brown Chitin Protector');
+    const keep=[legacy('reordered','Free Chitin Brown Protector'),legacy('low-coverage','Free many many many many words before Wurmslayer'),legacy('no-cue','Crimson Robe of Alendine Efreeti War Axe'),
+        legacy('edited',caption,{playerText:'Keep this reviewed text'}),legacy('ocr',caption,{evidence:[...multi.evidence,{kind:'ocr',text:'Examine evidence'}]}),
+        legacy('native',caption,{evidence:[{kind:'game-log',event:'item-link',logLine:`Marketvoice tells General:1, '\x12${'0'.repeat(56)}${caption}\x12'`}]}),
+        legacy('old-native',caption,{evidence:[{kind:'game-log',event:'item-link',text:`Marketvoice tells General:1, ' ${'0'.repeat(56)}${caption} '`}]}),
+        legacy('escaped',caption,{evidence:[{kind:'game-log',event:'item-link',text:`Marketvoice tells General:1, '\\aITEM 123 0:${caption}\\/a'`}]}),
+        legacy('manual',caption,{manual:true}),legacy('loot',caption,{evidence:[{kind:'game-log',event:'loot',logLine:multi.evidence[0].logLine}]}),
+        legacy('different-evidence',caption,{evidence:[...multi.evidence,{kind:'game-log',event:'item-link',logLine:"Marketvoice says, 'Crimson Robe of Alendine'"}]})];
+    const saved={schemaVersion:1,candidates:[multi,single,free,...keep]},disk=new Map([[key,JSON.stringify(saved)]]);let fails=false;
+    const storage={getItem:key=>disk.get(key),setItem:(key,value)=>{if(fails)throw Error('Synthetic storage failure');disk.set(key,value);}};
+    const options={storage,getPack:()=>catalog,autoReconcile:false};let queue=createContributionQueue(options);
+    const original=JSON.stringify(queue.snapshot()),dry=queue.reconcile();
+    for(const candidate of [multi,single,free]){const row=dry.rows.find(row=>row.id===candidate.id);assert.equal(row.action,'archive');assert.equal(row.classification,'chat-trade-caption-covered');}
+    for(const candidate of keep)assert.equal(dry.rows.find(row=>row.id===candidate.id).action,'keep',candidate.id);
+    fails=true;assert.equal(queue.reconcile({apply:true}).persisted,false);assert.equal(JSON.stringify(queue.snapshot()),original);assert.equal(queue.archived().length,0);fails=false;
+    assert(queue.reconcile({apply:true}).persisted);assert.deepEqual(queue.snapshot().map(row=>row.id),keep.map(row=>row.id));
+    for(const candidate of [multi,single,free]){const archived=queue.archived().find(row=>row.id===candidate.id);assert.equal(archived.name,candidate.name);assert.deepEqual(archived.evidence,candidate.evidence);assert.equal(archived.archive.reason,'chat-trade-caption-covered');}
+    const once=disk.get(key);queue=createContributionQueue({...options,autoReconcile:true});assert.equal(queue.reconcile({apply:true}).changed,false);assert.equal(disk.get(key),once,'Trade cleanup is durable and idempotent');
+    const fullArchive=Array.from({length:200},(_,index)=>({...legacy('archived-'+index,'Old Unknown '+index),archive:{reason:'old'}}));
+    const fullDisk=new Map([[key,JSON.stringify({schemaVersion:1,candidates:[multi,single],archive:fullArchive})]]),full=createContributionQueue({...options,storage:{getItem:key=>fullDisk.get(key),setItem:(key,value)=>fullDisk.set(key,value)},autoReconcile:true});
+    assert.equal(full.archived().length,200);for(const candidate of full.snapshot()){assert.deepEqual(candidate.reasons,[]);assert.equal(candidate.canonicalTitle,null,'Multi-item cleanup never invents one canonical item identity');}
+    assert.equal(JSON.parse(fullDisk.get(key)).candidates.length,2,'Full archives preserve rather than discard raw evidence');
+    const exactPack={...catalog,items:[...catalog.items,{name:single.name},{name:caption}]};
+    const exact=createContributionQueue({getPack:()=>exactPack,storage:{getItem:()=>JSON.stringify({schemaVersion:1,candidates:[single,multi]})},autoReconcile:false});
+    assert(exact.reconcile().rows.every(row=>row.classification!=='chat-trade-caption-covered'),'Genuine whole catalog titles are never classified as trade-caption mistakes');
+    console.log('Legacy trade cleanup: unranked single/multiple known items, untouched-only reversible archive, protected/encoded provenance, no fabricated canonical title, atomic save failure and full-archive preservation passed.');
+}

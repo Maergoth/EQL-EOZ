@@ -5,7 +5,7 @@ import { contributionReasons } from './contribution-reasons.js';
 import { classifyNpcEvidence } from './generated-pets.js';
 import { collectTierZeroEvidence, tierZeroVerificationPreview, confirmTierZeroVerification } from './contribution-tier-zero.js';
 import { automaticSourceReceiptKey } from './automatic-source-results.js';
-import { canonicalChatItemMatch, rankedChatItemMentions } from './chat-item-mentions.js';
+import { canonicalChatItemMatch, coveredTradeChatCaption, rankedChatItemMentions } from './chat-item-mentions.js';
 
 const KEY=CONTRIBUTION_QUEUE_KEY;
 const clean=(value,max=240)=>String(value??'').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim().slice(0,max);
@@ -25,17 +25,19 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         if(candidate.kind!=='item'||protectedDraft(candidate)||(candidate.sources||[]).length||(candidate.relations||[]).length||Object.keys(candidate.fields||{}).some(key=>!['name','tier'].includes(key)))return null;
         const evidence=(candidate.evidence||[]).filter(entry=>entry.kind!=='draft-migration');
         if(!evidence.length||evidence.some(entry=>entry.kind!=='game-log'||entry.event&&entry.event!=='item-link'))return null;
-        const match=canonicalChatItemMatch(candidate.name,pack());
-        if(match.state!=='matched'||match.exact||contributionNameKey(match.name)===contributionNameKey(candidate.name))return null;
+        const current=pack(),match=canonicalChatItemMatch(candidate.name,current);
+        if(match.exact||match.state==='matched'&&contributionNameKey(match.name)===contributionNameKey(candidate.name))return null;
+        let single=match.state==='matched',trade=true;
         for(const entry of evidence){
             const text=entry.logLine||entry.text||'';
             // Old journals replaced native delimiters with spaces. A retained
             // hex body is enough to preserve that uncertain evidence intact.
             if(/[\x12]|\\a(?:ITEM|PC)\b|[a-f0-9]{56}/i.test(text)||!contributionNameKey(text).includes(contributionNameKey(candidate.name)))return null;
-            const body=text.replace(/^\[[^\]]+\]\s*/,''),names=rankedChatItemMentions(body,pack());
-            if(names.length!==1||contributionNameKey(itemIdentity(names[0]).name)!==contributionNameKey(match.name))return null;
+            const body=text.replace(/^\[[^\]]+\]\s*/,''),names=single?rankedChatItemMentions(body,current):[];
+            single=single&&names.length===1&&contributionNameKey(itemIdentity(names[0]).name)===contributionNameKey(match.name);
+            trade=trade&&Boolean(coveredTradeChatCaption(candidate.name,text,current));
         }
-        return match.name;
+        return single?{title:match.name,reason:'chat-caption-covered'}:trade?{title:null,reason:'chat-trade-caption-covered'}:null;
     }
     const passivePopulation=relation=>['mob-zone','zone-population'].includes(relation?.type)&&relation.evidence==='consider';
     function passiveFacts(candidate){
@@ -226,7 +228,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         const rows=[],seen=new Map(),before=apply?{candidates:structuredClone(candidates),archive:structuredClone(archive),armed:structuredClone(armed)}:null;let changed=false;
         for(const candidate of [...candidates]){
             const passive=passiveFacts(candidate),reviewCandidate=passive&&!passive.archive?{...candidate,fields:passive.fields,relations:passive.relations}:candidate;
-            const chatTitle=coveredChatCaption(candidate),classification=chatTitle?{excluded:'chat-caption-covered',reasons:[],resolved:resolver().resolve('item',chatTitle)}:contributionReasons(reviewCandidate,resolver(),{pack:pack()}),resolved=classification.resolved,key=canonicalKey(candidate.kind,candidate.name,candidate.zone),protectedWork=protectedDraft(candidate),prior=seen.get(key),realGap=classification.reasons.some(reason=>['missing-source','missing-population','tier0-verification','identity-review'].includes(reason)),conflict=prior&&Object.entries(candidate.fields||{}).some(([field,value])=>prior.fields?.[field]&&!['knownLoot','knownNPCs'].includes(field)&&JSON.stringify(prior.fields[field].value)!==JSON.stringify(value.value)),duplicate=prior&&!protectedWork&&!protectedDraft(prior)&&!realGap&&!conflict;
+            const chatTitle=coveredChatCaption(candidate),classification=chatTitle?{excluded:chatTitle.reason,reasons:[],resolved:resolver().resolve('item',chatTitle.title||candidate.name)}:contributionReasons(reviewCandidate,resolver(),{pack:pack()}),resolved=classification.resolved,key=canonicalKey(candidate.kind,candidate.name,candidate.zone),protectedWork=protectedDraft(candidate),prior=seen.get(key),realGap=classification.reasons.some(reason=>['missing-source','missing-population','tier0-verification','identity-review'].includes(reason)),conflict=prior&&Object.entries(candidate.fields||{}).some(([field,value])=>prior.fields?.[field]&&!['knownLoot','knownNPCs'].includes(field)&&JSON.stringify(prior.fields[field].value)!==JSON.stringify(value.value)),duplicate=prior&&!protectedWork&&!protectedDraft(prior)&&!realGap&&!conflict;
             if(!prior&&!chatTitle)seen.set(key,candidate);
             const obsolete=passive?.archive?'passive-monster-observation':classification.excluded||(resolved.membership==='present'&&!classification.reasons.length?'known-complete':duplicate?'duplicate':null);
             const reason=protectedWork?'protected-work':prior&&conflict?'duplicate-conflict':obsolete||(passive?'passive-monster-observation':classification.reasons[0]||'unresolved'),action=obsolete&&!protectedWork&&archive.length<200?'archive':passive&&!passive.archive&&archive.length<200?'prune-passive-observations':'keep';

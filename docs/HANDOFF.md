@@ -1,6 +1,8 @@
 # Eye of Zomm contributor handoff
 
-Current `v1.0.4`: Character requests inventory and achievement exports together and loads both with one Import files action. Categories, explicit completion, objectives and progress counters stay saved per character; the wiki inspect adds a collapsible achievements section below gear/stats. Combined imports are atomic and do not poll in the background. See [the achievement guide](CHARACTER_ACHIEVEMENTS.md) for ownership, limits and wiki activation.
+Current `v1.0.5`: retire untouched historical trade captions when exact sequential catalog names cover at least half their words and a separate trade cue proves surrounding prose. Preserve real encoded item links, exact full titles, edited/OCR/loot/source-backed drafts and all raw evidence. Full archives keep false captions quiet; failed saves preserve the prior queue. See [chat item boundaries](CHAT_ITEM_BOUNDARIES.md).
+
+Previous `v1.0.4`: Character requests inventory and achievement exports together and loads both with one Import files action. Categories, explicit completion, objectives and progress counters stay saved per character; the wiki inspect adds a collapsible achievements section below gear/stats. Combined imports are atomic and do not poll in the background. See [the achievement guide](CHARACTER_ACHIEVEMENTS.md) for ownership, limits and wiki activation.
 
 Previous `v1.0.3` hotfix: keep Exaltations to their names and direct effects, including typed Focus effects and literal Worn labels. Exact local dataset refresh updates saved socket effects without changing private numeric data, tiers or recorded character totals; new wiki exports omit child stats and unrelated item fields.
 
