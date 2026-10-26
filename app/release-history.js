@@ -7,7 +7,8 @@ export const RELEASE_HISTORY = freeze([
   "changes": [
     "Keep your full desktop inventory in a private database without an aggregate item-count or inventory-byte ceiling.",
     "Search and browse carried items, bank, depot, keyring and unmatched exports in bounded pages. Existing characters migrate with a verified recovery backup.",
-    "Stream inventory and achievement imports into one transaction. Failed imports keep your saved character; sharing continues to include equipped gear and reviewed totals."
+    "Stream inventory and achievement imports into one transaction. Failed imports keep your saved character; sharing continues to include equipped gear and reviewed totals.",
+    "Item previews scale a listed base Void resist with the same formula as other resists. Recorded character stats stay unchanged."
   ],
   "steps": [
     {

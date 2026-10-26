@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import {itemRecoverySource,itemRecoveryFingerprint,itemBaseReviewPreview,createItemBaseReview,applyItemBaseReview,validateItemBaseReview,characterContributionFields} from '../app/item-base-review.js';
+import {itemRecoverySource,itemRecoveryFingerprint,itemBaseReviewChoices,itemBaseReviewPreview,createItemBaseReview,applyItemBaseReview,validateItemBaseReview,characterContributionFields} from '../app/item-base-review.js';
 import {buildContributionDraft,normalizeContributionCandidate} from '../app/contribution-model.js';
 import {createContributionQueue} from '../app/contribution-queue.js';
 import {getItemScalingIdentity,getItemScalingRevision} from '../app/item-scaling.js';
 import {recoverItemBaseStat} from '../app/item-base-recovery.js';
+import {itemContributionStatSource,itemContributionStatLines} from '../app/item-contribution-stats.js';
 
 const wrap=(value,confirmed=false)=>({value,confirmed});
 const make=()=>({kind:'item',name:'Synthetic Recovery Cloak +4',title:'Synthetic Recovery Cloak',zone:'Synthetic Vale',instance:'normal',era:'Classic Era',
@@ -108,6 +109,25 @@ assert.notEqual(stale.baseRecovery.sourceFingerprint,confirmed.baseRecovery.sour
 assert.equal(validateItemBaseReview(stale).ok,false,'A review from a different bundled formula identity requires review');
 const priorRules=JSON.parse(getItemScalingIdentity());priorRules.revision=1;
 const priorFingerprint=JSON.parse(confirmed.baseRecovery.sourceFingerprint);priorFingerprint[priorFingerprint.length-1]=JSON.stringify(priorRules);
-assert.equal(getItemScalingRevision(),3,'Exact decimal weight boundaries ship as a new formula revision');
+assert.equal(getItemScalingRevision(),4,'Authored Void scaling ships as a new formula revision');
 assert.equal(validateItemBaseReview({...confirmed,baseRecovery:{...confirmed.baseRecovery,sourceFingerprint:JSON.stringify(priorFingerprint)}}).ok,false,'The prior rounded-primary revision cannot authorize a new write, even when this particular base still roundtrips');
 console.log('Item base review: explicit exact/range choices, context/source/stat invalidation, preserved prose and observations, verified outgoing text, inference markers and replay persistence passed.');
+
+// Contextual Void is not an independently certified inverse. In particular,
+// entering zero cannot convert generated/unknown Void into an authored base.
+const voidPreview=itemBaseReviewPreview(original,{tier:4,fraction:0,reviewMode:'provisional'});
+assert(!Object.hasOwn(voidPreview.defaultChoices,'SV_CORRUPTION'));
+assert.throws(()=>itemBaseReviewChoices(voidPreview,{SV_CORRUPTION:0}),/supported values/);
+for(const base of [0,1,4])assert.throws(()=>createItemBaseReview(original,{tier:4,fraction:0,reviewMode:'provisional',reviewed:true,choices:{HP:30,SV_CORRUPTION:base}}),/supported base value/);
+const voidOmitted=createItemBaseReview(original,{tier:4,fraction:0,reviewMode:'provisional',reviewed:true,choices:{HP:30}});
+assert(!Object.hasOwn(voidOmitted.choices,'SV_CORRUPTION'));
+assert.doesNotMatch(applyItemBaseReview(original,voidOmitted).fields.statLines.value.join('\n'),/SV Void/);
+const falseZero={...original,...applyItemBaseReview(original,voidOmitted)};
+falseZero.baseRecovery={...voidOmitted,choices:{HP:30,SV_CORRUPTION:0}};
+falseZero.fields.statLines=wrap(['HP: 30','SV Void: 0'],true);
+assert.equal(validateItemBaseReview(falseZero).ok,false,'Saved zero shortcuts cannot authorize a recovered Void base');
+for(const base of [0,7,-2]){
+    const fields={tier:wrap(0,true),resistCorruption:{value:base,edited:true,confirmed:true}},source=itemContributionStatSource(fields);
+    assert.equal(source.values.resistCorruption,base);
+    assert(itemContributionStatLines(source.values,source.retained,fields).includes(`SV Void: ${base}`),'Direct tier-zero authored Void remains an ordinary contribution field');
+}

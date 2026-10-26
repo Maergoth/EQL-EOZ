@@ -84,6 +84,13 @@ async function native({root,temporary,profile,port,phase,output,expectedCards,ke
             await until(()=>execute(owner,async id=>{const api=window.eyeOfZommCharacterRepository,b=await api.bootstrap(),r=await api.get({profileId:b.activeProfileId,id});return (r.item||r.card)?.tier===7;},itemId),'durably acknowledged single-row edit');
         }
         const selected=await execute(owner,async id=>{const api=window.eyeOfZommCharacterRepository,b=await api.bootstrap();await api.flush();return api.get({profileId:b.activeProfileId,id});},itemId);assert.equal((selected.item||selected.card).tier,7);
+        const selectedCard=selected.item||selected.card;
+        assert.equal(selectedCard.baseStats.SV_CORRUPTION,25,'Display-only intrinsic Void base survives import, editing and process restart');
+        assert.equal(selectedCard.baseStats.SV_FIRE,25,'Comparison resist retains the same authored baseline');
+        await until(()=>execute(owner,()=>{const host=document.querySelector('[data-character-editor] [data-selected-item-stats]'),value=key=>Number(host?.querySelector(`[data-item-stat="${key}"] .wiki-itembox-value`)?.textContent);return document.querySelector('[data-character-editor] [data-card-tier]')?.value==='7'&&value('SV_CORRUPTION')===42&&value('SV_FIRE')===42;}),'actual selected intrinsic Void matches ordinary resist at saved tier seven');
+        const voidProof=await execute(owner,()=>{const host=document.querySelector('[data-character-editor] [data-selected-item-stats]'),value=key=>Number(host.querySelector(`[data-item-stat="${key}"] .wiki-itembox-value`).textContent);return{tier:Number(document.querySelector('[data-character-editor] [data-card-tier]').value),void:value('SV_CORRUPTION'),fire:value('SV_FIRE')};});
+        assert.deepEqual(voidProof,{tier:7,void:42,fire:42},'The displayed intrinsic Void is not replaced by a generated seven or zero');
+
         const keyring=await query('keyring');assert.equal(keyring.filteredTotal,keyringCount);assert(keyring.items.length<=50);assert(keyring.nextCursor);
         const unknown=await query('rejected','Unmatched Expedition Find');assert.equal(core.counts.rejected,keyringCount+1,'Unknown keyring rows preserve their old missing-catalog record as well as their keyring record');assert.equal(unknown.items.length,1);assert(unknown.items[0].entry.name.includes('Unmatched Expedition Find'));
         const worn=await query('equipped'),primary=worn.items.find(card=>card.id===core.core.equipment.primary);assert.equal(primary.augmentSlots,3);assert.equal(primary.augments.length,1);assert.equal(primary.augments[0].index,1);assert.equal(primary.augments[0].sourceSlot,4);
@@ -99,7 +106,7 @@ async function native({root,temporary,profile,port,phase,output,expectedCards,ke
         await execute(owner,()=>{document.querySelectorAll('#toast-region .toast-close').forEach(button=>button.click());document.querySelector('.character-bags').scrollIntoView({block:'start'});return Promise.all(Array.from(document.images,image=>image.decode().catch(()=>{})));});
         if(output){showInactive.call(owner);await execute(owner,()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));await wait(150);owner.webContents.invalidate();const image=await owner.capturePage();assert(!image.isEmpty());await fs.writeFile(path.join(output,phase+'.png'),image.toPNG());}
         await execute(owner,()=>window.eyeOfZommCharacterRepository.flush());
-        const proof={ok:true,phase,actualMainPreload:true,actualUiImport:phase==='import',actualProcessRestart:phase==='restart',sqlite:process.versions.sqlite,node:process.versions.node,electron:process.versions.electron,migratedProfiles:migrated.bootstrap.profiles.length,counts:core.counts,pageRows:first.items.length,pageBytes:Buffer.byteLength(JSON.stringify(first)),selectedItemId:itemId,editedTier:7,shareProof,foreignDenied:true,verifiedLegacyBackup:true};
+        const proof={ok:true,phase,actualMainPreload:true,actualUiImport:phase==='import',actualProcessRestart:phase==='restart',sqlite:process.versions.sqlite,node:process.versions.node,electron:process.versions.electron,migratedProfiles:migrated.bootstrap.profiles.length,counts:core.counts,pageRows:first.items.length,pageBytes:Buffer.byteLength(JSON.stringify(first)),selectedItemId:itemId,editedTier:7,voidProof:{base:25,...voidProof},shareProof,foreignDenied:true,verifiedLegacyBackup:true};
         await fs.writeFile(path.join(temporary,phase+'.json'),JSON.stringify(proof,null,2));owner.hide();clearTimeout(watchdog);app.quit();
     })();
     require(path.join(root,'desktop/main.cjs'));
@@ -115,7 +122,7 @@ try{
     const importedCards=1500,keyringCount=21030;
     for(let index=0;index<importedCards;index++){
         const worn=index<23,name=worn?'Expedition Equipment '+String(index+1).padStart(2,'0'):index===importedCards-1?'Storage Prize':'Stored Expedition Relic '+String(index%32).padStart(2,'0'),kind=worn?slotKinds[index]:'FINGER';
-        if(!catalog.some(item=>item.name===name))catalog.push({name,wikiTitle:name,iconId:'synthetic-'+index%8,classes:['WAR'],races:['ALL'],slots:[kind],stats:{AC:12,HP:25,STR:3},details:[{label:'Notes',value:'Synthetic inventory repository demonstration.'}]});
+        if(!catalog.some(item=>item.name===name))catalog.push({name,wikiTitle:name,iconId:'synthetic-'+index%8,classes:['WAR'],races:['ALL'],slots:[kind],stats:{AC:12,HP:25,STR:3,...(name==='Storage Prize'?{SV_FIRE:25}:{})},...(name==='Storage Prize'?{displayLines:['SV COLD: +2 SV. Void: +25']}:{}),details:[{label:'Notes',value:'Synthetic inventory repository demonstration.'}]});
         rows.push(`${worn?slotLabels[index]:index<500?'General '+(index-22):index<1000?'Bank'+(index-499):'Personal-Depot'+(index-999)}\t${name} +${index%6}\t${10000+(worn?index:index%32)}\t1\t0`);
         if(index===13||index===23){const location=index===13?'Primary':'General 1';rows.push(`${location}-Slot1\tEmpty\t0\t0\t0`,`${location}-Slot4\tSocket Bloom (Exaltation) +1\t900001\t1\t0`,`${location}-Slot8\tEmpty\t0\t0\t0`);}
     }

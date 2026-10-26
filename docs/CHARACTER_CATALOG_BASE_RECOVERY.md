@@ -174,11 +174,21 @@ exports. Conflicting written tier suffixes remain a review warning, with the
 original text retained. Unread stats and unsupported formulas stay unknown.
 
 Catalog previews use the [shared wiki engine](SHARED_ITEM_SCALING.md) for
-conditional Void and weapon Accuracy, with full item context. Recorded explicit
-Void stays authoritative; missing qualified Void is generated from known fields.
+conditional Void and weapon Accuracy, with full item context. Authored Void
+uses the same positive, negative and rounding branches as ordinary resists;
+explicit zero stays zero and null stays unknown. Missing qualified Void is
+generated from known fields.
 Unknown fields remain unknown. Legacy `unscaledStatKeys` are retained in stored
 records, but no longer suppress supported Void previews. Observed examine values
 still take precedence unchanged.
+
+Older item packs may retain authored Void only in standalone `displayLines`,
+a complete line of grouped resist fields, or catalog details. The bounded base
+adapter reads literal values and canonical
+Void aliases there. Existing structured values, including zero and null, win;
+conflicting or nonliteral values stay unknown. Saved cards fill only a missing
+catalog base from that metadata. Notes and observed examine values are not
+catalog base evidence.
 
 The component exports `searchCharacterCatalog(pack,query,{limit?})`,
 `resolveCharacterCatalog(pack,name,{limit?})`,
@@ -251,7 +261,10 @@ Primary stats, standalone damage, Backstab, Range and flat regen/haste use its
 family definitions and coefficients. Delay, elemental and bane damage stay
 static. Unsupported keys never silently use an identity fallback. Contextual
 Void/Accuracy, derived damage bonuses and character resource totals cannot be
-recovered as independent base fields.
+recovered as independent base fields. Void proposals stay omitted, including
+manually entered zero: a zero is not evidence of an intrinsic tier-zero value.
+Directly authored tier-zero item fields still retain positive, zero and negative
+Void values. Existing recorded examine values and character totals never rescale.
 
 Rank 10 has fraction zero. Forward weight now uses the wiki's exact ceiling,
 including its floating-point boundaries. Positive-tier weight inverse ranges

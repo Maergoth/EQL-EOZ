@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { searchCharacterCatalog, resolveCharacterCatalog, characterCatalogCard, characterCatalogPreview, CHARACTER_CATALOG_LIMITS } from '../app/character-catalog.js';
 import { createCharacterModel, characterItemStats, characterShareSummary } from '../app/character-model.js';
+import {scaleItemStat,scaledItemStats,catalogBaseStats} from '../app/item-scaling.js';
 
 const ring={name:'Synthetic Émber Ring',wikiTitle:'Ring of the Ember Guardian',iconId:'Exact_Icon_007',slots:['Fingers'],requiredLevel:21,stats:{HP:100,STR:2,DEX:-2,DMG:13,DELAY:20,WT:2.3,ATK:50,SV_CORRUPTION:9}};
 const weapon={name:'Synthetic Quartz Blade',wikiTitle:'Test:Quartz Blade',slots:['Primary'],stats:{HP:20,DMG:11}};
@@ -44,7 +45,7 @@ const preview=characterCatalogPreview(ring,{tier:3,fraction:2}),rows=Object.from
 assert.equal(preview.card.fraction,0,'Character catalog ignores obsolete progress options');assert.equal(rows.HP.value,130);assert.equal(rows.STR.value,5);assert.equal(rows.DEX.value,0);assert.equal(rows.DMG.value,16);assert.equal(rows.WT.value,1.7);
 for(const key of ['HP','STR','DEX','DMG','WT'])assert.equal(rows[key].modified,true,key);
 for(const key of ['ATK','DELAY']){assert.equal(rows[key].value,ring.stats[key]);assert.equal(rows[key].modified,false,key);}
-assert.equal(rows.SV_CORRUPTION.base,9);assert.equal(rows.SV_CORRUPTION.value,9);assert.equal(rows.SV_CORRUPTION.unsupported,false);assert.equal(rows.SV_CORRUPTION.modified,false,'Explicit base Void remains authoritative under shared wiki rules');
+assert.equal(rows.SV_CORRUPTION.base,9);assert.equal(rows.SV_CORRUPTION.value,12);assert.equal(rows.SV_CORRUPTION.unsupported,false);assert.equal(rows.SV_CORRUPTION.modified,true,'Authored Void follows the shared ordinary resist rules');
 assert.equal(characterCatalogPreview(ring,{tier:0}).rows.find(row=>row.key==='SV_CORRUPTION').value,9,'known base Void resist remains usable at tier zero');
 for(const tier of [-1,11,null,3.5])assert.throws(()=>characterCatalogCard(ring,{tier}),/Choose tier/);
 for(const fraction of [8,.5,null,'',1023])assert.equal(characterCatalogCard(ring,{tier:3,fraction}).fraction,0,'Removed progress input is not collected or solicited');
@@ -59,7 +60,7 @@ assert.equal(characterCatalogCard({...ring,statsComplete:false}).baseStatsComple
 const store=new Map(),storage={getItem:key=>store.get(key),setItem:(key,value)=>store.set(key,value)},model=createCharacterModel({storage});
 const first=model.intake({item:card}),second=model.intake({item:card});assert.equal(first.ok,true);assert.equal(second.ok,true);assert.notEqual(first.candidate.id,second.candidate.id,'every Add creates a distinct physical copy');
 assert.equal(first.deduplicated,false);assert.equal(second.deduplicated,false);assert.equal(first.candidate.fraction,0);assert.deepEqual(first.candidate.observedStats,{});assert.deepEqual(first.candidate.baseStats,ring.stats);assert(!/progress/i.test(card.notes));
-assert.equal(characterItemStats(first.candidate).stats.HP,130,'catalog stats scale exactly once at the selected whole tier');assert.equal(characterItemStats(first.candidate).stats.SV_CORRUPTION,9);
+assert.equal(characterItemStats(first.candidate).stats.HP,130,'catalog stats scale exactly once at the selected whole tier');assert.equal(characterItemStats(first.candidate).stats.SV_CORRUPTION,12);
 for(const [candidate,slot]of [[first.candidate,'finger1'],[second.candidate,'finger2']]){model.updateCandidate(candidate.id,{augmentStatus:'none'});assert.equal(model.assign(candidate.id,slot).ok,true);}
 model.setStatSnapshot('base',{stats:{HP_MAXIMUM:450},confirmed:true});model.setStatSnapshot('equipped',{stats:{HP_MAXIMUM:812},confirmed:true});
 assert.equal(model.totals().computed.HP_MAXIMUM,undefined,'Legacy snapshots and catalog gear do not create a current maximum-resource total');
@@ -71,11 +72,11 @@ assert.equal(restored.setAugmentSlots(first.candidate.id,1).ok,true);assert.equa
 assert.deepEqual(restored.totals().computed,observedTotals,'Tier and augment previews never rescale or add to observed character totals');
 restored.removeAugment(first.candidate.id,0);restored.unassign('finger1');assert.deepEqual(restored.totals().computed,observedTotals,'Removing a modeled augment or equipped item never subtracts from observed totals');assert(restored.assign(first.candidate.id,'finger1').ok);
 assert.deepEqual(createCharacterModel({storage}).totals().computed,observedTotals,'Observed totals retain their exact values through persistence and layout edits');
-const summary=characterShareSummary(restored.snapshot());assert.equal(summary.equipment.find(slot=>slot.slot==='finger1').item.stats.SV_CORRUPTION,9);assert.equal(summary.equipment.find(slot=>slot.slot==='finger1').item.baseStats.SV_CORRUPTION,9);
+const summary=characterShareSummary(restored.snapshot());assert.equal(summary.equipment.find(slot=>slot.slot==='finger1').item.stats.SV_CORRUPTION,15);assert.equal(summary.equipment.find(slot=>slot.slot==='finger1').item.baseStats.SV_CORRUPTION,9);
 const observed={...first.candidate,observedStats:{SV_CORRUPTION:19,HP:150},observedStatsComplete:true,augmentStatus:'included'};assert.equal(characterItemStats(observed).stats.SV_CORRUPTION,19,'actual observed stats override unsupported catalog adjustment without scaling');
 assert.equal(JSON.stringify(pack),before,'preview and Add never edit the catalog');
 console.log('Character catalog: flexible local search, bounded/incomplete results, whole-tier preview, modified stats, exact identity and distinct cards passed.');
-console.log('Catalog provenance: per-item values stay separate; observed character totals survive tier, augment and equipment edits without arithmetic; explicit Void values stay authoritative.');
+console.log('Catalog provenance: per-item values stay separate; observed character totals survive tier, augment and equipment edits without arithmetic; authored Void bases stay separate from rank bonuses.');
 
 const {resolveInventoryCatalog}=await import('../app/character-catalog.js');
 const presenceOnly={meta:{wikiEntitiesComplete:true},items:[],wikiEntities:{items:['Synthetic Known Crown'],titles:[{title:'Synthetic Known Rune (Exaltation)'}]}};
@@ -109,3 +110,72 @@ legacyModel.setStatSnapshot('current',{stats:{HP_MAXIMUM:5432},confirmed:true});
 assert(legacyModel.reconcileCatalog(()=>({status:'exact',item:explicitWeapon})).ok);const rehydrated=legacyModel.snapshot().candidates.find(card=>card.id===legacy.id);
 assert.equal(rehydrated.baseStats.BACKSTAB_DMG,15,'An existing card recovers missing catalog facts when its exact catalog identity is reconciled');assert.equal(rehydrated.baseStats.DELAY,22);assert.equal(rehydrated.baseStats.DMG_BONUS,10);
 assert.deepEqual(characterItemStats(rehydrated).stats,legacy.observedStats);assert.deepEqual(legacyModel.totals().computed,legacyObserved,'Reconciliation leaves observed item and Character totals unchanged');
+
+// Authored Void uses the ordinary resist formula without needing two other fields. Missing
+// Void still uses whole-card eligibility, and an unknown value stays unknown.
+for(const base of [9,25,0,-2,-25,null]){
+    const expected=base===null?null:scaleItemStat('SV_FIRE',base,5,{fraction:0});
+    for(const qualifiers of [{},{HP:12,STR:2}]){
+        const item={name:'Synthetic Authored Void',wikiTitle:'Synthetic Authored Void',slots:['FINGER'],stats:{...qualifiers,SV_CORRUPTION:base}};
+        const saved=structuredClone(item),card=characterCatalogCard(item,{tier:5}),rows=characterCatalogPreview(item,{tier:5}).rows;
+        assert.equal(card.baseStats.SV_CORRUPTION,base);assert.equal(characterItemStats(card).stats.SV_CORRUPTION,expected);
+        assert.equal(rows.find(row=>row.key==='SV_CORRUPTION').value,expected);assert.deepEqual(item,saved);
+        assert.equal(characterItemStats({...card,tier:0}).stats.SV_CORRUPTION,base);
+        assert.equal(characterItemStats({...card,tier:10}).stats.SV_CORRUPTION,base===null?null:scaleItemStat('SV_FIRE',base,10,{fraction:0}));
+        assert.equal(characterItemStats({...card,observedStats:{SV_CORRUPTION:31},observedStatsComplete:true,augmentStatus:'included'}).stats.SV_CORRUPTION,31,'Recorded examine Void is never rescaled');
+    }
+}
+for(const [stats,generated]of [[{HP:12},false],[{HP:12,STR:2},true]]){
+    const read=characterItemStats(characterCatalogCard({name:'Synthetic Missing Void',stats},{tier:5}));
+    assert.equal(Object.hasOwn(read.stats,'SV_CORRUPTION'),generated);if(generated)assert.equal(read.stats.SV_CORRUPTION,5);
+}
+
+for(const alias of ['SV_VOID','SVVoid','SVCorruption','Void','Corruption','ResistVoid']){
+    const raw=scaledItemStats({stats:{HP:12,STR:2,[alias]:null}},5);assert.equal(raw.SV_CORRUPTION,null,`${alias}: an authored unknown alias suppresses generated Void`);
+    assert.equal(Object.hasOwn(raw,alias),false,'Supported catalog aliases are normalized to the canonical field');
+    const read=characterItemStats(characterCatalogCard({name:'Synthetic Unknown Void Alias',stats:{HP:12,STR:2,[alias]:null}},{tier:5}));
+    assert.equal(read.stats.SV_CORRUPTION,null);assert.equal(Object.hasOwn(read.stats,alias.toUpperCase()),false,'The catalog base adapter canonicalizes a supported alias exactly once');
+}
+const unknownQualifier=characterItemStats(characterCatalogCard({name:'Synthetic Unknown Qualifier',stats:{HP:null,STR:2}},{tier:5}));
+assert.equal(unknownQualifier.stats.HP,null);assert.equal(Object.hasOwn(unknownQualifier.stats,'SV_CORRUPTION'),false,'Unknown ordinary stats do not earn a qualifier');
+
+assert.equal(characterItemStats(characterCatalogCard({name:'Synthetic Large Native Void',stats:{SV_CORRUPTION:25}},{tier:5})).stats.SV_CORRUPTION,37,'A large intrinsic Void baseline uses the same percentage branch as Fire resist');
+
+// Older dataset versions retain authored Void in display text, not typed stats.
+// Only bounded standalone catalog fields supply a missing base; notes and
+// actual observed examine values cannot become an authored catalog statistic.
+const displayVoid={name:'Synthetic Native Void Relic',wikiTitle:'Synthetic Native Void Relic',slots:['FINGER'],stats:{HP:12,STR:2},displayLines:['SV Void: +30']};
+assert.equal(catalogBaseStats(displayVoid).SV_CORRUPTION,30);
+assert.equal(characterCatalogPreview(displayVoid,{tier:5}).rows.find(row=>row.key==='SV_CORRUPTION').value,45);
+assert.equal(characterItemStats(characterCatalogCard({...displayVoid,displayLines:['SV. Void: +1']},{tier:5})).stats.SV_CORRUPTION,6);
+for(const label of ['SV Void','SV. Void','SV_VOID','SVVoid','SV Corruption','SVCorruption','Void','Corruption','ResistVoid']){
+    assert.equal(catalogBaseStats({...displayVoid,displayLines:[`${label}: +30`]}).SV_CORRUPTION,30,label);
+    assert.equal(catalogBaseStats({...displayVoid,displayLines:[],details:[{label,value:'+30'}]}).SV_CORRUPTION,30,label);
+}
+for(const explicit of [0,null,7]){
+    assert.equal(catalogBaseStats({...displayVoid,stats:{...displayVoid.stats,SV_CORRUPTION:explicit}}).SV_CORRUPTION,explicit,'Structured authored values outrank display fallback, including zero and unknown');
+    assert.equal(catalogBaseStats(displayVoid,{HP:12,SV_CORRUPTION:explicit}).SV_CORRUPTION,explicit,'Saved authored Void is not overwritten by a new fallback');
+}
+for(const lines of [['SV Void: +30','SV Corruption: +31'],['SV Void: ?'],['SV Void: +30 (uncertain)']]){
+    const item={...displayVoid,displayLines:lines};assert.equal(catalogBaseStats(item).SV_CORRUPTION,null);
+    assert.equal(characterItemStats(characterCatalogCard(item,{tier:5})).stats.SV_CORRUPTION,null,'Conflicting/unknown authored text suppresses generated Void');
+}
+assert.equal(catalogBaseStats({...displayVoid,details:[{label:'SV Void',value:'+31'}]}).SV_CORRUPTION,null,'Typed catalog detail and display-line conflicts stay unknown');
+assert.equal(catalogBaseStats({...displayVoid,details:[{label:'SV Void',value:'+30'}]}).SV_CORRUPTION,30,'Consistent repeated authored metadata is not ambiguous');
+const noAuthoredVoid={...displayVoid,displayLines:['Notes: SV Void: +30'],details:[{label:'Notes',value:'SV Void: +30'}],observedStats:{SV_CORRUPTION:99}};
+assert.equal(Object.hasOwn(catalogBaseStats(noAuthoredVoid),'SV_CORRUPTION'),false,'Prose and observations are not base fields');
+assert.equal(characterItemStats(characterCatalogCard(noAuthoredVoid,{tier:5})).stats.SV_CORRUPTION,5,'A truly missing native field retains conditional generation');
+assert.equal(catalogBaseStats(displayVoid,{HP:12}).SV_CORRUPTION,30,'Only a missing saved base is filled from authored catalog text');
+const savedVoidModel=createCharacterModel({storage:null}),savedVoid=savedVoidModel.intake({item:{...characterCatalogCard({...displayVoid,displayLines:[]},{tier:5}),observedStats:{SV_CORRUPTION:77,HP:99},observedStatsComplete:true,augmentStatus:'included'}}).candidate;
+savedVoidModel.setStatSnapshot('current',{stats:{SV_CORRUPTION:123},confirmed:true});const savedVoidTotals=structuredClone(savedVoidModel.totals().computed);
+assert(savedVoidModel.reconcileCatalog(()=>({status:'exact',item:displayVoid})).ok);
+const hydratedVoid=savedVoidModel.snapshot().candidates.find(card=>card.id===savedVoid.id);assert.equal(hydratedVoid.baseStats.SV_CORRUPTION,30);
+assert.deepEqual(hydratedVoid.observedStats,savedVoid.observedStats);assert.equal(hydratedVoid.tier,5);assert.deepEqual(savedVoidModel.totals().computed,savedVoidTotals);
+
+const groupedVoid={...displayVoid,displayLines:['SV MAGIC: +15 SV FIRE: +15 SV COLD: +15 SV DISEASE: +15 SV POISON: +15 SV VOID: +30']};
+assert.equal(catalogBaseStats(groupedVoid).SV_CORRUPTION,30);assert.equal(characterCatalogPreview(groupedVoid,{tier:5}).rows.find(row=>row.key==='SV_CORRUPTION').value,45);
+assert.equal(catalogBaseStats({...displayVoid,displayLines:['SV COLD: +7 SV. Void: +2']}).SV_CORRUPTION,2);
+for(const grouped of ['SV COLD: +7 SV VOID: ?','SV MAGIC: +3 SV VOID: unknown','SV VOID: +30 SV CORRUPTION: +31'])assert.equal(catalogBaseStats({...displayVoid,displayLines:[grouped]}).SV_CORRUPTION,null);
+for(const prose of ['Notes: SV COLD: +7 SV VOID: +30','SV COLD: +7 and a note about SV VOID: +30','Effect: SV VOID: +30'])assert.equal(Object.hasOwn(catalogBaseStats({...displayVoid,displayLines:[prose]}),'SV_CORRUPTION'),false,'A grouped-stat fallback cannot mine a value from prose');
+
+for(const line of ['SV VOID: +30 SV FIRE: +15','SV FIRE: +15 SV VOID: +30 SV COLD: +15','SV VOID: +30 SV Corruption: +30'])assert.equal(catalogBaseStats({...displayVoid,displayLines:[line]}).SV_CORRUPTION,30,'Valid grouped fields do not become unknown because Void appears first or repeats consistently');

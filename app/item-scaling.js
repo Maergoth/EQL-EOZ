@@ -16,10 +16,16 @@ export const itemEffectiveLevel=(fullLevel,fraction=0)=>engine.effectiveLevel(fu
 export const scaleItemStat=(key,value,fullLevel,options={})=>value===null?null:engine.scaleStat(key,value,fullLevel,options);
 
 const catalogStatAliases=Object.freeze({BACKSTAB:'BACKSTAB_DMG',BACKSTAB_DAMAGE:'BACKSTAB_DMG',BACKSTAB_DMG:'BACKSTAB_DMG',ATK_DELAY:'DELAY',ATTACK_DELAY:'DELAY',DELAY:'DELAY',DMG_BON:'DMG_BONUS',DAMAGE_BON:'DMG_BONUS',DAMAGE_BONUS:'DMG_BONUS',DMG_BONUS:'DMG_BONUS'});
-const catalogStatKey=label=>catalogStatAliases[String(label).trim().toUpperCase().replace(/[ .]+/g,'_')];
+const catalogStatKey=label=>core.canonicalStatKey(label)==='SV_CORRUPTION'?'SV_CORRUPTION':catalogStatAliases[String(label).trim().toUpperCase().replace(/[\s.-]+/g,'_')];
 const literalNumber=value=>typeof value==='number'&&Number.isFinite(value)?value:typeof value==='string'&&/^[+\-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(value.trim())&&Number.isFinite(Number(value))?Number(value):null;
+// Older catalog cards group ordinary resist fields on one display line. Only a
+// complete line of recognized resist atoms qualifies; embedded prose does not.
+const resistLabel='(?:SV[\\s._-]*(?:MAGIC|FIRE|COLD|DISEASE|POISON|VOID|CORRUPTION)|VOID|CORRUPTION|RESISTVOID|RESISTCORRUPTION)';
+const resistValue='(?:[+\\-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)|\\?|unknown)';
+const catalogResistLine=new RegExp(`^${resistLabel}\\s*:\\s*${resistValue}(?:\\s+${resistLabel}\\s*:\\s*${resistValue})*$`,'i');
+const catalogResistFields=new RegExp(`(${resistLabel})\\s*:\\s*(${resistValue})`,'gi');
 
-/** Recover explicit catalog fields omitted by older packs. Structured own
+/** Recover explicit weapon/Void catalog fields omitted by older packs. Structured own
  * values, including zero/unknown, win. Conflicting or nonliteral card values
  * stay unknown; notes and observed examine text are never consulted. A saved
  * catalog base can fill only these missing fields from a refreshed record. */
@@ -33,13 +39,14 @@ export function catalogBaseStats(item={},preservedStats) {
     for(const [key,value]of aliases)if(!Object.hasOwn(stats,key))stats[key]=value;
     if(preservedStats!==undefined){
         const fresh=catalogBaseStats(item);
-        for(const key of ['BACKSTAB_DMG','DELAY','DMG_BONUS'])if(!Object.hasOwn(stats,key)&&Object.hasOwn(fresh,key))stats[key]=fresh[key];
+        for(const key of ['BACKSTAB_DMG','DELAY','DMG_BONUS','SV_CORRUPTION'])if(!Object.hasOwn(stats,key)&&Object.hasOwn(fresh,key))stats[key]=fresh[key];
         return stats;
     }
     for(const raw of (Array.isArray(item.displayLines)?item.displayLines:[]).slice(0,32)){
         if(typeof raw!=='string'||raw.length>400)continue;
-        const line=raw.trim(),direct=line.match(/^(BACKSTAB(?:[ _]+(?:DMG|DAMAGE))?|(?:DMG|DAMAGE)[ _]+(?:BON|BONUS)|(?:(?:ATK|ATTACK)[ _]+)?DELAY)\s*:\s*(.*?)\s*$/i);
-        if(direct)collect(explicit,catalogStatKey(direct[1]),direct[2]);
+        const line=raw.trim(),direct=line.match(/^([^:\r\n]{1,60}):\s*(.*?)\s*$/);
+        if(catalogResistLine.test(line)){for(const field of line.matchAll(catalogResistFields))collect(explicit,catalogStatKey(field[1]),field[2]);}
+        else if(direct)collect(explicit,catalogStatKey(direct[1]),direct[2]);
         const skill=line.match(/^Skill:\s*[\w /&-]{1,80}?\s+(?:Atk\s+|Attack\s+)?Delay:\s*(.*?)\s*$/i);
         if(skill)collect(explicit,'DELAY',skill[1]);
     }
@@ -70,5 +77,7 @@ export function scaledItemStats(item={},fullLevel,options={}) {
         if(Number.isFinite(numeric))Object.defineProperty(known,key,{value:numeric,enumerable:true});
         else Object.defineProperty(unknown,key,{value:null,enumerable:true});
     }
-    return {...engine.scaleItemStats(known,fullLevel,{...options,slots,accuracyPercent}),...unknown};
+    // Unknown authored keys still establish field presence. In particular, a
+    // null Void alias must suppress generated Void rather than create two fields.
+    return {...engine.scaleItemStats({...known,...unknown},fullLevel,{...options,slots,accuracyPercent}),...unknown};
 }

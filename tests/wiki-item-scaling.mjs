@@ -76,7 +76,16 @@ assert.equal(Object.hasOwn(scaledItemStats({stats:{STR:3,HASTE:2,ATK:2,DMG:13,BA
 assert.equal(Object.hasOwn(scaledItemStats({stats:{HP:12,Mana:null}},5),'SV_CORRUPTION'),false,'Unknown newly eligible fields do not establish a second qualifier');
 assert.equal(Object.hasOwn(scaledItemStats({stats:{HP:12,HP_REGEN:null}},5),'SV_CORRUPTION'),false,'Unknown regeneration cannot establish a second qualifier');
 assert.equal(Object.hasOwn(scaledItemStats({stats:{HP_REGEN:2,HPREGEN:2}},5),'SV_CORRUPTION'),false,'Aliases of the same regeneration field count once');
-for(const explicit of [0,7])assert.equal(scaledItemStats({stats:{AC:2,HP:12,SV_CORRUPTION:explicit}},5).SV_CORRUPTION,explicit,'An explicit Void field remains caller-owned, including zero');
+for(const base of [0,1,7,25,-3,-25,null])for(let rank=0;rank<=10;rank++)for(const fraction of [0,Math.max(0,2**rank-1)]){
+    const expected=scaleItemStat('SV_FIRE',base,rank,{fraction});
+    assert.equal(scaledItemStats({stats:{SV_CORRUPTION:base}},rank,{fraction}).SV_CORRUPTION,expected,'Intrinsic Void uses the ordinary resist formula without requiring other stats');
+    assert.equal(scaledItemStats({stats:{AC:2,HP:12,SV_CORRUPTION:base}},rank,{fraction}).SV_CORRUPTION,expected,'An intrinsic Void value receives its rank gain exactly once');
+}
+for(const explicit of [0,null])assert.equal(scaledItemStats({stats:{AC:2,HP:12,SV_CORRUPTION:explicit}},5).SV_CORRUPTION,explicit,'Explicit zero and unknown Void suppress generation');
+for(const alias of ['SV Void','SV_VOID','SVVOID','SV Corruption','SV_CORRUPTION','SVCORRUPTION','resistCorruption']){
+    assert.equal(scaleItemStat(alias,25,5,{fraction:31}),scaleItemStat('SV_FIRE',25,5,{fraction:31}),`${alias}: intrinsic Void matches the other resists, including fractional progress`);
+}
+assert.equal(scaledItemStats({stats:{SV_CORRUPTION:7}},10,{fraction:1023}).SV_CORRUPTION,17,'Intrinsic Void respects the rank cap');
 assert.equal(itemEffectiveLevel(10,1023),10,'The cap has no fractional progress');
 assert.equal(scaleItemStat('WT',1,10,{fraction:1023}),.1,'Weight uses the same normalized capped state and mathematical ceiling as the wiki');
 assert.equal(scaleItemStat('WT',1,4,{fraction:9999}),scaleItemStat('WT',1,4,{fraction:15}),'Weight rejects excess fractional progress consistently');
