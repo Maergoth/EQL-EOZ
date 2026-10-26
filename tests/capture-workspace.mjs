@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {parseEditedStats,withDefaultItemStatLines,contributionItemEvidenceMarkup} from '../app/capture-workspace.js';
+import {parseEditedStats,withDefaultItemStatLines,contributionItemEvidenceMarkup,characterStatPreparationMarkup} from '../app/capture-workspace.js';
 import {parseScreenRead} from '../app/screen-read-parser.js';
 import {createContributionQueue} from '../app/contribution-queue.js';
 import {CHARACTER_STAT_KEYS,characterStatLabel} from '../app/character-model.js';
@@ -34,3 +34,6 @@ assert.equal((itemEvidence.match(/data-contribution-dropzone/g)||[]).length,1);a
 assert.equal(Object.hasOwn(candidate.fields,'statLines'),false,'preparing the editor does not mutate queued observations');
 console.log('Capture workspace stat editing: familiar labels, separators, unknowns, aliases and recoverable invalid/duplicate values passed.');
 console.log('Contribution item defaults: known numeric labels only; metadata remains separate and saved contributor text is preserved.');
+
+for(const [layout,expected,other]of [['default','Default layout detected.','Default Modern layout detected.'],['default_modern','Default Modern layout detected.','Default layout detected.']]){const markup=characterStatPreparationMarkup(layout);assert(markup.includes(expected));assert(!markup.includes(other));assert(markup.includes('Click off your buffs.'));assert(markup.includes('Keep all gear equipped.'));}
+assert(characterStatPreparationMarkup().includes('detected automatically'));assert(characterStatPreparationMarkup('default').includes('Select the Stats tab'));assert(characterStatPreparationMarkup('default_modern').includes('Scroll down'));assert.equal(characterStatPreparationMarkup('<img onerror=bad>'),characterStatPreparationMarkup(),'Unknown layout metadata never becomes HTML or forces a layout.');

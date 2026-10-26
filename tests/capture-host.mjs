@@ -34,10 +34,28 @@ function fixture({readingEnabled=true,onReadingEnabledChange}={}){
     return {host,main,event:{sender:contents,senderFrame:contents.mainFrame},journal,ocr,observations,copies,handlers,crops,submitted,
         tick(){now+=100;},advance(ms){now+=ms;},frame(id='one',width=100,height=40){return {bytes:png(id,width,height),width,height,capturedAt:now,captureGeneration:host.generation,owner:host.owner,sessionId:host.sessionId,sourceId:host.source?.id};},
         reject(error=Error('Transient synthetic OCR timeout.')){const pending=ocrPending;ocrPending=null;pending.reject(error);},
-        resolve(text){text??=host.owner==='character'?CHARACTER_TEXT:'Item: Synthetic Blade\nAC 12\nHP 45';const pending=ocrPending;ocrPending=null;pending.resolve({text,confidence:85,words:[]});},
+        resolve(text){text??=host.owner==='character'?CHARACTER_TEXT:'Item: Synthetic Blade\nAC 12\nHP 45';const pending=ocrPending;ocrPending=null;pending.resolve(typeof text==='object'?text:{text,confidence:85,words:[]});},
         async waitForRead(){for(let attempt=0;attempt<200;attempt++){if(ocrPending)return;await new Promise(resolve=>setTimeout(resolve,10));}throw Error('Synthetic read did not start.');}};
 }
 const f=fixture();
+// Transport proof uses the real parser with synthetic observed Default geometry
+// or its existing wordless Modern headings, not a caller-selected layout flag.
+{
+    const word=(text,x,y,width=100)=>({text,confidence:97,bbox:{x0:x,y0:y,x1:x+width,y1:y+20}});
+    const defaultWords=[word('Inventory',40,10),word('Pet',160,10,40),word('Stats',230,10,60),word('Loadouts',320,10,90),word('Storage',440,10,90),word('Heroic',350,80,65),word('Mods',425,80,50),word('Regen',50,230,80),word('Stats',50,320,60),word('Resists',50,500,80)];
+    for(const [label,value,y]of [['HP','330/398',80],['Mana','200/296',110],['Strength','90/510',350],['Stamina','80/510',380],['Magic','64/1000',525],['Void','102/1000',550]])defaultWords.push(word(label,50,y,160),word(value,220,y,105));
+    for(const [uiLayout,ocr]of [['default',{text:'Synthetic Default Stats pane',confidence:97,words:defaultWords}],['default_modern','Inventory\nCharacter Vitals\nStats and Resists\nHP 330/398\nMana 200/296\nSTR 90/510']]){
+        const layout=fixture();
+        try{
+            await layout.host.listSources();await layout.host.start({mode:'character',sourceId:'window:game',sessionId:'layout-transport'});layout.tick();layout.host.submitFrame(layout.frame('layout-live',1000,800));await layout.waitForRead();layout.resolve(ocr);await layout.host.processing;
+            const live=layout.observations[0];assert.equal(live.input.uiLayout,uiLayout,'Detected layout survives live frame publication');assert.equal(live.input.sourceId,'window:game');assert.equal(live.input.captureGeneration,layout.host.generation);assert.equal(live.owner,'character');assert.equal(live.sessionId,'layout-transport');
+            const imported=layout.host.importPng(png('layout-import',1000,800),{mode:'character',sessionId:'layout-transport'});await layout.waitForRead();layout.resolve(ocr);const result=await imported;
+            assert.equal(result.records[0].input.uiLayout,uiLayout,'Detected layout survives manual import publication');assert.equal(result.records[0].input.sourceId,null,'A layout label never turns a screenshot into live-source proof');assert.equal(result.records[0].input.captureGeneration,layout.host.generation);
+            assert.deepEqual((await layout.host.handle(layout.event,'read',{})).records.map(record=>record.input.uiLayout),[uiLayout,uiLayout],'Journal read retains both detected layout labels');
+            assert.deepEqual(layout.main.webContents.sent.filter(([channel])=>channel==='eye-of-zomm:capture-observation').map(([,record])=>record.input.uiLayout),[uiLayout,uiLayout],'Main-window IPC retains layout metadata');
+        }finally{await layout.host.dispose();}
+    }
+}
 {
     const saved=[],blocked=fixture({readingEnabled:false,onReadingEnabledChange:value=>saved.push(value)});
     try{

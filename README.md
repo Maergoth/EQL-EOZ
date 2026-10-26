@@ -135,8 +135,10 @@ production wiki submissions. Older tours remain available in What's new.
 ![Contribution matches and readable page details before publication](app/assets/whats-new/0.9.8/contribution-matching-and-loot.png)
 
 In **Settings → Screen reading**, explicitly select the source you want to read.
-The supported calibration is **Default Modern (`default_modern`)**; other game
-skins remain unverified. Calibration can select a complete stat or examine pane,
+The reader automatically detects **Default** and **Default Modern**. In Default,
+open Inventory's **Stats** tab; in Default Modern, scroll down to show the full
+stat panel and Additional Modifiers. Review unread values before saving. Other
+custom skins remain unverified. Calibration can select a complete stat or examine pane,
 and **Full frame** resets it. Original source/session/generation and timestamp
 checks still apply. Ordinary log parsing does not require screen reading.
 

@@ -1,5 +1,5 @@
 // OCR proposals only: never scale an item, infer drop sources or publish a fact.
-export const SCREEN_READ_PARSER_VERSION = 9;
+export const SCREEN_READ_PARSER_VERSION = 10;
 const clean = value => String(value ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim();
 const number = value => Number(String(value).replace(/,/g,''));
 const statNames = {
@@ -251,11 +251,42 @@ export function screenReadRefinementRegions(input={}) {
 }
 function characterRefinement(words,panes,character=characterRegion(words,panes)){
     if(!character)return null;
-    const base={x:character.x,y:character.y,width:character.right-character.x,height:character.bottom-character.y},available=words.filter(word=>!panes.some(pane=>wordsInPane([word],pane).length)),components=modernComponentRegions(available,character);
+    const base={x:character.x,y:character.y,width:character.right-character.x,height:character.bottom-character.y},available=words.filter(word=>!panes.some(pane=>wordsInPane([word],pane).length));
+    const components=modernComponentRegions(available,character);
+    if(character.uiLayout==='default'){
+        const evasion=defaultEvasionRegion(available,character);
+        // A Default reread keeps the final separator in its crop. A leading OCR
+        // "1" is never removed or treated as a divider by textual inference.
+        for(let index=components.length-1;index>=0;index--)if(components[index].component==='acEvasion')components.splice(index,1);
+        if(evasion)components.push(evasion);
+        // Keep the two differently sized Default columns separate in the same
+        // bounded pass. Cropping only the supported Heroic rows avoids spending
+        // pixels on Spell/Skill sections and improves small-font rereads without
+        // increasing the capture reader's pixel, tile or pass budgets.
+        const tiles=(components.length>2?[base,...components]:[{x:character.x,y:character.y,width:character.split-character.x,height:base.height},
+            {x:character.split,y:character.modifiersY-character.font*.5,width:character.right-character.split,height:Math.min(character.bottom,character.modifiersBottom)-character.modifiersY+character.font*.5},...components]).filter(tile=>tile.width>=4&&tile.height>=4);
+        return {role:'character-stats',tiles,preprocessing:'inverted',layout:components.length?'sparse':'block',scale:3};
+    }
     return {role:'character-stats',...(components.length?{tiles:[base,...components]}:base),preprocessing:'inverted',layout:components.length?'sparse':'block',scale:3};
+}
+function defaultEvasionRegion(words,character){
+    const rows=wordRows(words.filter(word=>word.bbox&&word.bbox.x0>=character.x&&word.bbox.x1<character.split&&word.bbox.y0>=character.y&&word.bbox.y1<=character.bottom));
+    const row=rows.find(row=>/^AC\b/i.test(row.words.map(word=>word.text).join(' '))),fraction=row?.words.find(word=>/^\d+\/\d+$/.test(clean(word.text)));
+    if(!fraction)return null;
+    const tail=row.words.filter(word=>word.bbox.x0>=fraction.bbox.x1),text=tail.map(word=>word.text).join(' ');
+    if(!tail.length||!text||!/^[\d,\s/|Il\[\]]+$/.test(text))return null;
+    const font=Math.max(3,row.height),x=fraction.bbox.x1,y=row.y-font*.3;
+    return {component:'acEvasion',x,y,width:Math.max(...tail.map(word=>word.bbox.x1))+font*.3-x,height:font*1.6};
 }
 function characterRegion(words,panes){
     const available=words.filter(word=>word.bbox&&!panes.some(pane=>word.bbox.x0>=pane.x&&word.bbox.x1<=pane.right&&word.bbox.y0>=pane.y&&word.bbox.y0<pane.bottom));
+    const defaults=defaultCharacterRegions(available);
+    if(defaults.length){
+        // A whole-display capture can contain two clients. Never combine their
+        // headings or arbitrarily select one client's equipped totals.
+        const modern=available.some(word=>/^Character$/i.test(clean(word.text))&&available.some(other=>/^Vitals$/i.test(clean(other.text))&&other.bbox.x0>word.bbox.x0&&Math.abs(other.bbox.y0-word.bbox.y0)<20));
+        return defaults.length===1&&!modern?defaults[0]:null;
+    }
     const inventory=available.find(word=>/^Inventory$/i.test(clean(word.text))),vitals=available.find(word=>/^Character$/i.test(clean(word.text))&&available.some(other=>/^Vitals$/i.test(clean(other.text))&&other.bbox.x0>word.bbox.x0&&Math.abs(other.bbox.y0-word.bbox.y0)<20));
     if(!inventory||!vitals){
         const heading=wordRows(available).find(row=>/^Character Stats$/i.test(row.words.map(word=>word.text).join(' ')));
@@ -279,7 +310,51 @@ function characterRegion(words,panes){
         if(Math.abs(left-vitals.bbox.x0)<=font*2&&/^Additional\s+Information$/i.test(text))bottom=Math.max(bottom,row.y+row.height+font*5);
         else if(/^Additional\s+Modifiers$/i.test(text)||/^(?:Accuracy|Avoidance|Combat Effects|Strike ?Through|Stun Resist|Damage Shield(?:ing| Mitiga(?:tion)?)?|DoT Shielding|Melee Shielding|Spell Shielding)\b/i.test(text))bottom=Math.max(bottom,row.y+row.height+font*.6);
     }
-    return {x,y,right,bottom:Math.min(bottom,vitals.bbox.y0+font*48),font};
+    return {x,y,right,bottom:Math.min(bottom,vitals.bbox.y0+font*48),font,uiLayout:'default_modern'};
+}
+function defaultCharacterRegions(words){
+    const rows=wordRows(words),regions=[];
+    for(const tab of rows){
+        const tabs=tab.words.filter(word=>/^(?:Inventory|Pet|Stats|Loadouts|Storage)$/i.test(clean(word.text))),names=new Set(tabs.map(word=>clean(word.text).toLowerCase()));
+        if(names.size!==tabs.length)continue;
+        if(!names.has('inventory')||!names.has('stats')||['pet','loadouts','storage'].filter(name=>names.has(name)).length<2)continue;
+        const inventory=tabs.find(word=>/^Inventory$/i.test(clean(word.text))),font=Math.max(3,Math.min(...tabs.map(word=>word.bbox.y1-word.bbox.y0))),left=Math.max(0,inventory.bbox.x0-font),tabRight=Math.max(...tabs.map(word=>word.bbox.x1));
+        if(tabRight-left>font*64)continue;
+        // Tab glyphs end before the panel border. Search only a bounded margin;
+        // expand the final crop to independently observed modifier-pair ink.
+        const body=words.filter(word=>word.bbox.x0>=left&&word.bbox.x1<=tabRight+font*8&&word.bbox.y0>tab.y+font&&word.bbox.y1<=tab.y+font*64&&word.bbox.y1-word.bbox.y0<=font*1.8),bodyRows=wordRows(body);
+        const heroic=bodyRows.flatMap(row=>row.words.map((word,index)=>({word,text:row.words.slice(index).map(value=>value.text).join(' ')}))).find(value=>/^Heroic\s+Mods$/i.test(clean(value.text))&&value.word.bbox.y0<tab.y+font*10&&value.word.bbox.x0>left+font*8)?.word;
+        if(!heroic)continue;
+        const split=heroic.bbox.x0-font*.6,leftRows=wordRows(body.filter(word=>word.bbox.x1<split)),heading=name=>leftRows.find(row=>new RegExp(`^${name}$`,'i').test(row.words.map(word=>clean(word.text)).join(' '))),regen=heading('Regen'),attributes=heading('Stats'),resists=heading('Resists');
+        if(!regen||!attributes||!resists||!(regen.y<attributes.y&&attributes.y<resists.y))continue;
+        const pair='[+-]?[\\d,]+[ \\t]*/[ \\t]*[\\d,]+',vitals=leftRows.filter(row=>row.y<regen.y&&new RegExp(`^(?:HP|Mana|End(?:urance)?)[ \\t]+${pair}(?:$|[ \\t])`,'i').test(row.words.map(word=>word.text).join(' ')));
+        const resistRows=leftRows.filter(row=>row.y>resists.y&&row.y<resists.y+font*16&&new RegExp(`^(?:Magic|Fire|Cold|Disease|Poison|Void|Corruption)[ \\t]+${pair}(?:$|[ \\t])`,'i').test(row.words.map(word=>word.text).join(' ')));
+        const attributeRows=leftRows.filter(row=>row.y>attributes.y&&row.y<resists.y&&/^(?:Strength|Stamina|Intelligence|Wisdom|Agility|Dexterity|Charisma)\b/i.test(row.words.map(word=>word.text).join(' ')));
+        if(vitals.length<2||!vitals.some(row=>/^HP\b/i.test(row.words[0].text))||attributeRows.length<2||resistRows.length<2)continue;
+        const top=Math.min(...vitals.map(row=>row.y),heroic.bbox.y0)-font*.5,bottom=Math.max(...resistRows.map(row=>row.y+row.height))+font;
+        const rightRows=wordRows(body.filter(word=>word.bbox.x0>=split)),end=rightRows.find(row=>row.y>heroic.bbox.y0&&/^(?:Spell Mods|Skill Damage Mod)$/i.test(row.words.map(word=>word.text).join(' '))),modifiersBottom=Math.min(end?.y??Infinity,heroic.bbox.y0+font*24);
+        const modifierRows=rightRows.filter(row=>row.y>heroic.bbox.y0&&row.y<modifiersBottom&&/^(?:Accuracy|Avoidance|Combat Effects|Strike ?Through|Stun Resist|Damage Shield(?:ing| Mitiga(?:tion)?)?|DoT Shielding|Melee Shielding|Spell Shielding)\b.*\d[ \t]*\/[ \t]*\d/i.test(row.words.map(word=>word.text).join(' ')));
+        const right=Math.max(tabRight+font,...modifierRows.flatMap(row=>row.words.map(word=>word.bbox.x1+font*.5)));
+        regions.push({x:left,y:Math.max(0,top),right,bottom,font,uiLayout:'default',split,resistsY:resists.y,modifiersY:heroic.bbox.y0,modifiersBottom});
+    }
+    return regions;
+}
+function characterTableWords(words,character){
+    if(character?.uiLayout!=='default')return words;
+    const result=[];
+    // Default places the same current/cap rows in a tall left column and the
+    // Heroic modifiers in the right column. Spell/skill sections are evidence,
+    // not alternative sources of Attack/Accuracy or inferred modifier totals.
+    for(const row of wordRows(words.filter(word=>word.bbox.x1<character.split))){
+        let selected=row.words;
+        if(row.y>=character.resistsY&&/^(?:Magic|Fire|Cold|Disease|Poison|Void|Corruption)$/i.test(clean(selected[0]?.text)))selected=selected.map((word,index)=>index===0?{...word,text:'SV '+word.text}:word);
+        if(/^Combat\b/i.test(clean(selected[0]?.text))&&/^Combat\s+(?:HP|Mana|End(?:urance)?)\s+Regen\b/i.test(selected.map(word=>word.text).join(' ')))selected=selected.flatMap((word,index)=>index?word:clean(word.text)==='Combat'?[]:{...word,text:word.text.replace(/^Combat\s+/i,'')});
+        result.push(...selected);
+    }
+    for(const row of wordRows(words.filter(word=>word.bbox.x0>=character.split&&word.bbox.y0>=character.modifiersY&&word.bbox.y0<character.modifiersBottom))){
+        if(/^(?:Accuracy|Avoidance|Combat Effects|Strike ?Through|Stun Resist|Damage Shield(?:ing| Mitiga(?:tion)?)?|DoT Shielding|Melee Shielding|Spell Shielding)\b/i.test(row.words.map(word=>word.text).join(' ')))result.push(...row.words);
+    }
+    return result;
 }
 function modernComponentRegions(words,character){
     const rows=wordRows(words.filter(word=>word.bbox&&word.bbox.x0>=character.x&&word.bbox.x1<=character.right&&word.bbox.y0>=character.y&&word.bbox.y1<=character.bottom&&word.bbox.y1-word.bbox.y0<=character.font*1.8));
@@ -297,9 +372,14 @@ function modernComponentRegions(words,character){
         {component:'attackAccuracy',x:cut+font*.35,y,width:right-cut-font*.35,height},
         ...(/^1\d+$/.test(clean(divider.text))?[{component:'acEvasion',x:cut+font*.35,y:divider.bbox.y0-font*.3,width:divider.bbox.x1-cut,height:divider.bbox.y1-divider.bbox.y0+font*.6}]:[])].filter(tile=>tile.width>=4&&tile.height>=4);
 }
-function refinedCharacterComponents(words,confidence){
+function refinedCharacterComponents(words,confidence,{requireEvasionDivider=false}={}){
     const fields=[];
     for(const key of ['attackOffense','attackAccuracy','acEvasion']){const selected=words.filter(word=>word.component===key&&clean(word.text));
+        if(key==='acEvasion'&&requireEvasionDivider){
+            const ordered=selected.slice().sort((a,b)=>a.bbox.x0-b.bbox.x0),text=ordered.map(word=>clean(word.text)).join('');
+            if(!ordered.length||ordered.length>2||!/^[/|]\d[\d,]*$/.test(text)||/^[/|]0\d/.test(text)||ordered.some(word=>Number(word.confidence)<85))continue;
+            fields.push(field(key,`Observed ${key} column OCR: ${text}`,number(text.slice(1)),Math.min(confidence,...ordered.map(word=>Number(word.confidence)))));continue;
+        }
         if(selected.length!==1||!/^\d[\d,]*$/.test(clean(selected[0].text))||/^0\d/.test(clean(selected[0].text))||Number(selected[0].confidence)<85)continue;
         fields.push(field(key,`Observed ${key} column OCR: ${selected[0].text}`,number(selected[0].text),Math.min(confidence,Number(selected[0].confidence))));}
     return fields;
@@ -337,7 +417,10 @@ function tableStats(text,words,confidence,options={}){
     const rows=wordRows(words);
     // Single glyphs in the Modern stat font are easy to confuse. Low-confidence
     // digits remain in raw evidence instead of silently becoming a known stat.
-    return entries.filter(entry=>!rows.some(row=>row.words.some(word=>/^[+-]?\d(?:\.\d+)?$/.test(clean(word.text))&&Number(word.confidence)<85&&number(word.text)===entry.value)&&stats(row.words.map(value=>value.text).join(' '),confidence,options).some(value=>value.key===entry.key)));
+    return entries.filter(entry=>!rows.some(row=>row.words.some(word=>{
+        const text=clean(word.text),pattern=options.confidentNumbers?/^[+-]?[\d,]+(?:\.\d+)?(?:[\/|][+-]?[\d,]+(?:\.\d+)?)*[%+]?$/:/^[+-]?\d(?:\.\d+)?$/;
+        return pattern.test(text)&&Number(word.confidence)<85&&text.replace(/[%+]$/,'').split(/[\/|]/).some(value=>number(value)===entry.value);
+    })&&stats(row.words.map(value=>value.text).join(' '),confidence,options).some(value=>value.key===entry.key)));
 }
 function numericDisagreements(base,read,options={}){
     const conflicts=new Set(),numeric=value=>{const text=clean(value);return /^[+-]?[\d,]+(?:\.\d+)?(?:[\/|][+-]?[\d,]+(?:\.\d+)?)*(?:%|\+)?$/.test(text)?text.replace(/[%+]$/,'').split(/[\/|]/):null;};
@@ -364,8 +447,9 @@ export function parseScreenRead(input = {}) {
     const characterOnly=input.characterOnly===true||input.owner==='character',raw = clean(input.text).slice(0,16384),baseWords=Array.isArray(input.words)?input.words.slice(0,2000):[],words = characterOnly?baseWords:refinedWords(input,baseWords);
     const confidence = Math.max(0,Math.min(100,Number(input.confidence) || 0));
     if (!raw) return [];
+    const provenance={...input.input};delete provenance.uiLayout;
     const metadata = { kind:input.kind === 'manual' ? 'manual':'ocr', owner:input.owner || 'contribution', sessionId:input.sessionId || '',
-        capturedAt:input.capturedAt || new Date().toISOString(), input:input.input || {} };
+        capturedAt:input.capturedAt || new Date().toISOString(), input:provenance };
     const panes=itemRegions(words),observations=[],initialPanes=itemRegions(baseWords);
     // Word geometry is always used when available, including an Inventory pane
     // to the right of any number of item panes. Sparse OCR text order is not row
@@ -377,7 +461,8 @@ export function parseScreenRead(input = {}) {
         const rawStatBlock=itemStatBlock(itemText,name);
         const parsedStats=parseItemStatBlock(rawStatBlock);
         const nameConfidence=region?.hover?Math.min(confidence,...wordsInPane(words,region).filter(word=>word.bbox.y0>=region.nameBand.y&&word.bbox.y1<=region.nameBand.y+region.nameBand.height).map(word=>Number(word.confidence)||0)):confidence;
-        const fields = [field('name',name,name,nameConfidence), ...parsedStats.fields.map(entry=>({...entry,confidence}))];
+        const confidentStats=region?tableStats(rawStatBlock,wordsInPane(words,region),confidence):parsedStats.fields;
+        const fields = [field('name',name,name,nameConfidence), ...parsedStats.fields.filter(entry=>confidentStats.some(value=>value.key===entry.key&&value.value===entry.value)).map(entry=>({...entry,confidence}))];
         // Region OCR sees a compact two-column examine stat table more clearly
         // than a whole scene. Punctuation after a label is OCR evidence, not a
         // decimal repair in the value; missing numeric punctuation stays absent.
@@ -427,15 +512,16 @@ export function parseScreenRead(input = {}) {
     const character=characterRegion(words,panes),withinCharacter=word=>Boolean(word.bbox&&word.bbox.x0>=character.x&&word.bbox.x1<=character.right&&word.bbox.y0>=character.y&&word.bbox.y1<=character.bottom&&word.bbox.y1-word.bbox.y0<=character.font*1.8&&!panes.some(pane=>wordsInPane([word],pane).length)),characterWords=character?words.filter(withinCharacter):[],characterText=character?wordLines(characterWords):words.length?wordLines(words.filter(word=>!panes.some(pane=>wordsInPane([word],pane).length))):raw;
     const textModern=!words.length&&/\bCharacter[ \t]+Vitals\b/i.test(characterText)&&/\bStats[ \t]+and[ \t]+Resists\b/i.test(characterText),textCharacter=!words.length&&(characterOnly?textModern||/^Character Stats\b/im.test(characterText):/\bInventory\b|^Character Stats\b/im.test(characterText));
     if (character||textCharacter) {
-        const modern=!!character&&character.modern!==false||characterOnly&&textModern,fields = stats(characterText,confidence,{character:true,modern}),conflicts=new Set(),evidence=[characterText];
+        const modern=!!character&&character.modern!==false||characterOnly&&textModern,tableWords=characterTableWords(characterWords,character),tableText=character?wordLines(tableWords):characterText,options={character:true,modern,confidentNumbers:character?.uiLayout==='default'},fields = options.confidentNumbers?tableStats(tableText,tableWords,confidence,options):stats(tableText,confidence,options),conflicts=new Set(),evidence=[characterText];
         for(const pass of (Array.isArray(input.refinements)?input.refinements:[]).slice(0,2).filter(pass=>pass.role==='character-stats')){const selected=(pass.words||[]).filter(word=>!character||withinCharacter(word)),ordinary=selected.filter(word=>!word.component),mapped=alignedTableWords(characterWords,ordinary),text=wordLines(mapped)||(!character?String(pass.text||''):'');evidence.push(wordLines(selected)||(!character?String(pass.text||''):''));
-            for(const key of numericDisagreements(characterWords,ordinary,{character:true,modern})){conflicts.add(key);const index=fields.findIndex(entry=>entry.key===key);if(index>=0)fields.splice(index,1);}
-            for(const entry of [...stats(text,Math.min(confidence,Number(pass.confidence)||0),{character:true,modern}),...refinedCharacterComponents(selected,confidence)]){
+            const scoped=characterTableWords(mapped,character),scopedText=character?wordLines(scoped):text;
+            for(const key of numericDisagreements(tableWords,characterTableWords(ordinary,character),{character:true,modern})){conflicts.add(key);const index=fields.findIndex(entry=>entry.key===key);if(index>=0)fields.splice(index,1);}
+            for(const entry of [...(options.confidentNumbers?tableStats(scopedText,scoped,Math.min(confidence,Number(pass.confidence)||0),options):stats(scopedText,Math.min(confidence,Number(pass.confidence)||0),options)),...refinedCharacterComponents(selected,confidence,{requireEvasionDivider:character?.uiLayout==='default'})]){
                 if(entry.key.startsWith('resist')&&(pass.words||[]).some(word=>String(word.text).includes(`${entry.value}/`)&&Number(word.confidence)<95))continue;
                 const existing=fields.findIndex(value=>value.key===entry.key);if(existing<0&&!conflicts.has(entry.key))fields.push(entry);else if(existing>=0&&fields[existing].value!==entry.value){conflicts.add(entry.key);fields.splice(existing,1);}}
         }
         if (fields.filter(entry=>['hpCurrent','hpMaximum','manaCurrent','manaMaximum','ac','acMitigation','acMitigationSoftcap','acEvasion','attackOffense','attackAccuracy','str','sta','agi','dex','wis','int','cha'].includes(entry.key)).length>=3) {
-            observations.push({ ...metadata, parser:{name:'character-stats',version:SCREEN_READ_PARSER_VERSION},
+            observations.push({ ...metadata, input:{...metadata.input,...(character?.uiLayout?{uiLayout:character.uiLayout}:textModern?{uiLayout:'default_modern'}:{})},parser:{name:'character-stats',version:SCREEN_READ_PARSER_VERSION},
                 subject:{kind:'character',name:clean(input.character).slice(0,80)},fields,
                 evidence:{text:[...fields.map(entry=>entry.raw),...evidence,...(conflicts.size?[`Conflicting OCR values left unknown: ${[...conflicts].join(', ')}`]:[])].join('\n').slice(0,16384),imageId:null} });
         }

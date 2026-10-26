@@ -78,12 +78,17 @@ other storage. Unsupported location formats still reject the import atomically.
 The preparation instructions must be prominent:
 
 1. **Open your Inventory.**
-2. **Scroll down.** Show the whole stat panel, including Additional Modifiers;
-   keep its Inventory heading visible.
+2. **Show your full stat panel.** In **Default**, select Inventory's **Stats**
+   tab and keep both columns visible. In **Default Modern**, scroll down to
+   include the stat panel and Additional Modifiers. Keep the Inventory tabs or
+   heading visible so the reader can identify the pane.
 3. **Click off your buffs.** Keep all gear equipped.
 
-Use the supported Default Modern (`default_modern`) UI, explicitly select the
-game window and choose **Read character stats**. Optional acquisition is a lower
+The reader automatically recognizes **Default** (`default`) and **Default
+Modern** (`default_modern`) from the visible pane. Explicitly select the game
+window and choose **Read character stats**. Confirmed layout evidence updates
+the instructions without replacing edited statistics. Unidentified layouts
+retain the general instructions; no skin setting is required. Optional acquisition is a lower
 1 FPS for a stable stat pane. It does not guarantee brief tooltip recall. Review
 the proposed numbers and correct unread fields before **Use these stats and
 review**. An explicit reread replaces the draft; deliberate edits are retained
@@ -222,7 +227,7 @@ including either universal Any slot or drag/drop. Standard slots require actual
 compatibility; there is no incompatible-slot override. The board has 23 normal
 slots plus Any 1 and Any 2, which accept known items only by manual placement.
 
-Default Modern's local inventory XML identifies the AC row's first component as
+The Default and Default Modern inventory XML identify the AC row's first component as
 mitigation AC, the slash component as mitigation softcap and the last component
 after the divider as evasion AC. Attack has distinct offense and accuracy values.
 These are separate components, not current/maximum or melee/ranged values.
@@ -257,7 +262,8 @@ private game captures or account data in Git. Preserve unrelated EQLWiki dirt.
   supplies pure touching geometry and guarded saved follower chains.
 - `app/character-walkthrough.js`: bounded local phase/source/session progress,
   fresh-base cutoff, durable manual drafts and unique capture identity matching.
-- `C:/EverQuest Legends/uifiles/default_modern/EQUI_InventoryWindow.xml`:
+- `C:/EverQuest Legends/uifiles/default/EQUI_InventoryWindow.xml` and
+  `C:/EverQuest Legends/uifiles/default_modern/EQUI_InventoryWindow.xml`:
   actual component EqTypes/tooltips. Read-only game UI evidence, never committed.
 - `docs/design/CHARACTER_CAPTURE.md`, `docs/design/CAPTURE_PIPELINE.md`:
   current contracts and prior calibration. Update the changed contracts.
@@ -286,7 +292,7 @@ capture starts outside an explicit user-started walkthrough.
    optional race for calculations. One clear Start/Continue entry point.
 2. **Capture source**: discover the actual game window and present its selected
    source inside the walkthrough, with manual source choice and inline optional
-   calibration. Default Modern remains the calibrated skin. Start from this step,
+   calibration. Default and Default Modern are detected from the visible pane. Start from this step,
    without sending the player to Settings.
 3. **Unequip**: ANY-slot items first. Remove one item slowly, keep its complete
    tooltip visible and wait for its card. Read full item text, resolve known

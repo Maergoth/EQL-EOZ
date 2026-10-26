@@ -47,6 +47,8 @@
     "test:capture-calibration": "node scripts/test-capture-calibration.mjs",
     "pretest:modern-ocr": "node scripts/prepare-ocr-assets.mjs",
     "test:modern-ocr": "node tests/modern-ocr.mjs",
+    "pretest:default-ocr": "node scripts/prepare-ocr-assets.mjs",
+    "test:default-ocr": "node tests/default-ocr.mjs",
     "pretest:hover-ocr": "node scripts/prepare-ocr-assets.mjs",
     "test:hover-ocr": "node tests/hover-ocr.mjs",
     "test:intel-stability": "node scripts/test-intel-stability.mjs",

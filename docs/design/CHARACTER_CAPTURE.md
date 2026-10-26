@@ -69,9 +69,14 @@ No server formula, cap, buff removal or gear-sum inference is performed.
 
 ### Stat capture and profile safety
 
-Preparation is **Open your Inventory → Scroll down → Click off your buffs**.
-Keep the entire Default Modern stat pane, Additional Modifiers and Inventory
-heading visible while keeping all gear on. Explicit window selection starts
+Preparation is **Open your Inventory → Show the full stat panel → Click off
+your buffs**. Default users select the **Stats** tab; Default Modern users
+scroll down to include Additional Modifiers. Keep both stat columns and the
+Inventory tabs or heading visible while keeping all gear on. The parser
+identifies either built-in layout from visible evidence and attaches an
+optional `input.uiLayout` (`default` or `default_modern`) only to the Character
+observation. Item examine panes retain their independent identity checks.
+Explicit window selection starts
 optional local capture at 1 FPS. Source/session/generation, original timestamp,
 sequence, phase and selected profile epochs guard live and imported proposals.
 The user reviews unread values; a fresh read can replace a draft, while deliberate
