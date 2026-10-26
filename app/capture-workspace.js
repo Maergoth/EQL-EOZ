@@ -618,11 +618,13 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function characterVisible(){const panel=characterRoot.closest('.view');return !panel||panel.classList.contains('is-active');}
     async function readInventoryFile(revision=inventoryWatchEpoch){
         if(!repositoryClient&&(!inventory||!achievements))throw Error('Character file import requires the desktop app.');
-        const flow=walkthrough.snapshot(),epoch=walkthroughEpoch,metadata=character.snapshot().metadata;
+        const flow=walkthrough.snapshot(),epoch=walkthroughEpoch,metadata=character.snapshot().metadata,activeProfileId=profiles.activeId();
         if(!characterVisible()||revision!==inventoryWatchEpoch||!flow.active||flow.step!=='inventory')return;
-        const current=()=>characterVisible()&&flowCurrent(epoch,flow.sessionId,'inventory')&&revision===inventoryWatchEpoch;
+        const current=()=>characterVisible()&&profiles.activeId()===activeProfileId&&flowCurrent(epoch,flow.sessionId,'inventory')&&revision===inventoryWatchEpoch;
         inventoryMessage='Reading your inventory and achievements files…';renderWalkthrough();
-        const result=repositoryClient?await repositoryClient.importFiles({metadata,onProgress:event=>{if(current()){inventoryMessage=`Reading your character export${Number.isSafeInteger(event.rows)?` · ${event.rows.toLocaleString()} rows`:''}…`;renderWalkthrough();}}}):await readCharacterExports({inventory,achievements,metadata,isCurrent:current});
+        let result;
+        try{result=repositoryClient?await repositoryClient.importFiles({metadata,onProgress:event=>{if(current()){inventoryMessage=`Reading your character export${Number.isSafeInteger(event.rows)?` · ${event.rows.toLocaleString()} rows`:''}…`;renderWalkthrough();}}}):await readCharacterExports({inventory,achievements,metadata,isCurrent:current});}
+        catch(error){if(current()){inventoryMessage=error.message||'The character files could not be read.';renderWalkthrough();}throw error;}
         const importedFlow=walkthrough.snapshot(),completedHere=repositoryClient&&characterVisible()&&epoch===walkthroughEpoch&&revision===inventoryWatchEpoch&&importedFlow.active&&importedFlow.sessionId===flow.sessionId&&['inventory','stats'].includes(importedFlow.step);
         if(!(repositoryClient?completedHere:current())||result?.stale)return;
         if(!result?.ok){inventoryMessage=result?.cancelled?'Import canceled. Your saved character is unchanged.':result?.error||'The character files could not be read.';renderWalkthrough();return;}

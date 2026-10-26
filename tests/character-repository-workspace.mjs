@@ -27,5 +27,29 @@ try{
     await until(()=>/saved on this computer/.test(document.querySelector('[data-character-repository-status]').textContent),'native ACK shown');
     assert(!writes.some(key=>/character-(?:v1|profiles-v1|walkthrough-v1)$/.test(key)),'native path never mirrors full inventory or roster to browser storage');
     assert.equal(f.rows.size,10020);assert.equal(warnings.length,0);
+    // Native parser errors must reach the inline import status as well as the
+    // existing warning path, without changing the saved inventory.
+    const savedRows=structuredClone([...f.rows]);
+    const importError='Synthetic incomplete worn equipment export.';
+    f.api.importFiles=async()=>{throw Error(importError);};
+    document.querySelector('[data-character-reimport]').click();
+    await until(()=>document.querySelector('[data-inventory-read]')&&!/Saving/.test(document.querySelector('[data-character-repository-status]').textContent),'inventory import step ACK');
+    await view.flushCharacter();await new Promise(resolve=>setTimeout(resolve,0));
+    document.querySelector('[data-inventory-read]').click();
+    await until(()=>document.querySelector('[data-inventory-import-status]')?.textContent===importError,'native failure is visible inline');
+    assert(warnings.includes(importError),'the existing warning receives the same error');
+    assert.deepEqual([...f.rows],savedRows,'failed native import changes no saved rows');
+    // A late failure from a canceled walkthrough may still be warned, but must
+    // never replace the current workflow's inline status.
+    let rejectImport;
+    f.api.importFiles=()=>new Promise((resolve,reject)=>{rejectImport=reject;});
+    document.querySelector('[data-inventory-read]').click();
+    await until(()=>typeof rejectImport==='function','second native import started');
+    document.querySelector('[data-character-stop]').click();
+    rejectImport(Error('Retired synthetic import failure.'));
+    await until(()=>document.querySelector('[data-walkthrough-status]').textContent.includes('Walkthrough canceled'),'cancelled walkthrough finishes');
+    assert(!document.querySelector('[data-inventory-import-status]'),'retired inline status is not recreated after cancellation');
+    assert(!document.querySelector('[data-walkthrough-status]').textContent.includes('Retired synthetic'));
+    assert.deepEqual([...f.rows],savedRows,'late failed import changes no saved rows');
 }finally{view.dispose();Object.assign(globalThis,prior);dom.window.close();}
 console.log('Mounted Character repository workspace: 10k native rows, bounded grid, equipment, page navigation, real editor, save ACK and no full browser mirror passed.');
