@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.0.7 - Easier Character setup
 
 - Automatically read the Default inventory Stats tab alongside Default Modern, with layout-specific guidance and the same equipped, unbuffed stat-review flow.
-
 - Choose two or three Character classes with checkboxes instead of typing class codes. Saved combinations are preselected, unfinished selections survive background refreshes, and wiki sharing formats the codes automatically.
+- Keep unread or conflicting OCR values unknown for review, including small text. Character totals continue to use only the statistics you review.
 
 ## 1.0.6 - Expandable private inventories
 

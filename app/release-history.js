@@ -2,6 +2,37 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.7",
+  "title": "Easier Character setup",
+  "changes": [
+    "Choose two or three classes with checkboxes. Saved class names and codes are preselected, and unfinished choices stay in place during background refreshes.",
+    "Read Character stats from Default's Inventory Stats tab or Default Modern's full stat panel. The visible pane selects the layout automatically.",
+    "Review unread or conflicting numbers before saving. Your recorded totals continue to use only the statistics you review."
+  ],
+  "steps": [
+    {
+      "title": "Choose your class combination",
+      "image": "1.0.7/character-class-checkboxes",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Check two or three classes in Character details. Full names and three-letter codes appear together. At three selections, uncheck one before adding another. Existing combinations are preselected; unrecognized saved values need your review before replacement.",
+      "alt": "Actual Character details form showing sixteen class checkboxes, with Cleric, Ranger and Shadow Knight selected and all other choices disabled until a selection is removed.",
+      "caption": "Actual production Character components in isolated Electron Chromium at 17px, using a disposable synthetic profile and fixture APIs. The native walkthrough checks two- and three-class submission, maximum-three recovery, saved full-name compatibility and unfinished-choice preservation. No player data, installed profile, game pixels or live wiki request.",
+      "imageSha256": "3fd8efa7a2c8b784151198032b46ada3e5a13a4f3f2d7826bea36442cf5d48d8"
+    },
+    {
+      "title": "Prepare either built-in stat panel",
+      "image": "1.0.7/character-stat-guidance",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Keep your gear equipped, open Inventory and click off your buffs. In Default, select the Stats tab and show both columns. In Default Modern, scroll down to the full panel and Additional Modifiers. Read your displayed stats, then review every unread value before continuing.",
+      "alt": "Actual Character stat preparation showing instructions for Default's Stats tab and Default Modern's scrolled stat panel, with an explicit Read character stats action and editable review area.",
+      "caption": "Actual production Character workspace in isolated Electron Chromium with a synthetic game-window selection and disposable profile. This capture shows preparation before acquisition; separate offline OCR tests verify generated Default pixels and safe unknown readings. No game or player pixels, installed profile or live wiki request.",
+      "imageSha256": "512840f1ef89504abfacb1109108ef841e8d9fdec16011ebd08280ef0d27d130"
+    }
+  ]
+},
+{
   "version": "1.0.6",
   "title": "Expandable private inventories",
   "changes": [
