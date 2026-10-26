@@ -1,6 +1,8 @@
 # Eye of Zomm contributor handoff
 
-Current `v1.0.1` hotfix: procedural chat identities, reversible untouched-caption cleanup, stable Discovery rows during proof renewal, and canonical outgoing wiki item formatting. The existing fresh-proof and protected-draft boundaries remain in force.
+Current `v1.0.2` hotfix: accept Personal-Depot inventory export locations and preserve their storage provenance, quantities and physical copies across reimport and restart. Depot contents remain unequipped, and recorded character totals keep their existing source.
+
+Previous `v1.0.1` hotfix: procedural chat identities, reversible untouched-caption cleanup, stable Discovery rows during proof renewal, and canonical outgoing wiki item formatting. The existing fresh-proof and protected-draft boundaries remain in force.
 
 1.0.0 integrates the six reviewed icon, tier-stat, Crawl, combatant, contribution and map-latency features. Preserve exact wiki base fields, capture permission, fresh-proof publication guards and one shared session. See [the 1.0 release record](RELEASE_1_0_PLAN.md); older receipts below remain historical.
 

@@ -30,8 +30,8 @@ provide recovery without giving renderer code arbitrary filesystem access.
 
 The parser validates the complete worn table before an atomic replacement.
 Preserve counts, IDs, exact worn locations, paired slots and physical duplicates.
-General bags, nested storage, Held, Bank, SharedBank and the separate KeyRing
-table do not become equipped gear. The file's Slots column is not proof of
+General bags, nested storage, Held, Bank, SharedBank, Personal-Depot entries and
+the separate KeyRing table do not become equipped gear. The file's Slots column is not proof of
 Exaltation capacity. Stored socket groups require an exact cached equipment
 parent; container facts override gear slots and child names. Unknown parents
 keep their contents separate. An exact trailing `(Exaltation)` can match its
@@ -43,6 +43,10 @@ five sockets, explicit observed capacity wins, and occupied positions are kept
 through the existing maximum of eight. Original source socket positions remain
 private. Malformed/stale results or a profile switch cannot partially
 overwrite the selected character. Export contents and paths stay private.
+
+Personal-Depot locations retain their own storage group, counts and physical
+copies across imports and restart, using the same container/socket rules as
+other storage. Unsupported location formats still reject the import atomically.
 
 ### 3. Recorded equipped, unbuffed stats
 

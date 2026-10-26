@@ -1,5 +1,7 @@
 # EQLWiki — Eye of Zomm
 
+**1.0.2: Personal depot inventory imports.** Import `/outputfile inventory` exports containing `Personal-Depot` storage. Depot items keep their counts and saved locations alongside carried and banked inventory. See [the inventory walkthrough](docs/CHARACTER_WALKTHROUGH.md).
+
 **1.0.1: Stable discoveries, combat and maps.** Canonical chat item matching, stable Discovery rows and edits, blueprint-style item pages, corrected healing and DoT attribution, restored Nektropos 3D maps, and bag imports that keep loose Exaltations separate from item sockets. See [queue stability](docs/DISCOVERY_QUEUE_STABILITY.md), [item formatting](docs/ITEM_CONTRIBUTION_FORM.md) and [combat attribution](docs/COMBATANT_OVERVIEW.md).
 
 **1.0.0: Eye of Zomm.** Responsive logged-location maps, shared Crawl progress, per-combatant parsing and AA, retained Live encounters, explicit weapon-base previews, a structured contribution form and one Screen Reading master switch. Native desktop and installer icons use the eye. See [the release record](docs/RELEASE_1_0_PLAN.md).

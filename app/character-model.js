@@ -56,7 +56,7 @@ export function characterEquipmentEligibility(candidate) {
 }
 
 const INVENTORY_SLOTS=new Set(CHARACTER_SLOTS.filter(slot=>slot.id!=='charm').map(slot=>slot.id));
-const INVENTORY_GROUPS=new Set(['equipment','inventory','bank','shared-bank','held','augment','keyring']);
+const INVENTORY_GROUPS=new Set(['equipment','inventory','bank','shared-bank','personal-depot','held','augment','keyring']);
 function inventoryOrigin(value){
     if(!value||typeof value!=='object'||!INVENTORY_GROUPS.has(value.group)||typeof value.key!=='string'||!value.key||value.key.length>600||!Number.isSafeInteger(value.itemId)||value.itemId<=0||value.itemId>2147483647||!Number.isInteger(value.count)||value.count<1||value.count>1e9||fullTier(value.tier)===null)return null;
     const location=clean(value.location,180),name=clean(value.name),baseName=clean(value.baseName),slot=INVENTORY_SLOTS.has(value.slot)?value.slot:null;
@@ -64,7 +64,7 @@ function inventoryOrigin(value){
 }
 function exportedExaltationOrigin(value){
     const origin=inventoryOrigin(value);
-    return Boolean(origin&&!origin.slot&&['inventory','bank','shared-bank','held','augment'].includes(origin.group)&&/\(Exaltation\)$/i.test(characterBaseItemName(origin.baseName||origin.name)));
+    return Boolean(origin&&!origin.slot&&['inventory','bank','shared-bank','personal-depot','held','augment'].includes(origin.group)&&/\(Exaltation\)$/i.test(characterBaseItemName(origin.baseName||origin.name)));
 }
 function inventoryFile(value){
     if(!value||typeof value!=='object')return null;
@@ -508,7 +508,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             };
             for(const entry of parsed.equipment){if(!INVENTORY_SLOTS.has(entry?.slot)||slots.has(entry.slot))throw Error('The inventory export must contain each of the 23 equipment slots once.');slots.add(entry.slot);const valid=validate(entry,'equipment',entry.slot);if(valid)entries.push(valid);}
             if([...INVENTORY_SLOTS].some(slot=>!slots.has(slot))||parsed.emptyEquipmentCount!==23-entries.length)throw Error('The inventory export has an incomplete equipment table.');
-            for(const entry of parsed.inventory){if(!['inventory','bank','shared-bank','held','augment'].includes(entry?.group))throw Error('The inventory export contains an unsupported storage group.');entries.push(validate(entry,entry.group));}
+            for(const entry of parsed.inventory){if(!['inventory','bank','shared-bank','personal-depot','held','augment'].includes(entry?.group))throw Error('The inventory export contains an unsupported storage group.');entries.push(validate(entry,entry.group));}
             const keyring=parsed.keyring.map(entry=>{if(!['keyring','augment'].includes(entry?.group))throw Error('The inventory export contains an unsupported keyring group.');return validate(entry,entry.group);});
             const draft=clone(state),byKey=new Map();
             for(const candidate of draft.candidates)if(candidate.inventoryOrigin){const key=candidate.inventoryOrigin.key;if(byKey.has(key))throw Error('Saved inventory contains ambiguous export bindings. Existing cards were kept.');byKey.set(key,candidate);}
@@ -524,7 +524,7 @@ export function createCharacterModel({storage=globalThis.localStorage,now=Date.n
             // Earlier imports gave loose Exaltations an ordinary storage key.
             // Reuse only a unique exact physical binding when its role changes.
             for(const entry of entries)if(entry.group==='augment'&&!byKey.has(entry.key)){
-                const prior=draft.candidates.filter(candidate=>{const origin=candidate.inventoryOrigin;return origin&&['inventory','bank','shared-bank','held'].includes(origin.group)&&origin.location===entry.location&&origin.itemId===entry.itemId&&origin.tier===entry.tier&&origin.baseName===entry.baseName;});
+                const prior=draft.candidates.filter(candidate=>{const origin=candidate.inventoryOrigin;return origin&&['inventory','bank','shared-bank','personal-depot','held'].includes(origin.group)&&origin.location===entry.location&&origin.itemId===entry.itemId&&origin.tier===entry.tier&&origin.baseName===entry.baseName;});
                 if(prior.length===1)byKey.set(entry.key,prior[0]);
             }
             const resolvedEntries=entries.map(entry=>({entry,patch:resolve(entry)}));
