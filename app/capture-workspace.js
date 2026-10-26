@@ -606,7 +606,9 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         }catch(error){inventoryMessage=error.message||'The character files could not be imported. Your saved character is unchanged.';renderWalkthrough();throw error;}
         stopInventoryWatch();inventoryMessage='';gapCacheKey='';shareImage=null;lastStats=null;lastStatsManualRead=null;baseProposalId='';
         walkthrough.inventoryImported({sequence:cursor});walkthroughMessage='Inventory and achievements imported. Keep your gear equipped and open the full stat panel.';renderCharacter();
-        await chooseSources();if(!flowCurrent(epoch,flow.sessionId,'stats'))return;walkthroughMessage='Follow the preparation steps, then start the stat reader.';renderWalkthrough();
+        // Native window enumeration can wait on the OS; it must not keep the
+        // completed file import busy or block manual stats and cancellation.
+        if(capture)void chooseSources().then(()=>{if(!flowCurrent(epoch,flow.sessionId,'stats'))return;walkthroughMessage='Follow the preparation steps, then start the stat reader.';renderWalkthrough();}).catch(error=>{if(flowCurrent(epoch,flow.sessionId,'stats'))warning(error.message);});
     }
     async function startStatsReading(sourceId){
         const flow=walkthrough.snapshot();if(!flow.active||flow.step!=='stats'||!capture)return;
