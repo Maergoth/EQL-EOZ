@@ -1,6 +1,8 @@
 # Eye of Zomm contributor handoff
 
-Current `v1.0.2` hotfix: accept Personal-Depot inventory export locations and preserve their storage provenance, quantities and physical copies across reimport and restart. Depot contents remain unequipped, and recorded character totals keep their existing source.
+Current `v1.0.3` hotfix: keep Exaltations to their names and direct effects, including typed Focus effects and literal Worn labels. Exact local dataset refresh updates saved socket effects without changing private numeric data, tiers or recorded character totals; new wiki exports omit child stats and unrelated item fields.
+
+Previous `v1.0.2` hotfix: accept Personal-Depot inventory export locations and preserve their storage provenance, quantities and physical copies across reimport and restart. Depot contents remain unequipped, and recorded character totals keep their existing source.
 
 Previous `v1.0.1` hotfix: procedural chat identities, reversible untouched-caption cleanup, stable Discovery rows during proof renewal, and canonical outgoing wiki item formatting. The existing fresh-proof and protected-draft boundaries remain in force.
 
