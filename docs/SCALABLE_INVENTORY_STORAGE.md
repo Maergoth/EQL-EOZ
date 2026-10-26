@@ -64,7 +64,7 @@ semantics remain separate from container or unverified-parent contents. Empty an
 sparse socket positions, loose Exaltation roles, unknown items and every stored
 location retain their existing meaning.
 
-Inventory and its companion achievement export activate in one durable
+Inventory and the paired achievement export activate in one durable
 transaction only after complete validation and source/profile checks. Cancellation,
 a changing source, invalid data or disk failure leaves the previous generation
 and manual work intact. No raw inventory is uploaded as part of local storage.
