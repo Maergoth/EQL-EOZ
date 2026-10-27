@@ -93,6 +93,7 @@ export const PACKAGED_RUNTIME_SOURCES = Object.freeze([
     'app/contribution-queue.js',
     'app/contribution-evidence.js',
     'app/contribution-model.js',
+    'app/eoz-page-category.js',
     'app/character-model.js',
     'app/character-storage.js',
     'app/character-profiles.js',

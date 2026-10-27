@@ -5,6 +5,7 @@ import {buildCharacterWikiSheet,normalizeCharacterWikiSheet,serializeCharacterWi
 import {createCharacterModel} from '../app/character-model.js';
 import {parseInventoryExport} from '../app/inventory-export.js';
 import {characterInspectMarkup} from '../app/character-inspect-view.js';
+import {hasEoZPageCategory,EOZ_PAGE_CATEGORY_FOOTER} from '../app/eoz-page-category.js';
 
 const identity={name:'Synthetic Keeper',server:'Test Server',level:60,race:'Human',classes:['WAR','CLR'],aaCount:25};
 const sheet={schemaVersion:1,metadata:identity,totals:{HP:{value:1040,complete:true},MP:{value:210,complete:true},END:{value:null,complete:false},AC_MITIGATION:{value:null,complete:false}},equipment:[{slot:'head',title:'Synthetic Known Helm',tier:4,iconId:500,level:30,basis:'observed-examine',complete:true,stats:{HP:40,STR:12,WT:0.2},augmentSlots:3,augments:[{index:1,title:'Synthetic Ruby',tier:2,iconId:501,complete:true,stats:{HP:3,STR:1}}]}]};
@@ -17,6 +18,9 @@ for(const mutate of [value=>value.schemaVersion=2,value=>value.equipment[0].slot
 const key=crypto.createHash('sha256').update(characterWikiIdentity(identity)).digest('hex'),otherKey='b'.repeat(64);
 assert.equal(characterWikiIdentity({name:' Ｓｙｎｔｈｅｔｉｃ  Keeper ',server:'TEST_Server'}),characterWikiIdentity(identity),'Normalized name+server is a stable upsert identity');
 const talk='Human introduction.\n== Existing discussion ==\nPlease retain this.\n',first=patchCharacterWikiSheet(talk,key,source);assert(first.text.startsWith(talk));assert(first.changed);const identical=patchCharacterWikiSheet(first.text,key,source);assert.equal(identical.changed,false);assert.equal(identical.text,first.text);
+assert(hasEoZPageCategory(first.text));assert(!first.block.includes('Category:EoZ'),'Page category stays outside identity-checked managed invocation');
+const oldUnchanged=patchCharacterWikiSheet(first.block,key,source,{metadata:identity});assert(oldUnchanged.changed,'A touched old sheet receives page membership even when its managed content is identical');assert.equal(oldUnchanged.block,first.block);
+const existingCategory=patchCharacterWikiSheet(talk+'[[Category:EoZ|Manual sort]]\n',key,source,{metadata:identity});assert(existingCategory.text.includes('[[Category:EoZ|Manual sort]]'));assert(!existingCategory.text.includes(EOZ_PAGE_CATEGORY_FOOTER));
 const other=patchCharacterWikiSheet(first.text,otherKey,'{{Character_sheet|name=Other|server=Other}}');const changed=structuredClone(sheet);changed.equipment[0].stats.HP=45;const replacement=patchCharacterWikiSheet(other.text,key,serializeCharacterWikiSheet(changed));assert(replacement.text.startsWith(talk));assert.match(replacement.text,/HP: 45/);assert(replacement.text.includes('name=Other|server=Other'));assert.equal((replacement.text.match(new RegExp(`${key}:BEGIN`,'g'))||[]).length,1);
 const quoted=`<nowiki>${first.block}</nowiki>\n`;assert.equal(patchCharacterWikiSheet(quoted,key,source).beforeBlock,null,'A literal example is never replaced');assert(patchCharacterWikiSheet(quoted,key,source).text.startsWith(quoted));
 for(const bad of [first.block+'\n'+first.block,first.block.replace(':END',':BEGIN'),first.block.replace(`${key}:END`,`${otherKey}:END`),first.block.replace(source,first.block)])assert.throws(()=>patchCharacterWikiSheet(bad,key,source),/markers|Duplicate|Nested/);

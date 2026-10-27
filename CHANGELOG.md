@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.9 - Wiki page tracking
+
+- Tag pages generated or edited by Eye of Zomm with Category:EoZ, including contribution articles, related pages, Character User sheets and new File descriptions.
+- Include the page-only tag in proposed and copied wikicode before review. Preserve existing category sort keys, manual content and Character image parameters.
+- Require a fresh Preview for older untagged drafts. Existing images and unrelated pages receive no extra edits just to add tracking.
+
 ## 1.0.8 - Character screenshots
 
 - Select or paste an optional Character screenshot in the Share review. Review the picture and destination before publishing; skipping it keeps your existing wiki image or placeholder.

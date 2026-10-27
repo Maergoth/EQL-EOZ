@@ -4,6 +4,7 @@ import {createWikiResolver,normalizeWikiIdentity,itemExaltationBaseIdentity} fro
 import {lootSetCoverage} from './loot-set-coverage.js';
 import {contributionScopedTemplateInfo,contributionItemSourceMatches,patchContributionRelationship,contributionZoneLootScopeInfo,contributionItemHasStats,contributionLootScopeText,contributionLootReferences} from './contribution-model.js';
 import {classifyCachedLoot} from './loot-classification.js';
+import {ensureEoZPageCategory} from './eoz-page-category.js';
 
 const MAX=2000,scoped=value=>['normal','raid'].includes(value?.instance||value?.instanceType)?value.instance||value.instanceType:typeof value?.raidInstance==='boolean'?(value.raidInstance?'raid':'normal'):value?.instance||value?.instanceType?'unknown':'normal';
 const active=text=>String(text).replace(/<!--[\s\S]*?(?:-->|$)|<(nowiki|pre|source|syntaxhighlight|ref|code)\b[^>]*\/>|<(nowiki|pre|source|syntaxhighlight|ref|code)\b[^>]*>[\s\S]*?(?:<\/\2\s*>|$)/gi,' ');
@@ -193,13 +194,13 @@ export function validateAutomaticSourcePlan(plan,{pack={},resolver=createWikiRes
     if(page.title!==relation.npc||page.role!=='primary'||page.operation!=='replace-reviewed'||typeof page.beforeText!=='string'||typeof page.afterText!=='string'||!Number.isSafeInteger(page.baseRevision)||page.baseRevision<1||!proof.kind||plan.lootClassifications?.[relation.item]?.kind!==proof.kind)throw Error('The source update requires manual review.');
     const before=liveContributionCoverage(pack,relation,{resolver,npcPage:{title:relation.npc,content:page.beforeText,revision:page.baseRevision,missing:false}});
     if(before.state!=='uncovered')throw Error('This automatic plan would refine a covered or unsupported authored loot field.');
-    const expected=patchContributionRelationship(page.beforeText,{role:'npc-loot',itemTitle:relation.item,npcTitle:relation.npc,instance:relation.instance,lootKind:proof.kind,preserveExisting:true},{pack,resolver}).text.replace(/\0/g,'').replace(/[ \t\n\r\v]+$/,'').replace(/\r\n?/g,'\n');
+    const expected=ensureEoZPageCategory(patchContributionRelationship(page.beforeText,{role:'npc-loot',itemTitle:relation.item,npcTitle:relation.npc,instance:relation.instance,lootKind:proof.kind,preserveExisting:true},{pack,resolver}).text).replace(/\0/g,'').replace(/[ \t\n\r\v]+$/,'').replace(/\r\n?/g,'\n');
     if(expected!==page.afterText)throw Error('This plan contains changes beyond appending the observed monster loot fact.');
     if(plan.pages.length===2){
         const summary=plan.pages[1];
         if(summary.title!==relation.zone||summary.role!=='zone-loot'||summary.operation!=='replace-reviewed'||typeof summary.beforeText!=='string'||typeof summary.afterText!=='string')throw Error('The optional zone summary requires manual review.');
         const expectedSummary=automaticZoneLootSummary(pack,relation,{resolver,zonePage:{title:summary.title,content:summary.beforeText,revision:summary.baseRevision,missing:false}});
-        if(!expectedSummary||expectedSummary.replace(/\0/g,'').replace(/[ \t\n\r\v]+$/,'').replace(/\r\n?/g,'\n')!==summary.afterText)throw Error('This plan contains changes beyond the independently eligible zone Unique Items summary.');
+        if(!expectedSummary||ensureEoZPageCategory(expectedSummary).replace(/\0/g,'').replace(/[ \t\n\r\v]+$/,'').replace(/\r\n?/g,'\n')!==summary.afterText)throw Error('This plan contains changes beyond the independently eligible zone Unique Items summary.');
     }
     return true;
 }

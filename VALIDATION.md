@@ -1,6 +1,8 @@
 # Validation report — v0.9.10
 
-Current `v1.0.7` candidate: choose two or three Character classes with checkboxes and automatically recognize the Default Stats tab or Default Modern stat panel. Preserve unfinished class choices and reviewed stat edits; unread or conflicting OCR values stay unknown for review. Existing private inventories and equipment-only sharing retain their contracts. See [the Character walkthrough](docs/CHARACTER_WALKTHROUGH.md). Final source, native, package and publication receipts must identify the released commit.
+Current `v1.0.9` candidate: tag generated and edited wiki pages with the page-only EoZ category before preview hashes and publication. Preserve manual source, sort keys, managed Character identities and image reuse; older untagged saved drafts require a fresh Preview. See [wiki page tracking](docs/WIKI_PAGE_TRACKING.md). Source, native, package and public-release receipts must identify the final commit.
+
+Previous `v1.0.7`: choose two or three Character classes with checkboxes and automatically recognize the Default Stats tab or Default Modern stat panel. Preserve unfinished class choices and reviewed stat edits; unread or conflicting OCR values stay unknown for review. Existing private inventories and equipment-only sharing retain their contracts. See [the Character walkthrough](docs/CHARACTER_WALKTHROUGH.md). Final source, native, package and publication receipts must identify the released commit.
 
 Previous `v1.0.5`: retire untouched historical trade captions when exact sequential catalog names cover at least half their words and a separate trade cue proves surrounding prose. Preserve real encoded item links, exact full titles, edited/OCR/loot/source-backed drafts and all raw evidence. Full archives keep false captions quiet; failed saves preserve the prior queue. See [chat item boundaries](docs/CHAT_ITEM_BOUNDARIES.md).
 

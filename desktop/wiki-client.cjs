@@ -20,6 +20,7 @@ function normalizeWikiSubmissionText(text) {
 }
 const models = () => import('../app/contribution-model.js');
 const characterSheets = () => import('../app/character-wiki-sheet.js');
+const pageCategories = () => import('../app/eoz-page-category.js');
 const copy = value => JSON.parse(JSON.stringify(value));
 const safeMessage = value => String(value || 'The wiki request could not complete.').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,500);
 class WikiError extends Error {
@@ -85,8 +86,13 @@ class WikiClient {
         const result=await this.history.list({user:status.authenticated?status.user:null,wikiOrigin:this.origin,...value});
         if(!result.warning&&status.warning)result.warning=status.warning;return result;
     }
-    async request(params, { post=false, form=null, maxResponseBytes=MAX_JSON } = {}) {
+    async request(params, { post=false, form=null, maxResponseBytes=MAX_JSON, categoryContext=null } = {}) {
         if(![MAX_JSON,MAX_CHARACTER_JSON].includes(maxResponseBytes))throw new WikiError('size','Invalid wiki response size limit.');
+        const action=form?.get('action')||params.action;
+        if(post&&['edit','upload'].includes(action)){
+            const {hasEoZPageCategory}=await pageCategories(),text=form?.get('text')??params.text;
+            if(typeof text!=='string'||!hasEoZPageCategory(text)&&!(action==='edit'&&params.section==='new'&&typeof categoryContext==='string'&&hasEoZPageCategory(categoryContext)))throw new WikiError('category-review','Prepare a fresh Preview with the EoZ tracking category before publishing.');
+        }
         const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
         try{
             const data=new URLSearchParams({format:'json',formatversion:'2',errorformat:'plaintext',...params});
@@ -301,11 +307,12 @@ class WikiClient {
         const classification=classifyCachedLoot(catalog,fact.item,[fact.npc],{resolver});
         if(!classification.kind)throw new WikiError('loot-review',classification.reason);
         const blueprint=await this.blueprints({force:true});await this.expectedUser(account);
-        const afterText=normalizeWikiSubmissionText(patchContributionRelationship(npcPage.content,{role:'npc-loot',itemTitle:fact.item,npcTitle:fact.npc,instance:fact.instance,lootKind:classification.kind,preserveExisting:true},{pack:catalog,resolver}).text);
-        if(afterText===normalizeWikiSubmissionText(npcPage.content))throw new WikiError('source-review','No new source fact remains to publish.');
+        const changedText=patchContributionRelationship(npcPage.content,{role:'npc-loot',itemTitle:fact.item,npcTitle:fact.npc,instance:fact.instance,lootKind:classification.kind,preserveExisting:true},{pack:catalog,resolver}).text;
+        if(normalizeWikiSubmissionText(changedText)===normalizeWikiSubmissionText(npcPage.content))throw new WikiError('source-review','No new source fact remains to publish.');
+        const {ensureEoZPageCategory}=await pageCategories(),afterText=normalizeWikiSubmissionText(ensureEoZPageCategory(changedText));
         const plan={schemaVersion:1,id:this.id(),wikiOrigin:this.origin,expectedUser:copy(account),blueprintRevision:blueprint.revision,createdAt:new Date(this.now()).toISOString(),status:'prepared',pages:[{id:'page-0',title:fact.npc,role:'primary',operation:'replace-reviewed',beforeText:npcPage.content,afterText,beforeHash:hash(npcPage.content),afterHash:hash(afterText),baseRevision:npcPage.revision,startTimestamp:npcPage.startTimestamp,status:'pending'}],warnings:[],blockers:[],matches:[],matchesReviewed:true,lootClassifications:{[fact.item]:classification},automaticSource:{schemaVersion:2,authorRole:'npc-loot',relationKey,observationId,itemTitle:fact.item,npcTitle:fact.npc,zoneTitle:fact.zone,instance:fact.instance,evidence,account:copy(account)}};
         const summary=automaticZoneLootSummary(catalog,fact,{resolver,itemPage,zonePage});
-        if(summary){const text=normalizeWikiSubmissionText(summary);plan.pages.push({id:'page-1',title:fact.zone,role:'zone-loot',operation:'replace-reviewed',beforeText:zonePage.content,afterText:text,beforeHash:hash(zonePage.content),afterHash:hash(text),baseRevision:zonePage.revision,startTimestamp:zonePage.startTimestamp,status:'pending'});}
+        if(summary){const text=normalizeWikiSubmissionText(ensureEoZPageCategory(summary));plan.pages.push({id:'page-1',title:fact.zone,role:'zone-loot',operation:'replace-reviewed',beforeText:zonePage.content,afterText:text,beforeHash:hash(zonePage.content),afterHash:hash(text),baseRevision:zonePage.revision,startTimestamp:zonePage.startTimestamp,status:'pending'});}
         plan.reviewDigest=this.digest(plan);this.plans.set(plan.id,plan);if(this.plans.size>30)this.plans.delete(this.plans.keys().next().value);await this.persist();return safePlan(plan);
     }
     async preparePlan({ candidate, relatedPages=[], matchesReviewed=false, editedText=null,sourceItemHints=[] }={}) {
@@ -447,7 +454,8 @@ class WikiClient {
             afterText=editedText;plan.warnings.push('The primary wikicode was manually edited; review the complete text.');
         }
         if(plan.zoneCreation)try{assertZoneCreationLayout(afterText,plan.zoneCreation);}catch(error){plan.blockers.push(safeMessage(error.message));}
-        const addPage=(state,after,role)=>{const afterText=normalizeWikiSubmissionText(after);const page={id:this.id(),title:state.title,pageId:state.pageId,operation:state.missing?'create':'replace-reviewed',beforeText:state.content,afterText,baseRevision:state.revision,baseTimestamp:state.timestamp,startTimestamp:state.startTimestamp,beforeHash:hash(state.content),afterHash:hash(afterText),role,status:'pending',result:null};plan.pages.push(page);};
+        const {ensureEoZPageCategory}=await pageCategories();
+        const addPage=(state,after,role)=>{const afterText=normalizeWikiSubmissionText(ensureEoZPageCategory(after));const page={id:this.id(),title:state.title,pageId:state.pageId,operation:state.missing?'create':'replace-reviewed',beforeText:state.content,afterText,baseRevision:state.revision,baseTimestamp:state.timestamp,startTimestamp:state.startTimestamp,beforeHash:hash(state.content),afterHash:hash(afterText),role,status:'pending',result:null};plan.pages.push(page);};
         addPage(primary,afterText,'primary');
         if(normalizedCandidate.kind==='item')for(const effect of contributionItemEffects(candidate)){
             const title=contributionTitle(effect.name);if(plan.pages.some(page=>page.title===title))continue;
@@ -532,7 +540,7 @@ class WikiClient {
             catch(error){const message=`${title}: ${safeMessage(error.message)}`;if(related.required||/classification|global.*count/i.test(error.message))plan.blockers.push(message+' The reciprocal source update must be resolved before publishing.');else plan.warnings.push(message);}
         }
         for(const group of groups.values()){
-            if(group.existingPage){group.existingPage.afterText=normalizeWikiSubmissionText(group.text);group.existingPage.afterHash=hash(group.existingPage.afterText);}
+            if(group.existingPage){group.existingPage.afterText=normalizeWikiSubmissionText(ensureEoZPageCategory(group.text));group.existingPage.afterHash=hash(group.existingPage.afterText);}
             else if(group.text!==group.state.content)addPage(group.state,group.text,group.role);
         }
         // Manually edited primary wikicode and legacy renderer fields share the
@@ -580,7 +588,7 @@ class WikiClient {
             const found=await this.request({action:'query',prop:'imageinfo',titles:`File:${attachment.filename}`,iiprop:'sha1|user'}),info=found.query?.pages?.[0]?.imageinfo?.[0];
             if(info){if(info.sha1!==crypto.createHash('sha1').update(bytes).digest('hex')||info.user!==plan.expectedUser.name)throw new WikiError('file-exists','A different file already uses this reviewed filename. No image was overwritten.');attachment.status='applied';delete attachment.error;await this.persist();return true;}
             const {literalWikiText}=await models(),token=await this.csrf(plan.expectedUser),form=new FormData();
-            for(const [key,value]of Object.entries({action:'upload',format:'json',formatversion:'2',errorformat:'plaintext',filename:attachment.filename,text:`Screenshot supplied by [[User:${plan.expectedUser.name}]].\n${literalWikiText(attachment.caption)}\n${literalWikiText(attachment.license)}`,comment:plan.automaticItem?'Eye of Zomm captured item screenshot':'Player-reviewed Eye of Zomm contribution screenshot',assert:'user',assertuser:plan.expectedUser.name,token}))form.set(key,value);
+            for(const [key,value]of Object.entries({action:'upload',format:'json',formatversion:'2',errorformat:'plaintext',filename:attachment.filename,text:(await pageCategories()).ensureEoZPageCategory(`Screenshot supplied by [[User:${plan.expectedUser.name}]].\n${literalWikiText(attachment.caption)}\n${literalWikiText(attachment.license)}`),comment:plan.automaticItem?'Eye of Zomm captured item screenshot':'Player-reviewed Eye of Zomm contribution screenshot',assert:'user',assertuser:plan.expectedUser.name,token}))form.set(key,value);
             form.set('file',new Blob([bytes],{type:'image/png'}),attachment.filename);attachment.status='unknown';await this.persist();
             if(beforeWrite)await beforeWrite('upload',plan);
             const response=await this.request({}, {post:true,form});if(response.upload?.result!=='Success')throw new WikiError('upload-warning','The wiki did not accept this screenshot. Review its warning before retrying.');
@@ -625,7 +633,7 @@ class WikiClient {
         const itemPage=await pageFor(source.itemTitle),npcPage=await pageFor(source.npcTitle),coverage=liveContributionCoverage(catalog,relation,{resolver,itemPage,npcPage});
         if(coverage.state!=='uncovered'&&!(ownSourceApplied&&coverage.state==='covered'))return{states,blocked:true,decision:coverage.state==='covered'?'covered':'review',reason:coverage.reason};
         const summary=plan.pages.find(page=>page.role==='zone-loot'&&page.status!=='applied');
-        if(summary){const expected=automaticZoneLootSummary(catalog,relation,{resolver,itemPage,zonePage:{title:summary.title,content:summary.beforeText,revision:summary.baseRevision,missing:false}});if(!expected||normalizeWikiSubmissionText(expected)!==summary.afterText)return{states,blocked:true,decision:'review',reason:'The optional zone summary no longer has verified item statistics or a supported existing Unique Items row.'};}
+        if(summary){const expected=automaticZoneLootSummary(catalog,relation,{resolver,itemPage,zonePage:{title:summary.title,content:summary.beforeText,revision:summary.baseRevision,missing:false}});if(!expected||normalizeWikiSubmissionText((await pageCategories()).ensureEoZPageCategory(expected))!==summary.afterText)return{states,blocked:true,decision:'review',reason:'The optional zone summary no longer has verified item statistics or a supported existing Unique Items row.'};}
         return{states};
     }
     async stopAutomaticContribution(plan,policy){
@@ -703,11 +711,13 @@ class WikiClient {
         await this.load();if(this.busy)throw new WikiError('busy','A wiki submission is already in progress.');
         const plan=this.plans.get(planId);if(!plan||reviewDigest!==plan.reviewDigest||reviewDigest!==this.digest(plan))throw new WikiError('review','This contribution changed. Prepare and review it again.');
         if(plan.blockers.length)throw new WikiError('review',plan.blockers.join(' '));
+        const {hasEoZPageCategory}=await pageCategories();
         this.busy=true;
         try{
             if(plan.automaticSource||plan.automaticItem)await this.expectedUser(plan.expectedUser);
             const policy=await this.automaticContributionPolicy(plan,{pages:automaticPolicyPages,automaticAttempt:Boolean(beforeWrite&&plan.automaticItem)});
             if(policy.blocked)return await this.stopAutomaticContribution(plan,policy);
+            if(plan.pages.some(page=>page.status!=='applied'&&!hasEoZPageCategory(page.afterText)))throw new WikiError('category-review','Prepare a fresh Preview with the EoZ tracking category before publishing this saved draft.');
             plan.historyAttempt={at:new Date(this.now()).toISOString(),status:'pending'};await this.persist();
             if(!plan.automaticSource&&!plan.automaticItem)await this.expectedUser(plan.expectedUser);
             const blueprint=await this.blueprints({force:true});if(blueprint.revision!==plan.blueprintRevision)throw new WikiError('blueprint-changed','The wiki blueprints changed. Prepare a new review.');
@@ -761,7 +771,7 @@ class WikiClient {
                 const existing=await this.request({action:'query',prop:'imageinfo',iiprop:'sha1|user',titles:`File:${record.filename}`}),info=existing.query?.pages?.[0]?.imageinfo?.[0];
                 if(info){const sha1=crypto.createHash('sha1').update(bytes).digest('hex');if(info.sha1!==sha1||info.user!==record.user.name)throw new WikiError('file-exists','A wiki file already uses that name. Choose a new snapshot ID.');record.upload='applied';await this.persist();}
                 else{
-                    const form=new FormData();for(const [key,value]of Object.entries({action:'upload',format:'json',formatversion:'2',errorformat:'plaintext',filename:record.filename,text:`Character snapshot shared by [[User:${record.user.name}]].`,comment:'Player-reviewed Eye of Zomm character snapshot',assert:'user',assertuser:record.user.name,token}))form.set(key,value);form.set('file',new Blob([bytes],{type:'image/png'}),record.filename);
+                    const form=new FormData();for(const [key,value]of Object.entries({action:'upload',format:'json',formatversion:'2',errorformat:'plaintext',filename:record.filename,text:(await pageCategories()).ensureEoZPageCategory(`Character snapshot shared by [[User:${record.user.name}]].`),comment:'Player-reviewed Eye of Zomm character snapshot',assert:'user',assertuser:record.user.name,token}))form.set(key,value);form.set('file',new Blob([bytes],{type:'image/png'}),record.filename);
                     record.upload='unknown';await this.persist();
                     try{const result=await this.request({}, {post:true,form});if(result.upload?.result!=='Success')throw new WikiError('upload-warning','The wiki reported an upload warning. No existing artwork was overwritten; review the file on the wiki.');record.upload='applied';record.fileUrl=result.upload.imageinfo?.url||null;await this.persist();}
                     catch(error){record.error={code:error.code,message:safeMessage(error.message)};await this.persist();return result();}
@@ -773,7 +783,7 @@ class WikiClient {
                 if(page.content.includes(marker)){record.talk='applied';record.talkRevision=page.revision;delete record.error;await this.persist();return result();}
                 const {literalWikiText}=await models();
                 record.talk='unknown';await this.persist();
-                try{const result=await this.request({action:'edit',title:page.title,section:'new',sectiontitle:`Character snapshot: ${titleSafe}`,text:`${marker}\n[[File:${record.filename}|800px]]\n\n${literalWikiText(record.caption)}\n\n~~~~`,summary:'Share character snapshot from Eye of Zomm',token,assert:'user',assertuser:record.user.name,starttimestamp:page.startTimestamp,...(page.missing?{createonly:'1'}:{nocreate:'1',baserevid:String(page.revision)})},{post:true});if(result.edit?.result!=='Success')throw new WikiError('talk-result','The image uploaded, but the wiki did not confirm the talk topic.');record.talk='applied';record.talkRevision=result.edit.newrevid;delete record.error;await this.persist();}
+                try{const result=await this.request({action:'edit',title:page.title,section:'new',sectiontitle:`Character snapshot: ${titleSafe}`,text:(await pageCategories()).ensureEoZPageCategory(`${marker}\n[[File:${record.filename}|800px]]\n\n${literalWikiText(record.caption)}\n\n~~~~`,{context:page.content}),summary:'Share character snapshot from Eye of Zomm',token,assert:'user',assertuser:record.user.name,starttimestamp:page.startTimestamp,...(page.missing?{createonly:'1'}:{nocreate:'1',baserevid:String(page.revision)})},{post:true,categoryContext:page.content});if(result.edit?.result!=='Success')throw new WikiError('talk-result','The image uploaded, but the wiki did not confirm the talk topic.');record.talk='applied';record.talkRevision=result.edit.newrevid;delete record.error;await this.persist();}
                 catch(error){record.error={code:error.code,message:safeMessage(error.message)};await this.persist();}
             }
             return result();
@@ -802,7 +812,7 @@ class WikiClient {
             if(target.info){if(target.info.sha1!==image.sha1||target.info.user!==record.user.name)throw new WikiError('file-exists','A different file now uses this reviewed filename. No image was overwritten.');image.status='applied';delete image.error;await this.persist();return true;}
             const selected=await this.characterScreenshots.get(record.key,image);if(!selected)throw new WikiError('image-review','The selected screenshot is unavailable. Select it again.');
             const {literalWikiText}=await models(),token=await this.csrf(record.user),form=new FormData();
-            for(const [key,value]of Object.entries({action:'upload',format:'json',formatversion:'2',errorformat:'plaintext',filename:image.filename,text:`Character screenshot supplied by [[User:${literalWikiText(record.user.name)}]].\nPlayer-selected game screenshot.`,comment:'Player-reviewed Eye of Zomm character screenshot',assert:'user',assertuser:record.user.name,token}))form.set(key,value);
+            for(const [key,value]of Object.entries({action:'upload',format:'json',formatversion:'2',errorformat:'plaintext',filename:image.filename,text:(await pageCategories()).ensureEoZPageCategory(`Character screenshot supplied by [[User:${literalWikiText(record.user.name)}]].\nPlayer-selected game screenshot.`),comment:'Player-reviewed Eye of Zomm character screenshot',assert:'user',assertuser:record.user.name,token}))form.set(key,value);
             form.set('file',new Blob([selected.bytes],{type:'image/png'}),image.filename);image.status='unknown';record.status='unknown';await this.persist();
             const response=await this.request({},{post:true,form});if(response.upload?.result!=='Success')throw new WikiError('upload-warning','The wiki did not accept the screenshot. Review its warning before retrying.');image.status='applied';delete image.error;await this.persist();return true;
         }catch(error){image.status=error.code==='unknown-write'?'unknown':'failed';image.error={code:error.code||'image',message:safeMessage(error.message)};record.status=image.status;record.error=image.error;await this.persist();return false;}
@@ -828,7 +838,7 @@ class WikiClient {
             const status=await this.expectedUser(),key=hash(characterWikiIdentity(sheet.metadata));let photo=null;
             if(screenshotReviewId!==null){photo=this.screenshotReviews.get(screenshotReviewId);if(!photo||photo.origin!==this.origin||photo.key!==key||photo.user.id!==status.user.id||photo.user.name!==status.user.name)throw new WikiError('image-review','The screenshot review belongs to another character or account. Preview it again.');sheet=normalizeCharacterWikiSheet({...sheet,screenshotFile:`File:${photo.filename}`});}
             await this.characterSheetCapability({achievements:Boolean(sheet.achievements),screenshot:Boolean(sheet.screenshotFile)});
-            const destination=`User:${status.user.name}`,payloadHash=hash(JSON.stringify({sheet,caption:note,...(photo?{screenshot:{attachmentId:photo.attachmentId,sha256:photo.sha256,filename:photo.filename}}:{})}));
+            const destination=`User:${status.user.name}`,payloadHash=hash(JSON.stringify({categoryPolicy:(await pageCategories()).EOZ_PAGE_CATEGORY_POLICY,sheet,caption:note,...(photo?{screenshot:{attachmentId:photo.attachmentId,sha256:photo.sha256,filename:photo.filename}}:{})}));
             const prior=shareId===null?[...this.sheets.values()].reverse().find(item=>item.destination===destination&&item.user?.id===status.user.id&&item.key===key&&item.payloadHash===payloadHash&&['pending','unknown'].includes(item.status)):null;
             const id=prior?.shareId||(shareId===null?this.id():String(shareId));if(!/^[A-Za-z0-9_-]{8,100}$/.test(id))throw new WikiError('sheet-id','Invalid character sheet review identifier.');
             let record=this.sheets.get(id);

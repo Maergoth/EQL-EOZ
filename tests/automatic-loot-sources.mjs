@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {extractContributionBlueprints} from '../app/contribution-model.js';
+import {hasEoZPageCategory} from '../app/eoz-page-category.js';
 const require=createRequire(import.meta.url),{AutomaticLootSources}=require('../desktop/automatic-loot-sources.cjs'),{WikiClient}=require('../desktop/wiki-client.cjs');
 const NOW=Date.parse('2026-10-25T12:00:00Z'),user={id:7,name:'Synthetic Editor'};
 const itemSource='<onlyinclude>{{Itempage\n|itemname=Example Gauntlets\n|statsblock=AC: 12<br>HP: 80\n|notes=Keep authored notes.\n|dropsfrom=\n[[Other Vale]]\n* [[Original Guardian]]\n}}</onlyinclude>';
@@ -27,6 +28,7 @@ function fixture(){
 let f=fixture(),first=record();assert.equal((await f.engine.observe(first)).accepted,true);assert.equal(f.receipts.length,1,JSON.stringify(f.deferred));assert.equal(f.writes.length,1);
 assert.equal(f.writes[0].title,'Forest Warden');assert.equal(f.pages.get('Example Gauntlets').content,itemSource,'No reciprocal item DropsFrom mirror is authored');assert.equal(f.pages.get('Synthetic Vale').content,zone,'Source authoring does not require a zone summary write');assert.match(f.pages.get('Forest Warden').content,/Original Relic/);assert.match(f.pages.get('Forest Warden').content,/Example Gauntlets/);assert.match(f.pages.get('Forest Warden').content,/HP=12000/);assert.doesNotMatch(f.pages.get('Forest Warden').content,/Category:Synthetic Vale/,'Population is an independent fact');
 await f.engine.observe(first);await f.engine.observe(record());assert.equal(f.writes.length,1,'Repeated observations never copy the reciprocal item field');await f.engine.observe(record({source:'Cave Warden'}));assert.equal(f.receipts.length,2);assert.equal(f.writes.length,2);
+f=fixture();f.pages.get('Forest Warden').content+='\r\n\r\n \t';await f.engine.observe(record());assert.equal(f.receipts.length,1,'Tracking and exact source validator use the same canonicalization around trailing source whitespace');assert(hasEoZPageCategory(f.writes[0].text));
 f=fixture();await f.engine.observe(record({source:'A Missing Warden'}));assert.equal(f.receipts.length,0);assert.equal(f.writes.length,0);assert.equal(f.pages.has('A Missing Warden'),false,'Unknown monster discovery stays available without automatic item redlinks');
 for(const options of [{evidence:'encounter-target'},{live:false},{age:11000},{zoneName:'Unknown'},{instance:'unknown'},{event:'item-link'},{source:"Syntheticowner's pet"},{source:'Gabobtik'},{relationZone:'Other Vale'}]){f=fixture();await f.engine.observe(record(options));assert.equal(f.writes.length,0,JSON.stringify(options));}
 f=fixture();const rendererRecord=record();rendererRecord.parser.name='eq-log';assert.equal((await f.engine.observe(rendererRecord)).accepted,false);
@@ -78,7 +80,7 @@ console.log('Native decision memo: dataset/TTL invalidation, no repeated attenti
 // New source publication may independently summarize verified Unique gear on
 // an existing zone row. This is never a reciprocal item-page mirror/backfill.
 async function summaryFixture(){const f=fixture(),catalog=await f.client.getItemCatalog();catalog.items[0].stats={AC:12,HP:80};f.client.getItemCatalog=async()=>catalog;f.pages.get('Synthetic Vale').content=zone.replace('{{:Example Gauntlets}}','?');return f;}
-f=await summaryFixture();await f.engine.observe(record());assert.equal(f.writes.length,2);assert.deepEqual(f.writes.map(page=>page.title),['Forest Warden','Synthetic Vale']);assert.equal(f.pages.get('Example Gauntlets').content,itemSource);assert.match(f.pages.get('Synthetic Vale').content,/Unique Items\n\|\s*\{\{:Example Gauntlets\}\}/);assert.equal(f.receipts[0].plan.pages[1].role,'zone-loot');assert.equal((await f.client.history.list({user,wikiOrigin:f.client.origin})).entries[0].pages.length,2);
+f=await summaryFixture();await f.engine.observe(record());assert.equal(f.writes.length,2);assert.deepEqual(f.writes.map(page=>page.title),['Forest Warden','Synthetic Vale']);assert(f.writes.every(page=>hasEoZPageCategory(page.text)),'Both independently validated automatic page bodies include the fixed tracking footer');assert.equal(f.pages.get('Example Gauntlets').content,itemSource);assert.match(f.pages.get('Synthetic Vale').content,/Unique Items\n\|\s*\{\{:Example Gauntlets\}\}/);assert.equal(f.receipts[0].plan.pages[1].role,'zone-loot');assert.equal((await f.client.history.list({user,wikiOrigin:f.client.origin})).entries[0].pages.length,2);
 for(const modify of [
  f=>{f.pages.get('Synthetic Vale').content=zone.replace('! Unique Items','! Other Information');},
  f=>{f.pages.get('Synthetic Vale').content=zone.replace('{{:Example Gauntlets}}','Various rare items');},

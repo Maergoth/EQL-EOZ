@@ -7,6 +7,7 @@ import { isOwnedPetName } from './generated-pets.js';
 import { lootSetCoverage } from './loot-set-coverage.js';
 import { fillZoneCreationBlueprint, ZONE_OVERVIEW_TOKEN_FIELDS } from './zone-blueprint.js';
 import { itemContributionWikiStatLines } from './item-contribution-stats.js';
+import { ensureEoZPageCategory } from './eoz-page-category.js';
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 const TYPES = new Set(['item', 'npc', 'zone', 'spell']);
 const CLASS_NAMES = { BER:'Berserker', BRD:'Bard', BST:'Beastlord', CLR:'Cleric', DRU:'Druid', ENC:'Enchanter', MAG:'Magician', MNK:'Monk', NEC:'Necromancer', PAL:'Paladin', RNG:'Ranger', ROG:'Rogue', SHM:'Shaman', SHD:'Shadow Knight', WAR:'Warrior', WIZ:'Wizard' };
@@ -272,7 +273,7 @@ export function buildContributionDraft(input, blueprints) {
     if (/\b(?:NPC_Name|ZONE_NAME|ZONE NAME|ITEM_NAME|Item Name|Describe the|Add a brief)\b/.test(text)) blockers.push('Replace all blueprint instructional placeholders.');
     if (/\{\{\s*(?:Special:|#|DISPLAYTITLE|DEFAULTSORT|subst:|safesubst:)|<\s*(?:script|iframe|object|embed)\b/i.test(candidate.playerText)) blockers.push('Remove unsupported executable or special-page markup from the contribution prose.');
     for(const match of activeContributionText(text).matchAll(/\[\[\s*Category\s*:\s*([^\]|]+)(?:\|[^\]]*)?\]\]/gi))for(const title of categories)if(contributionNameKey(match[1])===contributionNameKey(title))categories.delete(title);
-    return { title:candidate.title, kind:candidate.kind, text:`${text}\n${[...categories].map(title=>title===TIER_ZERO_VERIFICATION_CATEGORY?TIER_ZERO_CATEGORY_MARKER+'\n'+category(title):category(title)).join('\n')}\n`, warnings, blockers, blueprintRevision:blueprints?.revision ?? null };
+    return { title:candidate.title, kind:candidate.kind, text:ensureEoZPageCategory(`${text}\n${[...categories].map(title=>title===TIER_ZERO_VERIFICATION_CATEGORY?TIER_ZERO_CATEGORY_MARKER+'\n'+category(title):category(title)).join('\n')}\n`), warnings, blockers, blueprintRevision:blueprints?.revision ?? null };
 }
 
 function distance(a, b) {
