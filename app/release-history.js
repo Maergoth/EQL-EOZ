@@ -2,6 +2,27 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.9",
+  "title": "Wiki page tracking",
+  "changes": [
+    "Pages created or edited by Eye of Zomm carry the EoZ category so contributors can find and repair app-authored work.",
+    "Reviewed and copied wikicode includes the same page-only tag. Existing category sort keys and manual wiki content stay in place.",
+    "Character sheets and new image descriptions use the same tracking; image reuse and already covered related pages do not trigger extra edits."
+  ],
+  "steps": [
+    {
+      "title": "Review tagged wiki changes",
+      "image": "1.0.9/eoz-wiki-category",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Use Preview wiki changes as usual. Each proposed page includes Category:EoZ in a noinclude footer, so transcluded item pages do not tag their readers. Copy proposed wikicode includes the same text. Reopen an older saved draft with a fresh Preview before publishing.",
+      "alt": "Actual Contribute review showing item, monster and zone Before and After source, page-only Category:EoZ footers, Copy proposed wikicode controls and the final review confirmation.",
+      "caption": "Production main, preload and Contribute renderer in isolated sandboxed Electron, with synthetic catalog, logs and a loopback wiki. The native regression checks all three proposed page footers, the exact clipboard copy, no writes before review, partial publication and restart. Captured before the version metadata update, so the application header shows checkpoint 1.0.8. No player data, installed profile or public wiki writes.",
+      "imageSha256": "83661e62f65bf046cc41524efbc494ce74514b07f0f63357a4c27ed66fe330d0"
+    }
+  ]
+},
+{
   "version": "1.0.8",
   "title": "Character screenshots",
   "changes": [

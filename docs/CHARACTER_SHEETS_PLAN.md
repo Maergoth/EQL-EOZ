@@ -1,5 +1,9 @@
 # Character inspect sheets and wiki sharing
 
+Current shares add the page-only [EoZ tracking category](WIKI_PAGE_TRACKING.md)
+outside managed Character blocks. The schema-1 template fragment, custom image
+preservation and same-character replacement identity remain unchanged.
+
 ## Current 0.9.8 override
 
 The historical 0.9.6 implementation plan below remains as a receipt. Current

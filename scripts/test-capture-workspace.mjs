@@ -120,6 +120,11 @@ try{
             assert.doesNotMatch(review.text,/Log in, then|selected era template does not exist|Confirm the base item|current item blueprint is unavailable/);assert.match(review.after,/Class: WAR[ ,]+CLR/);assert.equal(review.disabled,true,'A valid preview waits for its one final review confirmation');assert.equal(writes.length,0,'Preview alone never publishes');assert.equal(await execute(main,()=>document.querySelector('.contribution-published-pages')),null,'Pending pages have no success link');
             assert.equal(await execute(main,()=>document.querySelectorAll('.wiki-diff').length),3,'Item, monster and zone source pages all remain visible');
             assert.equal(await execute(main,()=>document.querySelectorAll('[data-wiki-review] input[type=checkbox]').length),1,'Final publication has one overall review confirmation');
+            const proposedPages=await execute(main,()=>[...document.querySelectorAll('.wiki-diff label:last-child textarea')].map(input=>input.value));
+            assert(proposedPages.every(text=>text.includes('<noinclude>[[Category:EoZ]]</noinclude>')),'Every actual reviewed item, monster and zone page carries the page-only tracking category');
+            await click('[data-copy-page]');await until(()=>capturedClipboard.text===proposedPages[0],'Copy proposed wikicode includes the exact reviewed tracking tag');assert.equal(writes.length,0,'Copy remains local');
+            await execute(main,()=>{const after=document.querySelector('.wiki-diff label:last-child textarea');after.scrollTop=after.scrollHeight;});
+            await releaseScreenshot('wiki-eoz-category','contribute','[data-wiki-review]');
             await releaseScreenshot('contribution-single-publish','contribute','[data-publish-plan]');
             await click('[data-publish-plan]');
             await until(()=>execute(main,()=>document.querySelector('[data-publish-status]').textContent.includes('Completed edits will not be repeated')),'partial explicit loopback publish');assert.equal(writes.length,2);assert.match(pages.get('Workspace Contribution Shield').text,/\{\{Classic Era\}\}/);

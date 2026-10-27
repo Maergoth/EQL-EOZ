@@ -1,5 +1,15 @@
 # Browsable release history
 
+The 1.0.9 image shows actual Contribute Before/After source with page-only EoZ
+tracking on the proposed item, monster and zone changes. The isolated production
+main/preload regression checks exact Copy output, no writes before final review,
+partial publication and restart against a loopback wiki. All names, catalog and
+logs are synthetic; no player data or public writes are involved. This capture
+preceded the metadata bump and truthfully retains its 1.0.8 header. The immutable
+version-owned PNG has SHA-256
+`83661e62f65bf046cc41524efbc494ce74514b07f0f63357a4c27ed66fe330d0`.
+All earlier release entries and image bytes remain unchanged.
+
 The 1.0.8 image shows the optional Character screenshot section in the actual
 Share review, with a generated synthetic portrait and reviewed public filename.
 An isolated sandboxed Electron window uses the production preload and native

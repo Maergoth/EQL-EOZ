@@ -1,5 +1,10 @@
 # Capture, wiki contributions and character snapshots
 
+Current generated/edited wiki pages use the shared
+[EoZ tracking category contract](WIKI_PAGE_TRACKING.md). The category is present
+in reviewed and copied source before publication; saved older drafts need a
+fresh Preview. This adds no background or retrospective page edits.
+
 ## Current v0.9.7 execution
 
 Use [the inventory-export plan](INVENTORY_EXPORT_CHARACTER_PLAN.md) and

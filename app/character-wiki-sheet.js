@@ -3,6 +3,7 @@ import { CHARACTER_SLOTS, CHARACTER_STAT_KEYS, characterEquipmentEligibility, ch
 import { characterTotalGroups } from './character-totals.js';
 import { normalizeAchievementExport } from './achievement-export.js';
 import { normalizeCharacterScreenshotFile } from './character-screenshot.js';
+import { ensureEoZPageCategory } from './eoz-page-category.js';
 
 export const CHARACTER_WIKI_SHEET_SCHEMA=1;
 export const CHARACTER_WIKI_SHEET_CAPABILITY=Object.freeze({template:'Template:Character_sheet',templateMarker:'EQL_CHARACTER_SHEET_V1',itemTemplate:'Template:Character_sheet_item',itemMarker:'EQL_CHARACTER_SHEET_ITEM_V1',achievementMarker:'EQL_CHARACTER_ACHIEVEMENTS_V1',screenshotMarker:'EQL_CHARACTER_SCREENSHOT_V1',module:'skins.EQLImmersive.characterSheet'});
@@ -158,7 +159,7 @@ export function patchCharacterWikiSheet(source,key,template,{metadata=null}={}){
         }
     }
     const block=`<!-- EQL-EOZ-CHARACTER-SHEET:${key}:BEGIN -->\n${template}\n<!-- EQL-EOZ-CHARACTER-SHEET:${key}:END -->`,beforeBlock=target?source.slice(target.start,target.end):null;
-    const updated=target?source.slice(0,target.start)+block+source.slice(target.end):source+(source.endsWith('\n\n')||!source?'':source.endsWith('\n')?'\n':'\n\n')+block;
+    const updated=ensureEoZPageCategory(target?source.slice(0,target.start)+block+source.slice(target.end):source+(source.endsWith('\n\n')||!source?'':source.endsWith('\n')?'\n':'\n\n')+block);
     if(new TextEncoder().encode(updated).length>CHARACTER_WIKI_SHEET_LIMITS.pageBytes)throw Error('The updated User page exceeds the character sheet size limit.');
-    return {text:updated,block,beforeBlock,changed:beforeBlock!==block};
+    return {text:updated,block,beforeBlock,changed:updated!==source};
 }

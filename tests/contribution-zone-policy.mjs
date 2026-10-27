@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {createWikiResolver} from '../app/wiki-identity.js';
+import {ensureEoZPageCategory} from '../app/eoz-page-category.js';
 import {contributionReasons} from '../app/contribution-reasons.js';
 import {contributionRelationshipStatus} from '../app/contribution-presentation.js';
 import {patchContributionNpcZone,patchContributionZone,contributionZoneUsesDynamicList,contributionZoneHasLootRow,contributionItemHasStats,contributionZoneLootEntries} from '../app/contribution-model.js';
@@ -50,7 +51,7 @@ function clientFixture(){
 const candidate={kind:'npc',name:mob,zone,instance:'normal',intent:'update',reasons:['missing-population'],fields:{notable:{value:false,confirmed:true,edited:true}}};
 let f=clientFixture(),plan=await f.client.preparePlan({candidate,matchesReviewed:true});assert.deepEqual(plan.blockers,[]);assert.match(plan.pages[0].afterText,/zone=Various\n/);assert.match(plan.pages[0].afterText,/Category:Synthetic Commonlands/);assert(!plan.pages.some(page=>page.title===zone),'Dynamic population changes its NPC category source, never the zone Notable row');
 f=clientFixture();plan=await f.client.preparePlan({candidate:{...candidate,fields:{notable:{value:true,confirmed:true,edited:true}}},matchesReviewed:true});assert(plan.pages.some(page=>page.title===zone&&page.afterText.includes('[['+mob+']]')),'Only a reviewed true Notable choice enters the manual summary');
-pages.set(mob,categorized.text);f=clientFixture();plan=await f.client.preparePlan({candidate,matchesReviewed:true});assert.equal(plan.pages[0].afterText,categorized.text.trimEnd(),'An NPC already on the rendered dynamic list does not cause a duplicate membership edit');
+pages.set(mob,categorized.text);f=clientFixture();plan=await f.client.preparePlan({candidate,matchesReviewed:true});assert.equal(plan.pages[0].afterText,ensureEoZPageCategory(categorized.text).trimEnd(),'A prepared page adds only EoZ tracking while existing dynamic-list membership stays byte-for-byte intact');assert.equal((plan.pages[0].afterText.match(/\[\[Category:Synthetic Commonlands\]\]/g)||[]).length,1);
 f=clientFixture();plan=await f.client.preparePlan({candidate:{...candidate,name:'A small synthetic spider',title:mob,zone:'syntheticshort'},matchesReviewed:true});assert.match(plan.pages[0].afterText,/Category:Synthetic Commonlands/);assert.doesNotMatch(plan.pages[0].afterText,/Category:syntheticshort/,'Live canonical zone identity wins before a category source is generated');
 const newCandidate={kind:'npc',name:'A new synthetic wanderer',zone,instance:'normal',intent:'create',reasons:['missing-page'],fields:{notable:{value:false,confirmed:true},location:{value:'1, 2, 3',confirmed:true}}};
 f=clientFixture();plan=await f.client.preparePlan({candidate:newCandidate,matchesReviewed:true});assert.deepEqual(plan.blockers,[]);assert.equal(plan.pages.length,1);assert.match(plan.pages[0].afterText,/Category:Synthetic Commonlands/);assert(!plan.pages.some(page=>page.title===zone),'New ordinary monsters populate the category-backed dynamic list through their newly created article');
