@@ -5,14 +5,16 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import vm from 'node:vm';
 import {createRequire} from 'node:module';
+import {ensureEoZPageCategory} from '../app/eoz-page-category.js';
 const require=createRequire(import.meta.url),{WikiClient}=require('../desktop/wiki-client.cjs'),{WikiHost,CHANNEL}=require('../desktop/wiki-host.cjs');
 const {ContributionHistory,MAX_ENTRIES,MAX_BYTES,FILE_NAME}=require('../desktop/contribution-history.cjs');
 const ORIGIN='https://eqlwiki.com',A={id:7,name:'Synthetic Editor'},B={id:8,name:'Other Synthetic Editor'};
 const at='2026-10-25T12:00:00.000Z',hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const directory=await fs.mkdtemp(path.join(os.tmpdir(),'eoz-contribution-history-'));
 function plan(id,{user=A,status='submitted',mode='manual',origin=ORIGIN,pages=null}={}){
+    const afterText=ensureEoZPageCategory('PRIVATE_AFTER_WIKICODE').trimEnd();
     const value={id,wikiOrigin:origin,expectedUser:user,createdAt:at,blueprintRevision:1,blockers:[],matchesReviewed:true,status,
-        pages:pages||[{title:`Synthetic ${id}`,role:'primary',operation:'replace-reviewed',baseRevision:1,beforeHash:hash('before'),afterHash:hash('PRIVATE_AFTER_WIKICODE'),beforeText:'PRIVATE_BEFORE_WIKICODE',afterText:'PRIVATE_AFTER_WIKICODE',status:'applied',result:{revision:2,message:'PRIVATE_SERVER_ERROR',token:'PRIVATE_TOKEN'}}],
+        pages:pages||[{title:`Synthetic ${id}`,role:'primary',operation:'replace-reviewed',baseRevision:1,beforeHash:hash('before'),afterHash:hash(afterText),beforeText:'PRIVATE_BEFORE_WIKICODE',afterText,status:'applied',result:{revision:2,message:'PRIVATE_SERVER_ERROR',token:'PRIVATE_TOKEN'}}],
         request:{rawLog:'PRIVATE_RAW_LOG',ocr:'PRIVATE_OCR',token:'PRIVATE_TOKEN'}};
     if(mode==='automatic')value.automaticSource={observation:'PRIVATE_RAW_LOG'};
     return value;
@@ -73,6 +75,8 @@ try{
     const attempts=fixture({stateDir:path.join(directory,'attempts')});await attempts.client.load();
     const preview=plan('preview-only',{status:'prepared'});preview.pages[0].status='pending';delete preview.pages[0].result;attempts.client.plans.set(preview.id,preview);await attempts.client.persist();
     assert.equal((await attempts.client.contributionHistory()).entries.length,0,'Preview-only drafts do not claim a submission');
+    const stale=plan('stale-untagged-preview',{status:'prepared'});stale.pages[0].status='pending';delete stale.pages[0].result;stale.pages[0].afterText='PRIVATE_OLD_UNTAGGED';stale.pages[0].afterHash=hash(stale.pages[0].afterText);
+    const beforeStale=attempts.calls.length;await assert.rejects(submit(attempts.client,stale),error=>error.code==='category-review');assert.equal(attempts.calls.length,beforeStale,'A stale untagged draft fails before authentication or write');const staleReceipt=(await attempts.client.contributionHistory()).entries.find(value=>value.id===stale.id);assert.equal(staleReceipt.code,'category-review');assert.equal(staleReceipt.status,'needs-attention');assert.equal(staleReceipt.pages[0].status,'pending');assert.equal(staleReceipt.pages[0].revision,undefined,'The policy refusal never claims an applied page');
     const successful=plan('manual-attempt',{status:'prepared'});successful.pages[0].status='pending';delete successful.pages[0].result;
     assert.equal((await submit(attempts.client,successful)).status,'submitted');
     let receipt=(await attempts.client.contributionHistory()).entries.find(value=>value.id===successful.id);assert.equal(receipt.status,'submitted');assert.equal(receipt.pages[0].revision,2);

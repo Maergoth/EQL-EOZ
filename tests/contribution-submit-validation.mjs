@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {createItemBaseReview,applyItemBaseReview} from '../app/item-base-review.js';
-const require=createRequire(import.meta.url),{WikiClient}=require('../desktop/wiki-client.cjs');
+import {ensureEoZPageCategory} from '../app/eoz-page-category.js';
+const require=createRequire(import.meta.url),{WikiClient,normalizeWikiSubmissionText}=require('../desktop/wiki-client.cjs');
 const user={id:7,name:'Synthetic Editor'},hash=value=>createHash('sha256').update(value).digest('hex');
 const item='Synthetic Shared Powder',newMob='Synthetic New Guardian';
 const npcText=(name,kind='unique')=>'{{Namedmobpage|name='+name+'|known_loot='+(kind==='unique'?'{{:'+item+'}}':'?')+'|common_loot='+(kind==='common'?'{{:'+item+'}}':'?')+'}}';
@@ -12,6 +13,10 @@ function catalog(count=6){
     return {meta:{schemaVersion:3,version:'synthetic-v1',sample:false,wikiEntitiesComplete:true,lootSourceCountsVersion:2},wikiEntities:{items:[item],npcs:[...names,newMob],titles:[item,...names,newMob]},items:[{name:item,wikiTitle:item,stats:{HP:5}}],npcs:[...names,newMob].map(name=>({name,wikiTitle:name})),lootSourceCounts:{[item]:countRecord}};
 }
 function page(title,beforeText,afterText,{status='pending',currentText=beforeText,revision=beforeText?1:null}={}){
+    // These fixtures exercise the independent publication policies on reviewed
+    // source. Already-applied historical pages deliberately remain untagged.
+    const prepared=status==='applied'?afterText:normalizeWikiSubmissionText(ensureEoZPageCategory(afterText));
+    if(currentText===afterText&&status!=='applied')currentText=prepared;afterText=prepared;
     return {id:title,title,role:'primary',operation:beforeText?'replace-reviewed':'create',beforeText,afterText,beforeHash:hash(beforeText),afterHash:hash(afterText),baseRevision:revision,baseTimestamp:'2026-10-25T12:00:00Z',startTimestamp:'2026-10-25T12:00:00Z',status,currentText};
 }
 function fixture(pages,{pack=catalog(),automaticItem=false,itemBaseReview=null,notableChoices=null}={}){
