@@ -30,7 +30,7 @@
         <datalist id="map-destinations"></datalist>
         <div class="window-controls">
             <button id="app-update-badge" class="topbar-control app-update-badge" type="button" hidden>Update Available</button>
-            <button id="open-native-overlays" class="topbar-control" type="button" title="Show independent native overlay windows">Overlays</button>
+            <button id="open-native-overlays" data-feature-ui="overlays" data-feature-ui-hidden class="topbar-control" type="button" title="Show independent native overlay windows">Overlays</button>
         </div>
         <div class="live-strip">
             <span id="bridge-status" class="status-pill status-warn">Connecting</span>
@@ -43,14 +43,14 @@
 
     <aside class="sidebar">
         <button class="nav-button is-active" data-view="overview"><span>◆</span>Overview</button>
-        <button class="nav-button" data-view="map"><span>⌖</span>Live Map</button>
-        <button class="nav-button" data-view="npcs"><span>♟</span>NPCs</button>
-        <button class="nav-button" data-view="items"><span>◇</span>Items</button>
-        <button class="nav-button" data-view="drops"><span>▣</span>Drops</button>
-        <button class="nav-button" data-view="combat"><span>⚔</span>Combat</button>
-        <button class="nav-button" data-view="timers"><span>◷</span>Triggers</button>
-        <button class="nav-button" data-view="contribute"><span>✎</span>Contribute to Wiki</button>
-        <button class="nav-button" data-view="character"><span>♙</span>Character</button>
+        <button class="nav-button" data-view="map" data-feature-ui="map" data-feature-ui-hidden><span>⌖</span>Live Map</button>
+        <button class="nav-button" data-view="npcs" data-feature-ui="npcIntel" data-feature-ui-hidden><span>♟</span>NPCs</button>
+        <button class="nav-button" data-view="items" data-feature-ui="items" data-feature-ui-hidden><span>◇</span>Items</button>
+        <button class="nav-button" data-view="drops" data-feature-ui="drops" data-feature-ui-hidden><span>▣</span>Drops</button>
+        <button class="nav-button" data-view="combat" data-feature-ui="combat" data-feature-ui-hidden><span>⚔</span>Combat</button>
+        <button class="nav-button" data-view="timers" data-feature-ui="triggers" data-feature-ui-hidden><span>◷</span>Triggers</button>
+        <button class="nav-button" data-view="contribute" data-feature-ui="contributions" data-feature-ui-hidden><span>✎</span>Contribute to Wiki</button>
+        <button class="nav-button" data-view="character" data-feature-ui="character" data-feature-ui-hidden><span>♙</span>Character</button>
         <button class="nav-button" data-view="settings"><span>⚙</span>Settings</button>
     </aside>
 
@@ -62,12 +62,12 @@
                     <h1 id="hero-zone">Waiting for EverQuest log…</h1>
                 </div>
                 <div class="hero-actions">
-                    <button class="primary-button" data-go-view="map">Open live map</button>
+                    <button class="primary-button" data-feature-ui="map" data-feature-ui-hidden data-go-view="map">Open live map</button>
                     <a id="zone-wiki-link" class="secondary-button" target="_blank" rel="noopener">Open zone wiki</a>
                 </div>
             </div>
 
-            <div class="metric-grid overview-metrics single-metric">
+            <div class="metric-grid overview-metrics single-metric" data-feature-ui="combat" data-feature-ui-hidden>
                 <article class="metric-card">
                     <span class="metric-label">Current fight</span>
                     <strong id="metric-fight">0 DPS</strong>
@@ -75,14 +75,14 @@
                 </article>
             </div>
 
-            <div class="two-col">
-                <article class="panel">
+            <div class="two-col overview-activity">
+                <article class="panel" data-feature-ui="npcIntel" data-feature-ui-hidden>
                     <div class="panel-heading">
                         <div>
                             <span class="eyebrow">ZONE INTEL</span>
                             <h2>NPCs near your level</h2>
                         </div>
-                        <button class="text-button" data-go-view="npcs">View all</button>
+                        <button class="text-button" data-feature-ui="npcIntel" data-feature-ui-hidden data-go-view="npcs">View all</button>
                     </div>
                     <div id="overview-npcs" class="list-stack empty-state">No zone NPC data loaded yet.</div>
                 </article>
@@ -98,7 +98,7 @@
             </div>
         </section>
 
-        <section class="view map-view" data-view-panel="map">
+        <section class="view map-view" data-view-panel="map" data-feature-ui="map" data-feature-ui-hidden>
             <div class="map-toolbar panel">
                 <div>
                     <div class="map-title-row">
@@ -133,13 +133,13 @@
             </div>
             <div class="map-workspace">
                 <div class="viewer-frame-wrap">
-                    <iframe id="zone-viewer" class="viewer-frame" src="./zoneviewer/viewer.html" title="EQL Zone Viewer"></iframe>
+                    <iframe id="zone-viewer" class="viewer-frame" data-feature-src="./zoneviewer/viewer.html" title="EQL Zone Viewer"></iframe>
                 </div>
                 <aside id="map-loot-pane" class="map-loot-pane panel" aria-label="Selected monster loot" hidden></aside>
             </div>
         </section>
 
-        <section class="view" data-view-panel="npcs">
+        <section class="view" data-view-panel="npcs" data-feature-ui="npcIntel" data-feature-ui-hidden>
             <div class="section-heading">
                 <div>
                     <span class="eyebrow">NPC DATABASE</span>
@@ -153,7 +153,7 @@
             <div id="npc-list" class="card-grid"></div>
         </section>
 
-        <section class="view" data-view-panel="items">
+        <section class="view" data-view-panel="items" data-feature-ui="items" data-feature-ui-hidden>
             <div class="section-heading">
                 <div>
                     <span class="eyebrow">LOCAL ITEM DATABASE</span>
@@ -193,7 +193,7 @@
             <div id="item-list" class="card-grid"></div>
         </section>
 
-        <section class="view" data-view-panel="drops">
+        <section class="view" data-view-panel="drops" data-feature-ui="drops" data-feature-ui-hidden>
             <div class="section-heading">
                 <div>
                     <span class="eyebrow">OBSERVED LOOT</span>
@@ -211,7 +211,7 @@
             </article>
         </section>
 
-        <section class="view" data-view-panel="combat">
+        <section class="view" data-view-panel="combat" data-feature-ui="combat" data-feature-ui-hidden>
             <div class="section-heading">
                 <div>
                     <span class="eyebrow">LOCAL LOG PARSER</span>
@@ -237,14 +237,14 @@
             </div>
         </section>
 
-        <section class="view" data-view-panel="timers">
+        <section class="view" data-view-panel="timers" data-feature-ui="triggers" data-feature-ui-hidden>
             <div class="section-heading"><div><span class="eyebrow">COUNTDOWNS &amp; LOG TRIGGERS</span><h1>Triggers</h1></div></div>
             <div id="timer-settings" class="panel"></div>
             <div id="wiki-discovery-notices" aria-label="Wiki discoveries"></div>
         </section>
 
-        <section class="view" data-view-panel="contribute"><div id="contribution-workspace"></div></section>
-        <section class="view" data-view-panel="character"><div id="character-workspace"></div></section>
+        <section class="view" data-view-panel="contribute" data-feature-ui="contributions" data-feature-ui-hidden><div id="contribution-workspace"></div></section>
+        <section class="view" data-view-panel="character" data-feature-ui="character" data-feature-ui-hidden><div id="character-workspace"></div></section>
         <section class="view" data-view-panel="settings">
             <div class="section-heading">
                 <div>
@@ -252,98 +252,174 @@
                     <h1>Settings</h1>
                 </div>
             </div>
+            <div class="settings-discovery">
+                <label for="settings-search">Find a setting<input id="settings-search" type="search" autocomplete="off" placeholder="Search settings, such as font or screen reading"></label>
+                <nav class="settings-topics" aria-label="Settings topics">
+                    <a href="#settings-topic-features" data-settings-topic="features">Features</a>
+                    <a href="#settings-topic-game" data-settings-topic="game">Game setup</a>
+                    <a href="#settings-topic-appearance" data-settings-topic="appearance">Appearance and windows</a>
+                    <a href="#settings-topic-tools" data-settings-topic="tools">Maps and combat</a>
+                    <a href="#settings-topic-reading" data-settings-topic="reading">Screen reading</a>
+                    <a href="#settings-topic-updates" data-settings-topic="updates">Updates and wiki</a>
+                    <a href="#settings-topic-support" data-settings-topic="support">Help and support</a>
+                </nav>
+                <p id="settings-search-status" class="settings-helper" role="status" aria-live="polite"></p>
+            </div>
             <div class="settings-grid">
-                <article class="panel" id="appearance-settings">
-                    <h2>Fonts</h2>
-                    <label for="settings-font-family">Font family <select id="settings-font-family" aria-label="Font family"></select></label>
-                    <label for="settings-local-font">Installed font family <input id="settings-local-font" list="installed-font-families" autocomplete="off" maxlength="120" placeholder="Search or enter a font family"></label>
-                    <datalist id="installed-font-families"></datalist>
-                    <div class="settings-actions"><button id="refresh-system-fonts" class="secondary-button" type="button">Refresh installed fonts</button><button id="apply-system-font" class="secondary-button" type="button">Apply installed font</button></div>
-                    <p id="settings-system-font-status" class="settings-helper" role="status" aria-live="polite">Refresh to list fonts installed on this computer, or enter a family name directly.</p>
-                    <label for="settings-font-size">Text size <span class="appearance-size"><input id="settings-font-size" type="range" min="10" max="20" step="1" value="13" aria-label="Text size"><output id="settings-font-size-value" for="settings-font-size">13 px</output></span></label>
-                    <p class="settings-helper">Applies to the main window and all native overlays. Each overlay's Text size still adjusts that panel further. Installed fonts stay local; no font files are read or downloaded.</p>
-                    <div class="settings-actions"><button id="reset-appearance" class="secondary-button" type="button">Reset fonts</button></div>
-                    <p id="settings-appearance-status" class="settings-helper" role="status" aria-live="polite"></p>
-                </article>
-                <div id="overlay-controller" class="panel"></div>
-                <article id="capture-settings" class="panel"></article>
-                <article class="panel">
-                    <h2>EverQuest folder</h2>
-                    <div class="setting-line"><span>Game folder</span><code id="settings-eq-root">—</code></div>
-                    <div class="setting-line"><span>Active log</span><code id="settings-log-path">—</code></div>
-                    <div class="setting-line"><span>Log selection</span><code id="settings-log-mode">Automatic</code></div>
-                    <div class="setting-line"><span>Map files</span><code id="settings-map-status">Checking…</code></div>
-                    <p class="settings-helper">For continuous position and heading, create EverQuest movement bindings that also emit <code>/loc</code>. Eye of Zomm only reads those log lines; it never sends game input.</p>
-                    <div class="settings-actions">
-                        <button id="change-eq-folder" class="primary-button">Change folder</button>
-                        <button id="change-log" class="secondary-button">Choose log</button>
-                        <button id="automatic-log" class="text-button">Use newest log</button>
+                <section class="settings-group" id="settings-topic-features" data-settings-group="features" aria-labelledby="settings-topic-features-title">
+                    <header class="settings-group-heading">
+                        <h2 id="settings-topic-features-title" tabindex="-1">Features</h2>
+                        <p>Choose which tools are available.</p>
+                    </header>
+                    <div class="settings-group-panels">
+                        <article class="panel" id="feature-settings" aria-label="Feature controls"></article>
                     </div>
-                </article>
-                <article class="panel">
-                    <h2>Character fallback</h2>
-                    <label>Level <input id="manual-level" type="number" min="1" max="100" placeholder="Auto"></label>
-                    <span class="filter-label">Classes</span>
-                    <div id="settings-class-chips" class="chip-row"></div>
-                </article>
-                <article class="panel">
-                    <h2>Window</h2>
-                    <label class="check-control"><input id="settings-minimize-to-tray" type="checkbox" disabled> Minimize to tray</label>
-                    <label class="check-control"><input id="settings-start-minimized" type="checkbox" disabled> Start minimized</label>
-                    <p id="settings-window-status" class="settings-helper" role="status">Window settings are available in the desktop app.</p>
-                    <label class="check-control"><input id="settings-routing-enabled" type="checkbox"> Enable route controls in overlays</label>
-                </article>
-                <article class="panel">
-                    <h2>Combat encounters</h2>
-                    <label>End encounter after
-                        <span class="number-with-unit"><input id="encounter-gap" type="number" min="3" max="300" step="1" value="15"> seconds</span>
-                    </label>
-                </article>
-                <article class="panel">
-                    <h2>Application updates</h2>
-                    <div class="setting-line"><span>Installed version</span><code id="app-version">—</code></div>
-                    <p id="app-update-status" class="app-update-status" role="status" aria-live="polite">Checking application update support…</p>
-                    <p id="app-update-detail" class="settings-helper" role="alert" hidden></p>
-                    <progress id="app-update-progress" class="app-update-progress" max="100" aria-label="Application update download" hidden></progress>
-                    <span id="app-update-progress-label" class="settings-helper" hidden></span>
-                    <div class="settings-actions">
-                        <button id="check-app-update" class="secondary-button" type="button">Check for updates</button>
-                        <button id="download-app-update" class="primary-button" type="button" hidden>Download update</button>
-                        <button id="install-app-update" class="primary-button" type="button" hidden>Restart to install update</button>
-                        <button id="cancel-app-update" class="secondary-button" type="button" hidden>Cancel download</button>
-                        <button id="later-app-update" class="text-button" type="button" hidden>Later</button>
-                        <a id="app-update-notes" class="text-button" target="_blank" rel="noopener noreferrer" hidden>Release notes</a>
+                </section>
+                <section class="settings-group" id="settings-topic-game" data-settings-group="game" aria-labelledby="settings-topic-game-title">
+                    <header class="settings-group-heading">
+                        <h2 id="settings-topic-game-title" tabindex="-1">Game setup</h2>
+                        <p>Choose your logs and fallback profile.</p>
+                    </header>
+                    <div class="settings-group-panels">
+                        <article class="panel" id="game-settings">
+                            <h2>EverQuest folder</h2>
+                            <div class="setting-line"><span>Game folder</span><code id="settings-eq-root">—</code></div>
+                            <div class="setting-line"><span>Active log</span><code id="settings-log-path">—</code></div>
+                            <div class="setting-line"><span>Log selection</span><code id="settings-log-mode">Automatic</code></div>
+                            <div class="setting-line" data-feature-ui="map" data-feature-ui-hidden><span>Map files</span><code id="settings-map-status">Checking…</code></div>
+                            <p class="settings-helper" data-feature-ui="map" data-feature-ui-hidden>For continuous position and heading, create EverQuest movement bindings that also emit <code>/loc</code>. Eye of Zomm only reads those log lines; it never sends game input.</p>
+                            <div class="settings-actions">
+                                <button id="change-eq-folder" class="primary-button">Change folder</button>
+                                <button id="change-log" class="secondary-button">Choose log</button>
+                                <button id="automatic-log" class="text-button">Use newest log</button>
+                            </div>
+                        </article>
+                        <article class="panel" id="profile-settings">
+                            <h2>Profile fallback</h2>
+                            <p class="settings-helper">Use these when level or classes have not been read from your log.</p>
+                            <label>Level <input id="manual-level" type="number" min="1" max="100" placeholder="Auto"></label>
+                            <span class="filter-label">Classes</span>
+                            <div id="settings-class-chips" class="chip-row"></div>
+                        </article>
                     </div>
-                    <label class="check-control app-update-preference"><input id="app-update-startup-download" type="checkbox"> Download app updates automatically on startup</label>
-                    <p class="settings-helper">Windows restarts to install 5 seconds after a new update finishes downloading; choose Later to postpone. Linux opens the verified download folder for installation. Your settings and wiki data stay on this PC.</p>
-                </article>
-                <article class="panel">
-                    <h2>Wiki data</h2>
-                    <div class="setting-line"><span>Pack version</span><code id="pack-version">—</code></div>
-                    <div class="setting-line"><span>Pack mode</span><code id="pack-mode">Sample</code></div>
-                    <div class="setting-line"><span>Update status</span><code id="pack-update-status">—</code></div>
-                    <div class="setting-line"><span>Last check</span><code id="pack-last-check">—</code></div>
-                    <div class="setting-line"><span>Last successful check</span><code id="pack-last-success">—</code></div>
-                    <div class="setting-line"><span>Dataset generated</span><code id="pack-data-generated">—</code></div>
-                    <div class="setting-line"><span>Last download</span><code id="pack-last-download">—</code></div>
-                    <div class="setting-line"><span>Next check</span><code id="pack-next-check">—</code></div>
-                    <p class="settings-helper">Checks at startup and hourly while Eye of Zomm is open. Downloads only when the published dataset changes; saved data stays available offline.</p>
-                    <p id="pack-sync-error" class="settings-helper" role="status" hidden></p>
-                    <button id="update-pack" class="secondary-button">Sync with Wiki</button>
-                </article>
-                <article class="panel">
-                    <h2>Support diagnostics</h2>
-                    <p class="settings-helper">Export route, map, and setup state for troubleshooting. Character names, log contents, and filesystem paths are excluded.</p>
-                    <button id="export-diagnostics" class="secondary-button" type="button">Export redacted diagnostics</button>
-                </article>
-                <article class="panel">
-                    <h2>About Eye of Zomm</h2>
-                    <p class="settings-helper">See the latest features, report an issue or contribute on GitHub.</p>
-                    <div class="settings-actions">
-                        <button id="open-whats-new" class="primary-button" type="button">What's new</button>
-                        <a id="project-github-link" class="secondary-button" href="https://github.com/Maergoth/EQL-EOZ" target="_blank" rel="noopener noreferrer">Eye of Zomm on GitHub ↗</a>
+                </section>
+                <section class="settings-group" id="settings-topic-appearance" data-settings-group="appearance" aria-labelledby="settings-topic-appearance-title">
+                    <header class="settings-group-heading">
+                        <h2 id="settings-topic-appearance-title" tabindex="-1">Appearance and windows</h2>
+                        <p>Fonts, desktop behavior and overlay layout.</p>
+                    </header>
+                    <div class="settings-group-panels">
+                        <article class="panel" id="appearance-settings">
+                            <h2>Fonts</h2>
+                            <label for="settings-font-family">Font family <select id="settings-font-family" aria-label="Font family"></select></label>
+                            <label for="settings-local-font">Installed font family <input id="settings-local-font" list="installed-font-families" autocomplete="off" maxlength="120" placeholder="Search or enter a font family"></label>
+                            <datalist id="installed-font-families"></datalist>
+                            <div class="settings-actions"><button id="refresh-system-fonts" class="secondary-button" type="button">Refresh installed fonts</button><button id="apply-system-font" class="secondary-button" type="button">Apply installed font</button></div>
+                            <p id="settings-system-font-status" class="settings-helper" role="status" aria-live="polite">Refresh to list fonts installed on this computer, or enter a family name directly.</p>
+                            <label for="settings-font-size">Text size <span class="appearance-size"><input id="settings-font-size" type="range" min="10" max="20" step="1" value="13" aria-label="Text size"><output id="settings-font-size-value" for="settings-font-size">13 px</output></span></label>
+                            <p class="settings-helper">Applies to the main window and all native overlays. Each overlay's Text size still adjusts that panel further. Installed fonts stay local; no font files are read or downloaded.</p>
+                            <div class="settings-actions"><button id="reset-appearance" class="secondary-button" type="button">Reset fonts</button></div>
+                            <p id="settings-appearance-status" class="settings-helper" role="status" aria-live="polite"></p>
+                        </article>
+                        <article class="panel" id="window-settings">
+                            <h2>Window behavior</h2>
+                            <label class="check-control"><input id="settings-minimize-to-tray" type="checkbox" disabled> Minimize to tray</label>
+                            <label class="check-control"><input id="settings-start-minimized" type="checkbox" disabled> Start minimized</label>
+                            <p id="settings-window-status" class="settings-helper" role="status">Window settings are available in the desktop app.</p>
+                        </article>
+                        <div id="overlay-controller" data-feature-ui="overlays" data-feature-ui-hidden class="panel"></div>
                     </div>
-                </article>
+                </section>
+                <section class="settings-group" id="settings-topic-tools" data-settings-group="tools" aria-labelledby="settings-topic-tools-title">
+                    <header class="settings-group-heading">
+                        <h2 id="settings-topic-tools-title" tabindex="-1">Maps and combat</h2>
+                        <p>Fine-tune maps and encounter timing. Manage saved triggers in Triggers.</p>
+                    </header>
+                    <div class="settings-group-panels">
+                        <article class="panel" id="map-settings" data-feature-ui="map" data-feature-ui-hidden>
+                            <h2>Map routes</h2>
+                            <label class="check-control"><input id="settings-routing-enabled" type="checkbox"> Show route controls in overlays</label>
+                            <p class="settings-helper">Show route actions for your logged zone and location. Map view and Crawl controls are in Live Map.</p>
+                        </article>
+                        <article class="panel" id="combat-settings" data-feature-ui="combat" data-feature-ui-hidden>
+                            <h2>Combat encounters</h2>
+                            <label>End encounter after
+                                <span class="number-with-unit"><input id="encounter-gap" type="number" min="3" max="300" step="1" value="15"> seconds</span>
+                            </label>
+                        </article>
+                    </div>
+                </section>
+                <section class="settings-group" id="settings-topic-reading" data-settings-group="reading" aria-labelledby="settings-topic-reading-title">
+                    <header class="settings-group-heading">
+                        <h2 id="settings-topic-reading-title" tabindex="-1">Screen reading</h2>
+                        <p>Source selection and local text recognition.</p>
+                    </header>
+                    <div class="settings-group-panels">
+                        <article id="capture-settings" data-feature-ui="screenReading" data-feature-ui-hidden class="panel"></article>
+                    </div>
+                </section>
+                <section class="settings-group" id="settings-topic-updates" data-settings-group="updates" aria-labelledby="settings-topic-updates-title">
+                    <header class="settings-group-heading">
+                        <h2 id="settings-topic-updates-title" tabindex="-1">Updates and wiki</h2>
+                        <p>Application updates, cached wiki data and optional drop observations.</p>
+                    </header>
+                    <div class="settings-group-panels">
+                        <article class="panel" id="app-update-settings">
+                            <h2>Application updates</h2>
+                            <div class="setting-line"><span>Installed version</span><code id="app-version">—</code></div>
+                            <p id="app-update-status" class="app-update-status" role="status" aria-live="polite">Checking application update support…</p>
+                            <p id="app-update-detail" class="settings-helper" role="alert" hidden></p>
+                            <progress id="app-update-progress" class="app-update-progress" max="100" aria-label="Application update download" hidden></progress>
+                            <span id="app-update-progress-label" class="settings-helper" hidden></span>
+                            <div class="settings-actions">
+                                <button id="check-app-update" class="secondary-button" type="button">Check for updates</button>
+                                <button id="download-app-update" class="primary-button" type="button" hidden>Download update</button>
+                                <button id="install-app-update" class="primary-button" type="button" hidden>Restart to install update</button>
+                                <button id="cancel-app-update" class="secondary-button" type="button" hidden>Cancel download</button>
+                                <button id="later-app-update" class="text-button" type="button" hidden>Later</button>
+                                <a id="app-update-notes" class="text-button" target="_blank" rel="noopener noreferrer" hidden>Release notes</a>
+                            </div>
+                            <label class="check-control app-update-preference"><input id="app-update-startup-download" type="checkbox"> Download app updates automatically on startup</label>
+                            <p class="settings-helper">Windows restarts to install 5 seconds after a new update finishes downloading; choose Later to postpone. Linux opens the verified download folder for installation. Your settings and wiki data stay on this PC.</p>
+                        </article>
+                        <article class="panel" id="wiki-data-settings">
+                            <h2>Wiki data</h2>
+                            <div class="setting-line"><span>Pack version</span><code id="pack-version">—</code></div>
+                            <div class="setting-line"><span>Pack mode</span><code id="pack-mode">Sample</code></div>
+                            <div class="setting-line"><span>Update status</span><code id="pack-update-status">—</code></div>
+                            <div class="setting-line"><span>Last check</span><code id="pack-last-check">—</code></div>
+                            <div class="setting-line"><span>Last successful check</span><code id="pack-last-success">—</code></div>
+                            <div class="setting-line"><span>Dataset generated</span><code id="pack-data-generated">—</code></div>
+                            <div class="setting-line"><span>Last download</span><code id="pack-last-download">—</code></div>
+                            <div class="setting-line"><span>Next check</span><code id="pack-next-check">—</code></div>
+                            <p class="settings-helper">Checks at startup and hourly while Eye of Zomm is open. Downloads only when the published dataset changes; saved data stays available offline.</p>
+                            <p id="pack-sync-error" class="settings-helper" role="status" hidden></p>
+                            <button id="update-pack" class="secondary-button">Sync with Wiki</button>
+                        </article>
+                        <article class="panel" id="observation-settings" data-feature-ui="dropObservations" data-feature-ui-hidden></article>
+                    </div>
+                </section>
+                <section class="settings-group" id="settings-topic-support" data-settings-group="support" aria-labelledby="settings-topic-support-title">
+                    <header class="settings-group-heading">
+                        <h2 id="settings-topic-support-title" tabindex="-1">Help and support</h2>
+                        <p>Version information and troubleshooting.</p>
+                    </header>
+                    <div class="settings-group-panels">
+                        <article class="panel" id="diagnostics-settings">
+                            <h2>Support diagnostics</h2>
+                            <p class="settings-helper">Export route, map, and setup state for troubleshooting. Character names, log contents, and filesystem paths are excluded.</p>
+                            <button id="export-diagnostics" class="secondary-button" type="button">Export redacted diagnostics</button>
+                        </article>
+                        <article class="panel" id="about-settings">
+                            <h2>About Eye of Zomm</h2>
+                            <p class="settings-helper">See the latest features, report an issue or contribute on GitHub.</p>
+                            <div class="settings-actions">
+                                <button id="open-whats-new" class="primary-button" type="button">What's new</button>
+                                <a id="project-github-link" class="secondary-button" href="https://github.com/Maergoth/EQL-EOZ" target="_blank" rel="noopener noreferrer">Eye of Zomm on GitHub ↗</a>
+                            </div>
+                        </article>
+                    </div>
+                </section>
             </div>
         </section>
     </main>

@@ -1,3 +1,4 @@
+import {featureEnabled,featureForPanel,featureForView} from '../app/feature-registry.js';
 import assert from 'node:assert/strict';
 import './win32-hit-test-probe.mjs';
 import { EventEmitter } from 'node:events';
@@ -839,6 +840,7 @@ test('Crawl commands are issued only by authenticated Map or Intel panels',()=>f
     for(const id of ['parse','timers'])await assert.rejects(host.handleOverlayRequest(overlayEvent(id),'session:crawl-mode',{enabled:true}),/available in Map/);
     const wrong=overlayEvent('map');wrong.senderFrame={url:wrong.senderFrame.url};
     await assert.rejects(host.handleOverlayRequest(wrong,'session:crawl-mode',{enabled:true}),/unavailable/);
+    host.isPanelEnabled=id=>id!=='map';await assert.rejects(host.handleOverlayRequest(overlayEvent('intel'),'session:copy-waypoint',{npc:'Synthetic Keeper',zone:'Unrest'}),/Live Map is disabled/,'Native policy rejects hidden Map actions independently of an enabled Intel panel');
 }));
 
 test('opening a selected NPC rechecks its zone and native routing keeps the main window hidden', async () => {
@@ -846,7 +848,7 @@ test('opening a selected NPC rechecks its zone and native routing keeps the main
     const start = source.indexOf('async function handleOverlayCommand(');
     const end = source.indexOf('\nfunction currentEraIndex(', start);
     assert(start >= 0 && end > start, 'Missing authoritative application handler.');
-    async function routeFixture({ changeAt, changeZone = false, disablePaths = false } = {}) {
+    async function routeFixture({ changeAt, changeZone = false, disablePaths = false, features={} } = {}) {
         let zone = 'Unrest';
         const routes = [];
         const selections = [], fields = {};
@@ -857,6 +859,7 @@ test('opening a selected NPC rechecks its zone and native routing keeps the main
             if (disablePaths) settings.routingEnabled = false;
         };
         const context = vm.createContext({
+            featureEnabled:id=>featureEnabled(features,id),featureForPanel,featureForView,
             state:() => ({ zone }), zoneKey:value => String(value).toLowerCase(), settings,
             npcRecordForName:(name, requestedZone) => name === 'a synthetic guard' ? { name, zone:requestedZone } : null,
             raidVariant:npc => npc?.raidInstance === true,
@@ -865,7 +868,7 @@ test('opening a selected NPC rechecks its zone and native routing keeps the main
             pathToNpc:async (name,options) => { routes.push({ name, zone, options:JSON.parse(JSON.stringify(options)) }); }
         });
         vm.runInContext(source.slice(start, end), context);
-        return { routes, selections, run:(action = 'session:open') => context.handleOverlayCommand({ action,
+        return { routes, selections, run:(action = 'session:open') => context.handleOverlayCommand({ action,panel:'intel',
             payload:{ view:'npcs', npc:'a synthetic guard', zone:'Unrest', loc:[9999, 9999, 9999] } }) };
     }
     for (const changeAt of ['show']) {
@@ -873,6 +876,8 @@ test('opening a selected NPC rechecks its zone and native routing keeps the main
         await assert.rejects(zoned.run(), /previous zone/);
         assert.equal(zoned.routes.length, 0, `a zone change during ${changeAt} must not reuse the stale target`);
     }
+    const disabled=await routeFixture({features:{npcIntel:false}});await assert.rejects(disabled.run(),/disabled/);assert.equal(disabled.routes.length,0);
+    const mapDisabled=await routeFixture({features:{map:false}});await assert.rejects(mapDisabled.run('session:copy-waypoint'),/disabled/,'The final owner rejects Map clipboard actions before writing');assert.equal(mapDisabled.routes.length,0);
     const valid = await routeFixture();
     await valid.run('session:route');
     assert.deepEqual(valid.routes, [{ name:'a synthetic guard', zone:'Unrest', options:{openMain:false,raidInstance:false} }]);

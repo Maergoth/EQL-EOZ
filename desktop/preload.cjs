@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('eyeOfZommCharacterStorage', {
 });
 
 // Narrow paged inventory operations; no renderer-provided SQL or disk paths.
+contextBridge.exposeInMainWorld('eyeOfZommFeatures',{getState:()=>ipcRenderer.invoke('eye-of-zomm:features','get-state'),set:value=>ipcRenderer.invoke('eye-of-zomm:features','set',value),onChanged:callback=>subscribe('eye-of-zomm:features-changed',callback)});
 contextBridge.exposeInMainWorld('eyeOfZommCharacterRepository', {
     bootstrap:()=>ipcRenderer.invoke('eye-of-zomm:character-repository','bootstrap',{}),
     listProfiles:value=>ipcRenderer.invoke('eye-of-zomm:character-repository','listProfiles',value||{}),

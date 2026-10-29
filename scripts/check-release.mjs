@@ -10,6 +10,8 @@ const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf
 const uxVision = readFileSync(new URL('../docs/UX_VISION.md', import.meta.url), 'utf8');
 const manualTest = readFileSync(new URL('../docs/WINDOWS_MANUAL_TEST.md', import.meta.url), 'utf8');
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+const development = readFileSync(new URL('../DEVELOPMENT.md', import.meta.url), 'utf8');
+const featureGuide = readFileSync(new URL('../docs/FEATURE_CONTROLS.md', import.meta.url), 'utf8');
 const handoff = readFileSync(new URL('../docs/HANDOFF.md', import.meta.url), 'utf8');
 const implementationStatus = readFileSync(new URL('../docs/IMPLEMENTATION_STATUS.md', import.meta.url), 'utf8');
 const routeCorpus = readFileSync(new URL('../app/route-corpus.js', import.meta.url), 'utf8');
@@ -29,12 +31,15 @@ for (const required of ['## 6. Click budgets', '## 8. End-to-end UX flows', '## 
 for (const required of [`\`v${pkg.version}\``, '`X -222.75  Y 125.50  Z -154.10`', 'ZONE: The Castle of Mistmoore 1595 (mistmoore)', '`/loc -961.00, -30.00, -66.00`', 'client-map anchor X `30`, Y `961`, Z `-66`', '`/loc -330.00, 120.00, -178.13`', 'Succor anchor X `-120`, Y `330`, Z `-180`', '## 1. Continuous `/loc` tracking', '## 2. Rare-mob replacement map', '## 3. Native Intel and map browsing', '## 4. Map Overlay versus S3D textures', '## 5. Persistent golden path', '## 5b. Guarded spatial candidate and fallback', '100%', '125%', '150%']) {
     if (!manualTest.includes(required)) throw new Error(`Windows acceptance test is missing: ${required}`);
 }
-for (const required of ['docs/UX_VISION.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/HANDOFF.md', 'docs/NAVMESH_EVALUATION.md', 'VALIDATION.md']) {
-    if (!readme.includes(required)) throw new Error(`README is missing project-documentation link: ${required}`);
+for (const required of ['CHANGELOG.md', 'DEVELOPMENT.md', 'docs/FEATURE_CONTROLS.md']) {
+    if (!readme.includes(required)) throw new Error(`README is missing guide link: ${required}`);
 }
-for (const required of ['native Map', 'Normal Zone and Raid Zone', 'Show More', 'Through era', 'row-level Route actions', 'statless and weight-only', 'guarded Recast/Detour candidate']) {
-    if (!readme.includes(required)) throw new Error(`README is missing current 0.8 behavior: ${required}`);
+for (const required of ['docs/UX_VISION.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/HANDOFF.md', 'docs/NAVMESH_EVALUATION.md', 'VALIDATION.md', 'app/feature-registry.js', 'desktop/main.cjs']) {
+    if (!development.includes(required)) throw new Error(`Developer guide is missing component reference: ${required}`);
 }
+if (/^#{1,3}\s+(?:v)?\d+\.\d+\.\d+\b/m.test(readme)) throw new Error('Version-by-version release history belongs in CHANGELOG.md, not README.md.');
+if (!/!\[[^\]]+\]\([^)]+\)/.test(readme)) throw new Error('The user guide needs component screenshots.');
+for (const required of ['Settings', 'Features', 'saved', 'consent']) if (!featureGuide.toLowerCase().includes(required.toLowerCase())) throw new Error(`Feature guide is missing user behavior: ${required}`);
 for (const required of ['recast-navigation` 0.43.1', '## Player-facing UX contract', 'dedicated module worker', 'established collision-validated pathfinder', 'MIT', 'Zlib']) {
     if (!navmeshEvaluation.includes(required)) throw new Error(`Navmesh evaluation is missing: ${required}`);
 }
@@ -99,7 +104,7 @@ for (const required of ['npm run audit:deps', 'npm test', 'fetch-bootstrap-pack.
 }
 
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
-for (const relative of ['README.md', 'VALIDATION.md', 'CHANGELOG.md', 'docs/HANDOFF.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/NAVMESH_EVALUATION.md', 'docs/UX_VISION.md', 'docs/WINDOWS_MANUAL_TEST.md']) {
+for (const relative of ['README.md', 'CHANGELOG.md', 'DEVELOPMENT.md', 'CONTRIBUTING.md', 'SOURCE_INTEGRATION.md', 'docs/FEATURE_CONTROLS.md', 'VALIDATION.md', 'docs/HANDOFF.md', 'docs/IMPLEMENTATION_STATUS.md', 'docs/NAVMESH_EVALUATION.md', 'docs/UX_VISION.md', 'docs/WINDOWS_MANUAL_TEST.md']) {
     const absolute = resolve(repositoryRoot, relative);
     const content = readFileSync(absolute, 'utf8');
     for (const match of content.matchAll(/\]\(([^)]+)\)/g)) {

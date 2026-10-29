@@ -1,4 +1,5 @@
 import { TimerEngine } from './timer-engine.js';
+import {featureEnabled,normalizeFeatures} from './feature-registry.js';
 import { compactCombatants } from './combatants.js';
 
 const STORAGE_KEY = 'eql-eye-of-zomm-timers-v1';
@@ -127,17 +128,18 @@ export function fitOverlaySnapshot(snapshot) {
 
 export function createOverlaySession({ api, storage = globalThis.localStorage, getSession, onCommand = () => {}, onCues = () => {}, notify = () => {}, now = Date.now,
     setInterval = globalThis.setInterval, clearInterval = globalThis.clearInterval,
-    setTimeout = globalThis.setTimeout, clearTimeout = globalThis.clearTimeout } = {}) {
+    setTimeout = globalThis.setTimeout, clearTimeout = globalThis.clearTimeout, features={} } = {}) {
     let saved = null;
     try {
         const raw = storage?.getItem(STORAGE_KEY);
         if (raw && raw.length <= 1024 * 1024) saved = JSON.parse(raw);
     } catch { /* Invalid local preferences should not stop log parsing. */ }
     const engine = new TimerEngine({ now, state:saved });
+    let availability=normalizeFeatures(features);engine.setEnabled(featureEnabled(availability,'triggers'));
     const sessionId = `session-${now()}-${Math.random().toString(36).slice(2)}`;
     let sequence = 0, disposed = false, busy = false, publishPending = false, lastSaved = '', storageWarning = false, notice = null, flushQueued = false;
     let requestTimer = null, lastPublishedAt = -Infinity;
-    function cues() { const pending = engine.drainCues(); if (pending.length) { try { onCues(pending); } catch { /* A device failure cannot interrupt parsing. */ } } }
+    function cues() { const pending = engine.drainCues(); if (pending.length&&featureEnabled(availability,'triggers')) { try { onCues(pending); } catch { /* A device failure cannot interrupt parsing. */ } } }
     function scheduleFlush() {
         if (disposed || flushQueued) return;
         flushQueued = true;
@@ -183,7 +185,7 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
             cues();
             persist();
             emitTimers(timers);
-            if (api?.publish) await api.publish(fitOverlaySnapshot({ schemaVersion:1, sessionId, sequence:++sequence, at:now(), session:{ ...getSession(), timers, notice } }));
+            if (api?.publish&&featureEnabled(availability,'overlays')) await api.publish(fitOverlaySnapshot({ schemaVersion:1, sessionId, sequence:++sequence, at:now(), session:{ ...getSession(), timers, notice } }));
         } catch { /* A closing renderer or unavailable panel cannot stop the owner. */ }
         finally { busy = false; if (publishPending && !disposed) { publishPending = false; requestPublish(); } }
     }
@@ -192,6 +194,7 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
         try {
             let result = {};
             if (command.action.startsWith('timer:')) {
+                if(!featureEnabled(availability,'triggers'))throw Error('Triggers are disabled in Settings.');
                 const action = command.action.slice(6);
                 if (!TIMER_ACTIONS.has(action)) throw new Error('Unknown timer action.');
                 await engine.command(action, command.payload || {});
@@ -206,9 +209,10 @@ export function createOverlaySession({ api, storage = globalThis.localStorage, g
             notify(message); await publish();
         }
     });
-    const interval = setInterval(() => { void publish(); }, 1000);
+    const interval = setInterval(() => { if(featureEnabled(availability,'triggers')||featureEnabled(availability,'overlays'))void publish(); }, 1000);
     return {
         engine, publish, requestPublish,
+        setFeatures(value){availability=normalizeFeatures(value);engine.setEnabled(featureEnabled(availability,'triggers'));if(!featureEnabled(availability,'triggers'))persist();},
         getTimers:() => engine.snapshot(now()),
         onTimers(listener) {
             if (typeof listener !== 'function' || disposed) return () => {};

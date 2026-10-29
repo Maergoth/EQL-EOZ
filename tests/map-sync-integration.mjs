@@ -6,6 +6,7 @@ import { createCrawlMode } from '../app/crawl-mode.js';
 import { formatWorldLocationForGameMap, formatWorldLocationForPlayer } from '../app/coordinate-system.js';
 import { resolveZoneRecord, viewerZoneName,viewerZoneTarget,loggedZoneName } from '../app/zone-identity.js';
 import {locationPollDelay} from '../app/movement-tracking.js';
+import {featureEnabled as registryEnabled} from '../app/feature-registry.js';
 
 const source = readFileSync(new URL('../app/app.js', import.meta.url), 'utf8');
 const wrapper = readFileSync(new URL('../app/zoneviewer/viewer.html', import.meta.url), 'utf8');
@@ -39,6 +40,7 @@ function deferred() {
 }
 
 function harness() {
+    const features = {};
     const parser = new EQLogParser();
     parser.setCharacterFromFilename('eqlog_Synthetic_example.txt');
     const nodes = new Map();
@@ -55,6 +57,7 @@ function harness() {
     };
     const operations = [];
     const context = vm.createContext({
+        features, featureEnabled:id=>registryEnabled(features,id),
         parser, crawlMode:createCrawlMode(),crawlContext:()=>({zone:parser.zone}),pack:{ zones }, normalizedZoneKeys:new Map(), resolveZoneRecord,viewerZoneTarget,loggedZoneName, formatWorldLocationForPlayer,
         settings:{ mapMode:'top' }, bridgeInfo:{ eqRootExists:true, logExists:true,eqRootPath:'synthetic-root-a',logPath:'eqlog_Synthetic_example.txt' },mapDataRevision:0,
         viewerFolderStatus:'ready', viewerZoneState:{ zone:'', status:'idle', message:'' },
@@ -98,6 +101,16 @@ function sourceOwners(h){
         locationPollDelay:()=>100,schedulePoll:delay=>polls.push(delay),renderAll(){},renderLiveLocation(){},updateViewerFolderStatus(){}});
     vm.runInContext(between(source,'async function pollLog(', 'function consumeText(')+between(source,'async function applyLogSelection(', 'async function chooseEqFolder('),h.context);
     return polls;
+}
+{
+    const h=harness();h.context.features.map=false;
+    await h.consume('You have entered The Castle of Mistmoore.');
+    await h.consume('Your Location is 1, 2, 3');
+    assert.equal(h.parser.zone,'Mistmoore Castle','Map availability does not discard logged zone identity');
+    assert.deepEqual([h.parser.location.x,h.parser.location.y,h.parser.location.z],[2,1,3]);
+    assert.equal(await h.context.syncZoneToViewer(false),false);assert.equal(await h.context.syncLocationToViewer(false),false);
+    assert.deepEqual(h.viewer.calls,[],'Disabled Map never starts a viewer zone load');
+    assert.deepEqual(h.viewer.locations,[],'Disabled Map never synchronizes logged positions');
 }
 // A batch requests one newest native position. Timestamp-only duplicates leave
 // the one-second heartbeat in charge rather than rebuilding every native panel.

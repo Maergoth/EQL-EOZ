@@ -2,6 +2,27 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.10",
+  "title": "Feature controls and clearer guides",
+  "changes": [
+    "Choose the tools you want in Settings → Features. Disabled features disappear from navigation, Settings cards, summaries and related shortcuts while their saved data stays in place.",
+    "Find settings through topic links and search. Feature availability stays separate from permission to read a screen or collect optional observations.",
+    "Use the illustrated README for feature instructions, CHANGELOG for release history and DEVELOPMENT for component contracts and implementation style."
+  ],
+  "steps": [
+    {
+      "title": "Choose the features you want",
+      "image": "1.0.10/feature-controls",
+      "view": "settings",
+      "action": "Open Settings",
+      "copy": "Open Settings → Features and uncheck the tools you do not use. Only their switches remain, so you can enable them again. Saved characters, drafts and preferences stay intact. Re-enabling a feature does not restart an old reader or reopen its overlays; start those deliberately. Use topic links or Find a setting for the controls you keep.",
+      "alt": "Actual Eye of Zomm Settings Features section with eleven labeled checkboxes for maps, NPC intelligence, items, drops, combat, triggers, contributions, Character, overlays, screen reading and drop observations.",
+      "caption": "Production main and preload in isolated sandboxed Electron with synthetic logs, inventory and drafts at a 1024 × 900 viewport. The two-process check verifies all eleven switches, complete hidden UI, exact saved-data preservation, pending local observation durability, native denial and restart without automatic reader or overlay reopening. No player data, installed profile or public wiki writes.",
+      "imageSha256": "14ed2ec9f3438bf4757c85f8240d55015b49c4bdda3a1d47a866a822fa8eb1ce"
+    }
+  ]
+},
+{
   "version": "1.0.9",
   "title": "Wiki page tracking",
   "changes": [

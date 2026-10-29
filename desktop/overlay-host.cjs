@@ -137,8 +137,8 @@ function sessionCommand(action, payload) {
 }
 
 class OverlayHost {
-    constructor({ electron, origin, getMainWindow, showMain, readPreferences, writePreferences, trayIcon, now = Date.now, warn = console.warn, platform = process.platform }) {
-        this.electron = electron;
+    constructor({ electron, origin, getMainWindow, showMain, readPreferences, writePreferences, trayIcon, now = Date.now, warn = console.warn, platform = process.platform, isPanelEnabled=()=>true, getFeatureState=()=>({}) }) {
+        this.electron = electron;this.isPanelEnabled=isPanelEnabled;this.getFeatureState=getFeatureState;this.featureSuspended=new Set();
         this.platform = platform;
         this.origin = origin.replace(/\/$/, '');
         this.getMainWindow = getMainWindow;
@@ -173,6 +173,7 @@ class OverlayHost {
     displays() { return this.electron.screen.getAllDisplays(); }
     async initialize() {
         this.preferences = normalizePreferences(await this.readPreferences(), this.displays());
+        for(const id of PANEL_IDS)if(!this.isPanelEnabled(id))this.featureSuspended.add(id);
         this.docksSuspended=!this.hasVisiblePanels()&&PANEL_IDS.some(id=>this.preferences.panels[id].dock);
         this.electron.ipcMain.handle(IPC_MAIN, (event, action, value) => this.handleMainRequest(event, action, value));
         this.electron.ipcMain.handle(IPC_OVERLAY, (event, action, payload) => this.handleOverlayRequest(event, action, payload));
@@ -209,12 +210,14 @@ class OverlayHost {
         }
         return null;
     }
+    featuresChanged(){for(const id of PANEL_IDS)if(!this.isPanelEnabled(id))this.featureSuspended.add(id);for(const[id,win]of this.windows)if(!this.isPanelEnabled(id)){this.cancelPanelMove(id);win.destroy();}for(const[key,pending]of this.pendingReplies)if(!this.isPanelEnabled(pending.panel)){clearTimeout(pending.timeout);pending.reject(Error('This feature is disabled in Settings.'));this.pendingReplies.delete(key);}this.broadcast();}
     panelUrl(id) { return `${this.origin}/${id==='map'?'overlay-map.html':'overlay.html'}?panel=${id}`; }
     getState(id = null) {
-        const common = { globalMode:globalOverlayMode(this.preferences.panels), appearance:this.preferences.appearance, snapshot:this.snapshot, sessionAvailable:this.sessionAvailable,
+        const panels=Object.fromEntries(PANEL_IDS.map(key=>[key,{...this.preferences.panels[key],disabled:!this.isPanelEnabled(key),visible:this.isPanelEnabled(key)&&!this.featureSuspended.has(key)&&this.preferences.panels[key].visible}]));
+        const common = { features:this.getFeatureState(), globalMode:globalOverlayMode(panels), appearance:this.preferences.appearance, snapshot:this.snapshot, sessionAvailable:this.sessionAvailable,
             lastSnapshotAt:this.snapshotAt, sessionRestartCount:this.sessionRestartCount, recoveryShortcut:RECOVERY_SHORTCUT,
             recoveryShortcutRegistered:this.recoveryShortcutRegistered };
-        return clone(id ? { panel:id, preferences:this.preferences.panels[id], ...common } : { panels:this.preferences.panels, ...common });
+        return clone(id ? { panel:id, preferences:panels[id], ...common } : { panels, ...common });
     }
 
     async handleMainRequest(event, action, value) {
@@ -232,6 +235,7 @@ class OverlayHost {
             return { ok:true };
         }
         if (action === 'publish') {
+            if(!PANEL_IDS.some(id=>this.isPanelEnabled(id)))return {ok:false,disabled:true};
             const snapshot = jsonObject(value, MAX_SNAPSHOT_BYTES);
             if (snapshot.schemaVersion !== 1 || !snapshot.session || typeof snapshot.session !== 'object') throw new Error('Invalid overlay snapshot.');
             this.snapshot = snapshot;
@@ -247,8 +251,9 @@ class OverlayHost {
 
     async handleOverlayRequest(event, action, payload) {
         const id = this.overlaySender(event);
-        if (!id) throw new Error('Overlay request is unavailable.');
+        if (!id||!this.isPanelEnabled(id)) throw new Error('Overlay request is unavailable.');
         if (action === 'get-state') return this.getState(id);
+        if(['session:route','session:map-data','session:map-focus','session:cancel-route','session:copy-waypoint'].includes(action)&&!this.isPanelEnabled('map'))throw Error('Live Map is disabled in Settings.');
         if(['move-start','move','move-end'].includes(action)){
             if(action==='move-end')return this.finishPanelMove(id,{cancel:payload?.cancel===true});
             const prefs=this.preferences.panels[id];
@@ -302,6 +307,7 @@ class OverlayHost {
     }
 
     createPanel(id) {
+        if(!this.isPanelEnabled(id)||this.featureSuspended.has(id))return null;
         if (this.windows.has(id)) return this.windows.get(id);
         const prefs = this.preferences.panels[id];
         const win = new this.electron.BrowserWindow({
@@ -467,12 +473,14 @@ class OverlayHost {
         } else if (all.includes(action)) {
             for(const id of PANEL_IDS)this.cancelPanelMove(id);
             const defaults = normalizePreferences({}, this.displays());
-            const cycleMode=action==='cycle-all'?globalOverlayMode(this.preferences.panels):null;
+            const cycleMode=action==='cycle-all'?globalOverlayMode(this.getState().panels):null;
             if(action==='hide-all'||cycleMode==='locked')this.docksSuspended=true;
             if(action==='show-all'||cycleMode==='hidden')this.docksSuspended=false;
             if(action==='reset-layout')this.docksSuspended=false;
             for (const id of PANEL_IDS) {
+                if(!this.isPanelEnabled(id))continue;
                 const prefs = this.preferences.panels[id];
+                if(action==='show-all'||cycleMode)this.featureSuspended.delete(id);
                 if (cycleMode) {
                     prefs.visible=cycleMode!=='locked';
                     if (cycleMode!=='locked') prefs.locked=cycleMode==='unlocked';
@@ -489,7 +497,9 @@ class OverlayHost {
         } else {
             const id = panelId(panel);
             if (!id) throw new Error('Unknown overlay panel.');
+            if(!this.isPanelEnabled(id))throw Error('This feature is disabled in Settings.');
             const prefs = this.preferences.panels[id];
+            if(['show','toggle'].includes(action)){if(this.featureSuspended.has(id)&&action==='toggle')prefs.visible=false;this.featureSuspended.delete(id);}
             if(['show','hide','toggle'].includes(action))this.docksSuspended=false;
             if (action === 'show') prefs.visible = true;
             else if (action === 'hide') prefs.visible = false;
@@ -513,6 +523,7 @@ class OverlayHost {
     }
 
     apply(id) {
+        if(!this.isPanelEnabled(id)||this.featureSuspended.has(id)){const win=this.windows.get(id);if(win&&!win.isDestroyed())win.destroy();return;}
         const prefs = this.preferences.panels[id];
         let win = this.windows.get(id);
         if (!win && prefs.visible) win = this.createPanel(id);
@@ -532,7 +543,7 @@ class OverlayHost {
 
     fitTimerWindow() {
         const prefs = this.preferences?.panels.timers;
-        if (!prefs || this.docksSuspended || this.moveGestures.size) return;
+        if (!prefs || !this.isPanelEnabled('timers')||this.featureSuspended.has('timers')||this.docksSuspended || this.moveGestures.size) return;
         const timers = this.snapshot?.session?.timers || {};
         const count = Math.min(8, (timers.timers || []).filter(timer => timer.visible !== false).length);
         const swingHeight = timers.swing?.enabled === false ? 0 : 22;
@@ -544,7 +555,7 @@ class OverlayHost {
         this.updateDocking('timers',bounds,{snap:false,maintain:true});
     }
 
-    hasVisiblePanels() { return Boolean(this.preferences && PANEL_IDS.some(id => this.preferences.panels[id].visible)); }
+    hasVisiblePanels() { return Boolean(this.preferences && PANEL_IDS.some(id => this.isPanelEnabled(id)&&!this.featureSuspended.has(id)&&this.preferences.panels[id].visible)); }
     hasRecoveryControl() { return Boolean(this.tray || this.recoveryShortcutRegistered); }
     markSessionUnavailable() {
         this.sessionAvailable = false;
@@ -601,12 +612,13 @@ class OverlayHost {
     updateTray() {
         if (!this.tray || this.disposed) return;
         const action = (name, id) => () => { void this.control(name, id).catch(this.warn); };
+        const panels=PANEL_IDS.filter(id=>this.isPanelEnabled(id));this.tray.setToolTip(panels.length?'Eye of Zomm overlays':'Eye of Zomm');
         this.tray.setContextMenu(this.electron.Menu.buildFromTemplate([
             { label:'Open Eye of Zomm', click:() => this.showMain() }, { type:'separator' },
-            ...PANEL_IDS.map(id => ({ label:PANEL_NAMES[id], type:'checkbox', checked:this.preferences.panels[id].visible, click:action('toggle', id) })),
-            { type:'separator' }, { label:'Show all overlays', click:action('show-all') }, { label:'Hide all overlays', click:action('hide-all') },
+            ...panels.map(id => ({ label:PANEL_NAMES[id], type:'checkbox', checked:this.isPanelEnabled(id)&&!this.featureSuspended.has(id)&&this.preferences.panels[id].visible, enabled:this.isPanelEnabled(id), click:action('toggle', id) })),
+            ...(panels.length?[{ type:'separator' }, { label:'Show all overlays', click:action('show-all') }, { label:'Hide all overlays', click:action('hide-all') },
             { label:'Unlock all overlays', click:action('unlock-all') }, { label:'Restore overlay mouse interaction', click:action('restore-mouse') },
-            { label:'Reset overlay positions', click:action('reset-layout') }, { type:'separator' },
+            { label:'Reset overlay positions', click:action('reset-layout') }]:[]), { type:'separator' },
             { label:'Quit Eye of Zomm', click:() => this.electron.app.quit() }
         ]));
     }

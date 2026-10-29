@@ -1,5 +1,16 @@
 # Changelog
 
+Release history for [Eye of Zomm](README.md). For current feature instructions,
+start with the [user guide](README.md); the app's **Settings → About Eye of
+Zomm → What's new** also retains the illustrated release archive. Older entries
+describe behavior at that release, including workflows replaced in later versions.
+
+## 1.0.10 - Feature controls and clearer guides
+
+- Choose whole tools in Settings → Features without deleting their saved data. Disabled tools disappear from navigation, settings, summaries and shortcuts. Native services enforce availability, with separate screen-reading consent preserved.
+- Find settings through topic links and search. Group game setup, appearance/windows, maps/combat, screen reading, updates/wiki and support together.
+- Separate the illustrated user README, release changelog and component-by-component developer guide. Document the central feature registry and complete UI hiding for future additions.
+
 ## 1.0.9 - Wiki page tracking
 
 - Tag pages generated or edited by Eye of Zomm with Category:EoZ, including contribution articles, related pages, Character User sheets and new File descriptions.
@@ -79,6 +90,7 @@ See [the 1.0 release record](docs/RELEASE_1_0_PLAN.md).
 ## 0.9.15 - Verified discoveries, zones and map controls
 
 - Check the public live wiki before showing an automatic discovery, item gap or monster popup. Use the bundled snapshot to avoid checks for known facts. Keep pending, failed, broad, unsupported and inconclusive checks out of the discovery queue and popups; recheck current facts before publication.
+- Keep a previously confirmed editor and its saved draft in place while its proof renews. Preview and automatic publication wait for fresh proof; a newly covered result removes the obsolete task.
 - Reuse temporarily cached public wiki entries, including their direct zone and loot data, until the shipped snapshot reaches that revision. Share the cache across item presence, gap verification and local views; expire absence verdicts quickly and refresh old source proof without treating temporary facts as global loot-count completeness.
 - Dismiss an individual discovery with its red ×, or use ∞× to ignore that exact NPC or item across future contribution attempts. Restore ignored entities from Contribution History, including while signed out. Device ignores persist across restarts and dataset updates; existing submission receipts remain available.
 - Preserve readable zone names from entry logs and self /who records, including Lake Nerius. Export canonical public zones beyond the curated map catalog and retain documented NPC zone/category facts. Empty cache metadata no longer proves a wiki gap.

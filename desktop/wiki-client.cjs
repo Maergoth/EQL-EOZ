@@ -1,4 +1,5 @@
 'use strict';
+const {AsyncLocalStorage}=require('node:async_hooks');
 // Fixed-origin MediaWiki transport. Account cookies remain in the dedicated
 // Electron session; CSRF tokens never cross IPC or enter persistent draft state.
 const crypto = require('node:crypto');
@@ -46,7 +47,7 @@ function validatePNG(input) {
 }
 
 class WikiClient {
-    constructor({ session, version='development', stateDir=null, origin=PRODUCTION_ORIGIN, allowLoopbackDevelopment=false, fetchImpl, now=Date.now, id=crypto.randomUUID, getItemCatalog=null, isContributionIgnored=null, onWikiPageChanged=null } = {}) {
+    constructor({ session, version='development', stateDir=null, origin=PRODUCTION_ORIGIN, allowLoopbackDevelopment=false, fetchImpl, now=Date.now, id=crypto.randomUUID, getItemCatalog=null, isContributionIgnored=null, onWikiPageChanged=null, featureLease=()=>()=>true } = {}) {
         this.origin=wikiOrigin(origin,allowLoopbackDevelopment); this.api=`${this.origin}/api.php`;
         this.fetch=fetchImpl || (session && session.fetch.bind(session));
         if(typeof this.fetch!=='function') throw new WikiError('transport','The dedicated wiki session is unavailable.');
@@ -56,7 +57,13 @@ class WikiClient {
         this.attachments=new WikiAttachments({stateDir,validate:validatePNG,now,id});
         this.characterScreenshots=new CharacterScreenshots({stateDir,validate:validatePNG,now,id});
         this.history=new ContributionHistory({stateDir,now});
+        this.featureContext=new AsyncLocalStorage();this.featureRequests=new Map();this.featureLease=featureLease;
+        // Capture an operation's availability epoch, not just the value at its
+        // eventual POST. Re-enabling never resumes an old publishing intent.
+        const methods={contributions:['findMatches','blueprints','preparePlan','prepareCapturedItem','submitPlan','contributionHistory'],character:['characterSheetCapability','reviewCharacterScreenshot','shareCharacter','uploadCharacter'],dropObservations:['observationStatus','submitObservations']};
+        for(const [feature,names]of Object.entries(methods))for(const name of names){const original=this[name];if(typeof original!=='function')continue;this[name]=(...args)=>{const parent=this.featureContext.getStore(),lease=this.featureLease(feature),current=()=>lease()&&(!parent||parent.current());if(!current())return Promise.reject(new WikiError('feature-disabled','This feature is disabled in Settings.'));return this.featureContext.run({feature,current},()=>original.apply(this,args));};}
     }
+    cancelFeature(feature){for(const[controller,request]of this.featureRequests)if(request.feature===feature&&!request.post)controller.abort();}
     async load() {
         if(this.loaded)return;if(this.loading)return this.loading;
         this.loading=(async()=>{try{
@@ -87,6 +94,8 @@ class WikiClient {
         if(!result.warning&&status.warning)result.warning=status.warning;return result;
     }
     async request(params, { post=false, form=null, maxResponseBytes=MAX_JSON, categoryContext=null } = {}) {
+        const intent=this.featureContext.getStore();
+        if(intent&&!intent.current())throw new WikiError('feature-disabled','This feature was disabled. Start a new action after enabling it.');
         if(![MAX_JSON,MAX_CHARACTER_JSON].includes(maxResponseBytes))throw new WikiError('size','Invalid wiki response size limit.');
         const action=form?.get('action')||params.action;
         if(post&&['edit','upload'].includes(action)){
@@ -94,8 +103,10 @@ class WikiClient {
             if(typeof text!=='string'||!hasEoZPageCategory(text)&&!(action==='edit'&&params.section==='new'&&typeof categoryContext==='string'&&hasEoZPageCategory(categoryContext)))throw new WikiError('category-review','Prepare a fresh Preview with the EoZ tracking category before publishing.');
         }
         const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
+        this.featureRequests.set(controller,{feature:intent?.feature,post});
         try{
             const data=new URLSearchParams({format:'json',formatversion:'2',errorformat:'plaintext',...params});
+            if(intent&&!intent.current())throw new WikiError('feature-disabled','This feature was disabled. Start a new action after enabling it.');
             const response=await this.fetch(post?this.api:`${this.api}?${data}`,{method:post?'POST':'GET',credentials:'include',redirect:'error',cache:'no-store',signal:controller.signal,
                 headers:{'User-Agent':`EQLWiki-EyeOfZomm/${this.version}`,Accept:'application/json',...(post&&!form?{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}:{})},body:post?(form||data.toString()):undefined});
             if(response.url && new URL(response.url).origin!==this.origin)throw new WikiError('redirect','The wiki redirected outside its configured origin.');
@@ -109,7 +120,7 @@ class WikiClient {
             if(Array.isArray(result.errors)&&result.errors.length)throw new WikiError(String(result.errors[0].code||'api'),result.errors[0].text);
             return result;
         }catch(error){if(error instanceof WikiError)throw error;if(error.name==='AbortError')throw new WikiError(post?'unknown-write':'timeout',post?'The wiki write result is unknown. Refresh its state before retrying.':'The wiki request timed out.');throw new WikiError(post?'unknown-write':'network',post?'The connection ended before the wiki write result was confirmed. Refresh before retrying.':'The wiki could not be reached. Check the connection and try again.');}
-        finally{clearTimeout(timer);}
+        finally{clearTimeout(timer);this.featureRequests.delete(controller);}
     }
     async status() {
         const data=await this.request({action:'query',meta:'userinfo',uiprop:'rights|blockinfo'}),user=data.query?.userinfo;

@@ -1,5 +1,20 @@
 # Browsable release history
 
+The 1.0.10 image shows all eleven Features switches in the production Settings
+UI at a 1024 × 900 viewport, captured through isolated sandboxed Electron with
+the real main and preload. A two-process check exercises complete feature hiding,
+empty-topic removal, exact draft/inventory retention, an observation held at the
+native append boundary until the local save completes, disabled native calls and
+restart without automatically reopening readers or overlays. Synthetic game
+files, dialogs and capture enumeration replace external sources; no installed
+profile, player data or public wiki writes are used. The accepted narrow PNG is
+copied byte for byte into the user guide and version-owned archive, with SHA-256
+`14ed2ec9f3438bf4757c85f8240d55015b49c4bdda3a1d47a866a822fa8eb1ce`.
+The wide capture remains private because its lower edge includes a temporary
+filesystem path. All 54 earlier entries and 105 earlier runtime images remain
+unchanged. These focused desktop observations do not substitute for source,
+platform or packaged-release checks.
+
 The 1.0.9 image shows actual Contribute Before/After source with page-only EoZ
 tracking on the proposed item, monster and zone changes. The isolated production
 main/preload regression checks exact Copy output, no writes before final review,
