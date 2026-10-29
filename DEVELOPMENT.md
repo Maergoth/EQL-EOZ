@@ -8,6 +8,25 @@ The focused guides linked below explain component contracts in more detail;
 Historical plans, handoffs and release receipts explain earlier decisions;
 they are not a substitute for inspecting the current implementation.
 
+## Get started
+
+Use Node.js 22 and npm, matching CI. Put a PHP 8.x CLI on `PATH` for the
+PHP-backed exporter/wiki fixtures in the source suite; the installed Electron
+app does not need PHP.
+
+```bash
+npm ci
+npm test
+npm start
+```
+
+`npm ci` installs the committed lockfile. `npm start` builds the workers and
+generated runtime assets through `prestart`, then opens the desktop app. Pure
+tests use synthetic fixtures and need no real game or wiki account. Native
+desktop fixtures also need the platform dependencies and a display; follow
+[validation](VALIDATION.md), the [Windows acceptance guide](docs/WINDOWS_MANUAL_TEST.md)
+and the [Linux runtime/display guide](docs/FONTS_LINUX.md).
+
 ## Start with the boundary
 
 Eye of Zomm reads ordinary logs and supported files from a user-selected game

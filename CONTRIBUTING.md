@@ -13,7 +13,7 @@ Contributions are welcome for UI/UX, log parsing, wiki-data extraction, map navi
 Before opening a pull request:
 
 ```bash
-npm install
+npm ci
 npm test
 ```
 
