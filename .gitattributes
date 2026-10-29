@@ -3,3 +3,5 @@ vendor/zoneviewer/ZoneViewerApp.part* -text
 app/vendor/item-scaling-* text eol=lf
 # The native icon export records the vector's exact source hash.
 app/assets/eye-of-zomm.svg text eol=lf
+# The fixed OCR fixture manifest is pinned by its exact raw SHA-256.
+tests/fixtures/screen-read/modern-compact-images.json text eol=lf
