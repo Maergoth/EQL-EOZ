@@ -60,6 +60,7 @@ jobs:
             npm run test:discovery-queue-stability
             npm run test:combatant-overview -- --screenshots ci-screenshots/linux-combatant-overview
             npm run test:screen-reading-master
+            npm run test:feature-controls -- --screenshots ci-screenshots/linux-feature-controls
             npm run test:character-screenshot -- --screenshots ci-screenshots/linux-character-screenshot
             npm run test:chat-item-boundaries -- --screenshots ci-screenshots/linux-chat-boundaries
             if [ "$EXTENDED_UI_CHECKS" = "true" ]; then

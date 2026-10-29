@@ -14,6 +14,7 @@ const zlib = require('node:zlib');
 const { URL } = require('node:url');
 const { AppUpdater, isReleaseNotesUrl, launchSilentNsisInstaller } = require('./app-updater.cjs');
 const { OverlayHost } = require('./overlay-host.cjs');
+const {FeatureControls,CHANNEL:FEATURE_CHANNEL}=require('./feature-controls.cjs');
 const { safeMapFile } = require('./overlay-map-policy.cjs');
 const { DiscoveryHost } = require('./discovery-host.cjs');
 const { WikiItemExistence } = require('./wiki-item-existence.cjs');
@@ -60,6 +61,9 @@ let windowRef = null;
 let port = DEFAULT_PORT;
 let appUpdater = null;
 let overlayHost = null;
+let featureControls=null,featureRegistry=null;
+const featureEnabled=id=>featureControls?featureControls.enabled(id):false;
+const featureLease=id=>featureControls?featureControls.lease(id):()=>false;
 let discoveryHost = null;
 let captureHost = null;
 let automaticLogReader = null;
@@ -549,7 +553,7 @@ async function readLogWindow(offsetValue) {
         servedLogPath=logPath;
         // Only actual configured-file bytes authorize automatic source edits.
         // Renderer-proposed log observations continue to populate local drafts.
-        await automaticLogReader?.ingest(result).catch(()=>{});
+        if(featureEnabled('contributions'))await automaticLogReader?.ingest(result).catch(()=>{});
         return result;
     } finally {
         await handle.close();
@@ -570,6 +574,7 @@ function getContributionIgnores(){
 }
 
 async function eqFileManifest() {
+    featureControls.assert('map');const current=featureLease('map');
     const config = await readConfig();
     const root = String(config.eqRootPath || '');
     if (!root) return { rootName: '', files: [] };
@@ -614,10 +619,12 @@ async function eqFileManifest() {
     }
 
     await walk(rootReal);
+    if(!current())throw Error('Map was disabled while files were being read.');
     return { rootName: path.basename(rootReal), files, truncated: files.length >= MAX_EQ_FILE_COUNT };
 }
 
 async function readEqFile(relativeValue, {mapOnly=false} = {}) {
+    featureControls.assert('map');const current=featureLease('map');
     const config = await readConfig();
     const root = String(config.eqRootPath || '');
     const relative = String(relativeValue || '').replace(/\\/g, '/');
@@ -636,7 +643,7 @@ async function readEqFile(relativeValue, {mapOnly=false} = {}) {
     if (mapOnly && !safeMapFile(path.relative(rootReal, candidateReal).split(path.sep).join('/'))) return null;
     const stat = await fsp.stat(candidateReal).catch(() => null);
     if (!stat?.isFile() || stat.size > MAX_EQ_FILE_BYTES) return null;
-    return fsp.readFile(candidateReal);
+    const bytes=await fsp.readFile(candidateReal);if(!current())throw Error('Map was disabled while the file was being read.');return bytes;
 }
 
 function mimeType(filePath) {
@@ -741,6 +748,7 @@ async function requestHandler(req, res) {
             return sendJson(res, 405, { error: 'Method not allowed' });
         }
 
+        if(['/api/eq-files','/api/eq-file'].includes(pathname)&&!featureEnabled('map'))return sendJson(res,403,{code:'feature-disabled',error:'Live Map is disabled in Settings.'});
         if (pathname === '/api/info') return sendJson(res, 200, await apiInfo());
         if (pathname === '/api/log') return sendJson(res, 200, await readLogWindow(url.searchParams.get('offset')));
         if (pathname === '/api/eq-files') return sendJson(res, 200, await eqFileManifest());
@@ -907,6 +915,10 @@ async function bootstrap() {
     await ensureUserDirs();
     await startServer();
     let config = await readConfig();
+    featureRegistry=await import('../app/feature-registry.js');
+    featureControls=new FeatureControls({registry:featureRegistry,initial:config.features,persist:features=>updateConfig({features}),prepare:prepareFeatureState,apply:applyFeatureState,
+        allowed:event=>Boolean(windowRef&&!windowRef.isDestroyed()&&event.sender===windowRef.webContents&&event.senderFrame===windowRef.webContents.mainFrame&&event.senderFrame?.url===`http://${HOST}:${port}/`),
+        onChanged:state=>{if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:features-changed',state);}});
     if (!config.eqRootPath || !fs.existsSync(config.eqRootPath)) {
         await selectEqRoot({ firstRun: true });
         config = await readConfig();
@@ -921,6 +933,8 @@ async function bootstrap() {
         getMainWindow:() => windowRef,
         showMain:showMainWindow,
         readPreferences:() => readJson(overlayPreferencesPath(), {}),
+        isPanelEnabled:id=>featureRegistry.featurePanelEnabled(featureControls.snapshot().features,id),
+        getFeatureState:()=>featureControls.snapshot().features,
         writePreferences:preferences => atomicWriteJson(overlayPreferencesPath(), preferences)
     });
     await overlayHost.initialize();
@@ -933,18 +947,18 @@ async function bootstrap() {
     characterStorage = new CharacterStorage({directory:userDataDir(),electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
         warn:message=>console.warn('[Eye of Zomm]',message)});
     await characterStorage.initialize();
-    characterRepository=new CharacterRepository({directory:path.join(userDataDir(),'character-repository'),electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig,getPack:automaticWikiCatalog,retireLegacy:source=>characterStorage.retireCharacterData({directory:path.join(userDataDir(),'character-repository'),source}),warn:message=>console.warn('[Eye of Zomm]',message)});
+    characterRepository=new CharacterRepository({directory:path.join(userDataDir(),'character-repository'),electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig,getPack:automaticWikiCatalog,featureLease,isFeatureEnabled:()=>featureEnabled('character'),retireLegacy:source=>characterStorage.retireCharacterData({directory:path.join(userDataDir(),'character-repository'),source}),warn:message=>console.warn('[Eye of Zomm]',message)});
     await characterRepository.initialize();
-    inventoryFileHost = new InventoryFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig});
-    achievementFileHost = new AchievementFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig});
-    captureHost = new CaptureHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readingEnabled:config.screenReadingEnabled,
+    inventoryFileHost = new InventoryFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig,featureLease});
+    achievementFileHost = new AchievementFileHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readConfig,featureLease});
+    captureHost = new CaptureHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,readingEnabled:config.screenReadingEnabled,featureLease,isFeatureEnabled:()=>featureEnabled('screenReading'),isModeEnabled:mode=>featureEnabled(mode==='character'?'character':'contributions'),
         onReadingDisabled:()=>discoveryHost?.cancelScreenshot(),onReadingEnabledChange:enabled=>updateConfig({screenReadingEnabled:enabled})});
     contributionIgnoresHost=new ContributionIgnoresHost({ipcMain,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,store:getContributionIgnores(),
         onChanged:snapshot=>{automaticLootSources?.cancel();void discoveryHost?.reconcileIgnores().catch(()=>{});if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send(CONTRIBUTION_IGNORES_CHANGED,snapshot);}});
     wikiHost = new WikiHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
-        stateDir:path.join(userDataDir(),'wiki-contributions'),version:APP_VERSION,
+        stateDir:path.join(userDataDir(),'wiki-contributions'),version:APP_VERSION,featureLease,isFeatureEnabled:featureEnabled,
         onStatus:status=>{void observationHost?.accountChanged(status);if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:wiki-state',status);},
-        onAttachmentPrepared:({png})=>captureHost.readingEnabled?captureHost.importPng(png,{mode:'contribution'}):{records:[],cancelled:true},
+        onAttachmentPrepared:({png})=>featureEnabled('screenReading')&&featureEnabled('contributions')&&captureHost.readingEnabled?captureHost.importPng(png,{mode:'contribution'}):{records:[],cancelled:true},
         onCaptureEvidence:proof=>captureHost.getItemEvidence(proof),
         onItemCatalog:automaticWikiCatalog,
         isContributionIgnored:(target,catalog)=>getContributionIgnores().isIgnored(target,catalog),
@@ -956,15 +970,15 @@ async function bootstrap() {
         onObservation:record=>automaticLootSources.observe(record)});
     iconFinderHost = new IconFinderHost({session:wikiHost.session,stateDir:path.join(userDataDir(),'wiki-icons'),nativeImage:electron.nativeImage});
     observationHost = new DropObservationHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
-        stateDir:path.join(userDataDir(),'drop-observations'),client:wikiHost.client,version:APP_VERSION});
+        stateDir:path.join(userDataDir(),'drop-observations'),client:wikiHost.client,version:APP_VERSION,isFeatureEnabled:()=>featureEnabled('dropObservations')});
     await observationHost.ready;
     // Resolve the cookie-backed account before new events enter the outbox.
     const wikiCookies=await wikiHost.session.cookies.get({url:'https://eqlwiki.com/'}).catch(()=>[]);
-    await observationHost.accountChanged(wikiCookies.length?await wikiHost.client.status().catch(()=>({authenticated:false})):{authenticated:false});
+    await observationHost.accountChanged(wikiCookies.length&&['character','contributions','dropObservations'].some(featureEnabled)?await wikiHost.client.status().catch(()=>({authenticated:false})):{authenticated:false});
     rendererDrain = new RendererDrain({ipcMain,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
-    shareHost = new ShareHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
+    shareHost = new ShareHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,featureLease});
     discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
-        isScreenReadingEnabled:()=>captureHost.readingEnabled,
+        featureLease,isScreenReadingEnabled:()=>featureEnabled('screenReading')&&captureHost.readingEnabled,isFeatureEnabled:()=>featureEnabled('contributions'),
         verifyDiscovery:value=>wikiHost.verifyDiscovery(value),isContributionIgnored:target=>getContributionIgnores().isIgnored(target),
         itemExistence:new WikiItemExistence({getPack:automaticWikiCatalog,entryVerifier:wikiHost.discoveryVerifier,fetchImpl:(url,options)=>electron.net.fetch(url,{...options,credentials:'omit',useSessionCookies:false})})});
     createWindow(config,await readJson(windowPlacementPath(),{}));
@@ -1009,6 +1023,29 @@ ipcMain.handle('eye-of-zomm:window', async (event, action, value) => {
     else return false;
     return true;
 });
+
+ipcMain.handle(FEATURE_CHANNEL,(event,action,value)=>{if(!featureControls)throw Error('Feature settings are starting.');return featureControls.handle(event,action,value);});
+
+async function prepareFeatureState(next,before,changed){
+    if(!changed.includes('dropObservations')||!before.features.dropObservations||next.features.dropObservations)return;
+    if(quitting||reloading)throw Error('Wait for the current window operation before changing features.');
+    const drain=rendererDrain;
+    const resume=()=>{if(!quitting&&!reloading){try{drain?.resume();}catch{/* The renderer may have closed after the save. */}}};
+    try{
+        if(drain&&!await drain.drain())throw Error('Pending local observations could not be saved. The feature remains enabled; check available disk space and try again.');
+        if(quitting||reloading)throw Error('Wait for the current window operation before changing features.');
+        return resume;
+    }catch(error){resume();throw error;}
+}
+
+async function applyFeatureState(_next,_before,changed){
+    if(changed.includes('contributions')&&!featureEnabled('contributions')){automaticLogReader?.reset(true);automaticLootSources?.cancel();discoveryHost?.clear();}
+    if(changed.some(id=>['contributions','character','dropObservations'].includes(id)))wikiHost?.featuresChanged();
+    if(changed.includes('dropObservations'))observationHost?.featuresChanged();
+    overlayHost?.featuresChanged();
+    if(changed.some(id=>['screenReading','character','contributions'].includes(id))){if(!featureEnabled('screenReading'))discoveryHost?.cancelScreenshot();await captureHost?.featuresChanged();}
+    if(changed.includes('character')&&!featureEnabled('character'))await characterRepository?.suspend();
+}
 
 ipcMain.handle('eye-of-zomm:clipboard', (_event, text) => {
     const value = String(text || '');

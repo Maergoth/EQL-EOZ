@@ -183,6 +183,8 @@ export class EQLogParser {
         return this.sessionNumber;
     }
 
+    suspendCombat(){this.activeEncounters.clear();this.dotCasts.reset();}
+
     setEncounterGapSeconds(value) {
         const seconds = Math.max(3, Math.min(300, Math.round(Number(value) || 15)));
         if (seconds === this.encounterGapSeconds) return;
@@ -336,6 +338,7 @@ export class EQLogParser {
             }
         }
         if (!item || isCurrencyLoot(item)) return null;
+        if(this.recordDrops===false)return {type:'loot',item,quantity:parsedItem.quantity,source:source||'Unknown',sourceEvidence,zone:this.zone,...(isOwnedPetName(source)?{sourceIsPet:true}:{})};
         this.totalLoot += parsedItem.quantity;
 
         const sourceKey = this.observationKey(this.zone, source || 'Unknown');
@@ -460,7 +463,8 @@ export class EQLogParser {
             ...(!attackerKnown ? {attackerKnown:false} : {}),...attribution });
     }
 
-    parse(rawLine, { recordSession = true } = {}) {
+    parse(rawLine, { recordSession = true, recordCombat = true, recordDrops = true } = {}) {
+        this.recordDrops=recordDrops;
         const raw = String(rawLine || '').replace(/\r$/, '');
         const m = raw.match(LINE_RE);
         const parsedAt = m ? Date.parse(m[1]) : NaN;
@@ -558,6 +562,7 @@ export class EQLogParser {
         // must never repopulate the new parse with historical combat or loot.
         if (!recordSession) return null;
 
+        if(recordCombat){
         // Count earned points, never AA experience, bank balances or spends.
         // EQ's GAIN_ABILITY_POINT string has an optional bank-balance suffix.
         x = text.match(/^You have gained an ability point!(?:\s*You now have [\d,]+ ability point(?:s|\(s\))?\.)?$/i);
@@ -656,15 +661,16 @@ export class EQLogParser {
             return this.rememberCombatEvent({ type: 'rune', amount: n, source:'Rune capacity granted' });
         }
 
+        }
         x = text.match(/^You have slain (.+?)!/i);
-        if (x) return this.noteKill(x[1]);
+        if (x) return this.noteKill(x[1],{addToEncounter:recordCombat});
 
         x = text.match(/^(.+?) has been slain by (.+?)!/i);
         if (x) {
             const killedByPlayer = this.character && x[2].toLowerCase() === this.character.toLowerCase();
             // Count nearby group/raid kills for observed drop-rate denominators,
             // but do not create a player combat encounter from someone else's kill.
-            return this.noteKill(x[1], { addToEncounter: Boolean(killedByPlayer) });
+            return this.noteKill(x[1], { addToEncounter: recordCombat&&Boolean(killedByPlayer) });
         }
 
         // Legends/EQ clients have emitted several loot wordings over time.
@@ -687,7 +693,7 @@ export class EQLogParser {
         return null;
     }
 
-    snapshot() {
+    snapshot({includeCombat=true,includeDrops=true,includeNpcIntel=true}={}) {
         const now = Date.now();
         const sessionSeconds = this.sessionStartedAt && this.lastCombatAt
             ? Math.max(1, (this.lastCombatAt - this.sessionStartedAt) / 1000)
@@ -695,8 +701,8 @@ export class EQLogParser {
         const takenSeconds = this.takenStartedAt && this.lastTakenAt
             ? Math.max(1, (this.lastTakenAt - this.takenStartedAt) / 1000)
             : 0;
-        const combatants = combatantSnapshot(this.combatants, {character:this.character, selfSeconds:sessionSeconds});
-        const encounters = this.encounters.slice().reverse().map(encounter => {
+        const combatants = includeCombat?combatantSnapshot(this.combatants, {character:this.character, selfSeconds:sessionSeconds}):{rows:[],seconds:0};
+        const encounters = (includeCombat?this.encounters:[]).slice().reverse().map(encounter => {
             const duration = Math.max(1, (encounter.lastAt - encounter.startAt) / 1000);
             return {
                 ...Object.fromEntries(Object.entries(encounter).filter(([key]) => !['actorNames','combatantState','sourceContextId','zoneVisit'].includes(key))),
@@ -710,7 +716,7 @@ export class EQLogParser {
             };
         });
         const fight = encounters[0] || null;
-        const lootLog = this.lootLog.map(entry => {
+        const lootLog = (includeDrops?this.lootLog:[]).map(entry => {
             const dropsObserved = this.lootCounts.get(entry.lootKey) || 0;
             const killsObserved = this.killCounts.get(entry.sourceKey) || 0;
             return {
@@ -753,7 +759,7 @@ export class EQLogParser {
             encounterGapSeconds: this.encounterGapSeconds,
             lootLog,
             killCounts: Object.fromEntries(this.killCounts),
-            observed: Array.from(this.observed.values()).sort((a,b) => b.lastSeen - a.lastSeen),
+            observed: (includeNpcIntel?Array.from(this.observed.values()):[]).sort((a,b) => b.lastSeen - a.lastSeen),
             recentEvents: this.recentEvents.slice()
         };
     }

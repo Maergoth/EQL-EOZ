@@ -1,6 +1,8 @@
 # Eye of Zomm — Product and UX Vision
 
-Current `v1.0.9` candidate: tag generated and edited wiki pages with the page-only EoZ category before preview hashes and publication. Preserve manual source, sort keys, managed Character identities and image reuse; older untagged saved drafts require a fresh Preview. See [wiki page tracking](WIKI_PAGE_TRACKING.md). Source, native, package and public-release receipts must identify the final commit.
+Current `v1.0.10` integration: organize Settings and add centrally registered feature controls, preserving saved data and separate consent. The [developer guide](../DEVELOPMENT.md) is the current component reference; [CHANGELOG](../CHANGELOG.md) owns release history. See [feature controls](FEATURE_CONTROLS.md). Source, native and package checks must identify the final candidate.
+
+The older implementation and acceptance notes below retain historical context. They do not identify outstanding work or replace current source inspection.
 
 Previous `v1.0.8`: offer an optional Character picture in Share review, independently of Screen Reading. Keep selected pixels private until explicit Share; use reviewed canonical wiki File names, preserve existing images and reconcile interrupted uploads/page edits across restart. The wiki template supplies the left Add an image placeholder for existing sheets. See [Character screenshots](CHARACTER_SCREENSHOTS.md). Source, native, package and public-release receipts must identify the final commit.
 

@@ -1,0 +1,11 @@
+import {FEATURE_CATALOG,normalizeFeatures,validateFeaturePatch} from './feature-registry.js';
+export function mountFeatureControls({root,api,onChange=()=>{},initial={features:{}},beforeChange=async()=>{}}={}){
+    let state={schemaVersion:1,revision:0,...initial,features:normalizeFeatures(initial.features)},busy=false,disposed=false;
+    const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    if(root)root.innerHTML=`<h2>Enable features</h2><p class="settings-helper">Disable a feature to stop its work and hide its tools. Saved data and separate consent preferences are kept.</p><div class="feature-settings-options">${FEATURE_CATALOG.map(feature=>`<label class="check-control"><input type="checkbox" data-feature-setting="${feature.id}"><span>${escape(feature.label)}<small class="settings-helper">${escape(feature.description)}</small></span></label>`).join('')}</div><p data-feature-status role="status"></p>`;
+    function render(){if(!root)return;for(const input of root.querySelectorAll('[data-feature-setting]')){input.checked=state.features[input.dataset.featureSetting];input.disabled=busy||!api?.set;}root.setAttribute('aria-busy',String(busy));}
+    function accept(next){if(disposed||!next||next.schemaVersion!==1||!Number.isSafeInteger(next.revision)||next.revision<state.revision)return;state={...next,features:normalizeFeatures(next.features)};render();onChange(state);}
+    async function change(patch){validateFeaturePatch(patch);if(busy)return;busy=true;render();root?.querySelector('[data-feature-status]')?.replaceChildren('Saving feature settings…');try{await beforeChange(patch);accept(await api.set(patch));root?.querySelector('[data-feature-status]')?.replaceChildren('Feature settings saved.');}catch(error){root?.querySelector('[data-feature-status]')?.replaceChildren(error.message||'Feature settings could not be saved.');}finally{busy=false;render();}}
+    const listener=event=>{const input=event.target.closest?.('[data-feature-setting]');if(input)void change({[input.dataset.featureSetting]:input.checked});};root?.addEventListener('change',listener);const unsubscribe=api?.onChanged?.(accept);render();
+    return {accept,change,snapshot:()=>state,dispose(){disposed=true;unsubscribe?.();root?.removeEventListener('change',listener);}};
+}

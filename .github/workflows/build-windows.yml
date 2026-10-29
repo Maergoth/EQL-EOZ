@@ -58,6 +58,8 @@ jobs:
         run: |
           npm run test:screen-reading-master
           npm run test:chat-item-boundaries
+      - name: Test feature controls, Settings discovery and restart
+        run: npm run test:feature-controls -- --screenshots ci-screenshots/feature-controls
       - name: Test optional Character image review and guarded sharing without OCR
         run: npm run test:character-screenshot -- --screenshots ci-screenshots/character-screenshot
       - name: Test native overlay windows

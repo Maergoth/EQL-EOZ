@@ -1,3 +1,4 @@
+import {featureForView} from './feature-registry.js';
 import { RELEASE_HISTORY } from './release-history.js';
 import { createReleaseSeenStore, releaseHistoryUpTo } from './release-history-state.js';
 
@@ -54,7 +55,8 @@ export function mountWhatsNew({document=globalThis.document,button,navigate=()=>
         $('[data-tour-count]').textContent=`${index+1} of ${step.count}`;
         $('[data-tour-previous]').disabled=index===0;
         $('[data-tour-next]').textContent=index===step.count-1?'Done':'Next';
-        $('[data-tour-feature]').textContent=step.action;
+        const action=$('[data-tour-feature]'),feature=featureForView(step.view);action.textContent=step.action;
+        if(feature)action.setAttribute('data-feature-ui',feature);else action.removeAttribute('data-feature-ui');
     }
     function selectRelease(requested){
         const releases=available();

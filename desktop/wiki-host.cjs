@@ -8,10 +8,10 @@ const {LiveWikiCache}=require('./live-wiki-cache.cjs');
 const CHANNEL='eye-of-zomm:wiki';
 
 class WikiHost {
-    constructor({electron,origin,getMainWindow,stateDir,version,devWikiOrigin=null,allowLoopbackDevelopment=false,client=null,onStatus=null,onAttachmentPrepared=null,onIconRequest=null,onCaptureEvidence=null,onItemCatalog=null,isContributionIgnored=null,discoveryVerifier=null,liveCache=null}) {
+    constructor({electron,origin,getMainWindow,stateDir,version,devWikiOrigin=null,allowLoopbackDevelopment=false,client=null,onStatus=null,onAttachmentPrepared=null,onIconRequest=null,onCaptureEvidence=null,onItemCatalog=null,isContributionIgnored=null,discoveryVerifier=null,liveCache=null,featureLease=()=>()=>true,isFeatureEnabled=()=>true}) {
         this.electron=electron;this.origin=origin;this.getMainWindow=getMainWindow;this.disposed=false;this.loginWindow=null;this.onStatus=onStatus;
         this.onAttachmentPrepared=onAttachmentPrepared;this.onIconRequest=onIconRequest;
-        this.onCaptureEvidence=onCaptureEvidence;
+        this.onCaptureEvidence=onCaptureEvidence;this.featureLease=featureLease;this.isFeatureEnabled=isFeatureEnabled;
         this.onBaseCatalog=onItemCatalog||(()=>Promise.resolve({}));
         this.liveCache=liveCache||new LiveWikiCache({stateDir,onChange:()=>this.scheduleLiveEntriesChanged()});
         this.onItemCatalog=async()=>{const base=await this.onBaseCatalog()||{},snapshot=await this.liveCache.snapshot(base),{applyLiveWikiOverlay}=await import('../app/live-wiki-overlay.js');return applyLiveWikiOverlay(base,snapshot);};
@@ -19,7 +19,7 @@ class WikiHost {
         this.statusRevision=0;this.isContributionIgnored=isContributionIgnored;
         this.discoveryVerifier=discoveryVerifier||new ContributionGapVerifier({getPack:this.onBaseCatalog,liveCache:this.liveCache,fetchImpl:globalThis.fetch});
         this.session=electron.session.fromPartition(devWikiOrigin?'eye-of-zomm-wiki-development':'persist:eye-of-zomm-wiki');
-        this.client=client||new WikiClient({session:this.session,version,stateDir,origin:devWikiOrigin||PRODUCTION_ORIGIN,allowLoopbackDevelopment,getItemCatalog:this.onItemCatalog,isContributionIgnored,onWikiPageChanged:async title=>{this.discoveryVerifier.clear();await this.liveCache.invalidate(title);}});
+        this.client=client||new WikiClient({session:this.session,version,stateDir,origin:devWikiOrigin||PRODUCTION_ORIGIN,allowLoopbackDevelopment,featureLease,getItemCatalog:this.onItemCatalog,isContributionIgnored,onWikiPageChanged:async title=>{this.discoveryVerifier.clear();await this.liveCache.invalidate(title);}});
         this.session.setPermissionRequestHandler?.((_contents,_permission,callback)=>callback(false));
         this.session.setPermissionCheckHandler?.(()=>false);
         this.session.setDevicePermissionHandler?.(()=>false);
@@ -30,6 +30,9 @@ class WikiHost {
     async handle(event,action,value){
         if(!this.allowed(event))throw new WikiError('sender','Wiki contribution actions are available only in the main app.');
         if(typeof action!=='string')throw new WikiError('action','Invalid wiki action.');
+        const family=action.includes('character')?'character':['observation-status','submit-observations'].includes(action)?'dropObservations':['status','live-entries','login','logout'].includes(action)?null:'contributions';
+        if(family&&!this.isFeatureEnabled(family))throw new WikiError('feature-disabled','This feature is disabled in Settings.');
+        if(!family&&['status','login'].includes(action)&&!['character','contributions','dropObservations'].some(id=>this.isFeatureEnabled(id)))throw new WikiError('feature-disabled','Wiki features are disabled in Settings.');
         try{
             switch(action){
             case 'status':{await this.client.load();return await this.freshStatus();}
@@ -68,14 +71,16 @@ class WikiHost {
             }
         }catch(error){if(['prepare-attachment','discard-attachment','character-screenshot','prepare-character-screenshot','remove-character-screenshot'].includes(action)&&typeof error.code==='string'&&/^E[A-Z]+$/.test(error.code))throw new Error('[attachment] The screenshot could not be read or saved. Select it again.');throw new Error(`${error.code?`[${error.code}] `:''}${String(error.message||'The wiki action failed.').slice(0,600)}`);}
     }
+    featuresChanged(){if(!['character','contributions','dropObservations'].some(id=>this.isFeatureEnabled(id))&&this.loginWindow&&!this.loginWindow.isDestroyed())this.loginWindow.close();if(!this.isFeatureEnabled('contributions')){this.capturedItemPlans.clear();this.discoveryVerifier.clear();}for(const id of ['contributions','character','dropObservations'])if(!this.isFeatureEnabled(id))this.client.cancelFeature?.(id);}
     async characterScreenshotKey(metadata){const {characterWikiIdentity}=await import('../app/character-wiki-sheet.js');return require('node:crypto').createHash('sha256').update(characterWikiIdentity(metadata)).digest('hex');}
     screenshotDescriptor(value,{full=false}={}){if(!value)return {selection:null};const image=this.electron.nativeImage.createFromBuffer(value.bytes),size=image.getSize(),ratio=Math.min(1,480/size.width,320/size.height);if(image.isEmpty())throw Error('The private screenshot could not be decoded. Select it again.');return {selection:{...value.record,thumbnail:image.resize({width:Math.max(1,Math.round(size.width*ratio)),height:Math.max(1,Math.round(size.height*ratio)),quality:'good'}).toDataURL(),...(full?{preview:image.toDataURL()}:{})}};}
     async characterScreenshot({metadata,full=false}={}){return this.screenshotDescriptor(await this.client.characterScreenshots.get(await this.characterScreenshotKey(metadata)),{full:full===true});}
     async prepareCharacterScreenshot({metadata,source}={}){
+        const current=this.featureLease('character');if(!current())throw Error('Character is disabled in Settings.');
         if(!['file','clipboard'].includes(source))throw Error('Select or paste a character screenshot.');if(this.client.busy)throw Error('Wait for the current wiki submission before replacing the screenshot.');const key=await this.characterScreenshotKey(metadata);let bytes;
         if(source==='clipboard'){const image=this.electron.clipboard.readImage();if(image.isEmpty())throw Error('The clipboard does not contain an image.');const size=image.getSize();if(size.width>8192||size.height>8192||size.width*size.height>15000000)throw Error('Choose a screenshot under 15 megapixels.');bytes=image.toPNG();}
         else{const selected=await this.electron.dialog.showOpenDialog(this.getMainWindow(),{title:'Select optional character screenshot',properties:['openFile'],filters:[{name:'Character image',extensions:['png','jpg','jpeg','bmp']}]});if(selected.canceled||!selected.filePaths?.[0])return {cancelled:true};try{bytes=await readBoundedFile(selected.filePaths[0],MAX_SOURCE_BYTES);}catch{throw Error('The image could not be read. Choose a PNG, JPEG or BMP smaller than 48 MiB.');}}
-        if(this.disposed)throw Error('The app closed before the image was selected.');const decoded=decodeCharacterScreenshot(bytes,this.electron.nativeImage),record=await this.client.characterScreenshots.prepare(key,decoded.png,decoded);return this.screenshotDescriptor({record,bytes:decoded.png});
+        if(this.disposed||!current())throw Error('Character image selection was canceled.');const decoded=decodeCharacterScreenshot(bytes,this.electron.nativeImage),record=await this.client.characterScreenshots.prepare(key,decoded.png,decoded);return this.screenshotDescriptor({record,bytes:decoded.png});
     }
     async removeCharacterScreenshot({metadata,attachmentId}={}){if(this.client.busy)throw Error('Wait for the current wiki submission before removing the selection.');return this.client.characterScreenshots.remove(await this.characterScreenshotKey(metadata),attachmentId);}
     async liveEntries(){return this.liveCache.snapshot(await this.onBaseCatalog()||{});}
@@ -85,15 +90,17 @@ class WikiHost {
         this.liveEntriesTimer.unref?.();
     }
     async verifyDiscovery(value){
-        try{if(this.disposed)return{state:'unknown',reasons:[],confirmedRelations:[],checkedAt:new Date().toISOString()};if(['npc','item'].includes(value?.kind)&&typeof this.isContributionIgnored==='function'&&await this.isContributionIgnored({kind:value.kind,name:value.name}))return{state:'covered',reasons:[],confirmedRelations:[],checkedAt:new Date().toISOString()};return await this.discoveryVerifier.check(value);}catch{return{state:'unknown',reasons:[],confirmedRelations:[],checkedAt:new Date().toISOString()};}
+        const current=this.featureLease('contributions');
+        try{if(!current()||this.disposed)return{state:'unknown',reasons:[],confirmedRelations:[],checkedAt:new Date().toISOString()};if(['npc','item'].includes(value?.kind)&&typeof this.isContributionIgnored==='function'&&await this.isContributionIgnored({kind:value.kind,name:value.name}))return{state:'covered',reasons:[],confirmedRelations:[],checkedAt:new Date().toISOString()};const result=await this.discoveryVerifier.check(value);return current()?result:{state:'unknown',reasons:[],confirmedRelations:[],checkedAt:new Date().toISOString()};}catch{return{state:'unknown',reasons:[],confirmedRelations:[],checkedAt:new Date().toISOString()};}
     }
     async prepareAttachment({candidateId,kind,source,captureEvidence}={}){
+        const current=this.featureLease('contributions');if(!current())throw Error('Contribute is disabled in Settings.');
         if(typeof candidateId!=='string'||candidateId.length>160||!/^[A-Za-z0-9_-]+$/.test(candidateId)||!['item','npc','zone','spell'].includes(kind)||!['clipboard','file','capture'].includes(source)||source==='capture'&&(kind!=='item'||typeof this.onCaptureEvidence!=='function'))throw new WikiError('attachment','Choose a candidate and paste/select a PNG or read its current item examine.');
         let bytes;
         if(source==='capture')bytes=(await this.onCaptureEvidence(captureEvidence)).png;
         else if(source==='clipboard'){const image=this.electron.clipboard.readImage();if(image.isEmpty())throw new WikiError('attachment','The clipboard does not contain an image.');const size=image.getSize();if(size.width>8192||size.height>8192||size.width*size.height>15000000)throw new WikiError('png','The screenshot exceeds the image size limit.');bytes=image.toPNG();}
         else{const selected=await this.electron.dialog.showOpenDialog(this.getMainWindow(),{title:'Select contribution screenshot',properties:['openFile'],filters:[{name:'PNG screenshot',extensions:['png']}]});if(selected.canceled||!selected.filePaths?.[0])return {cancelled:true};bytes=await readBoundedFile(selected.filePaths[0]);}
-        if(this.disposed)throw new WikiError('closed','The wiki service closed.');
+        if(this.disposed||!current())throw new WikiError('closed','The screenshot selection was canceled.');
         bytes=validatePNG(bytes);const image=this.electron.nativeImage.createFromBuffer(bytes);if(image.isEmpty())throw new WikiError('png','The screenshot could not be decoded.');
         const descriptor=await this.client.attachments.add(bytes,{candidateId,kind}),size=image.getSize();
         if(source==='capture')try{await this.onCaptureEvidence(captureEvidence);}catch(error){await this.client.attachments.discard(descriptor.id);throw error;}
@@ -161,7 +168,7 @@ class WikiHost {
     }
     async freshStatus(){const revision=++this.statusRevision,status=await this.client.status();if(revision===this.statusRevision)await this.forwardStatus(status);return status;}
     publishStatus(){
-        if(this.disposed)return Promise.resolve();
+        if(this.disposed||!['character','contributions','dropObservations'].some(id=>this.isFeatureEnabled(id)))return Promise.resolve();
         return this.freshStatus().catch(()=>{});
     }
     login(){

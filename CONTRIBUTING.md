@@ -19,9 +19,12 @@ npm test
 
 For changes to log parsing, include representative sanitized log lines and tests. For data-export changes, keep the exporter server-local and low-priority rather than adding client-side page/API fan-out.
 
-The optional capture/contribution/Character work is indexed in
-[the shared execution plan](docs/CAPTURE_CONTRIBUTIONS.md). Preserve capture
-ownership, default-off settings, bounded private journals, offline OCR and
-reviewed wiki writes. Use synthetic fixtures and isolated profiles; never commit
-player logs/screenshots, account data or game archives. Record live-game,
-production-authentication and compositor acceptance separately from fixture tests.
+Start with [DEVELOPMENT.md](DEVELOPMENT.md) for the current technical component
+index, ownership boundaries, implementation style and verification guidance.
+Use its focused component links when changing capture, contributions, Character,
+maps or native services; older execution plans retain historical evidence.
+Preserve capture ownership, default-off Screen Reading permission, bounded private
+journals, offline OCR and guarded wiki writes. Use synthetic fixtures and isolated
+profiles; never commit player logs/screenshots, account data or game archives.
+Record live-game, production-authentication and compositor acceptance separately
+from fixture tests.

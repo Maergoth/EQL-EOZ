@@ -9,8 +9,8 @@ const itemIdentity = value => String(value || '').normalize('NFKC').replace(/_/g
 // Suggestions use a dedicated non-activating window, independent of Timers.
 // Registration never captures pixels or sends game input.
 class DiscoveryHost {
-    constructor({ electron, origin, getMainWindow, showMain = null, itemExistence = null, verifyDiscovery=null, isContributionIgnored=null, isScreenReadingEnabled=()=>false, now=Date.now }) {
-        this.electron = electron; this.origin = origin; this.getMainWindow = getMainWindow; this.itemExistence=itemExistence;this.verifyDiscovery=verifyDiscovery;this.isContributionIgnored=isContributionIgnored;this.isScreenReadingEnabled=isScreenReadingEnabled;this.now=now;this.noticeGeneration=0;
+    constructor({ electron, origin, getMainWindow, showMain = null, itemExistence = null, verifyDiscovery=null, isContributionIgnored=null, isScreenReadingEnabled=()=>false, isFeatureEnabled=()=>true, featureLease=()=>()=>true, now=Date.now }) {
+        this.featureLease=featureLease;this.isFeatureEnabled=isFeatureEnabled;this.electron = electron; this.origin = origin; this.getMainWindow = getMainWindow; this.itemExistence=itemExistence;this.verifyDiscovery=verifyDiscovery;this.isContributionIgnored=isContributionIgnored;this.isScreenReadingEnabled=isScreenReadingEnabled;this.now=now;this.noticeGeneration=0;
         this.showMain = showMain; this.spawnWindow = null; this.spawnReady = null; this.spawnGeneration = 0;
         this.queue = []; this.disposed = false; this.capturing = false; this.captureId = null; this.captureGeneration = 0; this.contributionSequence = 0;
         this.pendingNotices=new Map();this.retiredNotices=new Set();this.notableSequence=0;
@@ -57,6 +57,7 @@ class DiscoveryHost {
         return {pendingCapture:true,...details};
     }
     async handleSpawn(event, action, value) {
+        if(!this.isFeatureEnabled())throw Error('Contribute is disabled in Settings.');
         if (this.disposed || !this.isSpawn(event)) throw new Error('The spawn prompt is unavailable.');
         if (action === 'get-state') return this.spawnState();
         if (!['contribute','ignore','dismiss','set-notable'].includes(action)) throw new Error('Unknown spawn prompt action.');
@@ -86,6 +87,7 @@ class DiscoveryHost {
         if (!this.spawnState().length) window.hide();
     }
     async showSpawn() {
+        if(!this.isFeatureEnabled())return;
         let window = this.spawnWindow;
         if (!window || window.isDestroyed()) {
             const generation = ++this.spawnGeneration;
@@ -108,13 +110,14 @@ class DiscoveryHost {
             if (this.disposed || generation !== this.spawnGeneration || this.spawnWindow !== window || window.isDestroyed()) { if(!window.isDestroyed())window.destroy(); return; }
         }
         if(this.spawnReady)await this.spawnReady;
-        if (!this.spawnState().length || this.disposed || this.spawnWindow!==window || window.isDestroyed()) return;
+        if (!this.isFeatureEnabled()||!this.spawnState().length || this.disposed || this.spawnWindow!==window || window.isDestroyed()) return;
         const screen=this.electron.screen,point=screen.getCursorScreenPoint?.(),display=point&&screen.getDisplayNearestPoint?.(point)||screen.getPrimaryDisplay?.()||screen.getAllDisplays()[0],work=display?.workArea||{x:0,y:0,width:800,height:600};
         const width=Math.max(1,Math.min(400,work.width-24)),height=Math.max(1,Math.min(300,work.height-24));
         window.setBounds({x:Math.round(work.x+work.width-width-12),y:Math.round(work.y+work.height-height-12),width,height});
         window.setAlwaysOnTop?.(true,'pop-up-menu');this.publishSpawn();window.showInactive();
     }
     async handle(event, action, value) {
+        const featureCurrent=this.featureLease('contributions');if(!featureCurrent()||!this.isFeatureEnabled())throw Error('Contribute is disabled in Settings.');
         if (this.disposed) throw new Error('Wiki discovery has closed.');
         if(action==='check-item-exists'){
             if(!this.isMain(event))throw Error('Wiki item lookup is unavailable.');
@@ -165,6 +168,7 @@ class DiscoveryHost {
                 if(await ignored())return{ok:true,suppressed:true};
                 if(this.queue.some(item=>item.kind==='item'&&item.id!==value.id&&itemIdentity(item.name)===itemIdentity(value.name)))return{ok:true,suppressed:true};
             }
+            if(!featureCurrent()||generation!==this.noticeGeneration)return {ok:true,suppressed:true};
             if (this.queue.some(item => item.id === value.id)) return { ok:true, queued:true };
             // The newest kill owns the one armed /loc target. Never display an
             // old, inactive prompt after the new one expires.
@@ -216,6 +220,7 @@ class DiscoveryHost {
         throw new Error('Unknown wiki discovery action.');
     }
     async capture(value) {
+        if(!this.isFeatureEnabled())throw Error('Contribute is disabled in Settings.');
         if(!this.isScreenReadingEnabled())throw Error('Screen reading is disabled. Enable it in Settings → Screen reading first.');
         if (this.disposed || !this.queue.some(item => item.id === value?.id)) throw new Error('This suggestion has already been dismissed.');
         if (this.capturing) throw new Error('A screenshot is already in progress.');

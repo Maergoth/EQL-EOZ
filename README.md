@@ -1,648 +1,362 @@
 # EQLWiki — Eye of Zomm
 
-**1.0.9: Wiki page tracking.** Pages created or edited by Eye of Zomm receive the EoZ category, including contribution articles, Character User pages and new image descriptions. The tag is included in reviewed and copied wikicode; older saved drafts need a fresh Preview. See [wiki page tracking](docs/WIKI_PAGE_TRACKING.md).
+**Eye of Zomm** is a Windows and Linux app for **EverQuest Legends**.
+Follow your game log, explore maps and wiki loot, compare combatants, make
+reminders, and build a Character sheet to share on EQLWiki.
 
-**1.0.8: Character screenshots.** Add an optional picture when sharing your Character sheet. Select or paste an image, review the full picture and publish it with your sheet. Existing wiki sheets gain an **Add an image** placeholder so a picture can also be uploaded later. See [Character screenshots](docs/CHARACTER_SCREENSHOTS.md).
+[Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases/latest) ·
+[EQLWiki](https://eqlwiki.com) ·
+[Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) ·
+[Changelog](CHANGELOG.md) · [Developer guide](DEVELOPMENT.md)
 
-**1.0.7: Easier Character setup.** Choose two or three classes with checkboxes. Read your equipped, unbuffed stats from the Default inventory's **Stats** tab or the Default Modern stat panel; the visible layout is recognized automatically. Review unread numbers before saving. See [the Character walkthrough](docs/CHARACTER_WALKTHROUGH.md).
-
-**1.0.6: Expandable private inventories.** Full desktop inventories live in a private database and load in searchable pages. Stream inventory and achievement exports together, preserve physical copies and manual work, and migrate existing characters with a verified backup. Item previews also scale a listed positive base Void resist like other resists. Sharing still includes equipped gear and reviewed character stats. See [Character storage](docs/CHARACTER_STORAGE.md) and [shared item formulas](docs/SHARED_ITEM_SCALING.md).
-
-**1.0.5: Cleaner chat discoveries.** Trade captions combining known items no longer remain as false new-item tasks. Untouched old captions are archived reversibly; actual item links, screenshots and your edited work keep their evidence. See [chat item boundaries](docs/CHAT_ITEM_BOUNDARIES.md).
-
-**1.0.4: Character achievement exports.** Run `/outputfile inventory` and
-`/outputfile achievements`, then click one **Import files** button. Save both
-exports per character and share achievement progress in a collapsible section
-below equipment and recorded stats on your wiki User page. See
-[the achievement guide](docs/CHARACTER_ACHIEVEMENTS.md).
-
-**1.0.3: Character Exaltation effects.** Character and new wiki shares show each Exaltation's name and effects, including Focus effects and Worn labels. Saved effects refresh from exact local wiki matches while item tiers, socket numbers and recorded character totals stay intact. See [the Character walkthrough](docs/CHARACTER_WALKTHROUGH.md).
-
-**1.0.2: Personal depot inventory imports.** Import `/outputfile inventory` exports containing `Personal-Depot` storage. Depot items keep their counts and saved locations alongside carried and banked inventory. See [the inventory walkthrough](docs/CHARACTER_WALKTHROUGH.md).
-
-**1.0.1: Stable discoveries, combat and maps.** Canonical chat item matching, stable Discovery rows and edits, blueprint-style item pages, corrected healing and DoT attribution, restored Nektropos 3D maps, and bag imports that keep loose Exaltations separate from item sockets. See [queue stability](docs/DISCOVERY_QUEUE_STABILITY.md), [item formatting](docs/ITEM_CONTRIBUTION_FORM.md) and [combat attribution](docs/COMBATANT_OVERVIEW.md).
-
-**1.0.0: Eye of Zomm.** Responsive logged-location maps, shared Crawl progress, per-combatant parsing and AA, retained Live encounters, explicit weapon-base previews, a structured contribution form and one Screen Reading master switch. Native desktop and installer icons use the eye. See [the release record](docs/RELEASE_1_0_PLAN.md).
-
-**Eye of Zomm** is a local-first Windows and Linux app for **EverQuest Legends**. It reads ordinary game logs, combines them with cached EQLWiki knowledge, and keeps maps, named-mob loot, combat parses and triggers in separate desktop windows.
-
-[Download Windows / Linux](https://github.com/Maergoth/EQL-EOZ/releases) · [EQLWiki](https://eqlwiki.com) · [Report an issue](https://github.com/Maergoth/EQL-EOZ/issues) · [Changelog](CHANGELOG.md)
-
-**0.9.15: verified discoveries, zones and map controls.** Automatic discoveries stay hidden until a live public wiki check confirms the gap. An already confirmed editor keeps its saved draft in place while the check renews; Preview and automatic publishing wait for fresh proof, and a covered result removes the stale task. Known cached facts avoid network requests; failed or inconclusive checks remain quiet. Red × dismisses a discovery, and ∞× permanently ignores its NPC/item until restored in Contribution History. New zone pages use one normal/raid blueprint with overview and Map placeholders. Log zone anchoring and same-visit numeric /con suggestions preserve evidence, while the top 3D map supports visible player markers and left-drag pan. See [release verification](docs/RELEASE_0915_PLAN.md).
-
-**0.9.14: contribution history and safer loot discovery.** Open
-**Contribute → Contribution History** to see this device's automatic and reviewed submissions
-for your signed-in wiki account, including partly saved and unconfirmed results.
-Saved pages offer revision and diff links. Discoveries and History share the
-Contribute section and account controls; a compact reader toolbar and latest
-result keep the discovery queue close at hand. History preserves drafts and
-pauses its owned reader while open. It never retries a submission.
-Explicit owner-labelled pets stay out of monster discoveries and contribution
-plans. Common/Unique loot placement uses distinct monsters across the cached
-wiki dataset: six or more means Common; fewer means Unique only when the count
-is complete. No live counter requests are made. Shared item rules revision 2
-also corrects positive primary-stat flooring: base HP 50 shows 75 at rank 5
-with 4/32 progress. AC, HP, Mana, Endurance and regeneration also count toward
-the two-stat requirement for rank-based Void. Saved base-recovery reviews from
-older formulas require review after updating. Missing-wiki notices now appear
-in their own lower-right desktop popup, including when Timers is closed.
-Item notices check cached page membership first, then a bounded public existence
-lookup when necessary; unverified failures show no missing-page claim. See
-[the history guide](docs/CONTRIBUTION_HISTORY.md),
-[cached loot classification](docs/CONTRIBUTION_LOOT_CLASSIFICATION.md),
-[item discovery checks](docs/ITEM_DISCOVERY_EXISTENCE.md), and
-[the release record](docs/RELEASE_0914_PLAN.md).
-
-Items adds **Any** before **Auto** to browse every class without changing the
-character profile. Contributions preserve documented item sets instead of
-repeating their covered members. Rich item previews share a 350 ms mouseover
-delay, and Intel keeps its scrolling list intact during unrelated updates.
-
-[Crawl mode](docs/CRAWL_MODE.md) shares one checkbox between Map and Zone & loot.
-Fresh kills dim matching located or loot-bearing mobs until the next zone
-entry, and collapse their Intel drops. Uncheck it to restore normal previews.
-
-[Item contribution statistics](docs/ITEM_CONTRIBUTION_FORM.md) use one structured
-grid. Blank values stay omitted, deliberate zeros survive, and ranked readings
-retain their base-proposal validation and observed evidence.
-
-**0.9.13: correct tier-zero verification category.** Ranked and recovered item
-pages now use the exact
-[Tier 0 Verification Needed](https://eqlwiki.com/Category:Tier_0_Verification_Needed)
-category title. Accepted tier-zero readings recognize app-marked membership in
-either capitalization while preserving manually assigned categories.
-
-**0.9.12: shared wiki item formulas and tier-zero verification.** Item-tier
-previews use the wiki-owned engine and rules bundled with the app. Each release
-resolves one formula snapshot for both Windows and Linux; installed apps receive
-formula changes through app updates, without background formula requests.
-Backstab, weapon Accuracy, Void resist, weight and tier limits now agree with
-the wiki. Recorded Character totals remain unchanged. New item pages based on
-unverified ranked or recovered values join
-[Tier 0 verification needed](https://eqlwiki.com/Category:Tier_0_verification_needed).
-
-**0.9.11: automatic contribution reading and chat item detection.** Open
-Contribute, then open the selected item’s examine window in EverQuest. A gentle
-reader proposes matching stats, stages a reliable item screenshot and helps
-find its icon. Pause it in place; manual edits and Character capture stay
-protected. A fresh, sufficiently clear new-item reading can create its page
-automatically after live duplicate checks; ambiguous cases stay for review.
-Tiered item mentions can now be recognized even when game logs omit link codes.
-See [the follow-up and release record](docs/CHAT_CAPTURE_FOLLOWUP_PLAN.md).
-
-**0.9.10: reliable overlays and streamlined wiki contributions.** Gently drag
-a snapped overlay to detach it; its size and neighbors stay put. Release near a
-new edge to dock. Item hovers across the app and native Intel now use the wiki's
-item frame, inline stats and linked effects, retaining Character tier and
-Exaltation controls. The minimap shows travel direction from logged movement.
-
-Contribute uses fixed-choice class/slot dropdowns, shared Zone, screenshot and
-inline icon paste, targeted additions and a clear Preview → Publish flow. Tiered
-item evidence prefills editable compatible base proposals. Successful changes
-link to the saved pages. Missing wiki items linked in chat offer Contribute;
-accepted item/monster prompts wait for matching live examine evidence or the
-fresh next `/loc`, show green completion and then close. Character capture and
-existing readers stay protected. See [the release record](docs/RELEASE_0910_PLAN.md)
-for integration, verification and publication status.
-
-![Shared wiki-style item card in Eye of Zomm 0.9.10 with synthetic data](app/assets/whats-new/0.9.10/shared-wiki-itembox-main.png)
-
-The illustrated What's new archive retains every earlier update and its
-screenshots. Release captures use synthetic records and isolated profiles/APIs;
-they contain no player pixels or production wiki submissions.
-
-Keep all gear on. Enter character details, run both
-`/outputfile inventory` and `/outputfile achievements`, then click **Import files**
-to load both matching exports from your chosen game folder. A missing file
-opens its native chooser. Next, **Open your Inventory → Scroll down → Click off your
-buffs**, select the game window and review its fully equipped, unbuffed stats.
-Character totals use only that reviewed reading; item/catalog values and older
-baselines are never added. Character does not collect gear by item OCR.
-
-Missing wiki items and Exaltations leave public slots/sockets empty. Use Contribute
-to supply missing details, sync the accepted wiki data and export inventory again.
-Optional local stat/examine reading uses a lower **1 FPS** cadence for stable
-panes. See [the inventory-export flow](docs/CHARACTER_WALKTHROUGH.md) and
-[inventory-export design](docs/INVENTORY_EXPORT_CHARACTER_PLAN.md).
-
-The compact inspect and interactive wiki sharing introduced in 0.9.6 remain:
-24 equipment slots including two Any slots, clickable known gear/Exaltations,
-PNG copy/save and an interactive share with one final Share action. Since 0.9.8 new shares
-target your **User:Name** page. Character Select preserves
-separate **Character (Server)** saves. The wiki contract and activation boundary
-are documented in [the cross-repository plan](docs/CHARACTER_SHEETS_PLAN.md).
-
-The following images show the **0.9.8 components with synthetic
-records** in Chromium. They are interface evidence, not live-game capture or
-production wiki submissions. Older tours remain available in What's new.
-
-![Equipped hover tier slider, proc details and Exaltations with recorded-only totals](app/assets/whats-new/0.9.8/character-hover-tier-and-proc.png)
-
-![Contribution matches and readable page details before publication](app/assets/whats-new/0.9.8/contribution-matching-and-loot.png)
-
-In **Settings → Screen reading**, explicitly select the source you want to read.
-The reader automatically detects **Default** and **Default Modern**. In Default,
-open Inventory's **Stats** tab; in Default Modern, scroll down to show the full
-stat panel and Additional Modifiers. Review unread values before saving. Other
-custom skins remain unverified. Calibration can select a complete stat or examine pane,
-and **Full frame** resets it. Original source/session/generation and timestamp
-checks still apply. Ordinary log parsing does not require screen reading.
-
-![Historical OCR area calibration with a synthetic preview](app/assets/whats-new/0.9.0/ocr-calibration.png)
+**For AI agents and contributors:** start with the [developer guide](DEVELOPMENT.md)
+for component ownership, technical contracts and implementation style, then read
+[CONTRIBUTING.md](CONTRIBUTING.md) before editing. Use the [changelog](CHANGELOG.md)
+for release history; this README covers using the app.
 
 ## Get started
 
-1. Download the latest Windows `Setup-<version>-x64.exe`, Linux `<version>-x64.AppImage`, or Debian/Ubuntu `<version>-x64.deb` package from [Releases](https://github.com/Maergoth/EQL-EOZ/releases). Both platforms use the same version and data source.
-2. Choose your EverQuest Legends folder on first launch. Enable logging in the game; EoZ follows the newest `eqlog_*.txt` under `Logs`, or a specific file selected in Settings.
-3. Emit `/who` to establish your character's zone, level and classes, and `/loc` to place your position on the map. Later logged locations update it automatically.
-4. The header **Overlays** button cycles all panels through **Unlocked → Locked → Hidden → Unlocked**. Unlock to arrange Parse, Map, Zone & loot and Triggers, or configure each in **Settings → Native overlays**. Reopen **Settings → About Eye of Zomm → What's new** for the illustrated tour.
-
-The Windows installer creates normal Start Menu/Desktop shortcuts and registers `eqleoz://` so EQLWiki can open the app. Beta installers may be unsigned and show a Windows publisher prompt; see [signing status](SIGNING.md). Linux package and compositor details are in the [font/Linux guide](docs/FONTS_LINUX.md).
-
-Share the same [Releases link](https://github.com/Maergoth/EQL-EOZ/releases) with
-Windows and Linux users. Each release contains every platform package under one
-version; no separate Linux branch, release schedule or wiki dataset is needed.
-
-On Linux, make the AppImage executable and launch it, or install the deb using your distribution's package installer. Choose the actual client directory inside your Wine/Proton prefix or mounted installation; EoZ reads that directory's ordinary logs and map files. It runs as a separate native desktop app. X11/XWayland is preferred for independently positioned overlays; [native Wayland limits](https://www.electronjs.org/docs/latest/api/browser-window) can affect placement, focus and topmost behavior.
-
-## Shared item formulas
-
-Item sliders and recovered-base proposals use the wiki-owned, versioned item
-scaling engine. Release preparation takes one snapshot of the wiki source for
-both Windows and Linux; each installed app version keeps those fixed formulas. See the
-[shared formula guide](docs/SHARED_ITEM_SCALING.md) for the canonical source,
-release synchronization procedure and formula-version contract.
-
-## A look around
-
-The inventory images show the actual **0.9.4 Character component with synthetic records**. The tooltip-reading image shows the actual **0.9.2 Character component with synthetic records and capture status**; other guided Character images show 0.9.1. Capture and contribution images show 0.9.0 with a loopback-only wiki; font, green-stat and loot-pane images show 0.8.9. Older map/trigger captures show 0.8.8, archived from [Windows CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39863077085) and [Linux/X11 CI](https://github.com/Maergoth/EQL-EOZ/actions/runs/39862385659/job/120116045766). They contain no player records, proprietary geometry or live game capture. Foreground game compositing and OS-wide DPI still require [Windows acceptance checks](docs/WINDOWS_MANUAL_TEST.md).
-
-### A normal desktop workspace
-
-Move and resize the main window normally. Its size, position and maximized state are remembered, with recovery when a display is unavailable. **Minimize to tray** and **Start minimized** are optional Settings choices. When the tray is unavailable, minimizing keeps the normal taskbar recovery path. The main window has no Pin to top mode; overlays retain their own lock and mouse controls.
-
-**Settings → Fonts** selects a font family and base **Text size** from 10–20 px.
-The choice applies immediately to the main app and native overlays and survives
-restart. Each overlay retains its own text adjustment on top of that base.
-For a font outside the presets, choose **Installed font…**, **Refresh installed
-fonts**, search its family name and **Apply installed font**. You can also enter
-an installed family manually. Missing families use local system fallbacks.
-**Reset fonts** restores the EQL theme/13 px. Upgrades clear old cached interface
-files so newly added Settings appear immediately.
-
-![Eye of Zomm 0.8.9 using installed Calibri at 17 px with synthetic settings](app/assets/whats-new/0.8.9/system-fonts.png)
-
-**What's new** now contains a browsable illustrated release history. Each unseen
-version keeps its **New** marker until viewed, including skipped updates. New
-Windows downloads start a cancellable **Restarting in 5** countdown after
-verification, followed by silent installation and relaunch. Linux keeps its
-verified package download and manual installation handoff.
-
-### Maps that stay beside the game
-
-The native Map reads your client text maps and shares the logged position, named destinations and validated route with the main app. Hover the full zone-title row for **Reset**, Follow, zoom and a button cycling **Map → Top → First person** beside its name. A separate grip moves the unlocked window. Its 3D scene loads only when used. Use Z controls to inspect another elevation; monster names and markers share interactive pointer targets. The complete main **Map Explorer** keeps its own views and zoomable Local Map.
-
-Changed logged coordinates update the native map promptly after reading, with
-bounded burst coalescing. A stationary repeated `/loc` uses the normal heartbeat.
-See [location timing and verification](docs/MAP_LOCATION_LATENCY.md).
-
-Both 3D views mark your latest logged location with a cyan ground ring and add
-a movement-direction arrow once later locations establish travel direction,
-even when camera Follow is off. The marker keeps a visible minimum size when
-zoomed out. In Top 3D, left drag pans; right drag rotates the perspective.
-**Auto Z** uses the latest known logged elevation;
-moving the Z slider or inspecting a mob switches to manual slicing. Turn Auto Z
-back on, or Reset the overlay, to resume it. Missing height stays unknown. A
-nearby validated floor grounds the marker; otherwise its status identifies the
-logged-elevation fallback.
-
-The native 2D map marker becomes a small arrow after two distinct logged
-locations, estimating travel direction rather than actual character facing.
-It holds through stationary/jitter readings and resets on zone/source changes
-or a large position jump. Its background follows the overlay opacity setting;
-the native 3D surface fades as a whole, including its geometry. The main map
-viewer's styling remains independent.
-
-![Native Top 3D player marker and Auto Z on synthetic geometry](app/assets/whats-new/0.9.0/map-autoz.png)
-
-Routing is an opt-in. A line appears only after collision checks approve it; a guarded Recast/Detour candidate may refine the established route after the same checks. An unreachable or unverified destination remains a marker. Static archives do not reveal live doors or actors. [Route validation](docs/ROUTE_REJECTION_AUDIT.md) records working detours and remaining limits.
-
-![Native Map with zoom and elevation controls on a synthetic map](app/assets/whats-new/map.png)
-
-### Named mobs, raid sources and complete loot
-
-**Zone & loot** separates Normal Zone and Raid Zone sources, with red **Raid Zone** intel shown first. Click a section heading to collapse it. **Item Level Slider** and **My Class** stay anchored above the scrolling list. Hover or keyboard-focus a mob name for Details, Route, Copy /waypoint, Wiki and Map in the same row, without moving the list. Its Map action opens a first-person preview at that source, keeping your logged position unchanged. Use **Show More** for all matching drops. Class filtering retains usable equipment/effects and excludes statless and weight-only quest/junk records. A logged consider or named kill selects and expands its row and section with a mild visual/audio cue, without activating the window.
-
-Hover or focus an item's name or icon for its local wiki-style item card,
-including tier-adjusted values, linked effects and base comparisons. Character
-uses the same frame with its tier slider and Exaltation sockets; Exaltation
-summaries show only name/effect. Explicit font preferences still apply.
-**Through era** includes items through the chosen era. Activating a located NPC
-name copies a paste-ready `/waypoint Y X [Z]`; row-level Route actions start
-navigation when routing is enabled.
-
-Routine log and location updates retain stable mob ordering, the visible row,
-expanded drops and collapsed sections. A new named consider or kill still
-reveals its matching row once. Plane of Hate uses Z 120 only until a known
-logged elevation is available with Auto Z enabled.
-
-![Raid loot and same-row mob actions from a synthetic wiki pack](app/assets/whats-new/intel.png)
-
-The main Item and NPC browsers use the same local stat data. Item names and pictures support mouse hover and keyboard focus, including when logged activity updates a card.
-
-Item-level-modified stats appear **green** in cards and hover blocks. Unchanged
-values retain their normal color, and base comparisons stay muted. Clicking a
-monster in the main **Live Map** opens its full right-hand loot pane, with every
-known drop, the shared item-tier slider and explicit Route/Waypoint/Wiki actions.
-
-![Changed stats in green beside unchanged values and muted base comparisons](app/assets/whats-new/0.8.9/green-stats.png)
-
-![Complete Live Map loot pane with synthetic NPC and item records](app/assets/whats-new/0.8.9/loot-pane.png)
-
-![Main NPC browser item stat block with synthetic loot](docs/screenshots/main-item-hover.png)
-
-### Triggers and combat parses
-
-Create manual countdowns or literal/regex log triggers on the main **Triggers** page. Test a match, use named captures, set cooldowns and choose local sound/speech cues. Running countdowns and an optionally enabled observed swing bar appear in the compact Triggers window. You supply reminder durations; EoZ does not know a mob's respawn period.
-
-The independent **Parse** window has **Overview / Damage / Healing / Taken / Session** tabs and encounter selection. Healing includes a separately labeled rune-capacity subsection; capacity is not measured absorption or healing. **New session** in Combat or the Parse Session tab clears parse/loot totals while retaining the live log position, profile, map and triggers. One shared session reads the log for every panel. The optional swing bar defaults off; enable **Triggers → Swing → Show swing estimate** if desired. It estimates your outgoing melee rounds from logged hits and misses; one-second log timestamps limit its precision. See [trigger and countdown behavior](docs/TIMERS.md).
-
-Overview shows logged combatants for Whole session and individual encounters.
-Damage, Healing and Taken expand per combatant into ability/attacker details;
-Session includes **AA Gained**, counted from explicit earned-point messages.
-See [combatant scopes, rates and log limitations](docs/COMBATANT_OVERVIEW.md).
-
-![Timer trigger editor with synthetic match preview](app/assets/whats-new/timers.png)
-
-Unlock an overlay to move/resize it. Locking leaves its tabs and menus interactive; **Ignore mouse** passes clicks through. Recover from Settings, the tray, or **Ctrl+Shift+O** when registered. Layout, opacity and font scale are saved separately for each panel. Closing the main window while overlays are visible keeps their shared session running; use **Quit Eye of Zomm** in the tray to exit.
-
-Every unlocked overlay has clear axis/diagonal resize edges and a visible corner.
-Use the Parse/Map grip, Zone & loot title, or the Triggers body to drag. Dragging
-immediately detaches that panel and its direct children, keeps the panel's size,
-and leaves every other panel where it was. Release within 8 px of a new panel
-edge to snap: above/below share width, left/right share height. The group you
-just detached from cannot pull the panel back during that drag. Resizing a docked
-panel still keeps its docked followers aligned and sharing the matching size.
-Global Hidden suspends the group until it is shown again; hiding one panel
-detaches its relations. A manual Triggers height stays saved; **Reset positions**
-restores automatic content fitting. Global Unlock restores mouse input on every panel.
-
-![0.9.1 unlocked native Parse with separate drag and resize grips](app/assets/whats-new/0.9.1/overlay-resize.png)
-
-### Optional screen reading
-
-Logs remain the source for supported kills, loot, zone and character events.
-**Settings → Screen reading** adds optional local OCR for visible examine
-windows and character statistics. The checkbox is a master permission, saved on
-this device and disabled by default. When unchecked, native code stops active
-readers and OCR, discards pending screen results, and blocks manual/automatic
-Contribute reading, Character stats, source screenshots, and file/clipboard OCR.
-Logs, text entry and inventory-file imports keep working. While checked, opening
-**Contribute** starts item reading automatically; enabling it while Contribute is
-open does the same. One recommended game window is selected automatically; an
-ambiguous source requires your choice. OCR fills existing chat/log discoveries
-only, including a uniquely matched small reading typo; it never creates discoveries
-from screenshots alone. Pause or Stop releases
-capture work; status shows which workspace owns it. **Read a screenshot** imports
-one image without starting continuous capture, while the master permission is enabled.
-The main app and both new tabs retain the selected fonts and text size.
-
-Observed text and evidence remain in a bounded local journal. OCR values are
-editable proposals and may be wrong or incomplete; they do not establish unseen
-spawns, drop sources, caps or buffs. Starting a Character session pauses
-contribution capture so the two modes cannot read the source concurrently.
-
-![0.9.0 screen-reading controls after a synthetic import, with continuous capture disabled](app/assets/whats-new/0.9.0/screen-reading.png)
-
-### Contribute to Wiki through an explicit review
-
-Open **Contribute to Wiki** to review proposed items, monsters and zones from
-supported live log events, screenshot reads or manual entry. Review the matched
-destination page and task reason first: an existing page may need a source,
-population or tier-zero correction rather than a duplicate article. A shared
-resolver handles exact title aliases, apostrophes, case and supported item tiers;
-an incomplete catalog cannot prove absence. Generated pet names are excluded
-unless the wiki positively identifies a real NPC. Automatic monster discovery
-requires kill/death evidence or a named-corpse loot source; a nearby spell cast
-or consider alone does not create a new-monster task. Captured evidence shows
-the triggering log line locally without adding that private text to wiki pages
-or hourly observation uploads.
-
-A fresh unknown-monster kill arms one next **/loc** and shows a noninterrupting
-prompt. Stand at that monster's spawn before typing the command. A newer eligible
-kill replaces the active target; older drafts remain available for explicit
-rearming. Locations remain proposals for review, and EoZ never types commands.
-The popup also asks `Is <monster> notable?` Choose **Yes** or **No** to save
-that classification for review without opening the main window. Leaving it
-unanswered preserves the location draft. The same choice is editable in
-Contribute; a monster's page template does not make it notable automatically.
-
-Encoded item links in live chat also identify missing wiki items and offer
-**Contribute**; open the linked item's complete examine window. That action
-starts or reuses the contribution reader, using a configured game window or
-asking for an explicit source inside Contribute. An active Character capture
-keeps ownership. The notice stays open until that item's fresh OCR reading is
-saved, flashes green, then closes. Some clients strip link codes from logs.
-For those clients, a bounded tier-decorated name in a quoted chat message can
-offer a **possible item** suggestion. Ordinary unranked text and ambiguous
-messages remain unsupported. Known, queued, submitted and ignored identities
-still suppress repeated suggestions. Chat mentions imply no loot or drop source.
-
-Opening **Contribute** starts gentle local reading when one safe game window
-can be selected; otherwise choose the source directly in that section. Open the
-selected item's complete examine window and leave it visible. Matching fresh
-readings fill proposal fields and, when a reliable item crop is available, stage
-a local screenshot and icon matches. Manual/reviewed fields and existing images
-stay intact. Choose an icon when artwork matches are ambiguous. **Pause automatic
-reading** keeps it stopped until explicitly restarted. Leaving Contribute stops
-the reader it started unless an accepted discovery request still needs it;
-Character and preexisting readers retain ownership. Eligible fresh new items
-can publish automatically after exact, redirect and near-duplicate checks,
-under the signed-in account. Only that item and its bound screenshot may be
-created automatically; ambiguous/incomplete readings retain the normal review.
-Loot logs can also append sources to existing item, mob and zone pages without
-replacing prior sources. These updates use actual native log reads, explicit
-corpse evidence or a witnessed same-zone kill within 60 seconds, and unique
-confident canonical/fuzzy page matches. Ambiguous titles/conflicts stay in
-Contribute. Reopening a log never publishes historical observations. Successful
-creations and updates link to saved pages. See [the follow-up record](docs/CHAT_CAPTURE_FOLLOWUP_PLAN.md)
-for implementation, verification and publication status.
-
-Choosing **Contribute** on a monster prompt similarly pins it and re-arms the
-next `/loc`, without a timeout while waiting. The captured location flashes the
-prompt green before it closes. **×** cancels the pending request; Ignore also
-removes or suppresses the suggestion. Cancelling or finishing an item request
-stops only a reader started for these requests, leaving prior reader sessions
-alone. Zone/log-source changes cancel an incompatible spawn request.
-
-Correct the readable fields, choose **Raid Instance** when appropriate, and
-classify observed drops as **Common Loot** or **Unique Loot**. These are wiki
-sections, not measured drop probabilities. Classes and Equipment slots use
-multiselect dropdowns; drop sources reuse **Zone**. Empty item fields remain
-blank, while factual monster unknowns use the blueprint's supported placeholders.
-The destination check and final page preview remain. Check **I reviewed these
-page changes** once above Publish; there are no separate field, match or per-page
-approval checkboxes.
-
-Use the screenshot **+** area to select/paste a PNG, review its caption/license
-and choose whether to publish it with the article. Local OCR is separate from
-uploading. Inside **Icon ID**, paste a crop containing **just the icon** and
-choose a closest artwork match, or enter the exact ID. Matching runs locally
-against the wiki's versioned index; original aliases and IDs are preserved.
-No icon crop uploads.
-
-Log in through the wiki's normal dedicated window when you are ready to submit.
-The app loads the current wiki blueprints, prepares a page plan and shows every
-planned change. Review each page and fresh duplicate check before the final
-publish action. Existing permissions and edit-conflict checks apply; a partial
-result identifies unfinished pages so a retry does not repeat completed edits.
-Confirmed saved pages offer **View page** links for items, monsters, zones,
-spells and related updates. A monster created later through EoZ can recover
-published item-source relationships into its reviewed loot list. Automatic
-reverse links in wiki-rendered pages have a separate wiki deployment contract.
-Nothing publishes merely because a candidate was captured or previewed.
-
-For a tiered drop without a wiki base record, base recovery keeps the original
-numbers/evidence and prefills jointly compatible editable base proposals.
-Valid manual edits stay intact; unsupported numbers require correction before
-review. Unknown or unsupported values stay omitted. Recovered pages carry a visible request for
-verification against a tier-zero item; a genuine reviewed tier-zero reading can
-replace that proposal through a scoped patch. Missing item effects can include
-a separate spell-blueprint page in the same reviewed multi-page plan.
-
-![Common and Unique Loot controls, screenshot paste area and reviewed submission](app/assets/whats-new/0.9.8/contribution-loot-controls.png)
-
-![Local Icon Finder matching synthetic pixels without uploading the crop](app/assets/whats-new/0.9.8/wiki-icon-finder-match.png)
-
-### Build and share a character snapshot
-
-1. In **Character**, enter name, server, race, classes, level and AA count. Saved
-   characters are labeled **Character (Server)**; a new draft is registered only
-   after its details are valid.
-2. **Keep every item equipped.** Type `/outputfile inventory` in EverQuest.
-   While the inventory step is open, EoZ watches the chosen game folder for a
-   fresh matching `Name_server-Inventory.txt` and imports it automatically.
-   **Check now** and **Choose inventory file…** are available when needed. EoZ
-   never sends the game command itself. Bags, bank and keyring entries do not
-   become worn equipment.
-3. **Open your Inventory. Scroll down. Click off your buffs.** Keep the whole
-   Default Modern stat panel, including Additional Modifiers and the Inventory
-   heading, visible. Select your game window and choose **Read character stats**.
-   Review the proposal, correct uncertain values and use the reviewed stats.
-   Optional screen reading runs at 1 FPS; it is not a promise to catch brief
-   hover tooltips.
-4. Review the inspect before copying/saving a PNG or sharing it. Totals are the
-   recorded equipped, unbuffed values only, with maximum HP/Mana/Endurance,
-   distinct AC and ATK components, and the observed modifiers. Accuracy bonus
-   is separate from ATK Accuracy. Missing values stay unknown; changing gear,
-   catalog tiers or item previews does not recalculate character totals.
-
-Hover equipped gear to adjust its **tier directly below the name**; tier-adjusted
-preview values stay green. Item cards retain real effects/procs, cast time,
-required level, flags and restrictions, including Thornstinger's Rampage. None
-of these previews change the recorded character totals.
-
-Attached inventory-export **(Exaltation)** rows prefill known parent sockets. An
-exact socket-only base-item alias resolves these rows without weakening worn
-item matching. Unknown capacity defaults to **five**; observed capacity and
-occupied positions are retained through eight. The ambiguous export Slots
-column is not used as capacity.
-
-Unknown items/Exaltations are rejected from public equipment and leave empty
-slots/sockets. Use **Contribute to Wiki** to review missing item details, then
-sync accepted wiki data and generate a new inventory export. Item examine OCR
-belongs to Contribute, not Character gear intake. No missing item publishes
-automatically. The red **Clear inventory** action affects only the selected
-character's gear/import evidence and now-invalid stat reading, retaining identity
-and other saved characters.
-
-PNG copy/save stays local. Wiki sharing requires login and one explicit review;
-it updates only the authenticated account's own **User page**, replacing that
-Character (Server)'s managed sheet while preserving other characters and
-content. Old talk-page sheets remain intact; a destination change needs a fresh
-review. The app checks template/renderer support first. Raw OCR, export
-paths, source IDs, private inventory and current resource counters are not
-published. See [the current walkthrough](docs/CHARACTER_WALKTHROUGH.md).
-
-The current Character flow and log-based contribution queue are browsable in
-**What's new**, alongside every earlier release. These are actual component
-captures with synthetic records and an isolated profile.
-
-![Export equipped inventory](app/assets/whats-new/0.9.7/character-inventory-export.png)
-![Prepare the equipped character stat reading](app/assets/whats-new/0.9.7/character-recorded-stats.png)
-![Review log discoveries and spawn locations](app/assets/whats-new/0.9.7/contribution-log-discoveries.png)
-
-## Local files and optional wiki sync
-
-EoZ reads logs and supported map/archive files under the folder you choose.
-Optional screen reading reads only the source you select;
-it does not record audio or continuous video. EoZ never reads game-process memory,
-injects code, patches game files, sends game commands or synthesizes gameplay
-input. Wiki edits/uploads require the review actions described above. See
-[SAFETY.md](SAFETY.md).
-
-Wiki discovery notices appear in a separate bottom-right popup for 15 seconds of visible time. Local catalog checks run first; possible missing items require a live exact-title check before a notice appears. **Contribute** opens item capture; **Screenshot** copies a chosen window or display to your clipboard. Active capture keeps its notice available, then shows its confirmation for 15 seconds. Unanswered notices pause while hovered or keyboard-focused.
-
-Global **Search EQLWiki** opens a wiki search in your browser. Item/NPC cards open their exact wiki pages. Ordinary search and filtering use cached data and do not crawl wiki pages.
-
-**Settings → Collect and sync drop observations** controls a separate durable
-outbox. While enabled, fresh kill/loot events are saved locally even for known
-or ignored wiki entities. While the app is running and you are logged in, due
-batches are sent at most hourly to the wiki, with overdue startup checks and
-retry backoff. Offline events survive restarts; parse resets and Contribute
-Ignore/clear actions do not erase them. Disable the setting to stop collection
-and upload while retaining pending data.
-
-Only structured item/NPC/zone/source/tier/quantity/time evidence is sent, with
-opaque deduplication tokens. Player names, chat, paths, coordinates, screenshots
-and raw logs are excluded. Accepted observations are separate from reviewed
-article edits and do not imply drop chances or zero-drop counts. Other tools
-can use the documented attributed MediaWiki create/edit/upload APIs and the
-versioned observation endpoint: [API documentation](https://eqlwiki.com/API_Documentation).
-The observation endpoint/storage version 1.2.0 and public documentation are
-installed for 0.9.8. Future schema, database-page and application deployments
-still have separate activation and verification steps.
-
-## Two separate updates
-
-| Update | What it changes | Where to use it |
-| --- | --- | --- |
-| Application update | Installed EoZ code and interface | **Settings → Application updates**: check/download; Windows counts down to restart, Linux offers **Open download folder** |
-| Wiki data update | Cached NPCs, items, icons, zone aliases and source records | **Sync with Wiki**, also checked at startup and hourly while open |
-
-From 0.8.9, a new verified Windows download shows **Restarting in 5** and silently installs and relaunches automatically. Choose **Cancel restart** to keep the staged package for later, then use **Restart to install update** when ready. Merely reopening EoZ with a previously staged package does not start a countdown. Startup downloading is optional and off by default; when enabled, a newly completed startup download also starts the countdown. Windows may still require a security or elevation prompt. Settings, folder/log choices and cached wiki data stay in the existing profile. Older installed builds use their existing installer flow for the first upgrade.
-
-On Linux, **Open download folder** reveals the verified AppImage/deb with manual
-installation instructions. Close EoZ, replace the AppImage or install the deb,
-then reopen it. Linux updates do not run the Windows installer or claim an
-automatic restart; the saved profile remains in the native application-data
-location.
-
-The wiki data flow is server-side and low priority:
-
-```text
-EQLWiki content → local exporter → gzip + SHA-256 manifest
-               → GitHub dataset branch → verified local cache
-```
-
-Official installers include a production snapshot, so first launch does not reconstruct the wiki corpus. Startup, hourly background checks and **Sync with Wiki** check the small GitHub manifest; a changed version downloads and verifies the pack before replacing the cache. Overlapping requests share one check, and failure keeps the last valid data. Settings separates the last check, successful check, dataset generation, download and next check times. Players do not poll EQLWiki for dataset updates.
-
-The producer reads production MediaWiki's local content/database services and builds zone aliases, NPC locations/provenance, normal/raid source variants, items and embedded icons. Hourly host eligibility checks rebuild after 24 hours since the last successful publication; manual refresh remains available. Only the filtered manifest and compressed pack reach the dedicated `dataset` branch. Staging's private database copies use the same 24-hour freshness guard and separate hourly eligibility checks. Installing producer changes and rebuilding the dataset are separate from a desktop release; see [server operations](server/README.md).
-
-## Development and validation
-
-Node.js 22+ is required. Normal development works on Windows, macOS or Linux;
-release packages target Windows x64 and Linux x64. See the
-[platform/release guide](docs/FONTS_LINUX.md) for CI evidence and remaining
-desktop/game acceptance.
-
-```bash
-npm ci
-npm test
-npm start
-```
-
-Fetch the verified production bootstrap before catalog checks or packaging:
-
-```bash
-node scripts/fetch-bootstrap-pack.mjs --required
-npm run test:catalog
-npm run test:desktop-worker
-npm run dist:win
-npm run test:artifact
-```
-
-Linux packaging uses `npm run dist:linux`; the GitHub build performs native
-Linux packaged-executable checks under Xvfb. One publisher waits for both
-platform builds and their shared verified bootstrap before creating the release.
-
-Screenshots can be reproduced from the real Electron synthetic fixture without opening an actual game installation:
-
-```bash
-node scripts/test-native-overlays.mjs --screenshots <output-directory>
-node scripts/test-capture-workspace.mjs --screenshots <output-directory>
-```
-
-Tests with synthetic content do not establish live route quality, physical overlay focus/passthrough, monitor/DPI transitions or installer acceptance. Keep client archives, player logs, database snapshots, settings, generated packs and private diagnostic exports out of Git.
-
-### Developing the wiki integration
-
-Start with [EQLWiki's developer repository](https://github.com/Maergoth/EQLWiki)
-and the public [API documentation](https://eqlwiki.com/API_Documentation).
-EoZ uses the same attributed MediaWiki APIs available to other clients; it has
-no private edit proxy or shared bot identity. The desktop app opens the normal
-wiki login in a dedicated persistent session. Cookies and CSRF tokens stay in
-the trusted native service, and wiki IPC admits only the exact main frame.
-
-| Boundary | Entry points | Contract |
-| --- | --- | --- |
-| Desktop / renderer | [main](desktop/main.cjs), [preload](desktop/preload.cjs), [app](app/app.js) | Main owns private files, wiki transport and native windows; preload exposes bounded actions; the renderer owns the shared log/UI session. |
-| Auth and API transport | [WikiHost](desktop/wiki-host.cjs), [WikiClient](desktop/wiki-client.cjs) | Fixed wiki origin/session, current-account assertions, bounded requests and tokens kept outside renderer/draft state. |
-| Reviewed contributions | [workspace](app/capture-workspace.js), [draft builder](app/contribution-model.js), [queue](app/contribution-queue.js) | Resolve identity/task reasons, load current Help blueprints, preview every page, then publish scoped changes with revision/create-only guards and persisted partial retry. |
-| Character sharing | [model](app/character-model.js), [totals](app/character-totals.js), [sheet serializer](app/character-wiki-sheet.js) | Import known gear separately from confirmed recorded totals; share only a bounded managed Character (Server) block on the authenticated User page. |
-| Private Character inventory | [repository host](desktop/character-repository.cjs), [SQLite worker](desktop/character-repository-worker.cjs), [renderer client](app/character-repository-client.js), [pager](app/character-inventory-pager.js) | Stream validated exports into inactive generations, migrate original saves with verified backups, commit per-record edits with revision checks, and load bounded pages without an aggregate inventory cap. See [the contract](docs/SCALABLE_INVENTORY_STORAGE.md). |
-| Observation sync | [collector](app/drop-observations.js), [storage](desktop/drop-observation-storage.cjs), [sender](desktop/drop-observation-host.cjs) | Separate minimal schema-1 kill/loot outbox, stable IDs, account-bound receipts and due hourly batches; no article edits or raw-log upload. |
-| Published wiki data | [producer/host contract](server/README.md), [bootstrap fetch](scripts/fetch-bootstrap-pack.mjs), [client cache](desktop/main.cjs) | Wiki-local export → filtered GitHub `dataset` manifest/gzip → SHA-256-verified bootstrap/cache. Dataset refresh, observation ingestion and application releases are separate operations. |
-
-For a new integration, read account/source/revision context with `action=query`,
-load the documented current blueprints, and render an unsaved `action=parse`
-preview. Submit `action=edit` with the user's CSRF/account assertions plus
-`createonly` for new pages or `nocreate`/`baserevid` for patches. Screenshots use
-explicit reviewed `action=upload`; reconcile uncertain results before retrying.
-The separate `action=eozobservations` endpoint uses a versioned bounded batch
-and exhaustive per-event acknowledgements, not the article-edit workflow.
-
-Use [the contribution design](docs/design/WIKI_CONTRIBUTIONS.md),
-[persistent contribution ignores](docs/CONTRIBUTION_IGNORES.md),
-[evidence/outbox contract](docs/CONTRIBUTION_EVIDENCE_PLAN.md),
-[Character walkthrough](docs/CHARACTER_WALKTHROUGH.md) and
-[current release plan](docs/RELEASE_098_PLAN.md) for the detailed boundaries.
-Focused checks include `node tests/wiki-client.mjs`,
-`node tests/wiki-observations.mjs`, `node tests/drop-observations.mjs` and
-`npm run test:capture-workspace`; use disposable profiles and loopback wiki
-fixtures for writes. Run the full/platform/package gates for a release.
-Wiki PRs target `staging`; promote only scoped reviewed changes. File deployment
-does not publish database templates/scripts, install schema/private host jobs or
-refresh the dataset. See the wiki repository's contributor/operations guides
-before changing either side of that contract.
-
-| Documentation | Purpose |
+1. Download the Windows `Setup-<version>-x64.exe`, Linux
+   `<version>-x64.AppImage`, or Debian/Ubuntu `<version>-x64.deb` from
+   [Releases](https://github.com/Maergoth/EQL-EOZ/releases/latest).
+2. Choose your EverQuest Legends folder. Enable logging in the game with
+   `/log on`. EoZ follows the newest `eqlog_*.txt` in `Logs`; use
+   **Settings → Choose log** to select a particular log.
+3. Type `/who` to establish your character, zone, level and classes, then
+   `/loc` to place your last logged position on the map. EoZ reads these
+   messages; it does not type commands for you.
+4. Open **Overview** for current-zone suggestions and recent activity, then
+   use the sidebar to explore. Ordinary logs, maps, browsers, combat and
+   triggers do not require Screen Reading or a wiki login.
+5. Arrange floating panels with the header's **Overlays** control, or
+   [choose the features you want](#features-and-settings) in Settings.
+
+On Linux, make the AppImage executable or install the deb with your package
+manager. Choose the actual game directory inside your Wine/Proton prefix if
+applicable. X11/XWayland is preferred for independently positioned overlays;
+compositor restrictions can affect placement and mouse passthrough.
+See the [Linux guide](docs/FONTS_LINUX.md) and [Windows signing status](SIGNING.md).
+
+## Find a feature
+
+| Feature | Use it for |
 | --- | --- |
-| [Contributor handoff](docs/HANDOFF.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md) | Architecture, source ownership and exact next work |
-| [0.9.10 release record](docs/RELEASE_0910_PLAN.md), [discovery](docs/CONTRIBUTION_DISCOVERY_PLAN.md) and [item forms](docs/CONTRIBUTION_ITEM_FORM_PLAN.md) | Current request/evidence lifecycle, simpler review, component source map and separate app/wiki publication gates |
-| [Product vision](docs/UX_VISION.md) and [PNUT interaction plan](docs/PNUT_UX_PLAN.md) | UX contracts and feature scope |
-| [Window/map follow-up](docs/WINDOW_MAP_POLISH.md) | Current window, map and tour changes |
-| [Windows configuration writes](docs/WINDOWS_CONFIG_WRITES.md) | Bounded transient rename recovery without deleting existing settings |
-| [0.9.0 capture/contribution status](docs/CAPTURE_CONTRIBUTIONS.md) | Feature scope, ownership and acceptance contracts |
-| [0.9.0 release verification](docs/RELEASE_090.md) | Authorized release checks, platform evidence and publication ledger |
-| [Guided Character and overlay release](docs/CHARACTER_WALKTHROUGH.md) | Current flow, component ownership, native acceptance and 0.9.1 publication gates |
-| [Capture pipeline](docs/design/CAPTURE_PIPELINE.md), [wiki contribution contract](docs/design/WIKI_CONTRIBUTIONS.md) and [character/share contract](docs/design/CHARACTER_CAPTURE.md) | Local observation, reviewed write and independent stat/equipment semantics |
-| [Map validation](docs/MAP_VALIDATION.md) and [destination-only audit](docs/ROUTE_REJECTION_AUDIT.md) | Real local-archive observations and limits |
-| [Navigation architecture](docs/NAVMESH_EVALUATION.md) | Guarded worker routing and independent collision validation |
-| [Validation report](VALIDATION.md) and [Windows checklist](docs/WINDOWS_MANUAL_TEST.md) | Automated gates and remaining manual acceptance |
-| [Contributing](CONTRIBUTING.md), [security](SECURITY.md) and [signing](SIGNING.md) | Contribution and release boundaries |
-| [Overlay and item-form follow-ups](docs/OVERLAY_DRAG_DETACH_PLAN.md), [shared wiki item cards](docs/WIKI_ITEM_HOVERS_PLAN.md) | Next-release scope, source/native evidence, pending PR integration and remaining installer gates. |
+| [Workspace and overlays](#workspace-and-overlays) | Keep Parse, Map, Zone & loot and Triggers beside the game. |
+| [Live Map and Crawl](#live-map-and-crawl) | Follow logged locations, inspect destinations and clear visited targets. |
+| [NPCs, Items and Zone & loot](#npcs-items-and-zone--loot) | Find equipment, inspect effects and compare normal/raid sources. |
+| [Drops](#drops) | See the loot your selected log actually recorded. |
+| [Combat and Parse](#combat-and-parse) | Compare encounters, damage, healing, taken damage and AA gains. |
+| [Triggers](#triggers) | Set countdowns, log matches, sound and speech reminders. |
+| [Character](#character) | Import inventory/achievements, review stats and share an inspect. |
+| [Contribute to Wiki](#contribute-to-wiki) | Review missing facts, add sources and follow saved submissions. |
+| [Screen Reading](#optional-screen-reading) | Read supported visible stat/examine panels locally. |
+| [Features and Settings](#features-and-settings) | Choose components, appearance, log sources and update preferences. |
 
-The main source areas are `app/` (UI, parsing, maps and local knowledge), `desktop/` (Electron, overlays and file bridge), `server/` (wiki export), `scripts/` (build/validation), `tests/` and `wiki/` (optional launcher integration).
+Screenshots are **actual EoZ interfaces with synthetic demonstration data**.
+Captions identify their release versions; older images illustrate the named
+feature, while the text describes current use. They are not live-player
+screenshots or proof of public wiki submissions. More captures are available
+in **Settings → About Eye of Zomm → What's new**.
 
-Eye of Zomm is [MIT licensed](LICENSE). Zone Viewer, Recast/Detour and PNUT notices remain under `THIRD_PARTY/`.
+## Workspace and overlays
 
-NPC `zone = Various` is retained in the dataset as a scoped all-zones marker.
-Normal population uses the zone’s existing DynamicZoneList, which selects NPC
-pages in both the zone category and `NPCs`; missing membership adds the NPC
-category source. Only a player’s confirmed Notable choice adds a manual Notable
-NPCs summary entry. Automatic zone Unique Items additions retain the global
-fewer-than-six-monsters rule, require actual gear statistics beyond weight, and
-use only a pre-existing Unique Items row in the selected normal/raid scope.
-Zones such as Plane of Sky without that row are skipped.
+The main window contains all editors and browsers. Floating **Parse**, **Map**,
+**Zone & loot** and **Triggers** windows share its selected log and session.
 
-The 0.9.9 presentation layer is in `app/contribution-presentation.js` (queue
-categories, filters and order), `app/contribution-update.js` (specific gap fields
-and addition summaries), and `app/contribution-editor.js` (destination cards and
-form markup). `desktop/wiki-client.cjs` independently builds canonical reciprocal
-item/monster/zone edits; it never trusts a UI summary as authorization. Unsupported
-existing page layouts need manual resolution instead of destructive reformatting.
-`npm run test:workspace-099` exercises the real component with isolated synthetic
-records, including pointer timing, filters, focused tier changes and slot badges.
+- **Overlays** cycles **Unlocked → Locked → Hidden**. Unlock to move/resize;
+  locking keeps tabs and menus usable. **Ignore mouse** passes clicks through.
+- Drag a panel away to detach it; release beside another to dock their edges.
+  **Settings → Native overlays** controls visibility, layout locks, mouse
+  passthrough and **Reset positions**. Individual panels have opacity/text controls.
+- Recover mouse input through Settings, the tray, or **Ctrl+Shift+O** when
+  registered. **Minimize to tray** and **Start minimized** are optional.
+- Closing the main window can leave visible overlays running. Use **Quit Eye
+  of Zomm** from the tray to exit completely.
 
-Native desktop/installer artwork and 1.0 acceptance checks: [App icons](docs/APP_ICONS.md).
+![Overlay and font settings with synthetic data, EoZ 0.8.8](app/assets/whats-new/0.8.8/workspace.png)
+
+*Overlay settings, 0.8.8. Newer sections and sidebar entries are not shown.*
+
+## Live Map and Crawl
+
+Open **Live Map**, then choose **Map**, **Top down** or **First person**.
+Supported map files come from your chosen game folder. Readiness indicators
+show whether the folder, log, zone and `/loc` are available. Use **Center on
+last /loc** to return to your last recorded position.
+
+The cyan marker follows logged coordinates. Its arrow estimates movement,
+not character facing. The native Map offers **Follow**, zoom and **Auto Z**;
+change Z to inspect another floor, then restore Auto Z to follow logged height.
+In top 3D, left drag pans and right drag rotates.
+
+Choose a named mob or map label under **Navigate to**, then **Find path**.
+Routing is optional and requires map validation; an unsupported destination
+remains a marker. Static maps cannot know current doors or actors.
+
+![Logged marker and direction arrow on a synthetic map, EoZ 0.9.15](app/assets/whats-new/0.9.15/map-player-arrow.png)
+
+**Crawl** is shared between Map and Zone & loot. Fresh logged kills dim matching
+targets and collapse their Intel drops until the next zone visit. Turn it off
+to restore normal previews.
+
+![Crawl control and cleared targets with synthetic records, EoZ 1.0.0](app/assets/whats-new/1.0.0/crawl-intel.png)
+
+Read more: [Crawl](docs/CRAWL_MODE.md) · [map controls](docs/WINDOW_MAP_POLISH.md) ·
+[routing limits](docs/ROUTE_REJECTION_AUDIT.md).
+
+## NPCs, Items and Zone & loot
+
+**NPCs** searches the cached wiki catalog. Keep **Current zone only** checked
+for nearby sources, or clear it to browse other zones. **Items** adds class,
+slot, era and tier filters. **Any** shows every class; **Auto** follows your
+detected/profile classes. This filter does not change your Character.
+
+Hover or keyboard-focus an item for its wiki-style card and linked effects.
+Move the tier slider to compare previews: changed values are green and base
+comparisons are muted. Previews never change recorded Character totals.
+
+![Shared item card with synthetic NPC and loot data, EoZ 0.9.10](app/assets/whats-new/0.9.10/shared-wiki-itembox-main.png)
+
+The **Zone & loot** overlay separates Normal and Raid Zone sources. Use
+**Show More** for all matching drops; hover or focus a mob for **Details**,
+**Route**, **Copy /waypoint**, **Wiki** and **Map**. Its Map action previews the
+source without changing your logged location. A logged consider or named kill
+can reveal the matching row. Copied waypoints are for you to paste.
+
+![Normal and raid loot sources with synthetic records, EoZ 0.8.8](app/assets/whats-new/0.8.8/intel.png)
+
+*Zone & loot, 0.8.8. Current versions also offer Crawl as shown above.*
+
+Read more: [item previews](docs/SHARED_ITEM_SCALING.md) ·
+[loot classification](docs/CONTRIBUTION_LOOT_CLASSIFICATION.md).
+
+## Drops
+
+Open **Drops** for this session's observed loot, source labels and counts.
+These come from supported messages in the selected log, rather than everything
+a monster could drop. Use NPCs or Zone & loot for the wiki's known loot list.
+**New session** in Combat clears parse and loot totals while continuing at the
+current log position; it preserves your characters and triggers.
+
+![Drop log with synthetic session loot](docs/screenshots/drop-log.png)
+
+*Documentation capture of the actual Drops view with synthetic log events.*
+
+## Combat and Parse
+
+**Combat** shows session totals and recent encounters. The floating **Parse**
+panel adds **Overview**, **Damage**, **Healing**, **Taken** and **Session** tabs.
+Choose a whole session or encounter, then expand a combatant for abilities or
+incoming attackers. **Live** retains a completed fight until another begins;
+**Session** includes explicitly logged AA gains.
+
+Results depend on the messages your game log contains. Pets keep their names;
+unknown attackers remain unknown. Rune capacity is separate from measured
+healing or absorption. Damage and taken damage describe the same hits, so
+adding those columns would count them twice.
+
+![Per-combatant overview with synthetic damage and healing, EoZ 1.0.0](app/assets/whats-new/1.0.0/combatants.png)
+
+Read more: [combat scopes and log limitations](docs/COMBATANT_OVERVIEW.md).
+
+## Triggers
+
+Create a reminder or a literal/regular-expression log match in **Triggers**.
+Use **Test match**, set a cooldown and choose sound, speech or a countdown.
+Named captures can supply labels. Save a definition before **Fire now**.
+**Running countdowns** manages manual/repeating timers; the floating Triggers
+panel displays them. Respawn reminder durations are yours to supply, not a
+claim about the monster's actual respawn period.
+
+The optional **Swing → Show swing estimate** uses logged hits and misses;
+log timestamp precision limits its accuracy.
+
+![Log-trigger editor with a synthetic match expression, EoZ 0.8.8](app/assets/whats-new/0.8.8/timers.png)
+
+Read more: [triggers, countdowns and swing estimates](docs/TIMERS.md).
+
+## Character
+
+### Import inventory and achievements
+
+1. Enter your character name, server, race, level and AA count. Check **two or
+   three classes**. Characters are saved separately as **Character (Server)**.
+2. Keep all gear equipped and run both commands in EverQuest:
+
+   ```text
+   /outputfile inventory
+   /outputfile achievements
+   ```
+
+3. Click **Import files** once. EoZ reads the matching files from your chosen
+   game folder or opens a native chooser. Both must validate before saving;
+   cancellation or a failed import keeps the previous saved character.
+4. Search and page through carried items, bank and personal depot. Keyring and
+   unmatched exports have read-only source pages. Physical copies, locations,
+   counts, manual work and sockets retain their meaning; bag contents do not
+   become worn gear or attached Exaltations.
+
+![Two- or three-class picker with synthetic metadata, EoZ 1.0.7](app/assets/whats-new/1.0.7/character-class-checkboxes.png)
+
+![Paged inventory with synthetic cards, EoZ 1.0.6](app/assets/whats-new/1.0.6/large-inventory-import.png)
+
+Desktop inventory grows in private on-disk storage rather than one large
+browser value. Existing saves migrate with a recovery backup. Wait for pending
+edits to save before switching characters or sharing.
+
+### Review equipped, unbuffed stats
+
+Keep gear on, open Inventory, show the full stat panel and click off buffs.
+For **Default**, select **Stats** with both columns visible. For **Default
+Modern**, scroll down to include the stat panel and Additional Modifiers.
+The visible layout is recognized automatically.
+
+Choose your game window and **Read character stats**, or enter values manually.
+Correct uncertain numbers before **Use these stats and review**. Totals use
+only your reviewed reading: gear, Exaltations, catalog tiers and old baselines
+are not added. Reimporting gear requires a new current-stat review.
+
+![Equipped-stat preparation with synthetic data, EoZ 1.0.7](app/assets/whats-new/1.0.7/character-stat-guidance.png)
+
+### Inspect, export and share
+
+Hover or focus known equipped gear for its tier and Exaltations. Exaltation
+summaries show names and effects. Unknown wiki items stay private and leave
+public slots/sockets empty; contribute missing facts, sync accepted wiki data
+and import a fresh export when ready.
+
+**Copy PNG** and **Save PNG** create local equipment/stat images. **Share on my
+User page** requires a wiki login and a final review. It updates the matching
+Character (Server) sheet while preserving other characters and page content.
+Equipped gear, reviewed totals and achievements can be public; carried/banked
+inventory, raw exports and paths stay private.
+
+![Achievement progress in a synthetic Character review, EoZ 1.0.4](app/assets/whats-new/1.0.4/character-achievements.png)
+
+Optionally select or paste a picture in Share review. Check the whole image
+before sharing. Selection is local until Share; skipping it keeps the current
+wiki picture or **Add an image** placeholder. **Remove selected image** does
+not delete a public file. Image selection works with Screen Reading off.
+
+![Optional picture in the actual synthetic Share review, EoZ 1.0.8](app/assets/whats-new/1.0.8/character-screenshot.png)
+
+Read more: [walkthrough](docs/CHARACTER_WALKTHROUGH.md) ·
+[private storage/recovery](docs/CHARACTER_STORAGE.md) ·
+[achievements](docs/CHARACTER_ACHIEVEMENTS.md) ·
+[Character screenshots](docs/CHARACTER_SCREENSHOTS.md).
+
+## Contribute to Wiki
+
+Review discoveries or manually add missing facts in **Contribute to Wiki**.
+A task may update sources or locations on an existing page rather than create
+an article. Review the match and destination first. Automatic gaps require
+live public checks; failed checks do not prove that a page is missing.
+
+For an item prompt, open its complete examine window. With Screen Reading
+enabled, fresh matching readings can fill unedited fields and stage a
+screenshot. A screenshot alone does not establish a new discovery.
+Unknown-monster prompts can request your next `/loc`; stand at the spawn
+before typing it. Chat item mentions do not establish a drop source.
+
+![Discovery queue with synthetic candidates, EoZ 1.0.1](app/assets/whats-new/1.0.1/discovery-stability.png)
+
+Use structured stats, class/slot choices, source rows and optional screenshots.
+Unknown values stay blank. The local **Icon Finder** can match an icon crop
+without uploading it. **Preview** shows the page plan; confirm review before
+**Publish**. Signed-in automatic paths can also create an eligible freshly read
+item or append verified live loot sources; ambiguous work remains for review.
+Reopening historical logs does not publish their old observations.
+
+![Structured item fields with synthetic readings, EoZ 1.0.0](app/assets/whats-new/1.0.0/item-fields.png)
+
+**×** dismisses a task; **∞×** ignores its entity until restored in
+**Contribution History**. History lists this device's submissions for the
+current wiki account, including partial/unconfirmed results and saved-page
+links. It does not retry publication. EoZ-created/edited pages carry the
+[EoZ category](https://eqlwiki.com/Category:EoZ).
+
+![Submission history with synthetic receipts, EoZ 0.9.14](app/assets/whats-new/0.9.14/contribution-history.png)
+
+Read more: [item form](docs/ITEM_CONTRIBUTION_FORM.md) ·
+[History](docs/CONTRIBUTION_HISTORY.md) · [chat discoveries](docs/CHAT_ITEM_BOUNDARIES.md) ·
+[page tracking](docs/WIKI_PAGE_TRACKING.md).
+
+## Optional Screen Reading
+
+**Settings → Screen reading** is the master permission for local OCR/capture
+and starts disabled. Choose the source to read; Default and Default Modern
+stat panes are supported, while other skins remain unverified. Calibration
+selects a complete pane; **Full frame** resets it. Review uncertain numbers.
+
+Opening Contribute can start its reader while permission is enabled.
+**Pause automatic reading** keeps it paused until you resume. Character and
+Contribute coordinate ownership. Turning the master permission off stops
+readers and pending OCR, including screenshot-file/clipboard OCR; logs,
+manual text and inventory imports continue working.
+
+![Source controls with a synthetic preview, EoZ 0.9.0](app/assets/whats-new/0.9.0/screen-reading.png)
+
+*Historical source controls, 0.9.0; the master permission was added later.*
+
+Read more: [capture and review guide](docs/CAPTURE_CONTRIBUTIONS.md).
+
+## Features and Settings
+
+Use Settings to choose the components you want available. Feature controls
+preserve saved characters, triggers and drafts. Availability is separate from
+permission to read a screen or upload optional observations. See
+[feature controls](docs/FEATURE_CONTROLS.md) for switches and dependencies.
+Disabled features disappear from menus, Settings cards, Overview and related
+shortcuts. Their switches stay in **Settings → Features** so you can restore them.
+
+![Feature controls in the actual app with a synthetic profile](docs/screenshots/feature-controls.png)
+
+| Topic | What to change |
+| --- | --- |
+| Fonts | Font family, installed font selection and 10–20 px base text size; overlays also have their own adjustment. |
+| EverQuest folder / log | Game folder, a chosen log, or automatic newest-log selection. |
+| Native overlays | Visibility, layout lock, mouse passthrough and position recovery; opacity/text controls stay on individual panels. |
+| Screen reading | Explicit capture permission, source and local reading controls. |
+| Application updates | Check/download the next version and choose startup-download behavior. |
+| Wiki data | See dataset/check status and use **Sync with Wiki**. |
+| About Eye of Zomm | Open the illustrated What's new archive or report an issue. |
+
+### App updates and wiki data are separate
+
+An **application update** changes installed code and interface. A newly
+verified Windows update offers a five-second restart countdown that you can
+cancel. Linux reveals the verified AppImage/deb for manual installation.
+
+**Sync with Wiki** updates cached items, NPCs, icons and source records.
+Official packages include a production snapshot. Startup/hourly checks while
+EoZ is open use a small manifest and download changed data; failed checks keep
+the last valid cache. Item formulas update with the application, without
+background formula polling.
+
+[Public game-data download](https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/eqlwiki-eye-of-zomm-data.json.gz) ·
+[Version/checksum manifest](https://raw.githubusercontent.com/Maergoth/EQL-EOZ/dataset/manifest.json).
+This export is game/wiki entity data, not a private wiki account or SQL backup.
+
+### Optional drop observations
+
+**Collect and sync drop observations** saves minimal fresh kill/loot evidence
+and sends due batches while running and signed in, at most hourly with backoff.
+It excludes player names, raw chat/logs, paths, coordinates and screenshots.
+It is separate from article edits and does not calculate drop probabilities.
+Disable collection/upload to retain pending data without sending it.
+
+## Help and contributing
+
+EoZ reads supported files from your chosen folder and optional selected screen
+sources. It does not inspect game-process memory, inject code, patch game files
+or synthesize gameplay input. See [SAFETY.md](SAFETY.md).
+
+When [reporting an issue](https://github.com/Maergoth/EQL-EOZ/issues), include
+the app version and relevant visible status. Keep private logs/exports, chat
+screenshots and account information out of public reports. Settings offers a
+sanitized diagnostic export.
+
+Use [DEVELOPMENT.md](DEVELOPMENT.md) for setup, architecture, component/style
+contracts and validation; [CONTRIBUTING.md](CONTRIBUTING.md) describes contribution
+boundaries. [CHANGELOG.md](CHANGELOG.md) retains the complete release history.
+Eye of Zomm is [MIT licensed](LICENSE); bundled notices remain in `THIRD_PARTY/`.

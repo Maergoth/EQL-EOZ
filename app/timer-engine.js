@@ -69,6 +69,7 @@ function estimateInterval(times, seed = null) {
 
 export class TimerEngine {
     constructor({ now = () => Date.now(), definitions = [], state = null, matcher } = {}) {
+        this.enabled=true;this.availabilityEpoch=0;
         this.now = typeof now === 'function' ? now : () => Number(now);
         this.definitions = [];
         this.timers = [];
@@ -156,6 +157,7 @@ export class TimerEngine {
     drainCues() { return this.cues.splice(0); }
 
     async preview(input, line = '') {
+        if(!this.enabled)throw Error('Triggers are disabled in Settings.');
         const item = definition(input, input.id || 'preview');
         const result = await this.matcher.match({ pattern:item.type === 'spawn' ? item.npc : item.trigger || item.label, mode:item.type === 'spawn' ? 'contains' : item.match, ignorePunctuation:item.ignorePunctuation, line });
         const values = { line:result.line || String(line), match:result.match || '', name:item.label, ...(result.groups || {}) };
@@ -184,7 +186,7 @@ export class TimerEngine {
     }
 
     queueRegex(record) {
-        if (this.closed) return Promise.resolve(false);
+        if (this.closed||!this.enabled) return Promise.resolve(false);
         if (this.regexQueue.length >= 256) {
             this.matchingStatus = 'Trigger matcher is busy; excess log lines were skipped.';
             return Promise.resolve(false);
@@ -197,11 +199,13 @@ export class TimerEngine {
     async flushRegex() {
         if (this.regexBusy || this.closed || !this.regexQueue.length) return;
         this.regexBusy = true;
+        const epoch=this.availabilityEpoch;
         const records = this.regexQueue.splice(0, 128);
         const definitions = this.definitions.filter(item => item.enabled && item.type === 'text' && item.match === 'regex').map(item => ({ ...item }));
         let result;
         try {
             result = await this.matcher.batch(definitions, records.map(record => ({ id:record.id, text:record.text })));
+            if(!this.enabled||epoch!==this.availabilityEpoch){for(const record of records)record.resolve(false);return;}
             if (result.error && result.definitionId) {
                 const offender = this.definitions.find(item => item.id === result.definitionId);
                 if (offender) { offender.enabled = false; offender.error = result.error; }
@@ -215,7 +219,7 @@ export class TimerEngine {
                 const offender = this.definitions.find(item => item.id === result.definitionId);
                 if (offender) { offender.enabled = false; offender.error = result.error; }
             }
-            if (this.closed) { for (const record of records) record.resolve(false); return; }
+            if (this.closed||!this.enabled||epoch!==this.availabilityEpoch) { for (const record of records) record.resolve(false); return; }
             const matches = new Map((result.results || []).map(item => [`${item.lineId}|${item.definitionId}`, item.result]));
             for (const record of records) {
                 let changed = record.changed;
@@ -233,7 +237,13 @@ export class TimerEngine {
         finally { this.regexBusy = false; if (this.regexQueue.length && !this.closed) void this.flushRegex(); }
     }
 
+    setEnabled(value){
+        if(this.enabled===value)return;this.availabilityEpoch++;this.enabled=value;
+        if(!value){const at=this.now();for(const timer of this.timers)if(timer.status==='running'){timer.remainingMs=Math.max(0,timer.expiresAt-at);timer.status='paused';timer.expiresAt=null;}this.matcher.cancel?.();for(const record of this.regexQueue.splice(0))record.resolve(false);this.cues=[];this.notifications=[];this.resetSwing();}
+    }
+
     advance(at) {
+        if(!this.enabled)return;
         if (!finite(at)) throw new Error('Timer clock must be a finite timestamp.');
         this.notifications = this.notifications.filter(item => item.expiresAt > at);
         for (const timer of this.timers) {
@@ -285,6 +295,7 @@ export class TimerEngine {
     }
 
     consume(event, context = {}) {
+        if(!this.enabled)return false;
         const source = normalize(context.logId || context.character || 'current').slice(0, 240);
         if (this.swingSource !== source) {
             this.resetSwing();
@@ -382,6 +393,7 @@ export class TimerEngine {
     }
 
     command(action, args = {}) {
+        if(!this.enabled)throw Error('Triggers are disabled in Settings.');
         const at = this.now();
         this.advance(at);
         if (action === 'save-definition') {

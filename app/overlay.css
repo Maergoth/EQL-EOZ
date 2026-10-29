@@ -96,3 +96,5 @@ body[data-panel] .overlay-resize-edge[data-resize-edge=se]{bottom:0;right:0;widt
 body:is([data-panel=parse],[data-panel=intel]) .overlay-header{padding-right:12px}
 
 .character-item-details{display:grid;gap:5px;margin:12px 0}.character-item-details>div{display:grid;grid-template-columns:minmax(70px,auto) minmax(0,1fr);gap:10px}.character-item-details dt{color:var(--muted,#aab4c2)}.character-item-details dd{margin:0;min-width:0;overflow-wrap:anywhere}.character-item-details a{color:var(--gold2,#dfcb82)}
+
+[data-feature-ui-hidden]{display:none!important}

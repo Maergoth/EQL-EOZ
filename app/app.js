@@ -1,4 +1,16 @@
 import { EQLogParser } from './parser.js';
+import {FEATURE_IDS,normalizeFeatures,validateFeaturePatch,featureEnabled as registryEnabled,featureForView,featureForPanel} from './feature-registry.js';
+import {mountFeatureControls} from './feature-controls.js';
+import {mountFeatureVisibility} from './feature-visibility.js';
+import {mountSettingsNavigation} from './settings-navigation.js';
+const fallbackFeatureKey='eql-eye-of-zomm-features-v1';
+let featureState;
+try{featureState=window.eyeOfZommFeatures?await window.eyeOfZommFeatures.getState():{schemaVersion:1,revision:0,features:JSON.parse(localStorage.getItem(fallbackFeatureKey)||'{}')};}
+catch{featureState={schemaVersion:1,revision:0,features:window.eyeOfZommFeatures?Object.fromEntries(FEATURE_IDS.map(id=>[id,false])):{}};}
+let features=normalizeFeatures(featureState.features);
+const featureVisibility=mountFeatureVisibility({root:document,features});
+const featureEnabled=id=>registryEnabled(features,id);
+const featureApi=window.eyeOfZommFeatures||{async set(patch){validateFeaturePatch(patch);const next={...features,...patch};localStorage.setItem(fallbackFeatureKey,JSON.stringify(next));return {schemaVersion:1,revision:++featureState.revision,features:next};}};
 import { conForLevel } from './con-colors.js';
 import { catalogBaseStats, scaledItemStats } from './item-scaling.js';
 import { itemHasClassStats, itemHasZoneSource, itemMatchesClasses, scoreItemForBrowse } from './item-browse.js';
@@ -50,7 +62,7 @@ async function flushObservations(){
     if(!window.eyeOfZommObservations)return false;
     clearTimeout(observationRetry);observationRetry=null;
     const task=(async()=>{
-        try{while(observationPending.length){const batch=observationPending.slice(0,100);const result=await window.eyeOfZommObservations.collect(batch);if(result?.disabled){observationPreference=false;observationPending.splice(0);break;}observationPending.splice(0,batch.length);}observationWarning=false;return true;}
+        try{while(observationPending.length){const batch=observationPending.slice(0,100);const result=await window.eyeOfZommObservations.collect(batch);if(result?.featureDisabled)return false;if(result?.disabled){observationPreference=false;observationPending.splice(0);break;}observationPending.splice(0,batch.length);}observationWarning=false;return true;}
         catch{if(!observationWarning){observationWarning=true;showNotice('Drop observations could not be saved yet. They will retry while the app stays open.',{tone:'warning'});}if(!observationRetry)observationRetry=setTimeout(()=>{observationRetry=null;void flushObservations();},30000);return false;}
     })();observationSending=task;const saved=await task;if(observationSending===task)observationSending=null;return saved&&observationPending.length?flushObservations():saved;
 }
@@ -72,7 +84,7 @@ let fightExpiryTimer = null;
 let viewerSyncChain = Promise.resolve();
 let latestLocationSync = null;
 let pendingViewerLocation = null;
-let viewerFolderPromise = null;
+let viewerFolderPromise = null,mapFeatureEpoch=0;
 let viewerFolderPath = '';
 let viewerFolderStatus = 'idle';
 let viewerZoneState = { zone:'', status:'idle', message:'' };
@@ -203,7 +215,7 @@ function showNotice(message, options = {}) {
     if (!host || !message) return;
     const tone = ['success', 'warning', 'error'].includes(options.tone) ? options.tone : 'info';
     const toast = document.createElement('div');
-    toast.className = `toast toast-${tone}`;
+    toast.className = `toast toast-${tone}`;if(options.feature)toast.dataset.featureUi=options.feature;
     toast.setAttribute('role', tone === 'error' ? 'alert' : 'status');
     const copy = document.createElement('span');
     copy.textContent = String(message);
@@ -256,7 +268,7 @@ async function writeClipboardText(text) {
 
 function waypointNameControl(name, worldLocation) {
     const command = waypointCommandForWorldLocation(worldLocation);
-    if (!command) return `<span class="waypoint-npc-label">${esc(name)}</span>`;
+    if (!command||!featureEnabled('map')) return `<span class="waypoint-npc-label">${esc(name)}</span>`;
     return `<button type="button" class="waypoint-npc" data-waypoint="${esc(command)}" title="Copy ${esc(command)}" aria-label="Copy waypoint for ${esc(name)}"><span>${esc(name)}</span><span class="waypoint-copy-cue" aria-hidden="true">⧉</span></button>`;
 }
 
@@ -452,7 +464,7 @@ function acceptLiveWikiEntries(snapshot){
         const content=$('.content'),loot=$('#map-loot-pane'),scroll=content?.scrollTop,lootScroll=loot?.scrollTop,s=state(),profile=effectiveProfile(s),view=$('.nav-button.is-active')?.dataset.view||'overview';
         buildItemSlotSelect();renderHeader(s,profile);renderViewPanel(view,s,profile);captureWorkspace.refresh();
         if(content)content.scrollTop=scroll;if(loot)loot.scrollTop=lootScroll;
-        syncRareMobsToViewer(false);void overlaySession.publish();
+        if(featureEnabled('map'))syncRareMobsToViewer(false);void overlaySession.publish();
     },100);
 }
 
@@ -654,7 +666,7 @@ function consumeText(text, allowTransientUi = true) {
     let requiresFullRender = false;
     for (const line of lines) {
         const previousZone = parser.zone;
-        const event = parser.parse(line, { recordSession:allowTransientUi || parser.sessionNumber === 1 });
+        const event = parser.parse(line, { recordSession:allowTransientUi || parser.sessionNumber === 1,recordCombat:featureEnabled('combat'),recordDrops:featureEnabled('drops') });
         if (event && event.type !== 'location') requiresFullRender = true;
         if (event?.type === 'zone') {
             const canonicalZone = loggedZoneName(pack.zones,event.zone,event.zoneShortName);
@@ -669,33 +681,33 @@ function consumeText(text, allowTransientUi = true) {
         if (event?.type === 'location') latestLocation = { ...event.location };
         const originalAt = Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] || '');
         const freshTimerEvent = Number.isFinite(originalAt) && Math.abs(Date.now() - originalAt) <= 10000;
-        const crawlKill=crawlMode.snapshot().enabled&&['kill','zone','profile'].includes(event?.type)?crawlMode.consume(event,{
+        const crawlKill=(featureEnabled('map')||featureEnabled('npcIntel'))&&crawlMode.snapshot().enabled&&['kill','zone','profile'].includes(event?.type)?crawlMode.consume(event,{
             ...crawlContext(),live:allowTransientUi&&freshTimerEvent,at:parser.currentLineAt,
             playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)},
             event.type==='kill'?rareMobsForZone(state(),effectiveProfile(state()),{includeGeneric:true}).map(crawlCandidate):[]):null;
         let listedTarget = false;
         if(crawlKill)listedTarget=true;
-        else if (allowTransientUi && freshTimerEvent && ['consider','kill'].includes(event?.type)) listedTarget = focusIntelForConsider(event.type === 'consider' ? event.target : {name:event.victim});
+        else if (featureEnabled('npcIntel')&&allowTransientUi && freshTimerEvent && ['consider','kill'].includes(event?.type)) listedTarget = focusIntelForConsider(event.type === 'consider' ? event.target : {name:event.victim});
         if(['profile','zone'].includes(event?.type))cancelDiscoveryChecks();
-        if (!listedTarget && event?.type!=='kill') wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt,playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)});
+        if (featureEnabled('contributions')&&!listedTarget && event?.type!=='kill') wikiDiscovery.consume(event,{live:allowTransientUi && freshTimerEvent,logId:bridgeInfo?.logPath || 'current-log',zone:parser.zone,at:parser.currentLineAt,playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)});
         overlaySession.consume(event, { zone:parser.zone, character:parser.character, live:allowTransientUi && freshTimerEvent,
             text:line, at:parser.currentLineAt, logId:bridgeInfo?.logPath || 'current-log' });
         const observationCursor=++observedLogCursor;
-        if(observationPreference&&window.eyeOfZommObservations&&allowTransientUi&&freshTimerEvent&&['loot','kill'].includes(event?.type)){
+        if(featureEnabled('dropObservations')&&observationPreference&&window.eyeOfZommObservations&&allowTransientUi&&freshTimerEvent&&['loot','kill'].includes(event?.type)){
             if(observationPack!==pack){observationPack=pack;observationResolver=createWikiResolver(pack);}
             const source=bridgeInfo?.logPath||'current-log',server=String(source).split(/[\\/]/).pop()?.match(/^eqlog_[^_]+_(.+)\.txt$/i)?.[1]||'';
             const observation=collectDropObservation(event,{live:true,at:parser.currentLineAt,cursor:observationCursor,logId:source,sessionId:observationSession,server,zone:parser.zone,playerNames:[parser.character].filter(Boolean),pack,resolver:observationResolver});
             if(observation)queueObservation(observation);
         }
         if(allowTransientUi&&freshTimerEvent&&['zone','profile'].includes(event?.type))void discoveryContributionFlow?.cancelWhere(request=>request.purpose==='spawn-location',{close:true});
-        const captureLogResult=captureWorkspace.consumeLog(event,{zone:parser.zone,live:allowTransientUi&&freshTimerEvent,
+        const captureLogResult=featureEnabled('contributions')?captureWorkspace.consumeLog(event,{zone:parser.zone,live:allowTransientUi&&freshTimerEvent,
             logId:bridgeInfo?.logPath||'current-log',at:parser.currentLineAt,cursor:observationCursor,
-            logLine:line.slice(0,2048),playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)});
+            logLine:line.slice(0,2048),playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200)}):null;
         if(captureLogResult?.prompt)void discoveryContributionFlow?.cancelWhere(request=>request.purpose==='spawn-location'&&request.candidateId!==captureLogResult.prompt.candidateId,{close:true});
     }
     overlaySession.flush();
     if (zoneChanged || latestLocation && (!previousLocation || ['x','y','z'].some(key => previousLocation[key] !== latestLocation[key]))) overlaySession.requestPublish();
-    if (zoneChanged) {
+    if (featureEnabled('map')&&zoneChanged) {
         pendingViewerLocation = null;
         const sourceContext = mapSourceContext(), requestedZone = zoneKey(parser.zone);
         queueViewerSync(async () => {
@@ -716,7 +728,7 @@ function consumeText(text, allowTransientUi = true) {
 }
 
 function state() {
-    return parser.snapshot();
+    return parser.snapshot({includeCombat:featureEnabled('combat'),includeDrops:featureEnabled('drops'),includeNpcIntel:featureEnabled('npcIntel')||featureEnabled('map')});
 }
 
 function crawlContext(s=state()) {
@@ -784,9 +796,9 @@ function overlaySessionSnapshot() {
     const crawl=crawlMode.snapshot();
     const profile = effectiveProfile(s);
     const budget = { remaining:240 * 1024 };
-    const canRoute = Boolean(settings.routingEnabled && s.zone && s.location);
-    const sources = rareMobsForZone(s, profile, { includeGeneric:!settings.intelNamedOnly });
-    const npcs = sources.map(source => ({
+    const canRoute = featureEnabled('map')&&Boolean(settings.routingEnabled && s.zone && s.location);
+    const sources = featureEnabled('map')||featureEnabled('npcIntel')?rareMobsForZone(s, profile, { includeGeneric:!settings.intelNamedOnly }):[];
+    const npcs = (featureEnabled('npcIntel')?sources:[]).map(source => ({
         id:intelIdentity(source), name:source.name, raidInstance:raidVariant(source), defeated:crawlMode.isDefeated(crawlCandidate(source)), level:source.npc?.avgLevel || 0,
         levelMin:source.npc?.levelMin || 0, levelMax:source.npc?.levelMax || 0,
         con:conForLevel(source.npc?.avgLevel, profile.level), named:isNamedSource(source.name), rare:true,
@@ -798,7 +810,7 @@ function overlaySessionSnapshot() {
     const selected = focusedIntelTarget && zoneKey(focusedIntelTarget.zone) === zoneKey(s.zone) ? focusedIntelTarget : null;
     const navigation = activeRoute?.status === 'ready' && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? viewerApi()?.overlayNavigation?.() : null;
     return { character:s.character, zone:s.zone, crawl, logStatus:bridgeInfo?.logExists ? 'Following selected log' : 'Waiting for log',
-        parse:compactParseSnapshot(s), intel:{ npcs, zone:s.zone, crawlEnabled:crawl.enabled, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
+        parse:featureEnabled('combat')?compactParseSnapshot(s):null, intel:{ npcs, zone:s.zone, crawlEnabled:crawl.enabled, myClassOnly:Boolean(settings.intelMyClassOnly), itemTier:Number(settings.itemTier) || 0, canRoute,
             packVersion:pack.meta?.manifestVersion || pack.meta?.version || '', profileKey:JSON.stringify([profile.classes.slice().sort(),settings.itemTier,settings.era]),
             focusedNpcId:selected?.id || '', focusSequence:intelFocusSequence },
         map:{ zone:s.zone, viewerZone:viewerZoneTarget(pack.zones,s.zone,parser.zoneShortName), dataVersion:mapDataRevision, location:s.location, selectedNpcId:selected?.id || '', selectedNpcName:selected?.name || '',
@@ -807,7 +819,8 @@ function overlaySessionSnapshot() {
             route:{ points:navigation?.points || [], message:activeRoute && zoneKey(activeRoute.zone) === zoneKey(s.zone) ? activeRoute.message : '' } } };
 }
 
-async function handleOverlayCommand({ action, payload = {} }) {
+async function handleOverlayCommand({ action, panel, payload = {} }) {
+    if(!featureEnabled('overlays')||!featureEnabled(featureForPanel(panel))||['session:route','session:map-data','session:map-focus','session:cancel-route','session:copy-waypoint'].includes(action)&&!featureEnabled('map'))throw Error('This feature is disabled in Settings.');
     if (action === 'session:new-session') { startNewSession(); return; }
     if(action==='session:crawl-mode'){
         crawlMode.context(crawlContext());crawlMode.setEnabled(payload.enabled);renderAll();return crawlMode.snapshot();
@@ -874,6 +887,7 @@ async function handleOverlayCommand({ action, payload = {} }) {
     }
     if (action === 'session:open') {
         if (!['map', 'items', 'npcs', 'combat', 'timers', 'settings'].includes(payload.view)) return;
+        if(!featureEnabled(featureForView(payload.view)))throw Error('This feature is disabled in Settings.');
         const npc = payload.npc ? resolveNpc() : null;
         const item = payload.item ? itemRecord(payload.item) : null;
         if (payload.item && !item) throw new Error('That item is no longer available in the current dataset.');
@@ -1140,8 +1154,8 @@ function renderHeader(s, profile) {
 }
 
 function renderMetrics(s, profile) {
-    const fight = s.fight?.active ? s.fight : null;
-    $('#metric-fight').textContent = fight ? `${formatNum(fight.dps)} DPS` : '0 DPS';
+    const fight = featureEnabled('combat')&&s.fight?.active ? s.fight : null;
+    $('#metric-fight').textContent = !featureEnabled('combat')?'Disabled':fight ? `${formatNum(fight.dps)} DPS` : '0 DPS';
     $('#metric-fight-detail').textContent = fight ? `${fight.name} · ${formatNum(fight.damage)} damage${fight.active ? ' · active' : ''}` : 'No outgoing damage yet';
     clearTimeout(fightExpiryTimer);
     if (fight) {
@@ -1191,7 +1205,7 @@ function eventText(e) {
 
 function renderEvents(s) {
     // Repeated /loc lines drive the map but should not flood the Overview.
-    const events = s.recentEvents.filter(event => event.type !== 'location').slice(0,12);
+    const events = s.recentEvents.filter(event => event.type !== 'location'&&(featureEnabled('combat')||!['damage','heal','taken','rune','combatant-damage','combatant-heal','aa-gain'].includes(event.type))&&(featureEnabled('drops')||event.type!=='loot')).slice(0,12);
     const html = events.map(e => `<div class="event-row"><span class="event-type">${esc(e.type)}</span><span>${esc(eventText(e))}</span><span class="event-value">${e.amount ? formatNum(e.amount) : ''}</span></div>`).join('');
     $('#recent-events').className = events.length ? 'event-feed' : 'event-feed empty-state';
     $('#recent-events').innerHTML = events.length ? html : 'Waiting for log activity.';
@@ -1370,7 +1384,7 @@ function renderNpcList(s, profile) {
             ${n.damageDone ? `<div class="sub" style="margin-top:9px">${formatNum(n.damageDone)} damage observed this session</div>` : ''}
             <div class="card-actions">
                 <a class="mini-button" href="${wikiUrl(n.wikiTitle || n.name)}" target="_blank" rel="noopener">Open on Wiki</a>
-                <button class="mini-button path-npc" data-npc="${esc(n.name)}">Path in map</button>
+                <button data-feature-ui="map" class="mini-button path-npc" data-npc="${esc(n.name)}">Path in map</button>
             </div>
         </article>`;
     }).join('') || '<div class="empty-state">No NPCs match the current filters.</div>';
@@ -1421,7 +1435,7 @@ function renderItems(s, profile) {
             <div class="stats">${statHtml}</div>
             ${(item.dropSources||[]).length ? `<div class="item-sources"><span class="filter-label">Sources</span>${item.dropSources.slice(0,6).map(source => {
                 const canPath = Boolean(s.zone && source.zone && zoneKey(source.zone) === zoneKey(s.zone));
-                return `<div class="source-row"><span>${source.zone ? `${esc(source.zone)} · ` : ''}${esc(source.name)}</span><span class="source-actions"><a class="text-button" href="${wikiUrl(source.name)}" target="_blank" rel="noopener">Wiki</a>${canPath ? `<button class="text-button path-npc" data-npc="${esc(source.name)}">Path</button>` : ''}</span></div>`;
+                return `<div class="source-row"><span>${source.zone ? `${esc(source.zone)} · ` : ''}${esc(source.name)}</span><span class="source-actions"><a class="text-button" href="${wikiUrl(source.name)}" target="_blank" rel="noopener">Wiki</a>${canPath ? `<button data-feature-ui="map" class="text-button path-npc" data-npc="${esc(source.name)}">Path</button>` : ''}</span></div>`;
             }).join('')}</div>` : ''}
             ${item.notes ? `<div class="sub" style="margin-top:9px">${esc(item.notes)}</div>` : ''}
             <div class="card-actions"><a class="mini-button" href="${wikiUrl(item.wikiTitle || item.name)}" target="_blank" rel="noopener">Item wiki</a></div>
@@ -1636,10 +1650,11 @@ function renderMapReadiness(s = state()) {
 }
 
 function renderViewPanel(view, s, profile) {
+    if(!featureEnabled(featureForView(view)))return;
     if (view === 'map') {
         renderMapLootPane(s,profile);
     } else if (view === 'overview') {
-        renderOverviewNpcs(s, profile);
+        if(featureEnabled('npcIntel'))renderOverviewNpcs(s, profile);else $('#overview-npcs')?.replaceChildren();
         renderEvents(s);
     } else if (view === 'npcs') {
         renderNpcList(s, profile);
@@ -1692,9 +1707,25 @@ function renderAll() {
     captureWorkspace.refresh();
 }
 
+function applyFeatureAvailability(next){
+    const previous=features;featureState=next;features=normalizeFeatures(next.features);
+    for(const button of $$('[data-view]'))button.hidden=!featureEnabled(featureForView(button.dataset.view));
+    for(const panel of $$('[data-view-panel]'))panel.hidden=!featureEnabled(featureForView(panel.dataset.viewPanel));
+    if(!featureEnabled('combat')&&previous.combat)parser.suspendCombat();
+    if(!featureEnabled('triggers')&&previous.triggers)timerAlerts.stop();
+    if(!featureEnabled('contributions')){cancelDiscoveryChecks();void discoveryContributionFlow?.cancelWhere(()=>true,{close:true});}
+    if(previous.map!==features.map)mapFeatureEpoch++;
+    if(!featureEnabled('map')){clearActiveRoute();mapDataLoader.invalidate();retireViewerLocation();viewerReady=false;viewerFolderPromise=null;const frame=$('#zone-viewer');if(frame?.getAttribute('src'))frame.removeAttribute('src');}
+    else{const frame=$('#zone-viewer');if(frame&&!frame.getAttribute('src'))frame.src=frame.dataset.featureSrc||'./zoneviewer/viewer.html';}
+    featureVisibility.setFeatures(features);overlaySession.setFeatures(features);captureWorkspace.setFeatures?.(features);
+    if(!previous.dropObservations&&features.dropObservations)void flushObservations();
+    const view=$('.nav-button.is-active')?.dataset.view||'overview';if(!featureEnabled(featureForView(view)))setView('overview',{remember:false});
+    void renderObservationStatus();renderAll();
+}
+
 function setView(view, options = {}) {
     hideItemTooltip();
-    if (!$(`[data-view-panel="${view}"]`)) view = 'overview';
+    if (!$(`[data-view-panel="${view}"]`)||!featureEnabled(featureForView(view))) view = 'overview';
     $$('.nav-button').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
     $$('[data-view-panel]').forEach(p => p.classList.toggle('is-active', p.dataset.viewPanel === view));
     document.body.classList.toggle('map-active', view === 'map');
@@ -1815,6 +1846,8 @@ async function waitForViewerApi(timeout = 8000) {
 }
 
 async function ensureViewerFolderConnected(showFeedback = false, force = false) {
+    if(!featureEnabled('map'))return false;
+    const epoch=mapFeatureEpoch,current=()=>featureEnabled('map')&&epoch===mapFeatureEpoch;
     if (!bridgeInfo?.eqRootExists) {
         updateViewerFolderStatus('missing');
         if (showFeedback) showSettingsNotice('Choose your EverQuest folder first.');
@@ -1824,6 +1857,7 @@ async function ensureViewerFolderConnected(showFeedback = false, force = false) 
     const targetPath = String(bridgeInfo.eqRootPath || '');
     if (viewerFolderPromise) await viewerFolderPromise.catch(() => false);
     const apiObj = await waitForViewerApi();
+    if(!current())return false;
     if (!apiObj) {
         updateViewerFolderStatus('error', 'Viewer unavailable');
         if (showFeedback) showNotice('The Zone Viewer did not finish loading. Reopen Live Map and try again.', { tone:'error' });
@@ -1838,6 +1872,7 @@ async function ensureViewerFolderConnected(showFeedback = false, force = false) 
     viewerFolderPromise = (async () => {
         try {
             const result = await apiObj.useConfiguredFolder?.();
+            if(!current())return false;
             const ready = result?.ok === true || (result == null && Boolean(apiObj.status?.().directorySelected));
             if (ready) {
                 viewerFolderPath = targetPath;
@@ -1866,6 +1901,7 @@ async function ensureViewerFolderConnected(showFeedback = false, force = false) 
 }
 
 async function syncZoneToViewer(showFeedback = true) {
+    if(!featureEnabled('map'))return false;
     const s = state();
     if (!s.zone) {
         if (showFeedback) showNotice('The folder and log are ready. Eye of Zomm is waiting for the next zone line.', { tone:'warning' });
@@ -1873,7 +1909,7 @@ async function syncZoneToViewer(showFeedback = true) {
     }
     const request = { zone:zoneKey(s.zone), status:'loading', message:`Loading ${s.zone} from your local EverQuest files…` };
     viewerZoneState = request;
-    const isCurrent = () => viewerZoneState === request && zoneKey(state().zone) === request.zone;
+    const isCurrent = () => featureEnabled('map')&&viewerZoneState === request && zoneKey(state().zone) === request.zone;
     const fail = message => {
         if (!isCurrent()) return false;
         Object.assign(request, { status:'error', message });
@@ -1924,9 +1960,10 @@ async function syncZoneToViewer(showFeedback = true) {
 }
 
 async function syncLocationToViewer(showFeedback = true, requestedLocation = null) {
+    if(!featureEnabled('map'))return false;
     const s = state();
     const sourceContext = mapSourceContext(), requestedZone = zoneKey(s.zone);
-    const isCurrent = () => mapSourceContextMatches(sourceContext) && zoneKey(state().zone) === requestedZone;
+    const isCurrent = () => featureEnabled('map')&&mapSourceContextMatches(sourceContext) && zoneKey(state().zone) === requestedZone;
     const location = requestedLocation || s.location;
     if (!location) {
         const message = !bridgeInfo?.eqRootExists
@@ -2016,6 +2053,7 @@ function clearActiveRoute(options = {}) {
 }
 
 function scheduleRouteRefresh(location) {
+    if(!featureEnabled('map'))return;
     if (!activeRoute || zoneKey(activeRoute.zone) !== zoneKey(state().zone)) return;
     if (activeRoute.status === 'working' || routeRefreshTimer) return;
     if (locationDistance(location, activeRoute.lastRoutedLocation) < ROUTE_REFRESH_DISTANCE) return;
@@ -2472,7 +2510,7 @@ function wireUi() {
 
 buildClassChips();
 wireUi();
-const overlaySession = createOverlaySession({ api:window.eyeOfZommOverlays, getSession:overlaySessionSnapshot,
+const overlaySession = createOverlaySession({ api:window.eyeOfZommOverlays, getSession:overlaySessionSnapshot,features,
     onCommand:handleOverlayCommand, onCues:cues => timerAlerts.play(cues), notify:message => showNotice(message, { tone:'warning' }) });
 const timerAlerts = createTimerAlerts();
 const wikiDiscovery = createWikiDiscovery({getPack:()=>pack,
@@ -2484,7 +2522,7 @@ const wikiDiscovery = createWikiDiscovery({getPack:()=>pack,
     onWarning:message=>showNotice(message,{tone:'warning'})});
 function cancelDiscoveryChecks(){
     wikiDiscovery.cancelChecks();
-    void window.eyeOfZommDiscovery?.action('cancel-item-checks').catch(()=>{});
+    if(featureEnabled('contributions'))void window.eyeOfZommDiscovery?.action('cancel-item-checks').catch(()=>{});
 }
 window.eyeOfZommDiscovery?.onAction?.(event=>{
     const {action,id,candidateId,purpose,captureRequest,captureState,captureMessage}=event;
@@ -2533,18 +2571,21 @@ discoveryContributionFlow=createDiscoveryContributionFlow({
     dismiss:value=>window.eyeOfZommDiscovery.action('dismiss',{id:value.id})
 });
 const characterStorage=await createCharacterStorage({onWarning:message=>showNotice(message,{tone:'warning'})});
-captureWorkspace = mountCaptureWorkspace({characterStorage,contributionStorage:characterStorage,getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
+captureWorkspace = mountCaptureWorkspace({features,characterStorage,contributionStorage:characterStorage,getPack:()=>pack,getProfile:()=>({...effectiveProfile(state()),character:state().character}),
     getAppearance:()=>settings.appearance,notify:showNotice,navigate:view=>setView(view),
     onDiscoveryItem:(observation,match)=>discoveryContributionFlow.recordItem(observation,match),
     onDiscoveryLocation:location=>discoveryContributionFlow.recordLocation(location),
     onDiscoveryCapture:(request,result)=>discoveryContributionFlow.ready(request,result)});
 const stopLiveWikiEntries=window.eyeOfZommWiki?.onLiveEntriesChanged?.(acceptLiveWikiEntries);
 void window.eyeOfZommWiki?.liveEntries?.().then(acceptLiveWikiEntries).catch(()=>{});
-const observationSettings=document.createElement('section');observationSettings.className='observation-settings';observationSettings.innerHTML='<h2>Drop observations</h2><label class="check-control"><input type="checkbox" data-observation-enabled checked> Collect and sync drop observations</label><p class="settings-helper">Keeps minimal kill and loot observations locally and sends them hourly when logged in to the wiki. Chat, screenshots and file paths are excluded. Drop percentages are not calculated yet.</p><p data-observation-status role="status"></p><a href="https://eqlwiki.com/API_Documentation" target="_blank" rel="noopener">Wiki API documentation</a>';document.getElementById('capture-settings').append(observationSettings);
-const renderObservationStatus=async()=>{try{const status=await window.eyeOfZommObservations?.status();if(!status){observationSettings.hidden=true;return;}observationPreference=status.enabled;observationSettings.querySelector('[data-observation-enabled]').checked=status.enabled;observationSettings.querySelector('[data-observation-status]').textContent=`${status.pending} pending · ${status.acknowledged} delivered${status.error?' · '+status.error:''}`;}catch{observationSettings.querySelector('[data-observation-status]').textContent='Observation storage unavailable.';}};
+const observationSettings=document.createElement('section');observationSettings.className='observation-settings';observationSettings.innerHTML='<h2>Drop observations</h2><label class="check-control"><input type="checkbox" data-observation-enabled checked> Collect and sync drop observations</label><p class="settings-helper">Keeps minimal kill and loot observations locally and sends them hourly when logged in to the wiki. Chat, screenshots and file paths are excluded. Drop percentages are not calculated yet.</p><p data-observation-status role="status"></p><a href="https://eqlwiki.com/API_Documentation" target="_blank" rel="noopener">Wiki API documentation</a>';document.getElementById('observation-settings').append(observationSettings);
+const renderObservationStatus=async()=>{try{const status=await window.eyeOfZommObservations?.status();if(!status){observationSettings.hidden=true;return;}observationPreference=status.enabled;const input=observationSettings.querySelector('[data-observation-enabled]');input.checked=status.enabled;input.disabled=!featureEnabled('dropObservations');observationSettings.querySelector('[data-observation-status]').textContent=!featureEnabled('dropObservations')?'Drop observations are disabled in Features. Saved observations and your collection preference are kept.':`${status.pending} pending · ${status.acknowledged} delivered${status.error?' · '+status.error:''}`;}catch{observationSettings.querySelector('[data-observation-status]').textContent='Observation storage unavailable.';}};
 observationSettings.querySelector('[data-observation-enabled]').onchange=async event=>{try{await window.eyeOfZommObservations.configure({enabled:event.target.checked});await renderObservationStatus();}catch(error){showNotice(error.message,{tone:'warning'});await renderObservationStatus();}};
+const settingsNavigation=mountSettingsNavigation();
+const featureSettings=mountFeatureControls({root:$('#feature-settings'),api:featureApi,initial:featureState,beforeChange:patch=>captureWorkspace.prepareFeatureChange?.(patch),onChange:applyFeatureAvailability});
+applyFeatureAvailability(featureState);
 void renderObservationStatus();const observationStatusTimer=setInterval(()=>void renderObservationStatus(),60000);
-window.addEventListener('pagehide', () => { clearTimeout(liveEntriesTimer);stopLiveWikiEntries?.();clearTimeout(observationRetry);clearInterval(observationStatusTimer);wikiDiscovery.dispose();void discoveryContributionFlow.dispose();captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
+window.addEventListener('pagehide', () => { clearTimeout(liveEntriesTimer);stopLiveWikiEntries?.();clearTimeout(observationRetry);clearInterval(observationStatusTimer);wikiDiscovery.dispose();void discoveryContributionFlow.dispose();featureSettings.dispose();featureVisibility.dispose();settingsNavigation.dispose();captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

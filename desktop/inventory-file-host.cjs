@@ -50,25 +50,26 @@ async function readStableFile(target,io){
     }finally{await handle.close();}
 }
 class InventoryFileHost{
-    constructor({electron,origin,getMainWindow,readConfig,fsImpl=fsp}={}){
+    constructor({electron,origin,getMainWindow,readConfig,fsImpl=fsp,featureLease=()=>()=>true}={}){
         const url=new URL(origin);if(url.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(url.hostname)||url.origin!==origin)throw Error(`${label[0].toUpperCase()+label.slice(1)} reading requires the local app origin.`);
-        this.electron=electron;this.origin=origin;this.getMainWindow=getMainWindow;this.readConfig=readConfig;this.fs=fsImpl;this.disposed=false;this.busy=false;
+        this.featureLease=featureLease;this.electron=electron;this.origin=origin;this.getMainWindow=getMainWindow;this.readConfig=readConfig;this.fs=fsImpl;this.disposed=false;this.busy=false;
         electron.ipcMain.handle(CHANNEL,(event,action,value)=>this.handle(event,action,value));
     }
     isMain(event){const main=this.getMainWindow();return Boolean(!this.disposed&&main&&!main.isDestroyed()&&event.sender===main.webContents&&event.senderFrame===main.webContents.mainFrame&&event.senderFrame?.url===`${this.origin}/`);}
     async handle(event,action,value){
         if(!this.isMain(event))throw Error(`${label[0].toUpperCase()+label.slice(1)} files are available only in the main app.`);
+        const current=this.featureLease('character');if(!current())throw Error('Character is disabled in Settings.');
         if(action!=='read')throw Error(`Unknown ${label}-file action.`);
         if(this.busy)return {ok:false,error:`An ${label} export is already being read. Try again shortly.`};
         this.busy=true;
         try{
             if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(key=>!['name','server','chooseFile'].includes(key))||value.chooseFile!==undefined&&typeof value.chooseFile!=='boolean')throw new InventoryReadError(`Invalid ${label} export request.`);
             const expected=inventoryFileName(value.name,value.server),config=await this.readConfig();
-            if(!this.isMain(event))throw new InventoryReadError(`The app changed before the ${label} export could be read.`);
+            if(!current()||!this.isMain(event))throw new InventoryReadError(`The app changed before the ${label} export could be read.`);
             let target;
             if(value.chooseFile===true){
                 const choice=await this.electron.dialog.showOpenDialog(this.getMainWindow(),{title:`Choose ${command} export`,properties:['openFile'],filters:[{name:`${label[0].toUpperCase()+label.slice(1)} text export`,extensions:['txt']}],...(typeof config?.eqRootPath==='string'&&path.isAbsolute(config.eqRootPath)?{defaultPath:path.join(config.eqRootPath,expected)}:{})});
-                if(!this.isMain(event))throw new InventoryReadError(`The app changed before the ${label} export could be read.`);
+                if(!current()||!this.isMain(event))throw new InventoryReadError(`The app changed before the ${label} export could be read.`);
                 if(choice.canceled||!choice.filePaths?.length)return {ok:false,cancelled:true};
                 if(choice.filePaths.length!==1||typeof choice.filePaths[0]!=='string')throw new InventoryReadError(`Choose one ${label} text export.`);
                 target=choice.filePaths[0];
@@ -84,9 +85,9 @@ class InventoryFileHost{
                 }
                 if(!match)return {ok:false,notFound:true};target=path.join(root,match);
             }
-            if(!this.isMain(event))throw new InventoryReadError(`The app changed before the ${label} export could be read.`);
+            if(!current()||!this.isMain(event))throw new InventoryReadError(`The app changed before the ${label} export could be read.`);
             const result=await readStableFile(target,this.fs);
-            if(!this.isMain(event))throw new InventoryReadError(`The app changed before the ${label} export could be read.`);
+            if(!current()||!this.isMain(event))throw new InventoryReadError(`The app changed before the ${label} export could be read.`);
             return result;
         }catch(error){return {ok:false,error:error instanceof InventoryReadError?error.message:`The ${label} export could not be read. Run ${command}, or choose its text file and try again.`};}
         finally{this.busy=false;}

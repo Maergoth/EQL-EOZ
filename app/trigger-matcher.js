@@ -51,6 +51,11 @@ export class TriggerMatcher {
         else this.queue.shift()?.resolve({ matched:false, error, timedOut });
         this.drain();
     }
+    cancel() {
+        this.clearTimeout(this.startupTimer);this.worker?.terminate();this.worker=null;this.ready=false;
+        if(this.pending){this.clearTimeout(this.pending.timer);this.pending.resolve({matched:false,error:'Trigger matching was stopped.'});this.pending=null;}
+        for(const item of this.queue.splice(0))item.resolve({matched:false,error:'Trigger matching was stopped.'});
+    }
     close() {
         this.closed = true; this.clearTimeout(this.startupTimer); this.worker?.terminate(); this.worker = null;
         if (this.pending) { this.clearTimeout(this.pending.timer); this.pending.resolve({ matched:false, error:'Trigger matching has closed.' }); this.pending = null; }

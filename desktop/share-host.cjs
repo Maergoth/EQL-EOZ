@@ -18,8 +18,8 @@ function validatePng(value) {
 }
 
 class ShareHost {
-    constructor({electron,origin,getMainWindow}) {
-        Object.assign(this,{electron,origin,getMainWindow});
+    constructor({electron,origin,getMainWindow,featureLease=()=>()=>true}) {
+        Object.assign(this,{electron,origin,getMainWindow,featureLease});
         electron.ipcMain.handle(CHANNEL,(event,action,value)=>this.handle(event,action,value));
     }
     authorized(event) {
@@ -28,6 +28,7 @@ class ShareHost {
     }
     async handle(event,action,value) {
         if (!this.authorized(event)) throw Error('Snapshot sharing is unavailable.');
+        const current=this.featureLease(action==='copy-text'?'contributions':'character');if(!current())throw Error('This feature is disabled in Settings.');
         if (action==='copy-text') {
             if (typeof value!=='string'||!value||value.length>300000) throw Error('Wikicode is empty or too large.');
             this.electron.clipboard.writeText(value);return{ok:true};
@@ -37,6 +38,7 @@ class ShareHost {
         if (image.isEmpty()) throw Error('The PNG snapshot could not be decoded.');
         if (action==='copy-png') {this.electron.clipboard.writeImage(image);return{ok:true};}
         const result=await this.electron.dialog.showSaveDialog(this.getMainWindow(),{title:'Save character snapshot',defaultPath:`Eye-of-Zomm-character-${new Date().toISOString().slice(0,10)}.png`,filters:[{name:'PNG image',extensions:['png']}],properties:['showOverwriteConfirmation']});
+        if(!current())throw Error('The snapshot action was canceled.');
         if (result.canceled||!result.filePath) return{ok:false,canceled:true};
         if(path.extname(result.filePath).toLowerCase()!=='.png')throw Error('Choose a filename ending in .png so the save dialog can confirm any overwrite.');
         const target=result.filePath;

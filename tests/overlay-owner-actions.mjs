@@ -1,3 +1,4 @@
+import {featureEnabled as registryEnabled,featureForPanel,featureForView} from '../app/feature-registry.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -26,6 +27,7 @@ const raid={...normal,loc:[30,40,50],raidInstance:true};
 let current={zone:'Synthetic Zone',location:Object.freeze({x:1,y:2,z:3})};
 const calls=[];
 const context=vm.createContext({
+    featureEnabled:id=>registryEnabled({},id),featureForPanel,featureForView,
     state:()=>current,zoneKey:value=>String(value||'').toLowerCase(),
     npcRecordForName:(name,zone,isRaid)=>name===normal.name&&zone===normal.zone?(isRaid?raid:normal):null,
     intelIdentity:npc=>`${npc.zone}|${npc.name}|${npc.raidInstance?'raid':'normal'}`,
@@ -73,7 +75,7 @@ assert(resetFrom>=0&&resetTo>resetFrom&&consumeFrom>=0&&consumeTo>consumeFrom);
 const triggerCalls=[], discoveryCalls=[], contributionCalls=[], notices=[], publications=[];
 const overlayOwner={consume:(...args)=>triggerCalls.push(args),flush(){},publish:async()=>publications.push(parser.snapshot())};
 const discoveryOwner={consume:(...args)=>discoveryCalls.push(args)};
-const splitContext=vm.createContext({parser,partialLine:'[Wed Oct 21 12:00:02 2026] You slash Synthetic Keeper for ',logOffset:12345,
+const splitContext=vm.createContext({featureEnabled:id=>registryEnabled({},id),featureForPanel,featureForView,parser,partialLine:'[Wed Oct 21 12:00:02 2026] You slash Synthetic Keeper for ',logOffset:12345,
     selectedEncounterId:'old-fight',fightExpiryTimer:77,clearTimeout:id=>calls.push(['clear-timer',id]),
     renderAll:()=>calls.push(['render-split']),showNotice:message=>notices.push(message),overlaySession:overlayOwner,wikiDiscovery:discoveryOwner,
     // Collection/outbox behavior has its own fixtures; splitting a session must

@@ -3,9 +3,9 @@ const path=require('node:path'),fsp=require('node:fs/promises'),{Worker}=require
 const {CHANNEL,PROGRESS_CHANNEL,LIMITS,ACTIONS,object,failure,json}=require('./character-repository-contract.cjs');
 const {locate,streamExport}=require('./character-import-files.cjs');
 class CharacterRepository{
-    constructor({directory,electron,origin,getMainWindow,readConfig,getPack,retireLegacy,warn=()=>{}}={}){
+    constructor({directory,electron,origin,getMainWindow,readConfig,getPack,retireLegacy,warn=()=>{},isFeatureEnabled=()=>true,featureLease=()=>()=>true}={}){
         if(typeof directory!=='string'||!path.isAbsolute(directory))throw Error('A private Character repository directory is required.');
-        this.directory=directory;this.electron=electron;this.origin=origin;this.getMainWindow=getMainWindow;this.readConfig=readConfig;this.getPack=getPack;this.retireLegacy=retireLegacy;this.warn=warn;this.pending=new Map();this.sequence=0;this.selectionEpoch=0;this.activeProfileId='draft';this.job=null;this.seed=null;this.closed=false;this.error=null;
+        this.featureLease=featureLease;this.isFeatureEnabled=isFeatureEnabled;this.directory=directory;this.electron=electron;this.origin=origin;this.getMainWindow=getMainWindow;this.readConfig=readConfig;this.getPack=getPack;this.retireLegacy=retireLegacy;this.warn=warn;this.pending=new Map();this.sequence=0;this.selectionEpoch=0;this.activeProfileId='draft';this.job=null;this.seed=null;this.closed=false;this.error=null;
         const url=new URL(origin);if(url.origin!==origin||url.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(url.hostname))throw Error('Character repository requires the local app origin.');
         this.worker=new Worker(path.join(__dirname,'character-repository-worker.cjs'),{workerData:{directory,file:path.join(directory,'inventory.sqlite'),legacyFile:path.join(path.dirname(directory),'eye-of-zomm-character-storage.json'),appRoot:path.resolve(__dirname,'..')}});
         this.ready=new Promise(resolve=>this.resolveReady=resolve);
@@ -33,10 +33,11 @@ class CharacterRepository{
     }
     progress(job,value){if(this.job!==job||job.cancelled||job.epoch!==this.selectionEpoch)return;const main=this.getMainWindow?.();if(main&&!main.isDestroyed())main.webContents.send(PROGRESS_CHANNEL,{jobId:job.id,profileId:job.profileId,...value});}
     async handle(event,action,value={}){
+        if(!this.isFeatureEnabled()&&!['flush','cancelImport','cancelLegacySeed'].includes(action))return {ok:false,code:'feature-disabled',error:'Character is disabled in Settings.'};
         if(!this.isMain(event))throw Error('Character inventory is available only in the main app.');if(!ACTIONS.includes(action))throw Error('Unknown Character repository action.');if(!object(value))return {ok:false,code:'invalid-request',error:'Invalid Character storage request.'};
         if(['beginLegacySeed','appendLegacySeed','commitLegacySeed','cancelLegacySeed'].includes(action))return this.legacySeed(event,action,value);
         if(this.seed&&['createProfile','selectProfile','transaction','importFiles'].includes(action))return {ok:false,code:'seed-pending',error:'Finish or cancel legacy browser recovery first.'};
-        if(action==='cancelImport'){if(this.job&&(!value.jobId||value.jobId===this.job.id)){this.job.cancelled=true;void this.request('cancelImport',{jobId:this.job.id});}return {ok:true};}
+        if(action==='cancelImport'){if(this.job&&(!value.jobId||value.jobId===this.job.id)&&!this.job.committing){this.job.cancelled=true;void this.request('cancelImport',{jobId:this.job.id});}return {ok:true};}
         if(action==='importFiles')return this.importFiles(event,value);
         if(action==='selectProfile'||action==='createProfile'){this.selectionEpoch++;if(this.job){this.job.cancelled=true;void this.request('cancelImport',{jobId:this.job.id});}}
         if(action==='transaction'){try{json({upserts:value.upserts||[],removes:value.removes||[],updates:value.updates||[],duplicates:value.duplicates||[]},LIMITS.batchBytes,'Item edits');if(value.core!==undefined)json(value.core,LIMITS.coreBytes,'Character core');if(value.flow!==undefined)json(value.flow,LIMITS.flowBytes,'Character walkthrough');}catch(error){return {ok:false,code:error.code,error:error.message};}if(value.profileId!==this.activeProfileId)return {ok:false,code:'selection-changed',error:'The selected character changed. Reload before saving.'};}
@@ -44,13 +45,16 @@ class CharacterRepository{
     }
     async legacySeed(event,action,value){
         if(this.seedBusy)return {ok:false,code:'seed-busy',error:'Wait for the current legacy recovery chunk to finish.'};
-        this.seedBusy=true;try{return await this.legacySeedOperation(event,action,value);}finally{this.seedBusy=false;}
+        this.seedBusy=true;const operation=this.legacySeedOperation(event,action,value);this.seedWork=operation;try{return await operation;}finally{if(this.seedWork===operation)this.seedWork=null;this.seedBusy=false;}
     }
     async legacySeedOperation(event,action,value){
+        const featureCurrent=this.featureLease('character');
         try{
             if(action==='beginLegacySeed'){
                 if(this.seed||this.job&&!this.job.done)throw failure('seed-busy','Another recovery or import is active.');const token=randomUUID(),approved=await this.request('beginSeed',{token});if(!approved.ok)return approved;
+                if(!featureCurrent()){await this.request('cancelSeed',{token});throw failure('cancelled','Character recovery was disabled. Its browser source was preserved.');}
                 const file=path.join(this.directory,`browser-seed-${token}.json`);let handle;try{handle=await fsp.open(file,'wx+',0o600);}catch(error){await this.request('cancelSeed',{token});throw error;}
+                if(!featureCurrent()){await handle.close();await this.request('cancelSeed',{token});throw failure('cancelled','Character recovery was disabled. Its browser source was preserved.');}
                 this.seed={token,file,handle,hash:createHash('sha256'),length:0,carry:'',epoch:this.selectionEpoch};return {ok:true,token};
             }
             const seed=this.seed;if(!seed||value.token!==seed.token||seed.epoch!==this.selectionEpoch||!this.isMain(event))throw failure('seed-not-allowed','Legacy browser recovery is no longer active.');
@@ -59,17 +63,17 @@ class CharacterRepository{
             }
             if(action==='cancelLegacySeed'){await seed.handle.close();await this.request('cancelSeed',{token:seed.token});this.seed=null;return {ok:true};}
             if(seed.carry)throw failure('invalid-encoding','Legacy recovery ended inside a Unicode character.');await seed.handle.sync();const digest=seed.hash.digest('hex'),verified=createHash('sha256'),buffer=Buffer.alloc(LIMITS.chunkBytes);let position=0;while(position<seed.length){const result=await seed.handle.read(buffer,0,Math.min(buffer.length,seed.length-position),position);if(!result.bytesRead)throw failure('backup-failed','Legacy recovery is incomplete.');verified.update(buffer.subarray(0,result.bytesRead));position+=result.bytesRead;}if((await seed.handle.stat()).size!==seed.length||verified.digest('hex')!==digest||value.sha256!==undefined&&value.sha256!==digest)throw failure('backup-failed','Legacy recovery did not match its source.');await seed.handle.close();seed.handle=null;
-            if(!this.isMain(event)||this.seed!==seed||seed.epoch!==this.selectionEpoch)throw failure('cancelled','The app changed before legacy recovery could be activated.');const result=await this.request('commitSeed',{token:seed.token,file:seed.file});if(result.ok){this.activeProfileId=result.activeProfileId||'draft';this.selectionEpoch++;this.seed=null;return this.retire(result);}await this.request('cancelSeed',{token:seed.token});this.seed=null;return result;
+            if(!featureCurrent()||!this.isMain(event)||this.seed!==seed||seed.epoch!==this.selectionEpoch)throw failure('cancelled','The app changed before legacy recovery could be activated.');const result=await this.request('commitSeed',{token:seed.token,file:seed.file});if(result.ok){this.activeProfileId=result.activeProfileId||'draft';this.selectionEpoch++;this.seed=null;return this.retire(result);}await this.request('cancelSeed',{token:seed.token});this.seed=null;return result;
         }catch(error){if(this.seed){await this.seed.handle?.close().catch(()=>{});await this.request('cancelSeed',{token:this.seed.token});this.seed=null;}return {ok:false,code:error.code||'seed-failed',error:String(error.message||'Legacy data could not be recovered. Its browser copy was preserved.').slice(0,400)};}
     }
     async importFiles(event,value){
         if(this.job&&!this.job.done)return {ok:false,code:'import-busy',error:'An inventory import is already active. Cancel it before starting another.'};
         if(value.profileId!==this.activeProfileId)return {ok:false,code:'selection-changed',error:'The selected character changed.'};
         const job={id:randomUUID(),profileId:value.profileId,expectedRevision:value.expectedRevision,epoch:this.selectionEpoch,cancelled:false,done:false};
-        this.job=job;setImmediate(()=>void this.runImport(event,value,job));return {ok:true,jobId:job.id};
+        this.job=job;setImmediate(()=>{job.running=this.runImport(event,value,job);});return {ok:true,jobId:job.id};
     }
     async runImport(event,value,job){
-        const current=()=>this.job===job&&!job.cancelled&&!this.closed&&job.epoch===this.selectionEpoch&&this.activeProfileId===job.profileId&&this.isMain(event);
+        const current=()=>this.isFeatureEnabled()&&this.job===job&&!job.cancelled&&!this.closed&&job.epoch===this.selectionEpoch&&this.activeProfileId===job.profileId&&this.isMain(event);
         const check=result=>{if(!result?.ok)throw failure(result?.code||'import-failed',result?.error||'Inventory import failed.');return result;};
         try{
             const config=await this.readConfig();if(!current())throw failure('cancelled','Import canceled.');const pack=await this.getPack?.();
@@ -80,10 +84,11 @@ class CharacterRepository{
                 check(await this.request('finishImportFile',{jobId:job.id,kind,file:files[kind]}));
             }
             for(;;){if(!current())throw failure('cancelled','Import canceled.');const page=check(await this.request('prepareImportPage',{jobId:job.id}));this.progress(job,{phase:'resolve',rows:page.rows});if(page.done)break;}
-            if(!current())throw failure('cancelled','Import canceled.');const result=check(await this.request('commitImport',{jobId:job.id}));if(current())this.progress(job,{state:'complete',phase:'complete',...result});
+            if(!current())throw failure('cancelled','Import canceled.');job.committing=true;const result=check(await this.request('commitImport',{jobId:job.id}));if(this.job===job&&!job.cancelled&&job.epoch===this.selectionEpoch&&this.isMain(event))this.progress(job,{state:'complete',phase:'complete',...result});
         }catch(error){await this.request('cancelImport',{jobId:job.id}).catch(()=>{});if(this.job===job&&job.epoch===this.selectionEpoch){const main=this.getMainWindow?.();if(main&&!main.isDestroyed())main.webContents.send(PROGRESS_CHANNEL,{jobId:job.id,profileId:job.profileId,state:error.code==='cancelled'||job.cancelled?'cancelled':'error',code:error.code||'import-failed',error:String(error.message||'Inventory import failed. The saved inventory was kept.').slice(0,400)});}}
         finally{await this.sweepRetainedData();job.done=true;}
     }
-    async close(){if(this.closed)return;if(this.seed){await this.seed.handle?.close().catch(()=>{});await this.request('cancelSeed',{token:this.seed.token});this.seed=null;}if(this.job){this.job.cancelled=true;await this.request('cancelImport',{jobId:this.job.id});}await this.request('close');this.closed=true;this.electron?.ipcMain?.removeHandler(CHANNEL);await this.worker.terminate();}
+    async suspend(){if(this.seedWork)await this.seedWork;if(this.seed){const seed=this.seed;this.seed=null;await seed.handle?.close().catch(()=>{});await this.request('cancelSeed',{token:seed.token});}if(this.job){if(this.job.committing)await this.job.running;else{this.job.cancelled=true;await this.request('cancelImport',{jobId:this.job.id});}}await this.request('flush');}
+    async close(){if(this.closed)return;if(this.seed){await this.seed.handle?.close().catch(()=>{});await this.request('cancelSeed',{token:this.seed.token});this.seed=null;}if(this.job){if(this.job.committing)await this.job.running;else{this.job.cancelled=true;await this.request('cancelImport',{jobId:this.job.id});}}await this.request('close');this.closed=true;this.electron?.ipcMain?.removeHandler(CHANNEL);await this.worker.terminate();}
 }
 module.exports={CharacterRepository,CHANNEL,PROGRESS_CHANNEL};

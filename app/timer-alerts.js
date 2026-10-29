@@ -36,5 +36,5 @@ export function createTimerAlerts({ AudioContext = globalThis.AudioContext || gl
                 } catch { /* Audio device changes cannot interrupt parsing. */ }
             }
         }
-    }, dispose() { disposed=true; speech?.cancel(); void context?.close(); } };
+    }, stop(){speech?.cancel();void context?.close();context=null;}, dispose() { disposed=true; speech?.cancel(); void context?.close(); } };
 }
