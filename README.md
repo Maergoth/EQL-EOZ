@@ -216,6 +216,9 @@ Correct uncertain numbers before **Use these stats and review**. Totals use
 only your reviewed reading: gear, Exaltations, catalog tiers and old baselines
 are not added. Reimporting gear requires a new current-stat review.
 
+After a reader update, read and review the stats again, then **Share** to update
+an older wiki snapshot. Previously saved readings are not silently reinterpreted.
+
 ![Equipped-stat preparation with synthetic data, EoZ 1.0.7](app/assets/whats-new/1.0.7/character-stat-guidance.png)
 
 ### Inspect, export and share

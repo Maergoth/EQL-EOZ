@@ -777,7 +777,107 @@ unknown. Tall OCR noise is excluded before character rows are aligned. The
 existing maximum two refinements, four source tiles, 4MP stat atlas and source
 pixel limits are unchanged; there is no extra OCR call or cloud service.
 
-Focused parser/reader tests and the actual canvas-only Modern pixel gate pass
+Compact Default Modern columns use the positively observed heading spacing and
+multiple aligned rows to locate the native current-value cells. The Character
+refinements read seven physical crops: current attributes, current resists and
+the five independent native mitigation, softcap, evasion, offense and accuracy
+numeric widgets. These fit into the existing two refinement slots with at most
+four tiles per atlas, so Character-only reads may use three recognition calls
+including the scene. Mixed Contribution reads retain their item-name/stat
+priorities; a Character refinement uses only available slots. Complete native
+field geometry, source-ink guards and white atlas gutters protect digits from
+truncation. A clear cropped border alone cannot certify a complete number: an
+entire glyph might lie outside it. Inspect the full native field before excluding
+adjacent label context, and require a wide blank separation plus positively
+identified sibling-label bounds for every excluded ink pixel. Missing or
+ambiguous boundary evidence leaves the field unknown. The reader records actual
+scale and preprocessing. It does not split
+an OCR digit string or assume a current value from a known cap. Only actual
+executed, bounded tile footprints authorize
+replacement of a scene proposal, and an unread authoritative cell leaves its
+value unknown. Finite safe integers and finite confidence at the existing floors
+are required. A literal slash remains mandatory for a textual mitigation/softcap
+pair; independently recognized physical fields instead retain their native
+widget identity. Multiple client panes
+remain ambiguous. Existing Default processing and capture budgets are preserved.
+
+Incomplete initial labels or unreliable resource pairs may instead enter a
+Character-only native-schema fallback. Named HP, End and AC, either Attack Speed
+or Velocity, and a right-column body anchor must agree with the native row order,
+horizontal units and row pitch. Both reliable caption anchors must agree when present;
+their numeric values cannot certify the layout. HP and
+End bracket the intervening resource row, and the expected main numeric rows
+must contain observed ink without inventing an unread Attack label. The first
+atlas combines ordinary whole-panel
+context with separate native resource-current and resource-maximum columns.
+It keeps context at three-times scale and permits six-times numeric columns
+subject to the same output limits. Adaptive numeric OCR tiles preserve source
+antialiasing before inversion. Threshold masks remain separate safety checks
+for complete source rows, edge clipping and neighboring-widget guards; they
+must not replace the adaptive OCR pixels. The coherent seven-crop path keeps
+its existing preprocessing.
+This retains actual regen/modifier context without interpreting a merged number
+as a resource pair. The remaining atlas can read current attributes/resists and
+the two independent Attack widgets only after those labels and their neighboring
+label bounds are actually recovered. Reader and parser must share the validator
+for the executed first-context footprint and its mapped words plus the unique
+original Inventory anchor. Arbitrary, shifted, competing or missing context
+cannot authorize follow-up crops. AC still needs reliable literal context in
+this fallback; unavailable fields remain unknown. No fourth recognition call is
+permitted. The seven-crop path and mixed Contribution priorities are retained.
+Clear headings do not make a weak resource observation reliable: when any HP,
+Mana or Endurance pair lacks a reliable literal current/max reading inside its
+native widgets, prefer this positively certified resource fallback. All three
+reliable pairs retain the original seven-cell choice. Mixed Contribution and
+Default retain their existing priorities.
+
+A weak resource-column result does not erase independent above-floor context
+evidence when the positively named native row has exactly one literal
+current/max slash pair across its certified widgets. Both cells must have
+complete, ink-present, unclipped source-row proofs, and at least one reliable
+physical component must agree with that pair. Retain the context's own numeric
+confidence and raw evidence; never promote the weak cell's score. Failed source
+proofs, unread physical pairs, extra numeric tokens, merged digits and reliable
+conflicts cannot use this route.
+
+Modern resist admission and disagreement checks use the same 95 numeric-word
+confidence floor, including scene and ordinary context evidence. Other numeric
+fields retain 85, and Default retains its own existing policy. A below-floor
+proposal cannot become a known value or veto a sufficiently confident reread;
+different reliable readings remain a conflict. Limited observed clipped-caption
+aliases preserve raw evidence and still require explicit numeric values.
+Word admission uses the native field's exact outward-rounded source-pixel
+interval mapped through the actual acquisition origin/scale. It cannot expand
+beyond that interval to accommodate a result. Fallback Attack vertical bounds
+come from the certified native 14-unit widget and at most a one-unit gutter,
+retaining the actually recovered label and full horizontal source guard. Fat
+context OCR boxes cannot authorize a crop across adjacent native rows.
+
+The compact synthetic regression retains 29 independent numeric goldens and ten
+additional modifier zeros in the full view. At native nine-pixel glyph height,
+all 23 non-resist fields and every visible modifier must be exact, with at least
+four of six resists exact and no wrong or additional numeric values. Up to two
+resists may remain explicitly unknown only when independent source-pixel ink
+coverage inside the native current field and raw returned OCR words demonstrate
+withholding or absence. Retain boundary and exterior-halo evidence separately;
+adjacent slash antialiasing cannot extend current-field ownership. An
+above-floor correct word discarded by mapping or geometry fails this gate.
+For a correct below-floor literal, changing only its existing confidence to 95
+must restore that value through the parser while preserving all other fields.
+An incorrect below-floor literal must remain unknown, with every eligible raw
+numeric candidate below 95; it cannot be corrected using the expected value.
+The sole enlarged diagnostic control scales the entire native geometry by 1.5
+and requires all 23 non-resists, every visible modifier and at least three of six
+resists. Its at most three unknowns need the same raw-evidence and source-ink
+coverage proofs. This measures a fixed stress baseline; larger pixels do not
+guarantee higher OCR confidence. Each size uses the positive seven-cell or
+adaptive path selected by the planner, the same capture budgets and confidence policy.
+Keep strict supplied-image checks separate from this synthetic stress contract.
+Four fixed synthetic PNGs and their generation manifest preserve identical input
+pixels across operating systems. Source-ink sampling reads those decoded pixels
+before any OCR call, independently of returned word boxes.
+
+Earlier focused parser/reader tests and the canvas-only Modern pixel gate passed
 against source dependencies and the assembled offline OCR runtime. The updated
 synthetic image exercises explicit item Haste, all five AC/Attack components,
 independent item panes and right-side Inventory resources/attributes/resists.

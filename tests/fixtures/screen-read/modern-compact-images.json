@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "syntheticOnly": true,
+  "fixedCrossPlatformPixels": true,
+  "generation": {
+    "renderer": "modern-compact-layout.mjs",
+    "rendererSha256": "3eda976feb8070e53ae3733ee419406f43bd88a313a1c3a90f9a0955f15b990e",
+    "electron": "43.8.3",
+    "platform": "win32",
+    "font": "Arial12; entire layout scaled together at1 and1.5",
+    "ocrExecuted": false,
+    "pixelsEdited": false,
+    "threePreviouslyCapturedImagesByteEqual": true
+  },
+  "images": {
+    "compact-gear-top-normal": {
+      "filename": "modern-compact-gear-top-normal.png",
+      "geometryScale": 1,
+      "gearVisible": true,
+      "bytes": 22366,
+      "sha256": "04801632cab91c3647dfa928464ea7180989969e63b061df09247f6c823157fa",
+      "size": {
+        "width": 503,
+        "height": 500
+      }
+    },
+    "compact-full-stats-top-normal": {
+      "filename": "modern-compact-full-stats-top-normal.png",
+      "geometryScale": 1,
+      "gearVisible": false,
+      "bytes": 28900,
+      "sha256": "449d80a2d076f1b56581b2b3aea41de12dc575e58d86b05e23733a2042f663de",
+      "size": {
+        "width": 503,
+        "height": 500
+      }
+    },
+    "compact-gear-top-enlarged": {
+      "filename": "modern-compact-gear-top-enlarged.png",
+      "geometryScale": 1.5,
+      "gearVisible": true,
+      "bytes": 73061,
+      "sha256": "056447c6f0bfea6cd21f417d55f74ff6eab5d0238773dc0d9e561cf8be0d584e",
+      "size": {
+        "width": 755,
+        "height": 750
+      }
+    },
+    "compact-full-stats-top-enlarged": {
+      "filename": "modern-compact-full-stats-top-enlarged.png",
+      "geometryScale": 1.5,
+      "gearVisible": false,
+      "bytes": 99690,
+      "sha256": "07be032d032920b17c69bde2127326be98b17ff4e7f49a9feccf6a828dd520af",
+      "size": {
+        "width": 755,
+        "height": 750
+      }
+    }
+  }
+}

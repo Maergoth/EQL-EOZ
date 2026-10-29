@@ -149,7 +149,7 @@ async function run({root,temporary,screenshots}){
         const contributionCount=await execute(()=>JSON.parse(localStorage.getItem('eql-eye-of-zomm-contributions-v1')).candidates.length);
         await click('[data-walkthrough-read-stats]');await until(()=>execute(()=>fixture.state.phase==='running'),'explicit stat capture');
         const afterStart=await model();await observe('item',{name:'Synthetic Trail Boots',hp:777777,slots:['FEET']});assert.deepEqual((await model()).candidates,afterStart.candidates,'Character ignores item OCR');
-        const currentStats={hpMaximum:5432,hpCurrent:5000,acMitigation:401,acMitigationSoftcap:374,acEvasion:500,atkOffense:358,atkAccuracy:828,str:269,accuracy:7,attackSpeed:150,spellShielding:0};
+        const currentStats={hpMaximum:5432,hpCurrent:5000,manaMaximum:2103,manaCurrent:1700,enduranceMaximum:3204,enduranceCurrent:2800,acMitigation:401,acMitigationSoftcap:374,acEvasion:500,attackOffense:358,attackAccuracy:828,str:269,sta:241,agi:231,dex:222,wis:213,int:204,cha:195,resistMagic:31,resistFire:32,resistCold:33,resistDisease:34,resistPoison:35,resistCorruption:36,accuracy:7,attackSpeed:150,spellShielding:0};
         const layoutObservation=async(uiLayout,patch={})=>{const state=await execute(()=>fixture.state);return observe('character',currentStats,{...patch,input:{sourceId:state.source?.id,captureGeneration:state.generation,uiLayout,...patch.input}});};
         await layoutObservation('default');
         await until(()=>execute(()=>document.querySelector('[data-walkthrough-stats-values]').value.includes('5432')),'fresh current stats proposal');
@@ -179,6 +179,7 @@ async function run({root,temporary,screenshots}){
         assert.deepEqual(withoutDetails(saved.candidates.find(c=>c.id===ear.id)),withoutDetails(beforeEffects.candidates.find(c=>c.id===ear.id)),'Local effect refresh preserves parent and socket stats, tier and capacity');
         assert.deepEqual(saved.statSnapshots,beforeEffects.statSnapshots);
         const publicSource=await execute(async()=>{const {buildCharacterWikiSheet,serializeCharacterWikiSheet}=await import('/app/character-wiki-sheet.js');return serializeCharacterWikiSheet(buildCharacterWikiSheet(fixture.model()));});
+        for(const [parameter,value]of Object.entries({hp:5432,mp:2103,end:3204,ac_mitigation:401,ac_mitigation_softcap:374,ac_evasion:500,atk_offense:358,atk_accuracy:828,str:269,sta:241,agi:231,dex:222,wis:213,int:204,cha:195,sv_magic:31,sv_fire:32,sv_cold:33,sv_disease:34,sv_poison:35,sv_corruption:36,spell_shielding:0}))assert.match(publicSource,new RegExp(`\\|total_${parameter}=${value}(?:\\n|$)`),`Reviewed ${parameter} reaches the wiki without being replaced by equipment totals or unknowns`);
         assert.match(publicSource,/ear1_augment_1_details=Focus effect: \[\[Synthetic Canonical Clarity\|Visible clarity \(Worn\)\]\]/);
         assert.doesNotMatch(publicSource,/ear1_augment_1_(?:stats|tier|icon)=|87654|Synthetic old metadata/);
         await snapshot('character-imported-inspect.png',{selector:'[data-character-workbench]'});
@@ -187,6 +188,7 @@ async function run({root,temporary,screenshots}){
         await snapshot('character-loose-exaltation.png',{selector:'.character-bags'});await click(`[data-edit-card="${ear.id}"]`);
         await click('[data-character-preview]');await until(()=>execute(()=>document.querySelector('.character-share-dialog').open),'review snapshot');
         assert.match(await execute(()=>document.querySelector('[data-share-inspect]').textContent),/5,432|5432/);
+        await snapshot('character-reviewed-share.png',{selector:'[data-share-inspect]'});
         const effectCard=await execute(()=>{const node=document.querySelector('[data-share-inspect] [data-character-exaltation]');return {text:node?.textContent,links:[...(node?.querySelectorAll('a')||[])].map(a=>a.getAttribute('href'))};});
         assert.match(effectCard.text,/Focus effect: Visible clarity \(Worn\)/);assert.doesNotMatch(effectCard.text,/87654|Class:|Synthetic old metadata/);assert(effectCard.links.some(link=>link.endsWith('Synthetic%20Canonical%20Clarity')));
         await execute(()=>document.querySelector('[data-share-inspect] [data-character-exaltation]').closest('.character-inspect-slot').querySelector('.character-inspect-icon').focus());

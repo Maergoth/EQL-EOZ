@@ -1,6 +1,6 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current `v1.0.10` integration: organize Settings and add centrally registered feature controls, preserving saved data and separate consent. The [developer guide](../DEVELOPMENT.md) is the current component reference; [CHANGELOG](../CHANGELOG.md) owns release history. See [feature controls](FEATURE_CONTROLS.md). Source, native and package checks must identify the final candidate.
+Current `v1.0.11` integration: improve compact Default Modern stat reading in equipment-visible and scrolled views, preserving unknowns, recorded totals, feature availability and separate consent. The [developer guide](../DEVELOPMENT.md) remains the current component reference; [CHANGELOG](../CHANGELOG.md) owns release history. Source, native and package checks must identify the final candidate.
 
 The older implementation and acceptance notes below retain historical context. They do not identify outstanding work or replace current source inspection.
 

@@ -5,6 +5,12 @@ start with the [user guide](README.md); the app's **Settings → About Eye of
 Zomm → What's new** also retains the illustrated release archive. Older entries
 describe behavior at that release, including workflows replaced in later versions.
 
+## 1.0.11 - Reliable Modern character stats
+
+- Read compact Default Modern numeric columns separately in equipment-visible and scrolled stat views; preserve distinct AC and Attack components.
+- Refuse merged or uncertain numeric readings while keeping saved character totals independent of item estimates.
+- Read, review and Share again to replace an older incomplete wiki snapshot. Existing private and public snapshots are not silently rewritten.
+
 ## 1.0.10 - Feature controls and clearer guides
 
 - Choose whole tools in Settings → Features without deleting their saved data. Disabled tools disappear from navigation, settings, summaries and shortcuts. Native services enforce availability, with separate screen-reading consent preserved.

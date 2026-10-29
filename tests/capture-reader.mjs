@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';import {createRequire} from 'node:module';
 import {screenReadRefinementRegions,parseScreenRead} from '../app/screen-read-parser.js';
+import {modernAdaptiveWords,adaptiveWord} from './fixtures/screen-read/modern-adaptive-words.mjs';
 const require=createRequire(import.meta.url),{normalizeCaptureRegion,prepareCaptureImage}=require('../desktop/capture-image.cjs'),{recognizeCaptureImage}=require('../desktop/capture-reader.cjs');
-const operations=[];
+const operations=[];let borderInk=false,lastBitmapBytes;
 class Image{
-    constructor(width=500,height=400){this.width=width;this.height=height;}
+    constructor(width=500,height=400,tone=0){this.width=width;this.height=height;this.tone=tone;}
     getSize(){return {width:this.width,height:this.height};}isEmpty(){return false;}
-    crop(rect){operations.push({crop:rect});return new Image(rect.width,rect.height);}
-    resize(size){operations.push({resize:size});return new Image(size.width,size.height);}
-    toPNG(){return Buffer.from('synthetic-image-data');}toBitmap(){return Buffer.alloc(this.width*this.height*4);}
+    crop(rect){operations.push({crop:rect});return new Image(rect.width,rect.height,this.tone);}
+    resize(size){operations.push({resize:size});return new Image(size.width,size.height,this.tone);}
+    toPNG(){return Buffer.from('synthetic-image-data');}toBitmap(){const bytes=Buffer.alloc(this.width*this.height*4,this.tone);if(borderInk)bytes.fill(255,0,4);return bytes;}
 }
-const nativeImage={createFromBitmap:(_bytes,size)=>{operations.push({bitmap:{width:size.width,height:size.height}});return new Image(size.width,size.height);}},image=new Image();
+const nativeImage={createFromBitmap:(bytes,size)=>{lastBitmapBytes=bytes;operations.push({bitmap:{width:size.width,height:size.height,corners:[...bytes.subarray(0,4),...bytes.subarray(-4)]}});return new Image(size.width,size.height,bytes[0]);}},image=new Image();
 assert.equal(normalizeCaptureRegion(null,null),null);
 assert.throws(()=>normalizeCaptureRegion({x:0,y:0,width:1,height:1},null),/preview/);
 for(const region of [{x:-.1,y:0,width:1,height:1},{x:0,y:0,width:NaN,height:1},{x:.5,y:0,width:1,height:1},{x:0,y:0,width:.01,height:1}])assert.throws(()=>normalizeCaptureRegion(region,image.getSize()));
@@ -80,4 +81,101 @@ assert.equal(calls,1,'An item-only Character frame is not refined');assert.deepE
 calls=0;
 const wordlessCharacter=await recognizeCaptureImage({image,nativeImage,characterOnly:true,ocr:{async recognize(){calls++;return {text:'Character Stats\nHP 10/100\nMana 20/200',confidence:90,words:[]};}}});
 assert.equal(calls,1);assert.equal(wordlessCharacter.result.characterOnly,true);assert.equal(parseScreenRead(wordlessCharacter.result)[0].subject.kind,'character','Early reader return retains the character-only purpose');
-console.log('Capture reader: normalized region bounds/resize reset, single-pass negatives, bounded mapped refinements and cancellation passed.');
+const columnWord=(text,x,y,width=60)=>word(text,x,y,width,12,97),columnScene={text:'Synthetic Modern native numeric widgets',confidence:94,words:[columnWord('Inventory',200,20),columnWord('Character',100,60,58),columnWord('Vitals',165,60,36),columnWord('Stats',281,60,35),
+    columnWord('Strength',281,90,65),columnWord('123/789',365,90,56),columnWord('Stamina',281,110,65),columnWord('124/789',365,110,56),
+    columnWord('SV.',281,130,20),columnWord('Magic',306,130,50),columnWord('131/987',392,130,57),columnWord('SV.',281,150,20),columnWord('Fire',306,150,50),columnWord('132/987',392,150,57),
+    columnWord('AC',100,110,20),columnWord('113/79',167,110,48),columnWord('|211',223,110,32),columnWord('Attack',100,130,42),columnWord('317/419',192,130,66)]};
+const columnPlans=screenReadRefinementRegions({...columnScene,characterOnly:true});assert.deepEqual(columnPlans.map(pass=>pass.tiles.length),[4,3]);
+calls=0;operations.length=0;const expectedMapped=[];
+const numericColumns=await recognizeCaptureImage({image,nativeImage,characterOnly:true,ocr:{async recognize(_png,settings){
+    if(++calls===1)return columnScene;
+    assert.equal(settings.layout,'sparse');const proposal=columnPlans[calls-2],crops=proposal.tiles.map(tile=>({x:Math.floor(tile.x/3),y:Math.floor(tile.y/3),width:Math.ceil((tile.x+tile.width)/3)-Math.floor(tile.x/3),height:Math.ceil((tile.y+tile.height)/3)-Math.floor(tile.y/3),maxScale:tile.scale||proposal.scale})),bitmap=operations.filter(value=>value.bitmap).at(-1).bitmap;
+    let scale=proposal.scale,padding;while(scale>=1){padding=Math.max(8,scale*2);if(Math.max(...crops.map(crop=>crop.width*Math.min(scale,crop.maxScale)))+padding*2===bitmap.width)break;scale--;}
+    assert(scale>=1);assert.deepEqual(bitmap.corners,Array(8).fill(255),'Unused atlas corners remain white after inversion');let top=0;
+    expectedMapped.push(crops.map(crop=>{const tileScale=Math.min(scale,crop.maxScale);return {x0:(crop.x+5/tileScale)*3,y0:(crop.y+2/tileScale)*3,x1:(crop.x+20/tileScale)*3,y1:(crop.y+12/tileScale)*3};}));
+    return {text:'Independent numeric cell reads',confidence:97,words:crops.map(crop=>{const tileScale=Math.min(scale,crop.maxScale),value=word('17',padding+5,top+padding+2,15,10,97);top+=crop.height*tileScale+padding*2+16;return value;})};
+}}});
+assert.equal(calls,3,'Character uses the existing maximum two refinements for seven independent physical crops');
+assert.deepEqual(numericColumns.input.ocrPasses.map(pass=>pass.role),['scene','character-stats','character-stats']);
+for(const [index,pass]of numericColumns.result.refinements.entries()){
+    assert.deepEqual(pass.words.map(value=>value.column),columnPlans[index].tiles.map(tile=>tile.column));
+    assert.deepEqual(pass.words.map(value=>value.bbox),expectedMapped[index],'Each executed crop maps through its own actual scale');
+    assert.equal(pass.columnPreprocessing,'local-otsu');assert(pass.tiles.every(tile=>tile.preprocessing==='local-otsu'));
+}
+assert.deepEqual(numericColumns.result.refinements.map(pass=>pass.tiles.map(tile=>tile.scale)),[[6,6,3,3],[3,3,3]]);
+for(const operation of operations.filter(value=>value.bitmap))assert(operation.bitmap.width*operation.bitmap.height<=4*1024*1024&&Math.max(operation.bitmap.width,operation.bitmap.height)<=4096);
+borderInk=true;calls=0;
+const clippedColumns=await recognizeCaptureImage({image,nativeImage,characterOnly:true,ocr:{async recognize(){return ++calls===1?columnScene:{text:'No numeric proposal',confidence:97,words:[]};}}});borderInk=false;
+assert(clippedColumns.result.refinements.flatMap(pass=>pass.tiles).filter(tile=>tile.column!=='modern-attributes'&&tile.column!=='modern-resists').every(tile=>tile.edgeClipped===true),'Every numeric widget rejects original source-edge ink before resize');
+class PixelImage extends Image{
+    constructor(width,height,pixelAt,x=0,y=0){super(width,height);this.pixelAt=pixelAt;this.x=x;this.y=y;}
+    crop(rect){return new PixelImage(rect.width,rect.height,this.pixelAt,this.x+rect.x,this.y+rect.y);}
+    toBitmap(){const bytes=Buffer.alloc(this.width*this.height*4);for(let y=0;y<this.height;y++)for(let x=0;x<this.width;x++){const index=(y*this.width+x)*4;bytes[index]=bytes[index+1]=bytes[index+2]=this.pixelAt(this.x+x,this.y+y)?255:0;bytes[index+3]=255;}return bytes;}
+}
+const ownAndNeighbor=(x,y)=>[114,134].some(top=>y>=top&&y<top+3&&(x>=230&&x<234||x>=281&&x<283));
+async function guarded(extra=()=>false){let count=0;return recognizeCaptureImage({image:new PixelImage(5000,3000,(x,y)=>ownAndNeighbor(x,y)||extra(x,y)),nativeImage,characterOnly:true,ocr:{async recognize(){return ++count===1?columnScene:{text:'No numeric proposal',confidence:97,words:[]};}}});}
+const validGuard=await guarded(),guardTiles=validGuard.result.refinements.flatMap(pass=>pass.tiles).filter(tile=>tile.sourceGuard);assert.equal(guardTiles.length,2);
+assert(guardTiles.every(tile=>tile.guardVerified===true&&tile.edgeClipped===false),'Full native extent contains only the observed neighboring label beyond a genuine wide blank run');
+for(const [reason,extra]of [['whole last digit outside the proposed crop and outside the neighbor box',(x,y)=>x>=279&&x<281&&y>=114&&y<117],['ink touching the required blank run',(x,y)=>x===276&&y>=114&&y<117],['a competing excluded glyph outside the same-row label',(x,y)=>x===282&&y>=106&&y<109]]){
+    const result=await guarded(extra),tile=result.result.refinements.flatMap(pass=>pass.tiles).find(tile=>tile.column==='modern-acEvasion');assert.equal(tile.guardVerified,false,reason);assert.equal(tile.edgeClipped,true,reason);
+}
+const enlargedColumns={...columnScene,words:columnScene.words.map(value=>({...value,bbox:Object.fromEntries(Object.entries(value.bbox).map(([key,number])=>[key,number*10]))}))};
+calls=0;operations.length=0;
+const clampedColumns=await recognizeCaptureImage({image:new Image(5000,3000),nativeImage,characterOnly:true,ocr:{async recognize(){return ++calls===1?enlargedColumns:{text:'No numeric proposal',confidence:97,words:[]};}}});
+assert.equal(calls,3);assert(clampedColumns.result.refinements[0].scale<6);
+for(const pass of clampedColumns.result.refinements)assert(pass.tiles.length<=4&&pass.tiles.every(tile=>tile.scale<=pass.scale));
+for(const operation of operations.filter(value=>value.bitmap))assert(operation.bitmap.width*operation.bitmap.height<=4*1024*1024&&Math.max(operation.bitmap.width,operation.bitmap.height)<=4096,'Actual scaled bitmaps retain existing pixel/dimension limits');
+// The sparse scene can positively locate the native grid while losing one row
+// caption. Only actually executed whole-context words may plan its last pass.
+const adaptiveFixture=modernAdaptiveWords(),adaptivePlan=screenReadRefinementRegions({...adaptiveFixture.scene,characterOnly:true})[0],adaptiveTag='default-modern-resource-context-v1';
+const resourceInk=(x,y)=>[76,92,108].some(top=>y>=top+3&&y<top+6&&[175,235].some(left=>x>=left&&x<left+4)),adaptiveInk=(x,y)=>resourceInk(x,y)||(y>=143&&y<146&&(x>=230&&x<234||x>=281&&x<283));
+const actualCrops=proposal=>proposal.tiles.map(tile=>({...tile,x:Math.floor(tile.x),y:Math.floor(tile.y),width:Math.ceil(tile.x+tile.width)-Math.floor(tile.x),height:Math.ceil(tile.y+tile.height)-Math.floor(tile.y)}));
+let adaptiveFollowup,adaptiveCount=0;operations.length=0;
+const adaptiveRead=await recognizeCaptureImage({image:new PixelImage(5000,3000,adaptiveInk),nativeImage,characterOnly:true,ocr:{async recognize(_png,settings){
+    if(++adaptiveCount===1)return adaptiveFixture.scene;
+    const proposal=adaptiveCount===2?adaptivePlan:adaptiveFollowup,crops=actualCrops(proposal),bitmap=operations.filter(value=>value.bitmap).at(-1).bitmap;
+    let scale=proposal.scale,padding;while(scale>=1){padding=Math.max(8,scale*2);if(Math.max(...crops.map(crop=>crop.width*Math.min(scale,crop.scale||scale)))+padding*2===bitmap.width)break;scale--;}
+    assert(scale>=1);assert.equal(settings.layout,adaptiveCount===2?'block':'sparse');assert.deepEqual(bitmap.corners,Array(8).fill(255));
+    let top=0;const words=[];
+    for(const crop of crops){const tileScale=Math.min(scale,crop.scale||scale),map=entry=>({...entry,bbox:{x0:padding+(entry.bbox.x0-crop.x)*tileScale,y0:top+padding+(entry.bbox.y0-crop.y)*tileScale,x1:padding+(entry.bbox.x1-crop.x)*tileScale,y1:top+padding+(entry.bbox.y1-crop.y)*tileScale}});
+        if(crop.context)words.push(...adaptiveFixture.context.map(map));
+        else if(crop.sourceRows)for(const row of crop.sourceRows)words.push(map(adaptiveWord(String(adaptiveFixture.resources[row.key]),crop.x+18,row.y+4,18,10)));
+        else if(crop.column==='modern-attributes')for(const row of adaptiveFixture.rows.filter(row=>!row.key.startsWith('resist')))words.push(map(row.words[0]),map(adaptiveWord(String(row.value),adaptiveFixture.right+84,row.y,18)));
+        else if(crop.column==='modern-resists')for(const row of adaptiveFixture.rows.filter(row=>row.key.startsWith('resist')))words.push(map(adaptiveWord(String(row.value),adaptiveFixture.right+113,row.y,18)));
+        else words.push(map(adaptiveWord(crop.column==='modern-attackOffense'?'318':'647',crop.column==='modern-attackOffense'?201:229,140,18)));
+        top+=crop.height*tileScale+padding*2+16;
+    }
+    if(adaptiveCount===2){const {screenReadCharacterFollowup}=await import('../app/screen-read-parser.js');adaptiveFollowup=screenReadCharacterFollowup({...adaptiveFixture.scene,characterOnly:true,input:{scale:1,region:{x:0,y:0}},refinements:[{...adaptivePlan,tiles:actualCrops(adaptivePlan).map(tile=>({...tile,preprocessing:'antialias-inverted'})),words:adaptiveFixture.context.map(word=>({...word,context:adaptiveTag}))}]});assert(adaptiveFollowup);}
+    return {text:'Synthetic actual-tile words',confidence:97,words};
+}}});
+assert.equal(adaptiveCount,3);assert.deepEqual(adaptiveRead.result.refinements.map(pass=>pass.tiles.length),[3,4]);
+assert.equal(adaptiveRead.result.refinements[0].nativeContext,adaptiveTag);assert.equal(adaptiveRead.result.refinements[1].nativeFollowup,adaptiveTag);
+assert.deepEqual(adaptiveRead.result.refinements[0].tiles.map(tile=>tile.preprocessing),['antialias-inverted','antialias-inverted','antialias-inverted']);
+assert.deepEqual(adaptiveRead.result.refinements[0].tiles.map(tile=>tile.scale),[3,6,6]);assert.deepEqual(adaptiveRead.result.refinements[1].tiles.map(tile=>tile.scale),[6,6,3,3]);
+assert(adaptiveRead.result.refinements.every(pass=>pass.columnPreprocessing==='antialias-inverted'&&pass.guardPreprocessing==='local-otsu'));
+assert(adaptiveRead.result.refinements.flatMap(pass=>pass.tiles).filter(tile=>tile.sourceRows||tile.column?.startsWith('modern-attack')).every(tile=>tile.guardPreprocessing==='local-otsu'));
+assert(adaptiveRead.result.refinements[0].words.filter(word=>word.context).every(word=>!word.column&&!word.component),'Context retains ordinary mapped evidence instead of becoming an authoritative numeric column');
+assert(adaptiveRead.result.refinements[0].tiles.filter(tile=>tile.column).every(tile=>tile.rowProofs.length===3&&tile.rowProofs.every(row=>row.complete&&row.inkPresent&&!row.edgeClipped)));
+const adaptiveFields=Object.fromEntries(parseScreenRead({...adaptiveRead.result,input:adaptiveRead.input}).find(record=>record.subject.kind==='character').fields.map(field=>[field.key,field.value]));
+for(const [key,value]of Object.entries({...adaptiveFixture.resources,attackOffense:318,attackAccuracy:647,velocity:0,enduranceRegen:29,damageShieldMitigation:0}))assert.equal(adaptiveFields[key],value,key);
+for(const row of adaptiveFixture.rows)assert.equal(adaptiveFields[row.key],row.value,row.key);
+for(const operation of operations.filter(value=>value.bitmap))assert(operation.bitmap.width*operation.bitmap.height<=4*1024*1024&&Math.max(operation.bitmap.width,operation.bitmap.height)<=4096,'Dynamic scheduling preserves each existing bitmap budget');
+let shadeCalls=0;
+const antialiasProbe=await recognizeCaptureImage({image:new Image(5000,3000,64),nativeImage,characterOnly:true,ocr:{async recognize(){
+    if(++shadeCalls===1)return adaptiveFixture.scene;
+    const crops=actualCrops(adaptivePlan),padding=12,width=Math.max(...crops.map(crop=>crop.width*Math.min(adaptivePlan.scale,crop.scale||adaptivePlan.scale)))+padding*2,resourceTop=crops[0].height*3+padding*2+16;
+    assert.equal(lastBitmapBytes[((resourceTop+padding+10)*width+padding+10)*4],191,'Actual resource OCR pixels retain the inverted antialias shade64, rather than the threshold-copy white255');
+    return {text:'No recognized context',words:[],confidence:97};
+}}});
+assert.equal(shadeCalls,2);assert(antialiasProbe.result.refinements[0].tiles.filter(tile=>tile.column).every(tile=>tile.rowProofs.every(row=>!row.inkPresent)),'The separate Otsu proof copy still reports no foreground in an all-shade source');
+let oldShadeCalls=0;
+await recognizeCaptureImage({image:new Image(5000,3000,64),nativeImage,characterOnly:true,ocr:{async recognize(){if(++oldShadeCalls===1)return columnScene;assert(lastBitmapBytes.every(value=>value===255),'The original seven-cell path still submits its original Otsu pixels');return {text:'No old-path words',words:[],confidence:97};}}});
+assert.equal(oldShadeCalls,3);
+const enlargedAdaptive={...adaptiveFixture.scene,words:adaptiveFixture.scene.words.map(word=>({...word,bbox:Object.fromEntries(Object.entries(word.bbox).map(([key,value])=>[key,value*2]))}))};let clampAdaptiveCalls=0;operations.length=0;
+const adaptiveClamped=await recognizeCaptureImage({image:new Image(5000,3000),nativeImage,characterOnly:true,ocr:{async recognize(){return ++clampAdaptiveCalls===1?enlargedAdaptive:{text:'No context words',words:[],confidence:97};}}});
+assert.equal(clampAdaptiveCalls,2);assert(adaptiveClamped.result.refinements[0].scale<6);assert(adaptiveClamped.result.refinements[0].tiles.every(tile=>tile.scale<=adaptiveClamped.result.refinements[0].scale&&tile.scale<=(tile.context?3:6)),'Actual mixed ceilings are retained after global budget clamping');
+for(const operation of operations.filter(value=>value.bitmap))assert(operation.bitmap.width*operation.bitmap.height<=4*1024*1024&&Math.max(operation.bitmap.width,operation.bitmap.height)<=4096,'Adaptive mixed-scale clamping includes all tile padding and gutters');
+let cancellationCalls=0,adaptiveCurrent=true;
+const adaptiveCancelled=await recognizeCaptureImage({image:new PixelImage(5000,3000,adaptiveInk),nativeImage,characterOnly:true,isCurrent:()=>adaptiveCurrent,ocr:{async recognize(){if(++cancellationCalls===1)return adaptiveFixture.scene;adaptiveCurrent=false;return {confidence:97,text:'Cancelled context',words:[]};}}});
+assert.equal(cancellationCalls,2);assert.equal(adaptiveCancelled.cancelled,true,'Withdrawal after context cannot schedule or publish the followup');
+console.log('Capture reader: region bounds, cancellation, mixed-client budget, exact mixed-scale mapping and full-native-widget source-guard adversaries passed.');

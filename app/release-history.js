@@ -2,6 +2,27 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.11",
+  "title": "Reliable Modern character stats",
+  "changes": [
+    "Read the visible stat columns in Default Modern independently so compact equipment and scrolled stat views retain resources, attributes, resists and separate AC/Attack components.",
+    "Leave missing or uncertain digits unknown instead of accepting merged separators as large numbers. Keep recorded totals separate from equipment estimates.",
+    "Read your current stats again, review them, then Share to replace an older incomplete wiki snapshot. Saved sheets are not silently reinterpreted."
+  ],
+  "steps": [
+    {
+      "title": "Review current stats before sharing",
+      "image": "1.0.11/character-current-stats",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Open Inventory and show the stat rows you want to read. Review the proposed HP, attributes, resists and separate mitigation, softcap, evasion, offense and accuracy values. Save the reviewed reading and use Share to update your wiki sheet. Unknown values stay editable; equipment estimates do not replace recorded totals.",
+      "alt": "Actual Character share review with synthetic equipment and independently recorded HP, mana, endurance, three AC components, two Attack components, seven attributes and six resists.",
+      "caption": "Sandboxed Electron Chromium running the production Character component with synthetic observations and fixture capture/wiki boundaries. The integration check confirms explicit review, persistence and exact wiki serialization of all recorded stat families, including zero. Actual offline OCR pixel checks are separate. No player data, installed profile or public wiki writes.",
+      "imageSha256": "302e6e9d7f30834b939c78dbb2395813da41903cb00d0e9061a80b5b519ed1b3"
+    }
+  ]
+},
+{
   "version": "1.0.10",
   "title": "Feature controls and clearer guides",
   "changes": [
