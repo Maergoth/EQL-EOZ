@@ -1,5 +1,15 @@
 # Browsable release history
 
+The 1.0.11 image is an actual sandboxed Character share review with synthetic
+resources, attributes, resists and independent AC/Attack components. The focused
+Chromium component check uses fixture capture/wiki boundaries and confirms exact
+reviewed values survive saving and wiki serialization, including explicit zero.
+It does not claim real screenshot acquisition; offline OCR pixel evidence is
+recorded separately. No player pixels, installed profile or live wiki writes
+were used. Its immutable version-owned PNG has SHA-256
+`302e6e9d7f30834b939c78dbb2395813da41903cb00d0e9061a80b5b519ed1b3`.
+All prior release entries and artwork remain unchanged.
+
 The 1.0.10 image shows all eleven Features switches in the production Settings
 UI at a 1024 × 900 viewport, captured through isolated sandboxed Electron with
 the real main and preload. A two-process check exercises complete feature hiding,

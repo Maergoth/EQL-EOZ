@@ -397,14 +397,83 @@ Character layouts require positive bounded pane identity; unrelated item panes
 must not supply nearby numbers. Low-confidence or conflicting digits stay
 unknown, and unsupported modifiers remain raw evidence rather than guessed stats.
 
-Use existing image, tile/pixel, queue and deadline budgets. Do not add another
-OCR pass or relax confidence because one fixture becomes unreadable. Preserve
+Use existing image, tile/pixel, queue and deadline budgets: at most two
+refinements, four source tiles per atlas and three recognition calls including
+the scene. Do not raise these limits or relax confidence because one fixture
+becomes unreadable. Preserve
 the explicit unknown set and inspect actual words/geometry when diagnosing it.
 Continuous frames are not a recording archive. See
 [Screen Reading permission](docs/SCREEN_READING_MASTER.md),
 [capture pipeline](docs/design/CAPTURE_PIPELINE.md),
 [recovery](docs/LIVE_CAPTURE_RECOVERY.md) and
 [tooltip capture](docs/TOOLTIP_CAPTURE.md).
+
+For compact Default Modern stats, coherent headings and observed rows calibrate
+the native current-value cells separately from the slash, cap and heroic cells.
+Seven source-pixel crops fit within the two existing refinement slots:
+attribute and resist current-value columns plus the five independent native
+AC/Attack numeric widgets. Character-only reads may therefore use three
+recognition calls including the scene; mixed Contribution reads preserve their
+item identity/stat priorities. White atlas gutters and complete source-field
+geometry protect glyph edges. The parser admits finite, sufficiently confident
+integers aligned to their certified native field and observed row. An executed
+but unread cell cannot fall back to ambiguous scene digits. Textual AC pairs
+still require an actual slash; separately read physical widgets have their own
+field identity. Never repair a merged token by guessing its digit split or a cap.
+Keep this distinct from the Default Stats-tab parser and from recorded totals.
+
+When initial Modern labels or reliable literal resource pairs are incomplete,
+the Character-only fallback must
+certify native row order and pitch across both columns: named HP, End and AC,
+either Attack Speed or Velocity, and a right-column body anchor are required.
+Both reliable caption anchors must agree when present; no numeric Velocity
+value authorizes this layout. The intervening
+resource and Attack positions must contain observed numeric ink; this does not
+invent an unread Attack label. Its first refinement retains the
+ordinary whole-panel context and separately reads resource current/max columns.
+The context is limited to three-times scale while those numeric columns may
+use six-times scale within the same atlas budget. Adaptive numeric tiles retain
+antialiased source pixels before inversion; a separate threshold mask checks
+complete rows, edges and source guards without replacing the OCR pixels.
+A second refinement may use only labels recovered from that actually executed
+context tile, with its exact source footprint and the unique Inventory anchor
+revalidated by the same planner in the reader and parser. Never concatenate
+duplicate scene/context headings or invent an unread Attack label. Use
+independent resource evidence only when a positively named native row contains
+one above-floor literal current/max slash pair across its certified cells,
+both source-row proofs pass and at least one reliable physical component agrees.
+Keep the context's confidence; a weak cell is not promoted. Failed source
+proofs, merged digits, unread physical pairs and reliable conflicts stay unknown.
+Retain ordinary context for regen and modifiers; spend the remaining four tiles on
+current attributes/resists and independent Attack fields. Missing or conflicting
+evidence remains unknown within the same two-refinement budget. Contribution
+reads and the Default parser retain their existing priorities and behavior.
+Coherent headings alone cannot select the seven-cell path when an HP, Mana or
+Endurance pair is weak, malformed or outside its native widgets. Prefer the
+resource fallback only after the same positive native-schema certification;
+retain the seven-cell path when all three literal pairs are reliable.
+Modern resist numbers require 95 confidence in both admission and disagreement
+checks; other numeric fields retain 85. Do not let a rejected weak reading
+invalidate a reliable reread, or use this rule to resolve two reliable conflicts.
+Compare word boxes with the actual outward-rounded native field pixels mapped
+through the acquisition origin/scale, not an unrounded nominal edge. A fallback
+Attack crop uses the certified 14-unit widget height and bounded gutter; an
+inflated OCR label box must not expand it into neighboring stat rows.
+
+The native-size compact pixel gate requires all 23 non-resist values, every
+visible modifier and at least four of six resists to match independent goldens.
+Only up to two resists may remain unknown, with independent source-pixel ink
+coverage inside the native current field and raw returned-word evidence proving
+confidence withholding or an unread cell. A
+confidence-only replay must recover a correct below-floor literal at 95 without
+changing any other field. An incorrect below-floor literal must stay unknown;
+never repair it using a golden. The fixed whole-layout 1.5-times stress control
+requires all 23 non-resists, every visible modifier and at least three of six
+resists, with the same evidence for its at most three unknowns. Enlarging pixels
+does not guarantee higher OCR confidence. Every emitted number must match its
+golden at both sizes; keep the supplied-image acceptance separate and exact.
+Four fixed synthetic PNGs keep these pixels identical across operating systems;
+their generation manifest identifies the unchanged renderer and whole-layout scales.
 
 ### Discoveries, contribution review and publishing
 

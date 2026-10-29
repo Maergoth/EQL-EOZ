@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import './modern-character-columns.mjs';
+import './modern-character-adaptive.mjs';
 import {parseScreenRead,screenReadRefinementRegions,parseItemStatBlock,parseItemAugmentSlots} from '../app/screen-read-parser.js';
 const text=`Item Name: Synthetic Test Blade +3\nDescription\nSynthetic Test Blade +3\nNo Trade\nClass: WAR / PAL\nRace: ALL\nSlot: PRIMARY / SECONDARY\nTier 3 / 10\nAC 12\nHP 45\nMana 20\nSTR 8\nDMG 9 Delay 24\nWeight 2.5\nRequired Level 15\nModified\nWorn Effect: Synthetic Haste\nFocus Exaltation: empty\nRune Exaltation: Synthetic Rune`;
 const [item]=parseScreenRead({text,confidence:85,owner:'contribution',sessionId:'synthetic'});
@@ -96,6 +98,14 @@ for(const [index,entry] of modernItems.entries()){
 }
 const modernChar=modernParsed.find(entry=>entry.subject.kind==='character'),modernFields=Object.fromEntries(modernChar.fields.map(field=>[field.key,field.value]));
 assert.equal(modernFields.hpCurrent,412);assert.equal(modernFields.enduranceMaximum,510);assert.equal(modernFields.str,143);assert.equal(modernFields.attack,undefined,'unlabeled attack component pair is ambiguous');assert.equal(modernFields.attackSpeed,147);
+const modernFireWords=(text,confidence)=>[word('SV.',1960,620,30),word('Fire',2000,620,50),word(text,2100,623,100,16,confidence)];
+const modernFireRead=(text,confidence,refinement=null)=>parseScreenRead({text:'Synthetic Modern resist reliability',words:[...modern,...modernFireWords(text,confidence)],owner:'character',confidence:97,...(refinement?{refinements:[{role:'character-stats',confidence:97,text:'SV. Fire '+refinement[0],words:modernFireWords(...refinement)}]}:{})}).find(entry=>entry.subject.kind==='character');
+for(const [text,confidence,expected]of [['3/197',93,undefined],['53/197',94,undefined],['53/197',95,53],['0/197',95,0]])assert.equal(modernFireRead(text,confidence).fields.find(entry=>entry.key==='resistFire')?.value,expected,'Modern baseline resist numeric floor is95');
+assert.equal(modernFireRead('3/197',93,['53/197',79]).fields.find(entry=>entry.key==='resistFire'),undefined,'Two inadmissible Modern fallback reads cannot establish a resist');
+assert.equal(modernFireRead('3/197',93,['53/197',93]).fields.find(entry=>entry.key==='resistFire'),undefined,'Generic Modern refinement also retains the95 floor');
+assert.equal(modernFireRead('3/197',93,['53/197',96]).fields.find(entry=>entry.key==='resistFire')?.value,53,'An inadmissible93 baseline cannot poison an independent reliable96 reread');
+assert.equal(modernFireRead('3/197',95,['53/197',96]).fields.find(entry=>entry.key==='resistFire'),undefined,'Two reliable conflicting resist readings remain unknown');
+const attribute93=parseScreenRead({text:'Synthetic Modern ordinary attribute reliability',words:modern.map(entry=>entry.text==='143/511'?{...entry,confidence:93}:entry),owner:'character',confidence:97}).find(entry=>entry.subject.kind==='character');assert.equal(attribute93.fields.find(entry=>entry.key==='str')?.value,143,'Modern non-resist numeric floor remains85');
 const modernRegions=screenReadRefinementRegions({words:modern});assert.equal(modernRegions.length,2);assert.equal(modernRegions[0].tiles.length,3);assert.equal(modernRegions[1].role,'character-stats');
 const modernRefined=parseScreenRead({text:'Synthetic Modern scene',words:modern,confidence:89,refinements:[
     {role:'item-stats',tiles:[{x:0,y:0,width:600,height:600},{x:800,y:0,width:600,height:600}],confidence:92,text:'GLOBAL RAW MUST NOT LEAK',words:[word('Dexterity:',20,410,100),word('3',180,413,30,16,70),word('AC:',1080,300,40),word('33',1200,303,30,16,96)]},
@@ -138,6 +148,12 @@ const disagreed=Object.fromEntries(componentsDisagree.fields.map(entry=>[entry.k
 const mergedWords=[...modern.filter(entry=>entry.text!=='359/840'),word('3591840',1820,533,130,16,90),word('AC',1700,590,30),word('121/93',1820,593,75,16,97),word('|257',1910,593,50,16,97)];
 const merged=parseScreenRead({text:'Synthetic Modern missing component divider',words:mergedWords,confidence:92}).find(entry=>entry.subject.kind==='character');
 assert.equal(merged.fields.some(entry=>entry.key==='attackOffense'||entry.key==='attackAccuracy'),false,'a missing divider never promotes concatenated digits to one giant component');
+for(const [text,confidence,expected]of [['|503',61,undefined],['/503',72,undefined],['|593',84,undefined],['|593',85,593],['/593',97,593],['|0',85,0]]){
+    const words=mergedWords.map(entry=>entry.text==='|257'?{...entry,text,confidence}:entry),record=parseScreenRead({text:'Synthetic Modern fallback component confidence',words,confidence:97,refinements:[{role:'character-stats',text:'AC 121/93 '+text,confidence:97,words:[word('AC',1700,590,30),word('121/93',1820,593,75,16,97),word(text,1910,593,50,16,confidence)]}]}).find(entry=>entry.subject.kind==='character');
+    assert.equal(record.fields.find(entry=>entry.key==='acEvasion')?.value,expected,'A leading literal separator cannot bypass numeric confidence: '+text+' at '+confidence);
+}
+const zeroBeforeWeakTail=mergedWords.map(entry=>entry.text==='121/93'?{...entry,text:'0/93'}:entry.text==='|257'?{...entry,text:'|503',confidence:61}:entry),zeroRecord=parseScreenRead({text:'Synthetic known zero before weak trailing component',words:zeroBeforeWeakTail,confidence:97}).find(entry=>entry.subject.kind==='character');
+assert.equal(zeroRecord.fields.find(entry=>entry.key==='acMitigation')?.value,0,'An empty pre-separator segment is not evidence of a weak zero');assert.equal(zeroRecord.fields.find(entry=>entry.key==='acEvasion'),undefined);
 const splitRegions=screenReadRefinementRegions({words:mergedWords}).find(region=>region.role==='character-stats');
 assert.equal(splitRegions.tiles.length,3);assert.deepEqual(splitRegions.tiles.slice(1).map(tile=>tile.component),['attackOffense','attackAccuracy']);
 const splitRead=(key,text,confidence=96)=>({...word(text,key==='attackOffense'?1820:1920,533,30,16,confidence),component:key});
@@ -238,6 +254,7 @@ function defaultStatsPane(x=0,y=0){
 }
 const defaultWords=defaultStatsPane(),defaultInput={text:'Synthetic Default Stats pane',words:defaultWords,confidence:97,owner:'character',input:{captureGeneration:7,sourceId:'synthetic'}};
 const defaultRead=parseScreenRead(defaultInput)[0],defaultFields=Object.fromEntries(defaultRead.fields.map(entry=>[entry.key,entry.value]));
+const default93=parseScreenRead({...defaultInput,words:defaultWords.map(entry=>entry.text==='89/1000'?{...entry,confidence:93}:entry)})[0];assert.equal(default93.fields.find(entry=>entry.key==='resistFire')?.value,89,'Default baseline keeps its existing85 floor rather than inheriting the Modern resist policy');
 assert.equal(defaultRead.input.uiLayout,'default');assert.equal(defaultRead.input.captureGeneration,7);assert.equal(defaultInput.input.uiLayout,undefined,'Character layout cannot mutate shared item/input provenance');
 for(const [key,value]of Object.entries({hpCurrent:337,hpMaximum:901,manaCurrent:225,manaMaximum:703,enduranceCurrent:119,enduranceMaximum:509,acMitigation:407,acMitigationSoftcap:374,acEvasion:500,attackOffense:379,attackAccuracy:691,attackSpeed:150,hpRegen:52,manaRegen:9,enduranceRegen:61,str:269,sta:161,int:95,wis:100,agi:208,dex:239,cha:64,resistMagic:64,resistFire:89,resistCold:52,resistDisease:63,resistPoison:72,resistCorruption:102}))assert.equal(defaultFields[key],value,key);
 for(const [,key,value]of modifierRows)assert.equal(defaultFields[key],value,key);
