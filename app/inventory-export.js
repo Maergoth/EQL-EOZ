@@ -1,5 +1,7 @@
 // Pure parser for EverQuest's /outputfile inventory TSV. File access, catalog
 // matching and committing a character remain explicit caller responsibilities.
+import {isInventoryKeyringLocation} from './inventory-stream-parser.js';
+
 const MAX_CHARACTERS=2*1024*1024,MAX_ROWS=20000,MAX_LINE=4096;
 const SLOT_LABELS=Object.freeze({
     'Any Slot':['any1','any2'],Ear:['ear1','ear2'],Head:['head'],Face:['face'],Neck:['neck'],
@@ -74,7 +76,7 @@ export function parseInventoryExport(text,{classifyParent=()=> 'unknown'}={}){
         if(++rowCount>MAX_ROWS)fail(index,'too many rows.');
         if(section==='keyring'){
             const item=rowItem(fieldsAt(line,index,3),index,{keyring:true});
-            if(!/^[A-Za-z][A-Za-z ]{0,79}$/.test(item.location))fail(index,'invalid KeyRing category.');
+            if(!isInventoryKeyringLocation(item.location))fail(index,'invalid KeyRing category.');
             if(!item.empty){const {empty,...value}=item;keyring.push({...value,group:item.location==='Augmentation'?'augment':'keyring'});}
             continue;
         }

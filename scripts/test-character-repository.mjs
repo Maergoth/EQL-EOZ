@@ -54,6 +54,19 @@ async function native({root,temporary,profile,port,phase,output,expectedCards,ke
         await until(()=>execute(owner,()=>document.querySelector('[data-character-identity]')?.textContent.includes('Storage Demonstration')&&!document.querySelector('[data-inventory-page="next"]').disabled),'actual migrated/restored inventory page');
         const migrated=await execute(owner,async()=>{const api=window.eyeOfZommCharacterRepository,b=await api.bootstrap(),core=await api.getCore({profileId:b.activeProfileId}),manual=await api.get({profileId:b.activeProfileId,id:'legacy-keepsake'});return{bootstrap:b,core,manual};});
         assert(migrated.bootstrap.ok);assert.equal(migrated.bootstrap.profiles.length,2);assert(migrated.manual.ok);assert.equal(migrated.manual.item?.notes||migrated.manual.card?.notes,'Keep this manual evidence.');
+        const compoundLocation='Equipment-Synthetic Key Parent - 雪 +4',compoundName='Synthetic Key Appearance (Ornamentation)';
+        const inspectCompoundKeyring=async()=>{
+            const saved=await execute(owner,async name=>{const api=window.eyeOfZommCharacterRepository,b=await api.bootstrap(),c=await api.getCore({profileId:b.activeProfileId}),options={profileId:b.activeProfileId,generation:c.generation,query:name,limit:50};return{generation:c.generation,keyring:await api.list({...options,scope:'keyring'}),equipped:await api.list({...options,scope:'equipped'})};},compoundName);
+            assert(saved.keyring.ok);assert(saved.equipped.ok);assert.equal(saved.keyring.items.length,2,'Duplicate named KeyRing children persist as two physical records');assert.equal(saved.equipped.items.length,0,'A compound KeyRing location never becomes equipped gear');
+            const entries=saved.keyring.items.map(({id,entry})=>{
+                assert.equal(saved.keyring.kinds[id],'keyring');assert.equal(entry.location,compoundLocation);assert.equal(entry.name,compoundName);assert.equal(entry.itemId,900003);assert.equal(entry.count,1);assert.equal(entry.group,'keyring');
+                assert.equal(entry.slot,null);assert.equal(entry.parentLocation,null);assert.equal(entry.sourceSlot,null);assert(!Object.hasOwn(entry,'augments')&&!Object.hasOwn(entry,'augmentSlots'),'A named parent cannot invent socket attachment');
+                return{id,key:entry.key,location:entry.location,group:entry.group,kind:saved.keyring.kinds[id]};
+            });
+            assert.deepEqual(entries.map(entry=>JSON.parse(entry.key)),[0,1].map(occurrence=>['keyring',compoundLocation,900003,0,occurrence]),'Full compound origins and duplicate occurrence identities remain exact');
+            return{generation:saved.generation,entries};
+        };
+        let compoundKeyringProof;
         if(phase==='import'){
             assert.equal(migrated.core.counts.candidates,1003,'The actual desktop migrates beyond the old 1000-card slice');
             assert.equal(migrated.core.core.statSnapshots.current.stats.HP,3456,'Migration preserves reviewed game totals');
@@ -66,7 +79,20 @@ async function native({root,temporary,profile,port,phase,output,expectedCards,ke
             await until(()=>execute(owner,()=>Boolean(document.querySelector('[data-walkthrough-stats]'))&&!document.querySelector('[data-character-select]').disabled),'reviewed manual stat step');
             await execute(owner,()=>{const form=document.querySelector('[data-walkthrough-stats]'),field=form.querySelector('[data-walkthrough-stats-values]');field.value='HP: 3460\nSTR: 124';field.dispatchEvent(new Event('input',{bubbles:true}));form.requestSubmit();});
             await until(()=>execute(owner,async()=>{const api=window.eyeOfZommCharacterRepository,b=await api.bootstrap(),c=await api.getCore({profileId:b.activeProfileId});return c.core.statSnapshots.current?.stats?.HP===3460;}),'fresh manual stats durably saved');
+            const importedCompound=await inspectCompoundKeyring();
+            await until(()=>execute(owner,()=>Boolean(document.querySelector('[data-walkthrough-stage] [data-character-preview]'))&&!document.querySelector('[data-walkthrough-back]').hidden),'review step before explicit reimport');
+            await execute(owner,()=>document.querySelector('[data-walkthrough-back]').click());
+            await until(()=>execute(owner,()=>Boolean(document.querySelector('[data-walkthrough-stats]'))),'return to stats before explicit reimport');
+            await execute(owner,()=>document.querySelector('[data-walkthrough-back]').click());
+            await until(()=>execute(owner,()=>Boolean(document.querySelector('[data-inventory-read]'))&&!document.querySelector('[data-character-select]').disabled),'explicit unchanged-file reimport step');
+            await execute(owner,()=>document.querySelector('[data-inventory-read]').click());
+            await until(()=>execute(owner,async(generation,expected)=>{const api=window.eyeOfZommCharacterRepository,b=await api.bootstrap(),c=await api.getCore({profileId:b.activeProfileId});return c.generation!==generation&&document.querySelector('[data-character-inventory-count]')?.textContent.startsWith(expected.toLocaleString()+' saved');},importedCompound.generation,expectedCards),'a new unchanged-source native generation activates');
+            await until(()=>execute(owner,()=>Boolean(document.querySelector('[data-walkthrough-stats]'))&&!document.querySelector('[data-character-select]').disabled),'reimport requires reviewed manual stats');
+            await execute(owner,()=>{const form=document.querySelector('[data-walkthrough-stats]'),field=form.querySelector('[data-walkthrough-stats-values]');field.value='HP: 3460\nSTR: 124';field.dispatchEvent(new Event('input',{bubbles:true}));form.requestSubmit();});
+            await until(()=>execute(owner,async()=>{const api=window.eyeOfZommCharacterRepository,b=await api.bootstrap(),c=await api.getCore({profileId:b.activeProfileId});return c.core.statSnapshots.current?.stats?.HP===3460;}),'reimported manual stats durably saved');
+            compoundKeyringProof=await inspectCompoundKeyring();assert.deepEqual(compoundKeyringProof.entries,importedCompound.entries,'Reimport preserves exact duplicate KeyRing identity and location');
         }
+        compoundKeyringProof??=await inspectCompoundKeyring();
         const query=async(scope,needle='')=>execute(owner,async(scope,needle)=>{const api=window.eyeOfZommCharacterRepository,b=await api.bootstrap(),c=await api.getCore({profileId:b.activeProfileId});return api.list({profileId:b.activeProfileId,generation:c.generation,scope,query:needle,limit:50});},scope,needle);
         const core=await execute(owner,async()=>{const api=window.eyeOfZommCharacterRepository,b=await api.bootstrap();return api.getCore({profileId:b.activeProfileId});});
         assert(core.ok);assert.equal(core.counts.candidates,expectedCards);assert.equal(core.counts.equipped,23);assert.equal(core.counts.keyring,keyringCount);assert.equal(core.core.statSnapshots.current.stats.HP,3460,'Fresh reviewed totals survive storage/restart');assert.equal(core.core.achievements.achievementCount,1);
@@ -106,7 +132,7 @@ async function native({root,temporary,profile,port,phase,output,expectedCards,ke
         await execute(owner,()=>{document.querySelectorAll('#toast-region .toast-close').forEach(button=>button.click());document.querySelector('.character-bags').scrollIntoView({block:'start'});return Promise.all(Array.from(document.images,image=>image.decode().catch(()=>{})));});
         if(output){showInactive.call(owner);await execute(owner,()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));await wait(150);owner.webContents.invalidate();const image=await owner.capturePage();assert(!image.isEmpty());await fs.writeFile(path.join(output,phase+'.png'),image.toPNG());}
         await execute(owner,()=>window.eyeOfZommCharacterRepository.flush());
-        const proof={ok:true,phase,actualMainPreload:true,actualUiImport:phase==='import',actualProcessRestart:phase==='restart',sqlite:process.versions.sqlite,node:process.versions.node,electron:process.versions.electron,migratedProfiles:migrated.bootstrap.profiles.length,counts:core.counts,pageRows:first.items.length,pageBytes:Buffer.byteLength(JSON.stringify(first)),selectedItemId:itemId,editedTier:7,voidProof:{base:25,...voidProof},shareProof,foreignDenied:true,verifiedLegacyBackup:true};
+        const proof={ok:true,phase,actualMainPreload:true,actualUiImport:phase==='import',actualUiReimport:phase==='import',actualProcessRestart:phase==='restart',sqlite:process.versions.sqlite,node:process.versions.node,electron:process.versions.electron,migratedProfiles:migrated.bootstrap.profiles.length,counts:core.counts,pageRows:first.items.length,pageBytes:Buffer.byteLength(JSON.stringify(first)),selectedItemId:itemId,editedTier:7,voidProof:{base:25,...voidProof},compoundKeyringProof,shareProof,foreignDenied:true,verifiedLegacyBackup:true};
         await fs.writeFile(path.join(temporary,phase+'.json'),JSON.stringify(proof,null,2));owner.hide();clearTimeout(watchdog);app.quit();
     })();
     require(path.join(root,'desktop/main.cjs'));
@@ -128,7 +154,7 @@ try{
     }
     catalog.push({name:'Socket Bloom',wikiTitle:'Socket Bloom',slots:[],classes:['ALL'],stats:{HP:5},iconId:'synthetic-0'});
     rows.push('Personal-Depot99999\tUnmatched Expedition Find +2\t900002\t1\t0');
-    rows.push('','KeyRing\tName\tID');for(let index=0;index<keyringCount;index++)rows.push(`Equipment\tSynthetic Key ${String(index).padStart(6,'0')} ${'for a distant expedition '.repeat(4).trim()}\t${50000+index}`);
+    rows.push('','KeyRing\tName\tID');for(let index=0;index<keyringCount;index++)rows.push(index===0?'Equipment\tSynthetic Key Parent - 雪 +4\t900004':index<3?'Equipment-Synthetic Key Parent - 雪 +4\tSynthetic Key Appearance (Ornamentation)\t900003':`Equipment\tSynthetic Key ${String(index).padStart(6,'0')} ${'for a distant expedition '.repeat(4).trim()}\t${50000+index}`);
     const tsv=rows.join('\n')+'\n';assert(Buffer.byteLength(tsv)>2*1024*1024,'Fixture exceeds the former whole-file bound');
     const pack={meta:{schemaVersion:3,version:'synthetic-inventory-repository',manifestVersion:'synthetic-inventory-repository',sample:false,wikiEntitiesComplete:true},zones:[],npcs:[],items:catalog,icons,wikiEntities:{items:catalog.map(item=>item.name),npcs:[],zones:[],titles:catalog.map(item=>item.name)}};
     await writeFile(join(game,'Storage Demonstration_Synthetic-Inventory.txt'),tsv);await writeFile(join(game,'Storage Demonstration_Synthetic-Achievements.txt'),'Synthetic: Exploration\nC\tA prepared expedition\nC\t\tPrepare equipment and supplies.\n');
@@ -148,6 +174,7 @@ try{
         if(output)await writeFile(join(output,phase+'.log'),result.log);assert.equal(result.code,0,result.log);proofs.push(JSON.parse(await readFile(join(temporary,phase+'.json'),'utf8')));
     }
     assert.equal(proofs[0].selectedItemId,proofs[1].selectedItemId,'Physical item ID survives process restart');
+    assert.deepEqual(proofs[0].compoundKeyringProof.entries,proofs[1].compoundKeyringProof.entries,'Restart preserves exact compound KeyRing origins, duplicate identities and private type');
     const retained=JSON.parse(await readFile(legacyFile,'utf8'));
     for(const key of Object.keys(values))assert.equal(retained.values[key],null,'Verified migrated Character keys retire from the old whole-roster file');
     assert.equal(hash(await readFile(join(profile,'character-repository','character-legacy-'+hash(legacy)+'.json'))),hash(legacy),'Verified migration backup preserves exact original bytes');

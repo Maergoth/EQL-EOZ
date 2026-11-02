@@ -64,6 +64,12 @@ semantics remain separate from container or unverified-parent contents. Empty an
 sparse socket positions, loose Exaltation roles, unknown items and every stored
 location retain their existing meaning.
 
+KeyRing locations may contain an alphabetic category followed by `-` and a
+parent display name, including punctuation, Unicode and a tier suffix. Preserve
+the complete bounded location and duplicate occurrences as private keyring
+origins. A named parent supplies no source socket position: do not infer worn
+equipment, an Exaltation attachment or an equipped total from it.
+
 Inventory and the paired achievement export activate in one durable
 transaction only after complete validation and source/profile checks. Cancellation,
 a changing source, invalid data or disk failure leaves the previous generation

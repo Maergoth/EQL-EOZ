@@ -5,6 +5,12 @@ start with the [user guide](README.md); the app's **Settings → About Eye of
 Zomm → What's new** also retains the illustrated release archive. Older entries
 describe behavior at that release, including workflows replaced in later versions.
 
+## 1.0.12 - Compound keyring inventory imports
+
+- Accept supported keyring child locations that include a parent equipment name in inventory text exports instead of rejecting an otherwise valid import.
+- Preserve keyring source locations and quantities without treating those entries as equipped gear or attached Exaltations.
+- Retry a rejected inventory import after updating. Failed imports retain the previously saved character; no inventory is silently discarded or automatically replaced.
+
 ## 1.0.11 - Reliable Modern character stats
 
 - Read compact Default Modern numeric columns separately in equipment-visible and scrolled stat views; preserve distinct AC and Attack components.

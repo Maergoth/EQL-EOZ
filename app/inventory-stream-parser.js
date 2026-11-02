@@ -13,6 +13,14 @@ const integer=(value,line,label,max=2147483647)=>{
     if(!/^\d+$/u.test(value)||!Number.isSafeInteger(Number(value))||Number(value)>max)fail(line,`invalid ${label}.`);
     return Number(value);
 };
+// A KeyRing child names its parent after the category, not a numbered socket.
+// Preserve that full location as an opaque physical origin; punctuation in a
+// parent display name must not turn the row into equipped gear or an augment.
+export function isInventoryKeyringLocation(location){
+    if(typeof location!=='string'||location.length>180||/[\u0000-\u001f\u007f]/u.test(location))return false;
+    const separator=location.indexOf('-'),category=separator<0?location:location.slice(0,separator);
+    return /^[A-Za-z][A-Za-z ]{0,79}$/u.test(category)&&(separator<0||Boolean(location.slice(separator+1).trim()));
+}
 const groupFor=location=>{
     if(/^General [1-9]\d*(?:-Slot[1-9]\d*)*$/u.test(location))return 'inventory';
     if(/^Bank[1-9]\d*(?:-Slot[1-9]\d*)*$/u.test(location))return 'bank';
@@ -69,7 +77,7 @@ export function createInventoryStreamParser({onRow}={}){
         const item=itemAt(fieldsAt(line,lineNumber,section==='keyring'?3:5),lineNumber,section==='keyring');
         const common={ordinal:rowCount++,line:lineNumber,section,slot:null,equipmentOrdinal:null,parentLocation:null,sourceSlot:null,rootLocation:item.location,rootOccurrence:0};
         if(section==='keyring'){
-            if(!/^[A-Za-z][A-Za-z ]{0,79}$/u.test(item.location))fail(lineNumber,'invalid KeyRing category.');
+            if(!isInventoryKeyringLocation(item.location))fail(lineNumber,'invalid KeyRing category.');
             return {...common,...item,group:item.location==='Augmentation'?'augment':'keyring'};
         }
         const slots=Object.hasOwn(INVENTORY_WORN_LABELS,item.location)?INVENTORY_WORN_LABELS[item.location]:null;

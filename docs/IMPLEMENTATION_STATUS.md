@@ -1,6 +1,6 @@
 # Eye of Zomm implementation status
 
-Current `v1.0.11` integration: improve compact Default Modern stat reading in equipment-visible and scrolled views, preserving unknowns, recorded totals, feature availability and separate consent. The [developer guide](../DEVELOPMENT.md) remains the current component reference; [CHANGELOG](../CHANGELOG.md) owns release history. Source, native and package checks must identify the final candidate.
+Current `v1.0.12` integration: accept supported keyring child locations with parent equipment names during inventory import, preserving source provenance, physical copies, equipped gear, attached Exaltations and saved work. A rejected import retains the prior character. The [developer guide](../DEVELOPMENT.md) remains the current component reference; [CHANGELOG](../CHANGELOG.md) owns release history. Source, native and package checks must identify the final candidate.
 
 The older implementation and acceptance notes below retain historical context. They do not identify outstanding work or replace current source inspection.
 

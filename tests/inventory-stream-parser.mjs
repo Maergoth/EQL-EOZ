@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {createInventoryStreamParser,INVENTORY_STREAM_LIMITS} from '../app/inventory-stream-parser.js';
+import {createInventoryStreamParser,INVENTORY_STREAM_LIMITS,isInventoryKeyringLocation} from '../app/inventory-stream-parser.js';
 import {parseInventoryExport} from '../app/inventory-export.js';
 
 const labels=['Any Slot','Ear','Head','Face','Ear','Neck','Shoulders','Arms','Back','Wrist','Wrist','Range','Hands','Primary','Secondary','Fingers','Fingers','Chest','Legs','Feet','Waist','Ammo','Any Slot'];
@@ -29,6 +29,26 @@ assert.throws(()=>new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.of(0xf
 const repeated=[header,...labels.flatMap((label,index)=>[`${label}\tSynthetic Worn ${index}\t${index+1}\t1\t0`,`${label}-Slot7\tSynthetic Socket\t999\t1\t0`])].join('\n');
 const roots=stream(repeated,29).rows.filter(row=>row.parentLocation==='Ear');
 assert.deepEqual(roots.map(row=>[row.rootOccurrence,row.sourceSlot]),[[0,7],[1,7]],'Repeated worn labels retain their physical root occurrence');
+
+const parentName="Synthetic 雪 Blade's Edge - North +4",compoundLocation=`Equipment-${parentName}`;
+const compoundSource=[header,...worn,'','KeyRing\tName\tID\t',`Equipment\t${parentName}\t9001`,`${compoundLocation}\tSynthetic Appearance (Ornamentation)\t9002`,`${compoundLocation}\tSynthetic Appearance (Ornamentation)\t9002`].join('\r\n');
+for(const width of [1,2,17,8192]){
+    const actual=stream(compoundSource,width),children=actual.rows.filter(row=>row.location===compoundLocation);
+    assert.equal(actual.summary.rowCount,26);assert.equal(children.length,2,'Identical keyring child rows remain physical copies');
+    for(const child of children){
+        assert.equal(child.group,'keyring');assert.equal(child.section,'keyring');assert.equal(child.count,1);
+        assert.equal(child.name,'Synthetic Appearance (Ornamentation)');
+        assert.equal(child.slot,null);assert.equal(child.parentLocation,null);assert.equal(child.sourceSlot,null);
+        assert(!Object.hasOwn(child,'augments')&&!Object.hasOwn(child,'augmentSlots'),'A named keyring parent supplies no socket position');
+    }
+    assert.deepEqual(children.map(row=>row.location),parseInventoryExport(compoundSource).keyring.slice(1).map(row=>row.location));
+}
+for(const location of ['Mount',`Future Kind-${'親'.repeat(168)}`,`${'A'.repeat(80)}-Synthetic Parent`,compoundLocation])assert(isInventoryKeyringLocation(location),'Alphabetic categories and bounded parent display names are supported');
+assert(isInventoryKeyringLocation(`Equipment-${'x'.repeat(170)}`),'The full location boundary is 180 characters');
+for(const location of ['', 'Equipment-','Equipment-   ','-Synthetic Parent','Equipment1-Parent',`${'A'.repeat(81)}-Parent`,'Equipment-Parent\u0000','Equipment-Parent\tOther','Equipment-Parent\rOther','Equipment-Parent\nOther','Equipment-Parent\u007f',`Equipment-${'x'.repeat(171)}`]){
+    assert.equal(isInventoryKeyringLocation(location),false,'Malformed categories, empty parent names, controls and oversized locations reject');
+    assert.throws(()=>stream([header,...worn,'','KeyRing\tName\tID',`${location}\tSynthetic Appearance\t9002`].join('\r\n'),1),/Inventory export/);
+}
 
 const parser=createInventoryStreamParser({onRow:()=>{}});parser.write(header+'\n'+worn.join('\n')+'\n');
 for(let start=0;start<30000;start+=500){const batch=Array.from({length:500},(_,index)=>`General ${start+index+1}\tSynthetic Copy\t800\t1\t0`).join('\n')+'\n';assert.deepEqual(parser.write(batch),[]);}
