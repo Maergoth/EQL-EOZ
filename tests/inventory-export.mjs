@@ -33,6 +33,16 @@ assert.equal(parseInventoryExport('\uFEFF'+exportText()).equipment.length,23,'UT
 assert.equal(parseInventoryExport(exportText().replace(/\r\n/g,'\n')).equipment.length,23,'LF and CRLF exports agree');
 assert.equal(parseInventoryExport(exportText(worn(),[],[])).keyring.length,0,'An empty KeyRing is valid');
 
+const keyringParent="Synthetic 雪 Blade's Edge - North +4",keyringChildLocation=`Equipment-${keyringParent}`;
+const nestedKeyring=parseInventoryExport(exportText(worn(),[],[`Equipment\t${keyringParent}\t9001`,`${keyringChildLocation}\tSynthetic Appearance (Ornamentation)\t9002`,`${keyringChildLocation}\tSynthetic Appearance (Ornamentation)\t9002`,`Future Kind-${'親'.repeat(168)}\tSynthetic Future Entry\t9003`]));
+assert.equal(nestedKeyring.rowCount,27);assert.equal(nestedKeyring.keyring.length,4);
+assert.deepEqual(nestedKeyring.keyring.slice(1,3).map(item=>[item.location,item.name,item.itemId,item.count,item.group]),Array.from({length:2},()=>[keyringChildLocation,'Synthetic Appearance (Ornamentation)',9002,1,'keyring']),'Compound origins and duplicate physical keyring rows are retained verbatim');
+for(const item of nestedKeyring.keyring){
+    assert(!Object.hasOwn(item,'slot')&&!Object.hasOwn(item,'sourceSlot')&&!Object.hasOwn(item,'parentId')&&!Object.hasOwn(item,'augments')&&!Object.hasOwn(item,'augmentSlots'),'Named keyring ancestry cannot establish worn gear or a socket attachment');
+}
+for(const location of [`${'A'.repeat(80)}-Synthetic Parent`,`Equipment-${'x'.repeat(170)}`])assert.equal(parseInventoryExport(exportText(worn(),[],[`${location}\tSynthetic Keyring Entry\t9004`])).keyring[0].location,location);
+for(const location of ['', 'Equipment-','Equipment-   ','-Synthetic Parent','Equipment1-Parent',`${'A'.repeat(81)}-Parent`,'Equipment-Parent\u0000','Equipment-Parent\tOther','Equipment-Parent\rOther','Equipment-Parent\nOther','Equipment-Parent\u007f',`Equipment-${'x'.repeat(171)}`])assert.throws(()=>parseInventoryExport(exportText(worn(),[],[`${location}\tSynthetic Appearance\t9002`])),/Inventory export/,'Malformed compound keyring locations still reject the complete export');
+
 const socketGear=worn().flatMap((value,index)=>{
     if(index===1)return [row('Ear','Synthetic Ear Stone +4',200,1,11),row('Ear-Slot7','Synthetic Ear Stone (Exaltation)',200,1,11),row('Ear-Slot10')];
     if(index===4)return [row('Ear','Synthetic Ear Stone +5',200,1,11),row('Ear-Slot7'),row('Ear-Slot10','Synthetic Alternate (Exaltation)',201,1,11)];

@@ -2,6 +2,27 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.12",
+  "title": "Compound keyring inventory imports",
+  "changes": [
+    "Import supported keyring child locations that include a parent equipment name without rejecting the whole inventory text export.",
+    "Retain keyring locations, counts and existing saved work. Keyring entries remain separate from equipped gear and attached Exaltations.",
+    "After updating, retry an inventory import that was rejected. Failed imports leave the saved character unchanged."
+  ],
+  "steps": [
+    {
+      "title": "Continue after a successful import",
+      "image": "1.0.12/inventory-keyring-import",
+      "view": "character",
+      "action": "Open Character",
+      "copy": "Create fresh inventory and achievement exports, then choose Import files in Character. A successful import advances to Stats and wiki gaps. Supported keyring child locations remain preserved as source rows without becoming worn gear or attached Exaltations. Review current stats separately before saving or sharing.",
+      "alt": "Actual Character Stats and wiki gaps step showing Inventory and achievements imported after an isolated synthetic paired-file import, with no player data or private paths.",
+      "caption": "Actual app after a successful inventory and achievement import using synthetic demonstration data. Review current stats before saving or sharing the character.",
+      "imageSha256": "a12ea7747370f38577d6bf3ecc289bbd6f83e2032553593c09fd1051c89d19d7"
+    }
+  ]
+},
+{
   "version": "1.0.11",
   "title": "Reliable Modern character stats",
   "changes": [

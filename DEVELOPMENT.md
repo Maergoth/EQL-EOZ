@@ -371,6 +371,9 @@ physical-entry merge and legacy extraction. Stage an inactive generation, verify
 both sources and the selected profile, then activate atomically. Retain physical
 copy IDs, exact origins, manual changes, sparse sockets, loose Exaltation roles,
 keyrings and unknown/raw rows. A container child is not automatically a socket.
+Compound KeyRing labels (`category-parent display name`) retain their exact
+bounded location and physical occurrences. Parent punctuation/Unicode is valid;
+the label alone supplies no equipped slot or Exaltation socket relationship.
 
 Migration must preserve original source backups and verify stored counts/hashes
 before retiring old Character keys. `character-storage.cjs` remains the limited
