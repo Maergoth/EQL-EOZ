@@ -44,9 +44,13 @@ async function native({root,temporary,profile,game,proof,screenshots,phase,expec
             showOpenDialog:async()=>{assert.equal(phase,'initial');assert(!chooserRequested);chooserRequested=true;return new Promise(done=>{chooserResolve=done;});}},
         shell:{...electron.shell,openExternal:async()=>{throw Error('External navigation is disabled in this synthetic proof.');}}};
     const load=Module._load;Module._load=function(name,...rest){return name==='electron'?wrapped:load.call(this,name,...rest);};
+    // This fixture has no wiki account. Resolve the normal startup account
+    // restore immediately, without a real request or a transport timeout.
+    const {WikiClient}=require(path.join(root,'desktop/wiki-client.cjs'));
+    WikiClient.prototype.status=async function(){return {origin:this.origin,authenticated:false,user:null,canEdit:false,canCreate:false,canUpload:false,blocked:false};};
     if(phase==='initial'){
-        const {DropObservationStorage}=require(path.join(root,'desktop/drop-observation-storage.cjs')),append=DropObservationStorage.prototype.append;
-        DropObservationStorage.prototype.append=async function(...values){
+        const {SQLiteDropObservationStorage}=require(path.join(root,'desktop/drop-observation-sqlite.cjs')),append=SQLiteDropObservationStorage.prototype.append;
+        SQLiteDropObservationStorage.prototype.append=async function(...values){
             if(holdAppend&&Array.isArray(values[0])&&values[0].length){holdAppend=false;appendEntered=true;await new Promise(done=>{releaseAppend=done;});}
             return append.apply(this,values);
         };
@@ -245,7 +249,13 @@ try{
         await writeFile(join(temporary,'main.cjs'),`(${native.toString()})(${JSON.stringify({root:runtimeRoot,temporary,profile,game,proof,screenshots,phase,expectedVersion:pkg.version,packaged:Boolean(packagedRoot)})});`);
         const stdout=await open(join(proof,phase+'.stdout.log'),'w'),stderr=await open(join(proof,phase+'.stderr.log'),'w');const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
         const result=await new Promise(done=>{const child=spawn(electron,[temporary,'--disable-gpu','--mute-audio'],{cwd:root,env,windowsHide:true,stdio:['ignore',stdout.fd,stderr.fd],timeout:100000});child.once('error',error=>done({exitCode:null,error:error.message}));child.once('close',(exitCode,signal)=>done({exitCode,signal}));});await stdout.close();await stderr.close();
-        await writeFile(join(proof,phase+'-completion.json'),JSON.stringify(result,null,2)+'\n');assert.equal(result.exitCode,0,'Read '+join(proof,phase+'.json')+' and file-backed logs.');
+        await writeFile(join(proof,phase+'-completion.json'),JSON.stringify(result,null,2)+'\n');
+        if(result.exitCode!==0){
+            const failure=await readFile(join(proof,phase+'.json'),'utf8').then(JSON.parse).catch(()=>null);
+            console.error('Synthetic feature-controls failure:',JSON.stringify({phase,result,error:failure?.error,lastEvents:failure?.events?.slice(-6)}));
+            for(const suffix of ['stdout','stderr']){const tail=await readFile(join(proof,phase+'.'+suffix+'.log'),'utf8').catch(()=>'<unavailable>');console.error(`Synthetic ${phase} ${suffix} tail:\n${tail.slice(-4000)}`);}
+        }
+        assert.equal(result.exitCode,0,'Read '+join(proof,phase+'.json')+' and file-backed logs.');
         const receipt=JSON.parse(await readFile(join(proof,phase+'.json'),'utf8'));assert.equal(receipt.ok,true);phases.push(receipt);
     }
     const after=await sourceHashes();assert.deepEqual(after,before,'Runtime source must remain frozen during native proof');const archiveAfter=await archiveHash();assert.deepEqual(archiveAfter,archiveBefore,'Exact ASAR remains unchanged');
