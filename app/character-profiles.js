@@ -113,6 +113,7 @@ export function createCharacterProfiles({storage=globalThis.localStorage,onWarni
         storage:proxy,
         list:()=>state.profiles.map(({id,name,server})=>({id,name,server})),
         activeId:()=>state.activeId,
+        observationIdentity(){const profile=state.profiles.find(value=>value.id===state.activeId);return profile?{name:profile.name,server:profile.server}:null;},
         register(metadata){try{
             assertWritable();const label=identity(metadata);if(!label)throw Error('Enter a Character name and server before saving this character.');
             if(state.profiles.some(profile=>profile.id!==state.activeId&&sameIdentity(profile,label)))throw Error('A Character with this name and server already exists. Select that character instead.');

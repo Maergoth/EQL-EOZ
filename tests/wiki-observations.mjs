@@ -3,14 +3,14 @@ import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),{WikiClient}=require('../desktop/wiki-client.cjs');
 const account={id:7,name:'Fixture Observer'},requests=[];
 const batch={schemaVersion:1,batchId:'batch_fixture_01',clientVersion:'fixture',events:[{id:'event_fixture_01',kind:'loot',observedAt:'2026-10-24T10:00:00Z',item:'Synthetic relic'}]};
-let alter=x=>x,network=false;
+let alter=x=>x,network=false,supportsNames=false;
 const client=new WikiClient({fetchImpl:async(url,init={})=>{
  const params=init.method==='POST'?new URLSearchParams(init.body):new URL(url).searchParams;requests.push(Object.fromEntries(params));
  let data;if(params.get('meta')==='userinfo')data={query:{userinfo:{...account,rights:['edit','createpage']}}};
  else if(params.get('meta')==='tokens')data={query:{tokens:{csrftoken:'PRIVATE-TOKEN'}}};
  else {assert.equal(params.get('action'),'eozobservations');assert.equal(params.get('token'),'PRIVATE-TOKEN');assert.equal(params.get('assert'),'user');assert.equal(params.get('assertuser'),account.name);assert.equal(init.method,'POST');
  if(network)throw Error('fixture response lost');
- data={eozobservations:alter(params.get('operation')==='status'?{schemaVersion:1,enabled:false,available:false,account,limits:{events:100,bytes:262144,eventBytes:4096,hourlyBatches:12}}:{schemaVersion:1,batchId:batch.batchId,account,accepted:[batch.events[0].id],duplicates:[],conflicts:[],rejected:[],receivedAt:'2026-10-24T10:00:01Z'})};}
+ data={eozobservations:alter(params.get('operation')==='status'?{schemaVersion:1,enabled:supportsNames,available:supportsNames,account,limits:{events:100,bytes:262144,eventBytes:4096,hourlyBatches:12,...(supportsNames?{optionalEventFields:['characterName']}:{})}}:{schemaVersion:1,batchId:batch.batchId,account,accepted:[batch.events[0].id],duplicates:[],conflicts:[],rejected:[],receivedAt:'2026-10-24T10:00:01Z'})};}
  return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
 }});
 assert.equal((await client.observationStatus()).enabled,false);
@@ -22,4 +22,14 @@ alter=x=>x;network=true;await assert.rejects(client.submitObservations(batch),e=
 const before=requests.length;await assert.rejects(client.submitObservations({...batch,events:[...batch.events,...batch.events]}),/unique/);assert.equal(requests.length,before);
 await assert.rejects(client.submitObservations(batch,{expectedUser:{id:9,name:'Changed'}}),/account changed/);
 assert(requests.filter(r=>r.action==='eozobservations').every(r=>r.assertuser===account.name));
+const namedBatch={...batch,events:[{...batch.events[0],characterName:'Configured Character'}]};
+await assert.rejects(client.submitObservations(namedBatch),error=>error.code==='observation-capability');
+supportsNames=true;await client.observationStatus();await client.submitObservations(namedBatch);
+const namedRequest=requests.filter(request=>request.action==='eozobservations'&&request.operation==='submit').at(-1);assert.equal(JSON.parse(namedRequest.batch).events[0].characterName,'Configured Character');
+for(const characterName of [null,'','a'.repeat(121),'C:private','private/path','private\\path','Bad\nName'])await assert.rejects(client.submitObservations({...namedBatch,events:[{...namedBatch.events[0],characterName}]}),error=>error.code==='observations');
+supportsNames=false;await client.observationStatus();await assert.rejects(client.submitObservations(namedBatch),error=>error.code==='observation-capability');await client.submitObservations(batch);
+const throttled=new WikiClient({fetchImpl:async()=>new Response('{}',{status:429,headers:{'Retry-After':'600'}})});
+await assert.rejects(throttled.request({action:'eozobservations'}),error=>error.code==='http-429'&&error.retryAfterMs===600000,'HTTP throttling carries Retry-After to the background scheduler');
+const apiThrottled=new WikiClient({fetchImpl:async()=>new Response(JSON.stringify({error:{code:'eoz-rate-limit',info:'Synthetic throttle'}}),{headers:{'Retry-After':'120'}})});
+await assert.rejects(apiThrottled.request({action:'eozobservations'}),error=>error.code==='eoz-rate-limit'&&error.retryAfterMs===120000,'API throttling also preserves Retry-After');
 console.log('Wiki observation transport: named-session CSRF/assertions, capability, exhaustive/account-bound ACK, safe unknown retry and duplicate-ID rejection passed.');

@@ -25,6 +25,7 @@ const { AutomaticLootSources } = require('./automatic-loot-sources.cjs');
 const { ContributionIgnores, ContributionIgnoresHost, CHANGED:CONTRIBUTION_IGNORES_CHANGED } = require('./contribution-ignores.cjs');
 const { WikiHost } = require('./wiki-host.cjs');
 const { DropObservationHost } = require('./drop-observation-host.cjs');
+const { createObservationStartup } = require('./drop-observation-startup.cjs');
 const { IconFinderHost } = require('./icon-finder-host.cjs');
 const { RendererDrain } = require('./renderer-drain.cjs');
 const { ShareHost } = require('./share-host.cjs');
@@ -957,7 +958,7 @@ async function bootstrap() {
         onChanged:snapshot=>{automaticLootSources?.cancel();void discoveryHost?.reconcileIgnores().catch(()=>{});if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send(CONTRIBUTION_IGNORES_CHANGED,snapshot);}});
     wikiHost = new WikiHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
         stateDir:path.join(userDataDir(),'wiki-contributions'),version:APP_VERSION,featureLease,isFeatureEnabled:featureEnabled,
-        onStatus:status=>{void observationHost?.accountChanged(status);if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:wiki-state',status);},
+        onStatus:async status=>{try{await observationHost?.accountChanged(status);}catch{/* A failed local save cannot break wiki status or first paint. */}if(windowRef&&!windowRef.isDestroyed())windowRef.webContents.send('eye-of-zomm:wiki-state',status);},
         onAttachmentPrepared:({png})=>featureEnabled('screenReading')&&featureEnabled('contributions')&&captureHost.readingEnabled?captureHost.importPng(png,{mode:'contribution'}):{records:[],cancelled:true},
         onCaptureEvidence:proof=>captureHost.getItemEvidence(proof),
         onItemCatalog:automaticWikiCatalog,
@@ -969,12 +970,10 @@ async function bootstrap() {
     automaticLogReader=new AutomaticLogReader({getPack:automaticWikiCatalog,onReset:()=>automaticLootSources.cancel(),
         onObservation:record=>automaticLootSources.observe(record)});
     iconFinderHost = new IconFinderHost({session:wikiHost.session,stateDir:path.join(userDataDir(),'wiki-icons'),nativeImage:electron.nativeImage});
+    const observationStartup=createObservationStartup();
     observationHost = new DropObservationHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
-        stateDir:path.join(userDataDir(),'drop-observations'),client:wikiHost.client,version:APP_VERSION,isFeatureEnabled:()=>featureEnabled('dropObservations')});
+        stateDir:path.join(userDataDir(),'drop-observations'),client:wikiHost.client,version:APP_VERSION,isFeatureEnabled:()=>featureEnabled('dropObservations'),startupAccountReady:observationStartup.ready});
     await observationHost.ready;
-    // Resolve the cookie-backed account before new events enter the outbox.
-    const wikiCookies=await wikiHost.session.cookies.get({url:'https://eqlwiki.com/'}).catch(()=>[]);
-    await observationHost.accountChanged(wikiCookies.length&&['character','contributions','dropObservations'].some(featureEnabled)?await wikiHost.client.status().catch(()=>({authenticated:false})):{authenticated:false});
     rendererDrain = new RendererDrain({ipcMain,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef});
     shareHost = new ShareHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,featureLease});
     discoveryHost = new DiscoveryHost({electron,origin:`http://${HOST}:${port}`,getMainWindow:()=>windowRef,
@@ -982,6 +981,9 @@ async function bootstrap() {
         verifyDiscovery:value=>wikiHost.verifyDiscovery(value),isContributionIgnored:target=>getContributionIgnores().isIgnored(target),
         itemExistence:new WikiItemExistence({getPack:automaticWikiCatalog,entryVerifier:wikiHost.discoveryVerifier,fetchImpl:(url,options)=>electron.net.fetch(url,{...options,credentials:'omit',useSessionCookies:false})})});
     createWindow(config,await readJson(windowPlacementPath(),{}));
+    // Only native collection waits for this quiet account restore. WikiHost's
+    // revision guard prevents a late startup response from overriding a login.
+    void observationStartup.start(()=>wikiHost.publishStatus());
     // Metadata checks are quiet. Application downloads require an explicit
     // request or the saved opt-in; a staged installer never runs on startup.
     void getAppUpdater().startup().catch(() => console.warn('[Eye of Zomm] application update check unavailable.'));

@@ -1275,7 +1275,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         listen(document.defaultView,'beforeunload',event=>{if(closing||!repositoryClient.status.pending)return;event.preventDefault();event.returnValue=false;void repositoryClient.flush().then(()=>{closing=true;document.defaultView.close();}).catch(error=>warning(error.message));});
         if(enabled('character'))void repositoryClient.start().catch(()=>{});
     }
-    return{setFeatures,prepareFeatureChange:async patch=>{if(patch.character===false)await repositoryClient?.flush();},beginDiscoveryContribution,cancelDiscoveryContribution,setDiscoveryNotable,flushCharacter:()=>repositoryClient?.flush()||Promise.resolve(),drainCharacterForClose:()=>repositoryClient?.drainForClose()||Promise.resolve(),resumeCharacterAfterCloseDrain:()=>repositoryClient?.resumeAfterCloseDrain(),consumeLog(event,context){
+    return{dropObservationIdentity:()=>{const selected=profiles.list().find(profile=>profile.id===profiles.activeId());return selected?{name:selected.name,server:selected.server}:null;},setFeatures,prepareFeatureChange:async patch=>{if(patch.character===false)await repositoryClient?.flush();},beginDiscoveryContribution,cancelDiscoveryContribution,setDiscoveryNotable,flushCharacter:()=>repositoryClient?.flush()||Promise.resolve(),drainCharacterForClose:()=>repositoryClient?.drainForClose()||Promise.resolve(),resumeCharacterAfterCloseDrain:()=>repositoryClient?.resumeAfterCloseDrain(),consumeLog(event,context){
         if(!enabled('contributions'))return null;
         if(disposed||!event||context?.live!==true)return;
         const source=String(context.logId||'current');

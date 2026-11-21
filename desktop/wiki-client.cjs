@@ -8,6 +8,7 @@ const path = require('node:path');
 const {WikiAttachments}=require('./wiki-attachments.cjs');
 const {CharacterScreenshots}=require('./character-screenshots.cjs');
 const {ContributionHistory}=require('./contribution-history.cjs');
+const {normalizeCharacterName}=require('./drop-observation-storage.cjs');
 const PRODUCTION_ORIGIN = 'https://eqlwiki.com';
 const MAX_JSON = 2 * 1024 * 1024, MAX_PAGE = 512 * 1024, MAX_PNG = 12 * 1024 * 1024;
 const MAX_CHARACTER_PAGE = 2 * 1024 * 1024, MAX_CHARACTER_JSON = 8 * 1024 * 1024;
@@ -24,6 +25,7 @@ const characterSheets = () => import('../app/character-wiki-sheet.js');
 const pageCategories = () => import('../app/eoz-page-category.js');
 const copy = value => JSON.parse(JSON.stringify(value));
 const safeMessage = value => String(value || 'The wiki request could not complete.').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,500);
+function retryAfterMilliseconds(value,now){if(typeof value!=='string'||!value.trim())return 0;const delay=/^\d+(?:\.\d+)?$/.test(value.trim())?Number(value)*1000:Date.parse(value)-now;return Number.isFinite(delay)&&delay>0?Math.min(86400000,Math.max(1000,Math.ceil(delay))):0;}
 class WikiError extends Error {
     constructor(code, message) { super(safeMessage(message)); this.name='WikiError'; this.code=code; }
 }
@@ -110,14 +112,16 @@ class WikiClient {
             const response=await this.fetch(post?this.api:`${this.api}?${data}`,{method:post?'POST':'GET',credentials:'include',redirect:'error',cache:'no-store',signal:controller.signal,
                 headers:{'User-Agent':`EQLWiki-EyeOfZomm/${this.version}`,Accept:'application/json',...(post&&!form?{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}:{})},body:post?(form||data.toString()):undefined});
             if(response.url && new URL(response.url).origin!==this.origin)throw new WikiError('redirect','The wiki redirected outside its configured origin.');
-            if(!response.ok)throw new WikiError(`http-${response.status}`,`The wiki returned HTTP ${response.status}. Please try again later.`);
+            const retryAfterMs=retryAfterMilliseconds(response.headers.get('retry-after'),this.now());
+            const failure=(code,message)=>{const error=new WikiError(code,message);if(retryAfterMs)error.retryAfterMs=retryAfterMs;return error;};
+            if(!response.ok)throw failure(`http-${response.status}`,`The wiki returned HTTP ${response.status}. Please try again later.`);
             if(Number(response.headers.get('content-length'))>maxResponseBytes)throw new WikiError('size','The wiki response exceeded the size limit.');
             let bytes;
             if(response.body?.getReader){const reader=response.body.getReader(),chunks=[];let size=0;try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxResponseBytes){await reader.cancel();throw new WikiError('size','The wiki response exceeded the size limit.');}chunks.push(Buffer.from(value));}bytes=Buffer.concat(chunks);}finally{reader.releaseLock();}}
             else {bytes=Buffer.from(await response.text());if(bytes.length>maxResponseBytes)throw new WikiError('size','The wiki response exceeded the size limit.');}
             const result=JSON.parse(bytes.toString('utf8'));
-            if(result.error)throw new WikiError(String(result.error.code||'api'),result.error.info||result.error.text);
-            if(Array.isArray(result.errors)&&result.errors.length)throw new WikiError(String(result.errors[0].code||'api'),result.errors[0].text);
+            if(result.error)throw failure(String(result.error.code||'api'),result.error.info||result.error.text);
+            if(Array.isArray(result.errors)&&result.errors.length)throw failure(String(result.errors[0].code||'api'),result.errors[0].text);
             return result;
         }catch(error){if(error instanceof WikiError)throw error;if(error.name==='AbortError')throw new WikiError(post?'unknown-write':'timeout',post?'The wiki write result is unknown. Refresh its state before retrying.':'The wiki request timed out.');throw new WikiError(post?'unknown-write':'network',post?'The connection ended before the wiki write result was confirmed. Refresh before retrying.':'The wiki could not be reached. Check the connection and try again.');}
         finally{clearTimeout(timer);this.featureRequests.delete(controller);}
@@ -135,18 +139,24 @@ class WikiClient {
         return status;
     }
     async observationStatus() {
+        this.observationCapability=null;
         const status=await this.expectedUser(null,{requireEdit:false}),token=await this.csrf(status.user);
         const data=await this.request({action:'eozobservations',operation:'status',assert:'user',assertuser:status.user.name,token},{post:true});
         const result=data.eozobservations;
         if(result?.schemaVersion!==1||result.account?.id!==status.user.id||result.account?.name!==status.user.name||typeof result.enabled!=='boolean'||typeof result.available!=='boolean')throw new WikiError('observation-ack','The wiki observation capability response was invalid.');
+        this.observationCapability={account:{...status.user},characterNameSupported:result.enabled&&result.available&&Array.isArray(result.limits?.optionalEventFields)&&result.limits.optionalEventFields.includes('characterName')};
         return copy(result);
     }
     async submitObservations(batch,{expectedUser=null}={}) {
         if(!batch||batch.schemaVersion!==1||typeof batch.batchId!=='string'||!/^[A-Za-z0-9_-]{8,120}$/.test(batch.batchId)||!Array.isArray(batch.events)||batch.events.length<1||batch.events.length>100)throw new WikiError('observations','Invalid observation batch.');
         const ids=batch.events.map(event=>event?.id);
         if(ids.some(id=>typeof id!=='string'||!/^[A-Za-z0-9_-]{8,120}$/.test(id))||new Set(ids).size!==ids.length)throw new WikiError('observations','Observation IDs must be unique.');
+        const named=batch.events.some(event=>Object.hasOwn(event,'characterName'));
+        if(named)try{for(const event of batch.events)if(Object.hasOwn(event,'characterName')&&normalizeCharacterName(event.characterName)!==event.characterName)throw Error('name');}catch{throw new WikiError('observations','Invalid public observation character name.');}
         const json=JSON.stringify(batch);if(Buffer.byteLength(json)>262144)throw new WikiError('observations','The observation batch exceeds 256 KiB.');
-        const status=await this.expectedUser(expectedUser,{requireEdit:false}),token=await this.csrf(status.user);
+        const status=await this.expectedUser(expectedUser,{requireEdit:false});
+        if(named&&(!this.observationCapability?.characterNameSupported||this.observationCapability.account.id!==status.user.id||this.observationCapability.account.name!==status.user.name))throw new WikiError('observation-capability','The wiki does not currently support public character names. Keep this batch unchanged.');
+        const token=await this.csrf(status.user);
         const data=await this.request({action:'eozobservations',operation:'submit',batch:json,assert:'user',assertuser:status.user.name,token},{post:true}),result=data.eozobservations;
         if(result?.schemaVersion!==1||result.batchId!==batch.batchId||result.account?.id!==status.user.id||result.account?.name!==status.user.name||!['accepted','duplicates','conflicts','rejected'].every(key=>Array.isArray(result[key])))throw new WikiError('observation-ack','The wiki observation receipt did not match this batch/account. Pending events were retained.');
         const acknowledged=[...result.accepted,...result.duplicates,...result.conflicts,...result.rejected.map(entry=>entry?.id)];

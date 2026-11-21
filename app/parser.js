@@ -477,7 +477,11 @@ export class EQLogParser {
 
         x = text.match(/^You have entered (.+?)\.?$/i);
         if (x) {
-            this.logContext.anchor(normalizeName(x[1]),{at:this.currentLineAt,entered:true});
+            const zone = normalizeName(x[1]);
+            // Area-rule notices share the zoning prefix, but describe spell
+            // restrictions (Bind Affinity, levitation, etc.), not a new zone.
+            if (/^an? area where\b/i.test(zone)) return null;
+            this.logContext.anchor(zone,{at:this.currentLineAt,entered:true});
             this.zone = this.logContext.zone;
             this.zoneShortName = '';
             this.location=null;this.lastKill=null;

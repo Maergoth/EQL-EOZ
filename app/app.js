@@ -36,6 +36,7 @@ import { isItemStatModified } from './item-stat-presentation.js';
 import { characterCatalogDetails } from './character-item-card.js';
 import { catalogItemboxMarkup } from './catalog-itembox.js';
 import { collectDropObservation } from './drop-observations.js';
+import { mountDropObservationSettings } from './drop-observation-settings.js';
 import { createWikiResolver } from './wiki-identity.js';
 import { createTooltipHover } from './tooltip-delay.js';
 import { applyLiveWikiOverlay } from './live-wiki-overlay.js';
@@ -51,9 +52,9 @@ const crawlMode=createCrawlMode({getPack:()=>pack});
 let observationPack=null,observationResolver=null;
 const observationSession=globalThis.crypto.randomUUID();
 let observationPreference=true;
+let observationIncludeCharacterName=false,observationCharacterNameSupported=false,observationSettingsUi=null;
 const observationPending=[];let observationSending=null,observationRetry=null,observationWarning=false,sessionDraining=false;
 function queueObservation(observation){
-    if(observationPending.length>=10000){if(!observationWarning){observationWarning=true;showNotice('Drop observation storage is unavailable. The pending buffer is full; check Settings.',{tone:'warning'});}return;}
     observationPending.push(observation);void flushObservations();
 }
 async function flushObservations(){
@@ -580,6 +581,9 @@ async function pollLog() {
     pollInFlight = true;
     const requestSource = mapSourceContext();
     try {
+        // Apply backpressure to the reader instead of discarding observations
+        // when private durable storage is temporarily unavailable.
+        if(featureEnabled('dropObservations')&&observationPreference&&observationPending.length>=1000&&!await flushObservations()){schedulePoll(1000);return;}
         const data = await api(`/api/log?offset=${encodeURIComponent(logOffset)}`);
         if(sessionDraining)return;
         if(data.stale){schedulePoll(0);return;}
@@ -696,7 +700,7 @@ function consumeText(text, allowTransientUi = true) {
         if(featureEnabled('dropObservations')&&observationPreference&&window.eyeOfZommObservations&&allowTransientUi&&freshTimerEvent&&['loot','kill'].includes(event?.type)){
             if(observationPack!==pack){observationPack=pack;observationResolver=createWikiResolver(pack);}
             const source=bridgeInfo?.logPath||'current-log',server=String(source).split(/[\\/]/).pop()?.match(/^eqlog_[^_]+_(.+)\.txt$/i)?.[1]||'';
-            const observation=collectDropObservation(event,{live:true,at:parser.currentLineAt,cursor:observationCursor,logId:source,sessionId:observationSession,server,zone:parser.zone,playerNames:[parser.character].filter(Boolean),pack,resolver:observationResolver});
+            const observation=collectDropObservation(event,{live:true,at:parser.currentLineAt,cursor:observationCursor,logId:source,sessionId:observationSession,server,zone:parser.zone,playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200),pack,resolver:observationResolver,includeCharacterName:observationIncludeCharacterName,characterNameSupported:observationCharacterNameSupported,configuredCharacter:captureWorkspace.dropObservationIdentity?.(),detectedCharacter:parser.character});
             if(observation)queueObservation(observation);
         }
         if(allowTransientUi&&freshTimerEvent&&['zone','profile'].includes(event?.type))void discoveryContributionFlow?.cancelWhere(request=>request.purpose==='spawn-location',{close:true});
@@ -1724,6 +1728,7 @@ function applyFeatureAvailability(next){
 }
 
 function setView(view, options = {}) {
+    observationSettingsUi?.refreshIdentity();
     hideItemTooltip();
     if (!$(`[data-view-panel="${view}"]`)||!featureEnabled(featureForView(view))) view = 'overview';
     $$('.nav-button').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
@@ -2578,14 +2583,14 @@ captureWorkspace = mountCaptureWorkspace({features,characterStorage,contribution
     onDiscoveryCapture:(request,result)=>discoveryContributionFlow.ready(request,result)});
 const stopLiveWikiEntries=window.eyeOfZommWiki?.onLiveEntriesChanged?.(acceptLiveWikiEntries);
 void window.eyeOfZommWiki?.liveEntries?.().then(acceptLiveWikiEntries).catch(()=>{});
-const observationSettings=document.createElement('section');observationSettings.className='observation-settings';observationSettings.innerHTML='<h2>Drop observations</h2><label class="check-control"><input type="checkbox" data-observation-enabled checked> Collect and sync drop observations</label><p class="settings-helper">Keeps minimal kill and loot observations locally and sends them hourly when logged in to the wiki. Chat, screenshots and file paths are excluded. Drop percentages are not calculated yet.</p><p data-observation-status role="status"></p><a href="https://eqlwiki.com/API_Documentation" target="_blank" rel="noopener">Wiki API documentation</a>';document.getElementById('observation-settings').append(observationSettings);
-const renderObservationStatus=async()=>{try{const status=await window.eyeOfZommObservations?.status();if(!status){observationSettings.hidden=true;return;}observationPreference=status.enabled;const input=observationSettings.querySelector('[data-observation-enabled]');input.checked=status.enabled;input.disabled=!featureEnabled('dropObservations');observationSettings.querySelector('[data-observation-status]').textContent=!featureEnabled('dropObservations')?'Drop observations are disabled in Features. Saved observations and your collection preference are kept.':`${status.pending} pending · ${status.acknowledged} delivered${status.error?' · '+status.error:''}`;}catch{observationSettings.querySelector('[data-observation-status]').textContent='Observation storage unavailable.';}};
-observationSettings.querySelector('[data-observation-enabled]').onchange=async event=>{try{await window.eyeOfZommObservations.configure({enabled:event.target.checked});await renderObservationStatus();}catch(error){showNotice(error.message,{tone:'warning'});await renderObservationStatus();}};
+const observationSettings=document.createElement('section');observationSettings.className='observation-settings';document.getElementById('observation-settings').append(observationSettings);
+observationSettingsUi=mountDropObservationSettings({root:observationSettings,api:window.eyeOfZommObservations,login:()=>window.eyeOfZommWiki?.login(),isFeatureEnabled:()=>featureEnabled('dropObservations'),getConfiguredCharacter:()=>captureWorkspace.dropObservationIdentity?.(),getDetectedCharacter:()=>parser.character,notify:showNotice,onStatus:status=>{observationPreference=status.enabled;observationIncludeCharacterName=status.includeCharacterName===true;observationCharacterNameSupported=status.characterNameSupported===true;}});
+const renderObservationStatus=()=>observationSettingsUi.refresh();
 const settingsNavigation=mountSettingsNavigation();
 const featureSettings=mountFeatureControls({root:$('#feature-settings'),api:featureApi,initial:featureState,beforeChange:patch=>captureWorkspace.prepareFeatureChange?.(patch),onChange:applyFeatureAvailability});
 applyFeatureAvailability(featureState);
-void renderObservationStatus();const observationStatusTimer=setInterval(()=>void renderObservationStatus(),60000);
-window.addEventListener('pagehide', () => { clearTimeout(liveEntriesTimer);stopLiveWikiEntries?.();clearTimeout(observationRetry);clearInterval(observationStatusTimer);wikiDiscovery.dispose();void discoveryContributionFlow.dispose();featureSettings.dispose();featureVisibility.dispose();settingsNavigation.dispose();captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
+void renderObservationStatus();
+window.addEventListener('pagehide', () => { clearTimeout(liveEntriesTimer);stopLiveWikiEntries?.();clearTimeout(observationRetry);observationSettingsUi.dispose();wikiDiscovery.dispose();void discoveryContributionFlow.dispose();featureSettings.dispose();featureVisibility.dispose();settingsNavigation.dispose();captureWorkspace.dispose();void characterStorage.flush();whatsNew.dispose(); appUpdatesUi.dispose(); timerSettings.dispose(); overlaySession.dispose(); overlayController.dispose(); timerAlerts.dispose(); }, { once:true });
 setView(settings.lastView || 'overview', { remember:false });
 loadPack();
 connectBridge();

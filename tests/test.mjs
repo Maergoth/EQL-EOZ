@@ -61,6 +61,34 @@ assert(whoZone.snapshot().zone === 'The Castle of Mistmoore', '/who updates pars
 const repeatedWhoZone = whoZone.parse('[Thu Sep 03 00:00:02 2026] [26 MNK/SHM/BER] Maergoth (Iksar) <Reverb> ZONE: The Castle of Mistmoore 1595 (mistmoore)');
 assert(repeatedWhoZone?.type === 'profile', 'repeated /who rows do not churn the active zone');
 
+const areaRules = new EQLogParser();
+for (const rule of [
+    'You have entered an area where Bind Affinity is allowed.',
+    'You have entered an area where levitation effects do not function.'
+]) {
+    assert(areaRules.parse(`[Thu Sep 03 00:00:00 2026] ${rule}`) === null, 'area-rule notice is not a zoning event before a zone is known');
+    assert(areaRules.zone === '' && areaRules.zoneShortName === '', 'area-rule notice cannot establish an unknown zone');
+}
+areaRules.character = 'Synthetic';
+areaRules.parse('[Thu Sep 03 00:00:01 2026] [26 MNK/SHM/BER] Synthetic (Iksar) ZONE: The Castle of Mistmoore 1595 (mistmoore)');
+areaRules.parse('[Thu Sep 03 00:00:02 2026] Your Location is 10, 20, 30');
+areaRules.parse('[Thu Sep 03 00:00:03 2026] You have slain a synthetic guardian!');
+const beforeAreaRule = { zone:areaRules.zone, zoneShortName:areaRules.zoneShortName, location:areaRules.location, lastKill:areaRules.lastKill };
+for (const rule of [
+    'You have entered an area where Bind Affinity is allowed.',
+    'You have entered an area where levitation effects do not function.',
+    'YOU HAVE ENTERED AN AREA WHERE other spell rules apply',
+    'You have entered an   area where Bind Affinity is not allowed.'
+]) {
+    assert(areaRules.parse(`[Thu Sep 03 00:00:04 2026] ${rule}`) === null, 'area-rule notices never emit false zone events');
+    assert(areaRules.zone === beforeAreaRule.zone && areaRules.zoneShortName === beforeAreaRule.zoneShortName && areaRules.location === beforeAreaRule.location && areaRules.lastKill === beforeAreaRule.lastKill,
+        'area-rule notices preserve the known zone, short name, location and recent-kill source');
+}
+const lootAfterRule = areaRules.parse('[Thu Sep 03 00:00:05 2026] You have looted a Synthetic Token from the corpse of a synthetic guardian.');
+assert(lootAfterRule.zone === 'The Castle of Mistmoore', 'loot following an area-rule notice retains its real zone');
+const genuineZoneAfterRule = areaRules.parse('[Thu Sep 03 00:00:06 2026] You have entered Synthetic Uncatalogued Zone.');
+assert(genuineZoneAfterRule?.type === 'zone' && genuineZoneAfterRule.zone === 'Synthetic Uncatalogued Zone', 'genuine uncatalogued zoning messages still work');
+
 const befallenLocation = new EQLogParser();
 befallenLocation.parse('[Thu Sep 03 00:00:00 2026] Your Location is -961, -30, -66');
 const befallenState = befallenLocation.snapshot();
