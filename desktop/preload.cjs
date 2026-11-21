@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('eyeOfZommLifecycle',{
     }
 });
 contextBridge.exposeInMainWorld('eyeOfZommObservations',{
+    onStatus:callback=>subscribe('eye-of-zomm:observations-state',callback),
     status:()=>ipcRenderer.invoke('eye-of-zomm:observations','status'),
     collect:events=>ipcRenderer.invoke('eye-of-zomm:observations','collect',{events}),
     configure:value=>ipcRenderer.invoke('eye-of-zomm:observations','configure',value)

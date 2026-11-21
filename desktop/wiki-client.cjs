@@ -8,6 +8,7 @@ const path = require('node:path');
 const {WikiAttachments}=require('./wiki-attachments.cjs');
 const {CharacterScreenshots}=require('./character-screenshots.cjs');
 const {ContributionHistory}=require('./contribution-history.cjs');
+const {normalizeCharacterName}=require('./drop-observation-storage.cjs');
 const PRODUCTION_ORIGIN = 'https://eqlwiki.com';
 const MAX_JSON = 2 * 1024 * 1024, MAX_PAGE = 512 * 1024, MAX_PNG = 12 * 1024 * 1024;
 const MAX_CHARACTER_PAGE = 2 * 1024 * 1024, MAX_CHARACTER_JSON = 8 * 1024 * 1024;
@@ -135,18 +136,24 @@ class WikiClient {
         return status;
     }
     async observationStatus() {
+        this.observationCapability=null;
         const status=await this.expectedUser(null,{requireEdit:false}),token=await this.csrf(status.user);
         const data=await this.request({action:'eozobservations',operation:'status',assert:'user',assertuser:status.user.name,token},{post:true});
         const result=data.eozobservations;
         if(result?.schemaVersion!==1||result.account?.id!==status.user.id||result.account?.name!==status.user.name||typeof result.enabled!=='boolean'||typeof result.available!=='boolean')throw new WikiError('observation-ack','The wiki observation capability response was invalid.');
+        this.observationCapability={account:{...status.user},characterNameSupported:result.enabled&&result.available&&Array.isArray(result.limits?.optionalEventFields)&&result.limits.optionalEventFields.includes('characterName')};
         return copy(result);
     }
     async submitObservations(batch,{expectedUser=null}={}) {
         if(!batch||batch.schemaVersion!==1||typeof batch.batchId!=='string'||!/^[A-Za-z0-9_-]{8,120}$/.test(batch.batchId)||!Array.isArray(batch.events)||batch.events.length<1||batch.events.length>100)throw new WikiError('observations','Invalid observation batch.');
         const ids=batch.events.map(event=>event?.id);
         if(ids.some(id=>typeof id!=='string'||!/^[A-Za-z0-9_-]{8,120}$/.test(id))||new Set(ids).size!==ids.length)throw new WikiError('observations','Observation IDs must be unique.');
+        const named=batch.events.some(event=>Object.hasOwn(event,'characterName'));
+        if(named)try{for(const event of batch.events)if(Object.hasOwn(event,'characterName')&&normalizeCharacterName(event.characterName)!==event.characterName)throw Error('name');}catch{throw new WikiError('observations','Invalid public observation character name.');}
         const json=JSON.stringify(batch);if(Buffer.byteLength(json)>262144)throw new WikiError('observations','The observation batch exceeds 256 KiB.');
-        const status=await this.expectedUser(expectedUser,{requireEdit:false}),token=await this.csrf(status.user);
+        const status=await this.expectedUser(expectedUser,{requireEdit:false});
+        if(named&&(!this.observationCapability?.characterNameSupported||this.observationCapability.account.id!==status.user.id||this.observationCapability.account.name!==status.user.name))throw new WikiError('observation-capability','The wiki does not currently support public character names. Keep this batch unchanged.');
+        const token=await this.csrf(status.user);
         const data=await this.request({action:'eozobservations',operation:'submit',batch:json,assert:'user',assertuser:status.user.name,token},{post:true}),result=data.eozobservations;
         if(result?.schemaVersion!==1||result.batchId!==batch.batchId||result.account?.id!==status.user.id||result.account?.name!==status.user.name||!['accepted','duplicates','conflicts','rejected'].every(key=>Array.isArray(result[key])))throw new WikiError('observation-ack','The wiki observation receipt did not match this batch/account. Pending events were retained.');
         const acknowledged=[...result.accepted,...result.duplicates,...result.conflicts,...result.rejected.map(entry=>entry?.id)];

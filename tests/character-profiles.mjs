@@ -12,6 +12,7 @@ const metadata={name:'Synthetic Keeper',server:'Test Server'};
 let sequence=0;const ids=()=>`profile-${++sequence}`;
 const backing=memory(),warnings=[],profiles=createCharacterProfiles({storage:backing,id:ids,onWarning:message=>warnings.push(message)});
 assert.deepEqual(profiles.list(),[]);assert.equal(profiles.activeId(),null);assert.equal(backing.getItem(ROSTER),null,'opening a blank draft writes nothing');
+assert.equal(profiles.observationIdentity(),null,'An unregistered draft cannot supply a public observation identity');
 assert.equal(profiles.register({name:'Missing server'}).ok,false);assert.equal(profiles.select('missing').ok,false);assert.equal(backing.getItem(ROSTER),null);
 assert.throws(()=>profiles.storage.setItem('other-key',json({})),/Unsupported/);assert.equal(profiles.storage.getItem('other-key'),null);
 
@@ -19,7 +20,9 @@ const model=createCharacterModel({storage:profiles.storage,now:()=>1000});
 model.setMetadata(metadata);const card=model.intake({item:{name:'Synthetic saved item',observedStats:{HP:21},evidence:[{observationId:'synthetic-read',sessionId:'fixture',at:1000,text:'Synthetic written HP 21'}]}}).candidate;
 const flow=createCharacterWalkthrough({storage:profiles.storage,id:()=> 'fixture-flow',now:()=>2000});
 assert.equal(profiles.list().length,0,'seeded metadata and manual inventory do not register first step');
+assert.equal(profiles.observationIdentity(),null,'Auto-seeded character metadata is never an observation attribution source');
 const keeper=profiles.register(metadata);assert(keeper.ok);flow.begin();flow.advance();
+assert.deepEqual(profiles.observationIdentity(),metadata,'Only the active registered Character Select identity is exposed for optional attribution');
 const keeperModel=profiles.storage.getItem(MODEL),keeperFlow=profiles.storage.getItem(FLOW);assert.equal(profiles.activeId(),keeper.id);assert.equal(profiles.list().length,1);
 assert.equal(JSON.parse(backing.getItem(ROSTER)).draft.model,null,'promotion creates a blank successor draft');
 assert(profiles.newCharacter().ok);assert.equal(profiles.activeId(),null);assert.equal(profiles.storage.getItem(MODEL),null);assert.equal(backing.getItem(MODEL),null,'selecting draft updates legacy mirror immediately');

@@ -9,6 +9,13 @@ export function dropObservationToken(value){
     for(const char of String(value??'').slice(0,4096)){const x=char.charCodeAt(0);a=Math.imul(a^x,16777619);b=Math.imul(b^x,2246822519);c=Math.imul(c^x,3266489917);d=Math.imul(d^x,668265263);}
     return [a,b,c,d].map(value=>(value>>>0).toString(16).padStart(8,'0')).join('');
 }
+export function dropObservationCharacterName(context={}){
+    if(context.includeCharacterName!==true||context.characterNameSupported!==true)return '';
+    const name=context.configuredCharacter?.name,detected=context.detectedCharacter;
+    if(typeof name!=='string'||!name.trim()||Array.from(name).length>120||/[\u0000-\u001f\u007f/\\]|[a-z]:|[\uD800-\uDFFF]/iu.test(name)||typeof detected!=='string')return '';
+    const folded=value=>value.trim().normalize('NFKC').toLowerCase();
+    return folded(name)===folded(detected)?name.trim():'';
+}
 export function collectDropObservation(event,context={}, {now=Date.now(),freshnessMs=10000}={}){
     if(context.live!==true||!['kill','loot'].includes(event?.type))return null;
     const at=Number.isFinite(context.at)?context.at:event.at;
@@ -32,5 +39,6 @@ export function collectDropObservation(event,context={}, {now=Date.now(),freshne
     for(const [kind,name,key]of [['zone',zone,'zoneTitle'],['npc',npc,'npcTitle'],['item',item,'itemTitle']]){const resolved=resolver.resolve(kind,name);if(resolved.membership==='present'&&resolved.canonicalTitle)result[key]=clean(resolved.canonicalTitle);}
     const tier=event.type==='loot'?itemBaseIdentity(item).tier:null;if(tier!==null)result.tier=tier;
     const catalogVersion=clean(context.catalogVersion||context.pack?.meta?.manifestVersion||context.pack?.meta?.version,120);if(catalogVersion)result.catalogVersion=catalogVersion;
+    const characterName=dropObservationCharacterName(context);if(characterName)result.characterName=characterName;
     return result;
 }
