@@ -22,6 +22,7 @@ export function mountDropObservationSettings({root,api,login=()=>Promise.resolve
         if(disposed)return;if(!next){root.hidden=true;return;}root.hidden=false;status=next;
         enabled.checked=next.enabled===true;enabled.disabled=!isFeatureEnabled();include.checked=next.includeCharacterName===true;signIn.hidden=next.authenticated===true;signIn.disabled=!isFeatureEnabled();
         message.textContent=!isFeatureEnabled()?'Drop observations are disabled in Features. Saved observations and your collection preference are kept.':`${next.pending} pending · ${next.acknowledged} delivered${next.uploading?' · Uploading in the background':next.pending&&!next.authenticated?' · Log in here to upload pending observations automatically.':next.error?' · '+next.error:''}`;
+        const issues=(Number(next.conflicts)||0)+(Number(next.rejected)||0);if(issues)message.textContent+=` · ${issues} retained for review`;
         onStatus(next);refreshIdentity();
     }
     async function refresh(){const current=++revision;try{const next=await api?.status();if(current===revision)apply(next);}catch{if(!disposed&&current===revision)message.textContent='Observation storage unavailable.';}}

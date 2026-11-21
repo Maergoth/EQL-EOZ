@@ -73,12 +73,21 @@ queueing and screenshots never publish an article edit automatically.
 
 Version 0.9.8 adds a separate minimal kill/loot observation outbox. Its
 clearly labeled Settings option defaults on and controls collection and upload.
-While enabled, fresh structured events are retained in bounded atomic private
-storage; while the app runs and the user is logged in, due batches can be sent
-at most hourly to the wiki with account-bound receipt checks and retry/backoff.
+While enabled, fresh structured events are retained in a private SQLite outbox
+without a lifetime count cap. A dedicated worker reads bounded batches without
+loading the backlog into the UI process. While the app runs and the user is
+logged in through EoZ, pending records upload automatically after startup/login,
+with paced continuations, account-bound receipts and persisted retry/backoff.
 Opting out stops collection/upload and retains pending records. Raw logs, chat,
-player/actor fields, filesystem paths, coordinates and screenshots are not
-accepted by this endpoint. This archive is separate from reviewed attributed
+account/actor identifiers, filesystem paths, coordinates and screenshots are not
+accepted as event fields. A separate default-off **Include character name
+publicly with drop observations** option can attach the registered active
+Character Select name when it matches the detected character and the wiki
+advertises support. It applies only to new events and does not rewrite queued
+records or recover historical names. Turning the option off does not erase names
+already queued. The native service retains immutable named batches when a server
+cannot accept them. The former JSON outbox is preserved with a private backup
+before transactional migration. This archive is separate from reviewed attributed
 article edits and cannot establish drop probabilities or unseen zero drops.
 Wiki API/schema activation remains a separate release gate.
 

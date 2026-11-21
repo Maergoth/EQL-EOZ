@@ -55,7 +55,6 @@ let observationPreference=true;
 let observationIncludeCharacterName=false,observationCharacterNameSupported=false,observationSettingsUi=null;
 const observationPending=[];let observationSending=null,observationRetry=null,observationWarning=false,sessionDraining=false;
 function queueObservation(observation){
-    if(observationPending.length>=10000){if(!observationWarning){observationWarning=true;showNotice('Drop observation storage is unavailable. The pending buffer is full; check Settings.',{tone:'warning'});}return;}
     observationPending.push(observation);void flushObservations();
 }
 async function flushObservations(){
@@ -582,6 +581,9 @@ async function pollLog() {
     pollInFlight = true;
     const requestSource = mapSourceContext();
     try {
+        // Apply backpressure to the reader instead of discarding observations
+        // when private durable storage is temporarily unavailable.
+        if(featureEnabled('dropObservations')&&observationPreference&&observationPending.length>=1000&&!await flushObservations()){schedulePoll(1000);return;}
         const data = await api(`/api/log?offset=${encodeURIComponent(logOffset)}`);
         if(sessionDraining)return;
         if(data.stale){schedulePoll(0);return;}
@@ -698,7 +700,7 @@ function consumeText(text, allowTransientUi = true) {
         if(featureEnabled('dropObservations')&&observationPreference&&window.eyeOfZommObservations&&allowTransientUi&&freshTimerEvent&&['loot','kill'].includes(event?.type)){
             if(observationPack!==pack){observationPack=pack;observationResolver=createWikiResolver(pack);}
             const source=bridgeInfo?.logPath||'current-log',server=String(source).split(/[\\/]/).pop()?.match(/^eqlog_[^_]+_(.+)\.txt$/i)?.[1]||'';
-            const observation=collectDropObservation(event,{live:true,at:parser.currentLineAt,cursor:observationCursor,logId:source,sessionId:observationSession,server,zone:parser.zone,playerNames:[parser.character].filter(Boolean),pack,resolver:observationResolver,includeCharacterName:observationIncludeCharacterName,characterNameSupported:observationCharacterNameSupported,configuredCharacter:captureWorkspace.dropObservationIdentity?.(),detectedCharacter:parser.character});
+            const observation=collectDropObservation(event,{live:true,at:parser.currentLineAt,cursor:observationCursor,logId:source,sessionId:observationSession,server,zone:parser.zone,playerNames:[parser.character,...(parser.knownPlayerNames||[])].filter(Boolean).slice(0,200),pack,resolver:observationResolver,includeCharacterName:observationIncludeCharacterName,characterNameSupported:observationCharacterNameSupported,configuredCharacter:captureWorkspace.dropObservationIdentity?.(),detectedCharacter:parser.character});
             if(observation)queueObservation(observation);
         }
         if(allowTransientUi&&freshTimerEvent&&['zone','profile'].includes(event?.type))void discoveryContributionFlow?.cancelWhere(request=>request.purpose==='spawn-location',{close:true});

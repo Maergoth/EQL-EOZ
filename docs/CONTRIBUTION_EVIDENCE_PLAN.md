@@ -269,7 +269,7 @@ active queue. Root must back up the installed profile, inspect the dry-run
 counts, apply and read back before claiming the user's list is cleaned. No
 player list or private backup belongs in Git.
 
-## Separate hourly observation outbox
+## Separate durable observation outbox
 
 The observation archive is independent of the editable contribution queue.
 `collectDropObservation(event, context)` taps fresh parsed kill/loot events
@@ -278,27 +278,51 @@ still supply observations. Explicit player/pet evidence and generated-name
 rules exclude ineligible kills; uncertain loot sources stay unknown. No zero
 drop or probability calculation is performed.
 
-`desktop/drop-observation-storage.cjs` stores minimal allowlisted events with
-stable IDs and SHA-256 payload hashes in a private atomic file. Bounds are
-16 MiB, 10,000 pending/issue records and 5,000 acknowledged dedup receipts.
-Corrupt saved files are preserved and write-blocked. A full/unwritable store
-warns; it never silently deletes pending data. New parse sessions, Contribute
-Ignore/clear and journal retention cannot erase this outbox.
+`desktop/drop-observation-sqlite.cjs` and its worker store minimal allowlisted
+events, stable IDs, SHA-256 payload hashes and acknowledged dedup receipts in a
+private SQLite database without lifetime count limits. Indexed queries prepare
+bounded chunks without loading the whole backlog. New pending rows sort by
+observed time descending with an event-ID tie-break; existing immutable batches
+are retried first. Legacy JSON is validated and copied to a fresh private backup
+before transactional import, preserving original IDs, hashes, account bindings,
+preferences and saved batches. Corrupt sources are preserved and paused. Disk
+failures never silently evict records. New parse sessions, Contribute Ignore/clear
+and journal retention cannot erase this outbox.
 
 `desktop/drop-observation-host.cjs` restricts collection/status/configure IPC to
 the exact main frame. **Collect and sync drop observations** defaults on and
 controls both collection and upload; disabling retains existing pending data.
-Uploads require the normal logged-in wiki account and a due hourly schedule.
-Overdue startup checks resume when running; failures back off 1, 2, 4 and then
-up to 24 hours. Closing the app cannot promise background transmission.
+Uploads require the normal logged-in wiki account in EoZ's dedicated session.
+Settings provides an explicit login button; startup never opens the login window.
+The main window paints before remote account restoration. A native readiness
+gate delays new durable collection until that first account check settles,
+preserving account binding without blocking the UI. Startup and login schedule
+prompt background attempts. Up to ten serial batches form a cycle, followed by a
+short yielded continuation while eligible records remain. A persisted rolling
+budget honors the server's advertised hourly allowance; failures back off from
+one minute to one hour and honor `Retry-After` up to 24 hours. Pending records
+continue automatically while running and signed in. Closing the app cannot
+promise background transmission.
 
 Events contain only ID, kill/loot kind, observed time, optional server/catalog
 version, zone/NPC/item and canonical titles, quantity, tier, instance, source
-kind and opaque source/session/sequence tokens. No player/actor fields, chat,
-raw logs, paths, screenshots or coordinates are accepted. Batches have schema
+kind and opaque source/session/sequence tokens. An optional `characterName`
+contains only a registered Character Select name under the separate default-off
+public-name consent. The current detected character must match that selection;
+parser names, log filenames and wiki account names never supply the public name.
+The native service must first see `characterName` in
+`eozobservations.limits.optionalEventFields`. Missing capability means unnamed
+collection; capability loss preserves existing named batches unchanged while
+unnamed records can continue. Consent applies at new-event creation, with no
+retroactive naming or stripping after opt-out. Names have 1–120 Unicode codepoints
+and reject controls, slashes, backslashes and drive-letter colons. Absent names
+remain omitted rather than becoming null, retaining old hashes.
+No account/actor event fields, chat, raw logs, paths, screenshots or coordinates
+are accepted. Batches have schema
 version 1 and at most 100 events/262,144 bytes; each event is at most 4,096 bytes.
-Normal authenticated cycles send at most ten batches, below the server's twelve
-per-hour account cap.
+The client honors advertised limits, including older servers' smaller hourly
+allowance, with hard per-request bounds of 100 events and 262,144 bytes. These
+request/rate bounds do not cap the lifetime backlog or delete unsent records.
 
 Records collected with a known account are bound to it. An immutable persisted
 batch precedes network work. A receipt must match schema, batch, account, payload

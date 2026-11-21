@@ -542,12 +542,18 @@ for selecting or sharing a Character picture. See
 
 ### Observation outbox
 
-`app/drop-observations.js`, `desktop/drop-observation-host.cjs` and
-`drop-observation-storage.cjs` collect minimal fresh structured kill/loot events
-and retain account-bound batches. This is a separate data API, not article edits.
+`app/drop-observations.js`, `app/drop-observation-settings.js` and
+`desktop/drop-observation-host.cjs` collect minimal fresh structured kill/loot
+events and retain account-bound batches. `drop-observation-sqlite.cjs` delegates
+the durable outbox and indexed newest-first selection to
+`drop-observation-worker.cjs`; `drop-observation-storage.cjs` retains the legacy
+schema validators and migration contract. This is a separate data API, not article edits.
 Collection/upload consent, persisted backoff, batch identity and acknowledgments
 must remain intact. Opting out stops new collection/send work and retains pending
-records. Do not include raw chat/logs, player identities, paths, coordinates or
+records. Public `characterName` is optional and requires separate default-off
+consent, an explicitly registered matching Character Select identity and current
+server capability. Absent fields stay absent to preserve historical event hashes.
+Do not include raw chat/logs, account identities, paths, coordinates or
 screenshots, and do not infer unseen zero drops or drop probabilities. See
 [contribution evidence](docs/CONTRIBUTION_EVIDENCE_PLAN.md).
 

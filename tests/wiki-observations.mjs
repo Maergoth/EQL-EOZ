@@ -28,4 +28,8 @@ supportsNames=true;await client.observationStatus();await client.submitObservati
 const namedRequest=requests.filter(request=>request.action==='eozobservations'&&request.operation==='submit').at(-1);assert.equal(JSON.parse(namedRequest.batch).events[0].characterName,'Configured Character');
 for(const characterName of [null,'','a'.repeat(121),'C:private','private/path','private\\path','Bad\nName'])await assert.rejects(client.submitObservations({...namedBatch,events:[{...namedBatch.events[0],characterName}]}),error=>error.code==='observations');
 supportsNames=false;await client.observationStatus();await assert.rejects(client.submitObservations(namedBatch),error=>error.code==='observation-capability');await client.submitObservations(batch);
+const throttled=new WikiClient({fetchImpl:async()=>new Response('{}',{status:429,headers:{'Retry-After':'600'}})});
+await assert.rejects(throttled.request({action:'eozobservations'}),error=>error.code==='http-429'&&error.retryAfterMs===600000,'HTTP throttling carries Retry-After to the background scheduler');
+const apiThrottled=new WikiClient({fetchImpl:async()=>new Response(JSON.stringify({error:{code:'eoz-rate-limit',info:'Synthetic throttle'}}),{headers:{'Retry-After':'120'}})});
+await assert.rejects(apiThrottled.request({action:'eozobservations'}),error=>error.code==='eoz-rate-limit'&&error.retryAfterMs===120000,'API throttling also preserves Retry-After');
 console.log('Wiki observation transport: named-session CSRF/assertions, capability, exhaustive/account-bound ACK, safe unknown retry and duplicate-ID rejection passed.');

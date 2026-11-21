@@ -1,6 +1,52 @@
-# Validation report — v0.9.10
+# Validation report — v1.0.13
 
-Current `v1.0.9` candidate: tag generated and edited wiki pages with the page-only EoZ category before preview hashes and publication. Preserve manual source, sort keys, managed Character identities and image reuse; older untagged saved drafts require a fresh Preview. See [wiki page tracking](docs/WIKI_PAGE_TRACKING.md). Source, native, package and public-release receipts must identify the final commit.
+## 1.0.13 candidate checks — November 21, 2026
+
+The isolated client branch is based on released `origin/main` 1.0.12. The
+following checks used synthetic records and disposable profiles; they did not
+read an installed player's outbox or upload game/account data to production.
+
+- `npm test` passed all **219 ordered source gates**, including worker builds,
+  observation collection/storage/transport, feature and account boundaries,
+  release documentation, screenshot hashes and actual-ASAR byte checks. A
+  sequential Node runner preserves the original command list and fail-fast
+  behavior while avoiding Windows cmd's command-length limit.
+- `tests/drop-observation-sqlite.mjs` retained and drained **11,025 records**
+  exceeding 16 MiB, preserved deduplication beyond 5,000 acknowledged records,
+  and exercised byte-identical legacy backup, transactional activation/recovery,
+  corruption and write failures, account/name isolation, exact pre-submit/ACK
+  proofs and persistent rolling quota/Retry-After deadlines. A legacy 24-hour
+  capacity backoff resets once during migration and drains through a healthy
+  host immediately; subsequent SQLite hard deadlines survive restart/login.
+- `tests/drop-observation-drain.mjs` drained **10,052 records to zero** in
+  **101 bounded requests over 11 yielded cycles**. The original frozen batch
+  went first, then unprepared rows sorted newest to oldest. Offline failures
+  retained the identical retry batch; opt-out and feature disable made zero
+  sends; signing into EoZ resumed without an hourly wait.
+- `test:drop-observations-native` passed with **Electron 43.8.3, Node 24.22.0
+  and SQLite 3.53.4**, a hidden sandboxed renderer and no public network. The
+  same migration/backup/restart/immutable-batch/account/newest-chunk checks passed
+  from a disposable four-file ASAR containing the exact current package and
+  three storage sources. Its worker SHA-256 was
+  `32c8671443a275ba0213cfc37bdfb3596ef707a11684029add515e374b6e83ee`.
+- Dependency audit passed the configured high-severity threshold; six existing
+  moderate advisories remain. The SHA-256-verified bootstrap generation
+  `20261121T073302Z-e2501d608b52` supplied 137 zones, 9,761 NPCs and 11,433 items;
+  catalog and wiki-formula checks passed.
+- Two version-owned Settings captures show the actual component in isolated
+  Chromium with synthetic status/profile replies. They contain no player logs,
+  installed profile or public wiki requests. UI regressions cover explicit login,
+  default-off names, disclosure, capability/mismatch/feature handling, safe text
+  and native status ordering.
+
+Windows/Linux CI now requires both source and **full packaged-app ASAR** worker
+migration checks, including release builds with extended UI checks disabled.
+Full release-package/platform results and publication are separate pending
+receipts. The local four-file ASAR proves worker/archive runtime compatibility;
+it is not an installer test. Actual installed-user migration, live game behavior
+and a real user's authenticated production upload were not performed here.
+
+Previous `v1.0.9` candidate: tag generated and edited wiki pages with the page-only EoZ category before preview hashes and publication. Preserve manual source, sort keys, managed Character identities and image reuse; older untagged saved drafts require a fresh Preview. See [wiki page tracking](docs/WIKI_PAGE_TRACKING.md). Source, native, package and public-release receipts must identify the final commit.
 
 Previous `v1.0.7`: choose two or three Character classes with checkboxes and automatically recognize the Default Stats tab or Default Modern stat panel. Preserve unfinished class choices and reviewed stat edits; unread or conflicting OCR values stay unknown for review. Existing private inventories and equipment-only sharing retain their contracts. See [the Character walkthrough](docs/CHARACTER_WALKTHROUGH.md). Final source, native, package and publication receipts must identify the released commit.
 

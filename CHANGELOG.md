@@ -5,6 +5,14 @@ start with the [user guide](README.md); the app's **Settings → About Eye of
 Zomm → What's new** also retains the illustrated release archive. Older entries
 describe behavior at that release, including workflows replaced in later versions.
 
+## 1.0.13 - Automatic drop observation uploads
+
+- Keep Bind Affinity and levitation area notices from replacing the real zone on following observations.
+- Open the app immediately and upload saved observations in the background after startup or login, using the wiki's advertised batch limits. Failed or uncertain uploads retain their exact records for bounded retries; collection and upload opt-out remains respected.
+- Preserve the complete backlog without the former 10,000-record limit, with a verified private backup during upgrade. New pending observations upload newest first; an existing retry batch keeps its original contents.
+- Log in directly from Settings → Drop observations. Eye of Zomm's wiki session is separate from a browser login; no login window opens automatically.
+- Optionally include the selected, registered character name publicly with new observations. This starts off and requires the selected name to match the current detected character. Existing observations are not given names retroactively.
+
 ## 1.0.12 - Compound keyring inventory imports
 
 - Accept supported keyring child locations that include a parent equipment name in inventory text exports instead of rejecting an otherwise valid import.

@@ -2,6 +2,39 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.13",
+  "title": "Automatic drop observation uploads",
+  "changes": [
+    "Keep Bind Affinity and levitation area notices from replacing the real zone on following observations.",
+    "Open the app immediately and upload saved observations in the background after startup or login, respecting collection opt-out and the wiki's advertised bounded batch limits.",
+    "Preserve the whole backlog without a lifetime record limit, back up the old outbox during upgrade, and upload new pending records newest first while keeping existing retry batches intact.",
+    "Log in directly from Settings → Drop observations. Eye of Zomm uses a separate wiki session and never opens a login window automatically.",
+    "Optionally include the selected, registered character name publicly with new observations. This starts off, requires a matching current character, and never adds names to historical records."
+  ],
+  "steps": [
+    {
+      "title": "Send saved observations in the background",
+      "image": "1.0.13/drop-observations-login",
+      "view": "settings",
+      "action": "Open Settings",
+      "copy": "Open Settings → Drop observations and choose Log in to wiki here in Eye of Zomm. A browser session does not log the app in. With collection enabled, saved observations upload quietly after startup or login. Pending records stay saved when the wiki is unavailable. Uncheck Collect and sync drop observations to stop collection and uploads.",
+      "alt": "Actual Drop observations Settings component with a direct Log in to wiki button, 120 synthetic pending records, 30 delivered records and the public character name option off.",
+      "caption": "Production Settings component rendered in isolated headless Chromium with synthetic status and character replies. No installed profile, player logs, game pixels or public wiki requests were used. This component capture does not establish native startup or production upload acceptance.",
+      "imageSha256": "612d1134ea95d2c125e52726009b3a5d88fc1f0299e200f5841427dc0b567c4c"
+    },
+    {
+      "title": "Choose whether to share your character name",
+      "image": "1.0.13/drop-observations",
+      "view": "settings",
+      "action": "Open Settings",
+      "copy": "Public character names start off. To include one, save your character details in Character Select, select the character currently detected by the app, then enable Include character name publicly with drop observations. The disclosure shows the exact configured name. This affects new observations; names already queued can still be published after turning the option off.",
+      "alt": "Actual Drop observations Settings component showing background upload status and the unchecked optional public-name control with Synthetic Character disclosed as the configured identity.",
+      "caption": "The same production Settings component after its actual login handler receives synthetic authenticated capability. Public attribution remains off. The fixture is isolated headless Chromium with no installed profile, player records or public wiki requests.",
+      "imageSha256": "09a98d527b49800cdda4a7993200017bf9a6660e39133ad067af10b7ce6544c4"
+    }
+  ]
+},
+{
   "version": "1.0.12",
   "title": "Compound keyring inventory imports",
   "changes": [

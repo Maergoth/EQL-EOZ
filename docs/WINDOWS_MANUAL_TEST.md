@@ -1,8 +1,29 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current `v1.0.12` integration: accept supported keyring child locations with parent equipment names during inventory import, preserving source provenance, physical copies, equipped gear, attached Exaltations and saved work. A rejected import retains the prior character. The [developer guide](../DEVELOPMENT.md) remains the current component reference; [CHANGELOG](../CHANGELOG.md) owns release history. Source, native and package checks must identify the final candidate.
+Current `v1.0.13` candidate: preserve the complete drop-observation backlog in a private SQLite worker, upload newest pending records automatically after EoZ startup/login in paced acknowledged batches, and keep offline, disabled or account-bound records for retry. Spell-rule notices never become zone names. Public Character Select attribution is a separate default-off option for new events; historical names remain unavailable. The [developer guide](../DEVELOPMENT.md) and [observation contract](CONTRIBUTION_EVIDENCE_PLAN.md#separate-durable-observation-outbox) describe ownership and migration. Synthetic checks and release component captures are distinct from installed-profile migration, live account uploads, platform/package checks and publication receipts.
 
 The older implementation and acceptance notes below retain historical context. They do not identify outstanding work or replace current source inspection.
+
+## 1.0.13 observation acceptance
+
+Use a disposable profile and synthetic loopback wiki first. Upgrade a legacy
+outbox with pending events and a frozen batch: confirm a private byte-for-byte
+backup, unchanged IDs/hashes/accounts, restart recovery and newest-first new
+batches. Exercise more than 10,000 records; acknowledge every chunk without an
+entry-count cutoff. Rate limiting must pause and resume automatically without
+losing a record. Network timeouts must leave the main window usable and preserve
+the exact retry batch. Keep opt-out and disabled-feature profiles at zero uploads.
+
+With owner-approved live account acceptance, sign in using the Drop observations
+button and verify existing pending records begin uploading without reopening the
+app or waiting an hour. Startup must never open the login window automatically.
+In Character Select, save a matching registered character, then explicitly opt
+into public names and confirm the exact disclosure. Only new events acquire the
+name; a mismatched selection, absent capability or default-off preference omits
+it. Verify opt-out does not rewrite already queued named batches. Type actual
+zoning and area-rule messages: Bind Affinity/levitation notices must not change
+zone, map location or subsequent loot attribution. Record live checks separately
+from source fixtures and synthetic component screenshots.
 
 Previous `v1.0.8`: offer an optional Character picture in Share review, independently of Screen Reading. Keep selected pixels private until explicit Share; use reviewed canonical wiki File names, preserve existing images and reconcile interrupted uploads/page edits across restart. The wiki template supplies the left Add an image placeholder for existing sheets. See [Character screenshots](CHARACTER_SCREENSHOTS.md). Source, native, package and public-release receipts must identify the final commit.
 

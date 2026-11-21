@@ -25,6 +25,7 @@ const characterSheets = () => import('../app/character-wiki-sheet.js');
 const pageCategories = () => import('../app/eoz-page-category.js');
 const copy = value => JSON.parse(JSON.stringify(value));
 const safeMessage = value => String(value || 'The wiki request could not complete.').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,500);
+function retryAfterMilliseconds(value,now){if(typeof value!=='string'||!value.trim())return 0;const delay=/^\d+(?:\.\d+)?$/.test(value.trim())?Number(value)*1000:Date.parse(value)-now;return Number.isFinite(delay)&&delay>0?Math.min(86400000,Math.max(1000,Math.ceil(delay))):0;}
 class WikiError extends Error {
     constructor(code, message) { super(safeMessage(message)); this.name='WikiError'; this.code=code; }
 }
@@ -111,14 +112,16 @@ class WikiClient {
             const response=await this.fetch(post?this.api:`${this.api}?${data}`,{method:post?'POST':'GET',credentials:'include',redirect:'error',cache:'no-store',signal:controller.signal,
                 headers:{'User-Agent':`EQLWiki-EyeOfZomm/${this.version}`,Accept:'application/json',...(post&&!form?{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}:{})},body:post?(form||data.toString()):undefined});
             if(response.url && new URL(response.url).origin!==this.origin)throw new WikiError('redirect','The wiki redirected outside its configured origin.');
-            if(!response.ok)throw new WikiError(`http-${response.status}`,`The wiki returned HTTP ${response.status}. Please try again later.`);
+            const retryAfterMs=retryAfterMilliseconds(response.headers.get('retry-after'),this.now());
+            const failure=(code,message)=>{const error=new WikiError(code,message);if(retryAfterMs)error.retryAfterMs=retryAfterMs;return error;};
+            if(!response.ok)throw failure(`http-${response.status}`,`The wiki returned HTTP ${response.status}. Please try again later.`);
             if(Number(response.headers.get('content-length'))>maxResponseBytes)throw new WikiError('size','The wiki response exceeded the size limit.');
             let bytes;
             if(response.body?.getReader){const reader=response.body.getReader(),chunks=[];let size=0;try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxResponseBytes){await reader.cancel();throw new WikiError('size','The wiki response exceeded the size limit.');}chunks.push(Buffer.from(value));}bytes=Buffer.concat(chunks);}finally{reader.releaseLock();}}
             else {bytes=Buffer.from(await response.text());if(bytes.length>maxResponseBytes)throw new WikiError('size','The wiki response exceeded the size limit.');}
             const result=JSON.parse(bytes.toString('utf8'));
-            if(result.error)throw new WikiError(String(result.error.code||'api'),result.error.info||result.error.text);
-            if(Array.isArray(result.errors)&&result.errors.length)throw new WikiError(String(result.errors[0].code||'api'),result.errors[0].text);
+            if(result.error)throw failure(String(result.error.code||'api'),result.error.info||result.error.text);
+            if(Array.isArray(result.errors)&&result.errors.length)throw failure(String(result.errors[0].code||'api'),result.errors[0].text);
             return result;
         }catch(error){if(error instanceof WikiError)throw error;if(error.name==='AbortError')throw new WikiError(post?'unknown-write':'timeout',post?'The wiki write result is unknown. Refresh its state before retrying.':'The wiki request timed out.');throw new WikiError(post?'unknown-write':'network',post?'The connection ended before the wiki write result was confirmed. Refresh before retrying.':'The wiki could not be reached. Check the connection and try again.');}
         finally{clearTimeout(timer);this.featureRequests.delete(controller);}

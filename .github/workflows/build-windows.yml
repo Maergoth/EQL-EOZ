@@ -86,6 +86,8 @@ jobs:
       - name: Test Character persistence across restarts and changed origins
         if: inputs.extended_ui_checks
         run: npm run test:character-storage
+      - name: Test observation SQLite migration in the actual Electron runtime
+        run: npm run test:drop-observations-native
       - name: Test cached frontend upgrade recovery
         if: inputs.extended_ui_checks
         run: npm run test:main-cache
@@ -192,6 +194,8 @@ jobs:
           }
       - name: Test packaged Character database and native import
         run: npm run test:character-repository -- --packaged-root dist/win-unpacked/resources/app.asar --screenshots ci-screenshots/packaged-character-repository
+      - name: Test observation migration from the verified packaged ASAR
+        run: npm run test:drop-observations-native -- --packaged-root dist/win-unpacked/resources/app.asar
       - name: Hash release assets
         run: node scripts/release-assets.mjs win32
       - name: Upload installer artifact

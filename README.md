@@ -343,10 +343,25 @@ This export is game/wiki entity data, not a private wiki account or SQL backup.
 ### Optional drop observations
 
 **Collect and sync drop observations** saves minimal fresh kill/loot evidence
-and sends due batches while running and signed in, at most hourly with backoff.
-It excludes player names, raw chat/logs, paths, coordinates and screenshots.
-It is separate from article edits and does not calculate drop probabilities.
-Disable collection/upload to retain pending data without sending it.
+and automatically uploads the saved backlog in the background after startup or
+login. Use **Settings → Updates and wiki → Drop observations → Log in to wiki**
+inside EoZ; logging into a separate browser does not sign the app in. Startup
+does not open a login popup. Network failures retain records and retry later.
+
+Pending observations have no lifetime count limit. Newest observations upload
+first in small paced batches; an already prepared retry batch keeps its original
+contents. The wiki's hourly allowance controls pacing, and the app continues
+automatically until all eligible records are acknowledged. Disabling collection
+or its feature retains pending records and stops sending them. The app must be
+running and signed in to upload.
+
+Names are omitted by default. **Include character name publicly with drop
+observations** is a separate opt-in that shows the registered Character Select
+name it will use. The selection must match the current detected character.
+This applies to new observations only; names already queued can still publish
+after the option is turned off. Historical records are never given a name.
+Raw chat/logs, paths, coordinates and screenshots remain excluded. Observations
+are separate from article edits and do not calculate drop probabilities.
 
 ## Help and contributing
 
