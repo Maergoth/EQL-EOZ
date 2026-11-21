@@ -11,6 +11,7 @@ describe behavior at that release, including workflows replaced in later version
 - Open the app immediately and upload saved observations in the background after startup or login, using the wiki's advertised batch limits. Failed or uncertain uploads retain their exact records for bounded retries; collection and upload opt-out remains respected.
 - Preserve the complete backlog without the former 10,000-record limit, with a verified private backup during upgrade. New pending observations upload newest first; an existing retry batch keeps its original contents.
 - Log in directly from Settings → Drop observations. Eye of Zomm's wiki session is separate from a browser login; no login window opens automatically.
+- Explain email confirmation, account restrictions, upload pacing, server capacity and pending records belonging to a different wiki account so each wait has a clear next action.
 - Optionally include the selected, registered character name publicly with new observations. This starts off and requires the selected name to match the current detected character. Existing observations are not given names retroactively.
 
 ## 1.0.12 - Compound keyring inventory imports

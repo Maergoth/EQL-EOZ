@@ -22,7 +22,10 @@ read an installed player's outbox or upload game/account data to production.
   **101 bounded requests over 11 yielded cycles**. The original frozen batch
   went first, then unprepared rows sorted newest to oldest. Offline failures
   retained the identical retry batch; opt-out and feature disable made zero
-  sends; signing into EoZ resumed without an hourly wait.
+  sends; signing into EoZ resumed without an hourly wait. Email, restriction,
+  authentication/assertion, allowance and capacity errors showed their specific
+  next action; foreign-account pending records stayed bound and explained which
+  sign-in was needed.
 - `test:drop-observations-native` passed with **Electron 43.8.3, Node 24.22.0
   and SQLite 3.53.4**, a hidden sandboxed renderer and no public network. The
   same migration/backup/restart/immutable-batch/account/newest-chunk checks passed

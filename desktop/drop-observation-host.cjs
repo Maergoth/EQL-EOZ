@@ -2,6 +2,18 @@
 const {account,sameAccount}=require('./drop-observation-storage.cjs');
 const {SQLiteDropObservationStorage}=require('./drop-observation-sqlite.cjs');
 const CHANNEL='eye-of-zomm:observations';
+const authFailure=error=>['authentication','login','eoz-login','notloggedin','assertuserfailed','assertnameduserfailed','assertuser','account-changed'].includes(String(error.code||error.message||'').toLowerCase());
+function uploadErrorMessage(error){
+    const code=String(error.code||error.message||'').toLowerCase();
+    if(authFailure(error))return 'Use Log in to wiki in Eye of Zomm to send pending observations. The records are retained until you sign in.';
+    if(code==='eoz-email')return 'Confirm the email address on your wiki account in wiki Preferences. Pending observations will retry automatically.';
+    if(['eoz-blocked','blocked','permission','permissiondenied','badaccess-groups'].includes(code))return 'This wiki account is not allowed to submit observations. Check its wiki account restrictions; pending records are retained.';
+    if(['eoz-rate-limit','ratelimited','http-429'].includes(code))return 'The wiki upload allowance is in use. Pending observations will continue automatically.';
+    if(code==='eoz-capacity')return 'Wiki observation storage is at its configured limit. Pending records are retained; the wiki operator must resolve capacity.';
+    if(['disabled','eoz-disabled','eoz-schema','eoz-schema-unavailable'].includes(code))return 'Wiki observation storage is unavailable. Pending observations are retained for automatic retry.';
+    if(code==='observation-capability')return 'The wiki does not currently support public character names. Named observations are retained unchanged.';
+    return 'Observation upload was not confirmed. Pending observations are retained for retry.';
+}
 class DropObservationHost{
     constructor({electron,origin,getMainWindow,stateDir,client,version='development',storage,now=Date.now,setIntervalImpl=setInterval,clearIntervalImpl=clearInterval,setTimeoutImpl=setTimeout,clearTimeoutImpl=clearTimeout,autoStart=true,isFeatureEnabled=()=>true,startupAccountReady=Promise.resolve()}={}){
         const url=new URL(origin);if(url.origin!==origin||url.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(url.hostname))throw Error('Observation collection requires the local app.');
@@ -57,7 +69,8 @@ class DropObservationHost{
                 await this.storage.beginAttempt();if(!current())return;
                 if(!this.storage.status().pending){await this.storage.recordAttempt({success:true});return;}
                 const status=await this.client.status();if(!current())return;
-                if(!status.authenticated||status.blocked){this.owner=null;this.characterNameSupported=false;throw Error('authentication');}
+                if(!status.authenticated){this.owner=null;this.characterNameSupported=false;throw Error('authentication');}
+                if(status.blocked){this.owner=account(status.user);this.characterNameSupported=false;throw Object.assign(Error('blocked'),{code:'eoz-blocked'});}
                 const owner=account(status.user);if(!sameAccount(owner,this.owner))this.characterNameSupported=false;this.owner=owner;
                 const capability=await this.refreshCapability();if(!current())return;
                 if(capability?.enabled===false||capability?.available===false)throw Error('disabled');
@@ -74,10 +87,11 @@ class DropObservationHost{
                 }
                 if(current()){
                     const remaining=await this.storage.pendingForAccount(owner,{characterNameSupported:this.characterNameSupported,existsOnly:true});if(!current())return;
-                    this.error=!this.characterNameSupported&&this.storage.status().pendingWithCharacterName?'The wiki does not currently support public character names. Named observations are retained unchanged.':quotaAt?'The wiki hourly upload allowance is in use. Remaining observations will continue automatically.':null;
+                    const ownPending=!remaining&&this.storage.status().pending?await this.storage.pendingForAccount(owner,{characterNameSupported:true,existsOnly:true}):true;if(!current())return;
+                    this.error=!ownPending?'Pending observations belong to another wiki account. Sign out in Contribute to Wiki and sign back in with the original account; the records are retained.':!this.characterNameSupported&&this.storage.status().pendingWithCharacterName?'The wiki does not currently support public character names. Named observations are retained unchanged.':quotaAt?'The wiki hourly upload allowance is in use. Remaining observations will continue automatically.':null;
                     await this.storage.recordAttempt({success:true,delayMs:quotaAt?Math.max(1000,quotaAt-this.now()):remaining&&sent===maximum?2500:3600000});
                 }
-            }catch(error){if(current()){this.error=error.message==='authentication'?'Log in to the wiki to send pending observations.':error.message==='disabled'?'Wiki observation storage is unavailable. Pending observations are retained.':'Observation upload was not confirmed. Pending observations are retained for retry.';await this.storage.recordAttempt({success:false,error:this.error,retryAfterMs:error.retryAfterMs||0});}}
+            }catch(error){if(current()){this.error=uploadErrorMessage(error);if(authFailure(error)){this.owner=null;this.characterNameSupported=false;}await this.storage.recordAttempt({success:false,error:this.error,retryAfterMs:error.retryAfterMs||0});}}
         })();this.inflight=task;
         try{await task;}finally{if(this.inflight===task)this.inflight=null;this.publishStatus();if(!this.closed&&this.storage.status().enabled&&this.isFeatureEnabled())this.scheduleNext();}return this.status();
     }
