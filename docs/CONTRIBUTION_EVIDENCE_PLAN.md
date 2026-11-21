@@ -173,6 +173,11 @@ The parser preserves existing source strings/counts, but classifies corpse
 provenance only when that wording is present and never carries a recent
 kill/encounter source across a zone or selected log/root change. Actual source
 replacement clears its zone, short name, location, last kill and current fight.
+`You have entered an area where ...` messages describe local spell rules such
+as Bind Affinity and levitation. They do not emit zone events or replace known
+zone, short-name, location or recent-kill context; following observations retain
+the real zone. Genuine zoning messages and the character's self `/who` row remain
+zone signals, including uncatalogued zone names.
 Retained combat history has immutable per-event zones and current-source
 membership; rebuilding encounters after changing the inactivity gap cannot make
 an earlier log eligible as the current loot source. Until this log supplies a
