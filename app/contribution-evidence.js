@@ -4,7 +4,12 @@ import { createWikiResolver, normalizeWikiIdentity, itemBaseIdentity, itemExalta
 import {validConsiderLevelProof} from './log-context.js';
 
 export const CONTRIBUTION_QUEUE_KEY = 'eql-eye-of-zomm-contributions-v1';
-export const CONTRIBUTION_QUEUE_BYTES = 1800000;
+export const CONTRIBUTION_QUEUE_BYTES = 10000000;
+// Leave room for authored work when automatic log discovery fills its budget.
+export const CONTRIBUTION_AUTOMATIC_QUEUE_BYTES = 8000000;
+export const CONTRIBUTION_QUEUE_DRAFTS = 1000;
+export const CONTRIBUTION_AUTOMATIC_DRAFTS = 900;
+export const CONTRIBUTION_ARCHIVE_DRAFTS = 1000;
 export const CONTRIBUTION_LOG_LINE_LIMIT = 2048;
 export const contributionEvidenceText = (value, max=240) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
 // Retain only the triggering line in private evidence, not surrounding chat

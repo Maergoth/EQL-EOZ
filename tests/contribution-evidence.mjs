@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EQLogParser } from '../app/parser.js';
 import { createContributionQueue } from '../app/contribution-queue.js';
-import { CONTRIBUTION_QUEUE_KEY, contributionMembership, logContributionObservation } from '../app/contribution-evidence.js';
+import { CONTRIBUTION_QUEUE_KEY, CONTRIBUTION_AUTOMATIC_DRAFTS, contributionMembership, logContributionObservation } from '../app/contribution-evidence.js';
 import {createItemBaseReview,applyItemBaseReview,validateItemBaseReview} from '../app/item-base-review.js';
 
 const values=new Map(),storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};
@@ -109,5 +109,11 @@ const oldTierIgnore=createContributionQueue({storage:{getItem:()=>JSON.stringify
         else{assert.equal(migrated.name,prior.name);assert.equal(migrated.title,prior.title);assert.deepEqual(migrated.fields,prior.fields);assert.deepEqual(migrated.evidence,prior.evidence,'Protected historical drafts are not renamed or re-evidenced');}
     }
 }
-const fullValues=new Map(),fullWarnings=[],full=createContributionQueue({storage:{getItem:key=>fullValues.get(key),setItem:(key,value)=>fullValues.set(key,value)},onWarning:value=>fullWarnings.push(value)});for(let n=0;n<200;n++)assert(full.add({kind:'item',name:`Synthetic capacity item ${n}`}));const fullBefore=fullValues.get(CONTRIBUTION_QUEUE_KEY);assert.equal(full.add({kind:'item',name:'Synthetic overflow item'}),null);assert.equal(fullValues.get(CONTRIBUTION_QUEUE_KEY),fullBefore);assert.equal(full.snapshot()[0].name,'Synthetic capacity item 0');assert(fullWarnings.some(value=>value.includes('full')),'Capacity refuses the new draft without evicting saved evidence');
+const fullValues=new Map(),fullWarnings=[],full=createContributionQueue({storage:{getItem:key=>fullValues.get(key),setItem:(key,value)=>fullValues.set(key,value)},onWarning:value=>fullWarnings.push(value)});
+const capacityEvidence=index=>({id:`synthetic-capacity-log-${index}`,kind:'game-log',capturedAt:'2026-11-26T17:00:00Z',input:{event:'item-link'},evidence:{text:`Synthetic capacity item link ${index}`}});
+for(let n=0;n<CONTRIBUTION_AUTOMATIC_DRAFTS;n++)assert(full.add({kind:'item',name:`Synthetic capacity item ${n}`,evidence:capacityEvidence(n)}));
+assert(full.add({kind:'item',name:'Synthetic overflow item',evidence:capacityEvidence(CONTRIBUTION_AUTOMATIC_DRAFTS)}));
+assert.equal(full.snapshot().length,CONTRIBUTION_AUTOMATIC_DRAFTS);assert.equal(full.snapshot()[0].name,'Synthetic capacity item 1');
+assert.equal(full.storageStatus().evictedDiscoveries,1);assert.deepEqual(fullWarnings,[],'Automatic discoveries roll off the oldest untouched log suggestion without a capacity error');
+assert.equal(JSON.parse(fullValues.get(CONTRIBUTION_QUEUE_KEY)).candidates.at(-1).name,'Synthetic overflow item');
 console.log('Contribution evidence: live log drafts/relationships, conservative sources, persistent dedup, explicit fresh targeted /loc, restart/source/zone/expiry guards and corruption preservation passed.');

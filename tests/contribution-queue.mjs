@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {createContributionQueue} from '../app/contribution-queue.js';
+import {CONTRIBUTION_ARCHIVE_DRAFTS} from '../app/contribution-evidence.js';
 const values=new Map(),storage={getItem:key=>values.get(key),setItem:(key,value)=>values.set(key,value)};
 let pack={meta:{wikiEntitiesComplete:true},wikiEntities:{items:['Existing Gem','Existing Boots'],npcs:['Goblin Alchemist'],titles:['Existing Gem','Existing Boots','Goblin Alchemist','Synthetic Vale']},items:[{name:'Existing Gem'}],npcs:[{name:'Goblin Alchemist'}],zones:[{name:'Synthetic Vale'}]};
 const queue=()=>createContributionQueue({storage,getPack:()=>pack});let q=queue();
@@ -105,9 +106,9 @@ hints=createContributionQueue({storage:hintStorage,getPack:()=>hintPack});assert
     assert.equal(q.reconcile({apply:true}).applied,true);assert.equal(q.snapshot().length,preserved.length);assert.equal(q.archived().length,2);
     for(const old of [free,sales]){const archived=q.archived().find(row=>row.id===old.id);assert.deepEqual(archived.evidence,old.evidence);assert.equal(archived.name,old.name);assert.equal(archived.archive.reason,'chat-caption-covered','The original wrong draft is reversible and never rewritten into a wiki page');}
     const once=disk.get(key);q=createContributionQueue({...options,autoReconcile:true});assert.equal(q.reconcile({apply:true}).changed,false);assert.equal(disk.get(key),once,'Cleanup is durable and restart-idempotent');
-    const fullArchive=Array.from({length:200},(_,index)=>({...legacy('archived-'+index,'Archived Unknown '+index),archive:{reason:'old'}}));
+    const fullArchive=Array.from({length:CONTRIBUTION_ARCHIVE_DRAFTS},(_,index)=>({...legacy('archived-'+index,'Archived Unknown '+index),archive:{reason:'old'}}));
     const fullDisk=new Map([[key,JSON.stringify({schemaVersion:1,candidates:[free],archive:fullArchive})]]),full=createContributionQueue({...options,storage:{getItem:key=>fullDisk.get(key),setItem:(key,value)=>fullDisk.set(key,value)}});
-    full.reconcile({apply:true});assert.equal(full.archived().length,200);assert.deepEqual(full.snapshot()[0].reasons,[],'A full archive still removes the false gap claim without dropping its record');
+    full.reconcile({apply:true});assert.equal(full.archived().length,CONTRIBUTION_ARCHIVE_DRAFTS);assert.deepEqual(full.snapshot()[0].reasons,[],'A full archive still removes the false gap claim without dropping its record');
     const canonical={...catalog,items:[...catalog.items,{name:free.name}],wikiEntities:{...catalog.wikiEntities,items:[...catalog.wikiEntities.items,free.name]}};
     const genuine=createContributionQueue({...options,getPack:()=>canonical,storage:{getItem:()=>JSON.stringify({schemaVersion:1,candidates:[free]})}});
     assert.notEqual(genuine.reconcile().rows[0].classification,'chat-caption-covered','A full exact catalog title takes priority over its shorter suffix');
@@ -136,9 +137,9 @@ hints=createContributionQueue({storage:hintStorage,getPack:()=>hintPack});assert
     assert(queue.reconcile({apply:true}).persisted);assert.deepEqual(queue.snapshot().map(row=>row.id),keep.map(row=>row.id));
     for(const candidate of [multi,single,free]){const archived=queue.archived().find(row=>row.id===candidate.id);assert.equal(archived.name,candidate.name);assert.deepEqual(archived.evidence,candidate.evidence);assert.equal(archived.archive.reason,'chat-trade-caption-covered');}
     const once=disk.get(key);queue=createContributionQueue({...options,autoReconcile:true});assert.equal(queue.reconcile({apply:true}).changed,false);assert.equal(disk.get(key),once,'Trade cleanup is durable and idempotent');
-    const fullArchive=Array.from({length:200},(_,index)=>({...legacy('archived-'+index,'Old Unknown '+index),archive:{reason:'old'}}));
+    const fullArchive=Array.from({length:CONTRIBUTION_ARCHIVE_DRAFTS},(_,index)=>({...legacy('archived-'+index,'Old Unknown '+index),archive:{reason:'old'}}));
     const fullDisk=new Map([[key,JSON.stringify({schemaVersion:1,candidates:[multi,single],archive:fullArchive})]]),full=createContributionQueue({...options,storage:{getItem:key=>fullDisk.get(key),setItem:(key,value)=>fullDisk.set(key,value)},autoReconcile:true});
-    assert.equal(full.archived().length,200);for(const candidate of full.snapshot()){assert.deepEqual(candidate.reasons,[]);assert.equal(candidate.canonicalTitle,null,'Multi-item cleanup never invents one canonical item identity');}
+    assert.equal(full.archived().length,CONTRIBUTION_ARCHIVE_DRAFTS);for(const candidate of full.snapshot()){assert.deepEqual(candidate.reasons,[]);assert.equal(candidate.canonicalTitle,null,'Multi-item cleanup never invents one canonical item identity');}
     assert.equal(JSON.parse(fullDisk.get(key)).candidates.length,2,'Full archives preserve rather than discard raw evidence');
     const exactPack={...catalog,items:[...catalog.items,{name:single.name},{name:caption}]};
     const exact=createContributionQueue({getPack:()=>exactPack,storage:{getItem:()=>JSON.stringify({schemaVersion:1,candidates:[single,multi]})},autoReconcile:false});

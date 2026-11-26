@@ -245,33 +245,75 @@ fresh revision/create-only guards and partial-result retry.
 
 Root passes the origin-independent native storage adapter to the queue through
 the separate `contributionStorage` mount option. It is independent of selected
-Character profiles. One added fixed allowlisted key,
-`eql-eye-of-zomm-contributions-v1`, has a **1,800,000 UTF-8 byte** bound.
-Existing Character keys keep their 1,500,000-byte limits and the roster keeps
-8,000,000 bytes. The fixed outer-file worst escaped bound is 76,804,096 bytes.
+Character profiles. The fixed allowlisted key
+`eql-eye-of-zomm-contributions-v1` has a **10,000,000 UTF-8 byte** bound.
+Automatic discoveries use a budget of **8,000,000 bytes**, leaving room for
+explicit edits and captured evidence. The Character model retains its
+8 MiB limit, the walkthrough 1,500,000 bytes, and the legacy roster 32 MiB.
+The native envelope admits the worst escaped sum of the fixed limits; its
+361,993,984-byte bound is a validation ceiling, not a preallocated file.
 Exact-main IPC, atomic queued writes, quit draining, authoritative file values,
 browser migration only for absent keys, tombstones and corruption preservation
 remain unchanged. Cache upgrades clear cache, not these private drafts.
 
-The queue stores at most 200 drafts, 2,000 Ignore keys, 2,000 remembered live IDs,
-six recent text evidence entries per draft, 100 distinct relationships per draft
-and eight supporting event IDs per relationship. It refuses a new identity when
-full rather than silently deleting an older draft. A storage/byte-limit failure
-warns that changes remain in memory; recovery/removal is needed before closing.
-Malformed/unsupported saved queue data is preserved and write-blocked. This is
-not an unlimited raw log archive or recording.
+The queue stores at most 1,000 active drafts. Automatic additions have a budget
+of 900 drafts, reserving 100 slots for explicit contributions. Other bounds remain 2,000
+Ignore keys, 2,000 remembered live IDs, six recent text evidence entries per
+draft, 100 distinct relationships per draft and eight supporting event IDs per
+relationship. New automatic drop-source suggestions are bounded at 100 per
+item; historical and deliberate source edits are preserved. Automatic updates
+are checked before replacing draft content, so a rejected discovery cannot
+leave an unsavable draft behind. Manual/OCR edits and explicitly requested
+spawn captures can use the reserved space.
+
+The Discovery queue shows a persistent saving, saved, paused or unsaved status.
+Native writes show saved only after the storage service acknowledges them;
+completion and failures refresh the status without waiting for another log line.
+**Process queue** saves the current form and reconciles local suggestions.
+Capacity pressure first runs this local cleanup. If it still needs room, it
+replaces the oldest untouched log discoveries in the same save as the new draft.
+It keeps drafts in use, authored drafts, screenshots, reviewed or unfinished
+submissions, and requested or captured spawn locations. If there is no eligible
+discovery to replace, capture pauses and the status points to the available
+cleanup actions. Saved drafts stay available for editing.
+Actual save failures distinguish the hard byte limit, browser storage quota and
+unavailable storage, and repeated failures do not produce a toast for every log
+line. Recent manual edits remain in memory after a failed save; keep the app
+open until recovered. Malformed/unsupported saved data is preserved and
+write-blocked.
+
+When completed draft copies remain in the archive, **Clear completed local
+drafts** offers an explicit confirmation with their count. It removes only
+archived drafts whose status is `submitted`, freeing their local evidence and
+thumbnails. Active drafts, unfinished/partial archive entries, published wiki
+pages and actual submission history are kept. The clear operation saves
+transactionally and restores the archive if saving fails.
 
 `queue.reconcile({apply:false})` provides a bounded dry run. Versioned apply
 archives safe untouched known-complete/generated-pet/duplicate entries while
-retaining edited, reviewed, submitted and partial plans and real patch tasks.
-Archive entries remain bounded and recoverable; a failed save rolls back the
-active queue. Root must back up the installed profile, inspect the dry-run
-counts, apply and read back before claiming the user's list is cleaned. No
-player list or private backup belongs in Git.
+retaining edited, reviewed and partial plans and real patch tasks. Processing
+also moves fully submitted drafts into the local archive, preserving submission
+details. The archive admits up to 1,000 entries. Only untouched obsolete automatic
+suggestions have retention applied: at most the newest 200 within 2,000,000 bytes
+and 30 days. Authored, reviewed, submitted and partial work is retained. A failed
+save rolls back reconciliation. Existing private profiles are not changed by a
+source update; back up and inspect any explicit installed-profile operation
+before claiming the user's list is cleaned. No player list or private backup
+belongs in Git.
+
+Successful automatic source submissions and verified quiet coverage decisions
+retire matching source-only tasks from the active list. They do not retire
+unrelated gaps or protected work. Quiet decisions are scoped to the dataset;
+retained unresolved suggestions can return when that dataset changes, whereas
+successful publication receipts remain valid.
 
 ## Separate durable observation outbox
 
 The observation archive is independent of the editable contribution queue.
+Discoveries are proposed wiki work, so unfinished drafts need review rather
+than automatic publication. Processing their local queue cannot transmit or
+erase the durable kill/loot observations described below. Those observations
+have their own automatic upload and retry path.
 `collectDropObservation(event, context)` taps fresh parsed kill/loot events
 before Ignore, submitted and wiki-presence filters. Known NPCs/items therefore
 still supply observations. Explicit player/pet evidence and generated-name

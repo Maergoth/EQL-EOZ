@@ -1,5 +1,6 @@
 // Shared mounted-browser scenario; all observations, storage and wiki replies
 // are synthetic. This module is test code, never part of the app bundle.
+import {CONTRIBUTION_ARCHIVE_DRAFTS} from '../app/contribution-evidence.js';
 export async function discoveryQueueStabilityScenario({document,mountCaptureWorkspace,assert,onPending=async()=>{},onTradeCleanup=async()=>{}}){
     const flush=async()=>{for(let index=0;index<16;index++)await Promise.resolve();};
     const saved={dateNow:Date.now,setTimeout:globalThis.setTimeout,clearTimeout:globalThis.clearTimeout};
@@ -87,7 +88,7 @@ export async function discoveryQueueStabilityScenario({document,mountCaptureWork
         const legacy=(id,name)=>({id,kind:'item',name,title:name,zone:'',status:'needs-review',fields:{name:{value:name,confirmed:false},tier:{value:3,confirmed:false}},sources:[],relations:[],evidence:[{id:'log-'+id,kind:'game-log',event:'item-link',text:`Marketvoice tells General:1, '[${name} +3]'`,logLine:`[Sun Oct 25 18:00:00 2026] Marketvoice tells General:1, '[${name} +3]'`}]});
         const caption=legacy('old-caption','Free Brown Chitin Protector'),multi=legacy('old-multi','FREE Crimson Robe of Alendine Efreeti War Axe'),trading=legacy('old-trading','Trading Wurmslayer'),unrelated=legacy('untouched-gap','Stable Untouched Relic');
         for(const candidate of [multi,trading])candidate.evidence[0].logLine=candidate.evidence[0].text=`Marketvoice tells General:1, '${candidate.name}'`;
-        const archive=Array.from({length:200},(_,index)=>({...legacy('archived-'+index,'Archived Unknown '+index),archive:{reason:'old'}}));
+        const archive=Array.from({length:CONTRIBUTION_ARCHIVE_DRAFTS},(_,index)=>({...legacy('archived-'+index,'Archived Unknown '+index),archive:{reason:'old'}}));
         storage.setItem('eql-eye-of-zomm-contributions-v1',JSON.stringify({schemaVersion:1,candidates:[caption,multi,trading,unrelated],archive}));
         const beforeCaption=checks.length;view=mountCaptureWorkspace(options);await flush();view.refresh();await flush();
         for(const check of checks.slice(beforeCaption))answer(check);await flush();
@@ -98,7 +99,7 @@ export async function discoveryQueueStabilityScenario({document,mountCaptureWork
         assert(!row(caption.name)&&!row(multi.name)&&!row(trading.name)&&row(unrelated.name)===unrelatedRow,'Single and multiple trade captions retire only their retained rows even when the archive is full');
         assert(document.querySelector('[data-candidate-form]')?.querySelector('h2')?.textContent!==caption.name,'The retired false caption cannot retain an active editor lease');
         const retained=JSON.parse(storage.getItem('eql-eye-of-zomm-contributions-v1'));
-        assert(retained.archive.length===200&&[caption,multi,trading].every(candidate=>retained.candidates.find(value=>value.id===candidate.id)?.reasons.length===0),'The quiet legacy records and complete full archive remain saved');
+        assert(retained.archive.length===CONTRIBUTION_ARCHIVE_DRAFTS&&[caption,multi,trading].every(candidate=>retained.candidates.find(value=>value.id===candidate.id)?.reasons.length===0),'The quiet legacy records and complete full archive remain saved');
         unrelatedRow.querySelector('[data-candidate-id]').click();await flush();
         await onTradeCleanup();
         return{verifiedRows:3,unchangedRefreshes:17,pendingAndUnavailableStable:true,equivalentPackWrapperStable:true,selectableReviewOnly:true,newRowsRequireProof:true,coveredRetiresOnlyAffected:true,sourceAndPackInvalidate:true,fullArchiveCaptionRetired:true,multiTradeCaptionRetired:true,calls};

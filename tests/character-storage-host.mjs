@@ -6,7 +6,7 @@ import {createRequire} from 'node:module';
 const {CharacterStorage,CHARACTER_STORAGE_KEYS,MAX_VALUE_BYTES,MAX_ROSTER_BYTES,MAX_CONTRIBUTION_BYTES,MAX_FILE_BYTES,CHANNEL}=createRequire(import.meta.url)('../desktop/character-storage.cjs');
 const ROSTER='eql-eye-of-zomm-character-profiles-v1';
 const CONTRIBUTIONS='eql-eye-of-zomm-contributions-v1';
-assert.deepEqual(CHARACTER_STORAGE_KEYS,['eql-eye-of-zomm-character-v1','eql-eye-of-zomm-character-walkthrough-v1',ROSTER,CONTRIBUTIONS]);assert.equal(MAX_VALUE_BYTES,8*1024*1024);assert.equal(MAX_ROSTER_BYTES,32*1024*1024);assert.equal(MAX_CONTRIBUTION_BYTES,1800000);assert.equal(MAX_FILE_BYTES,(MAX_VALUE_BYTES*2+MAX_ROSTER_BYTES+MAX_CONTRIBUTION_BYTES)*6+4096,'The outer file admits the worst escaped sum of the four fixed limits');
+assert.deepEqual(CHARACTER_STORAGE_KEYS,['eql-eye-of-zomm-character-v1','eql-eye-of-zomm-character-walkthrough-v1',ROSTER,CONTRIBUTIONS]);assert.equal(MAX_VALUE_BYTES,8*1024*1024);assert.equal(MAX_ROSTER_BYTES,32*1024*1024);assert.equal(MAX_CONTRIBUTION_BYTES,10000000);assert.equal(MAX_FILE_BYTES,361993984,'The outer file admits the worst escaped sum of the four fixed limits');
 const directory=await mkdtemp(join(tmpdir(),'eoz-character-storage-unit-'));
 try{
     const warnings=[],handlers=new Map(),main={isDestroyed:()=>false,webContents:{mainFrame:{url:'http://127.0.0.1:1234/'}}};
@@ -23,10 +23,10 @@ try{
     await assert.rejects(store.write({key:ROSTER,value:'x'.repeat(MAX_ROSTER_BYTES+1)}),/Invalid/);
     await assert.rejects(store.write({key:ROSTER,value:'界'.repeat(Math.floor(MAX_ROSTER_BYTES/3)+1)}),/Invalid/,'The roster cap is a UTF-8 byte cap');
     await assert.rejects(store.write({key:CONTRIBUTIONS,value:'x'.repeat(MAX_CONTRIBUTION_BYTES+1)}),/Invalid/);
-    await assert.rejects(store.write({key:CONTRIBUTIONS,value:'界'.repeat(600001)}),/Invalid/,'The contribution cap is UTF-8 bytes');
+    await assert.rejects(store.write({key:CONTRIBUTIONS,value:'界'.repeat(Math.floor(MAX_CONTRIBUTION_BYTES/3)+1)}),/Invalid/,'The contribution cap is UTF-8 bytes');
     await assert.rejects(store.write({key:CHARACTER_STORAGE_KEYS[0],value:'x',extra:true}),/Invalid/);
     const roster=JSON.stringify({schemaVersion:1,padding:'a'.repeat(MAX_ROSTER_BYTES-JSON.stringify({schemaVersion:1,padding:''}).length)});assert.equal(Buffer.byteLength(roster),MAX_ROSTER_BYTES);
-    const contributionQueue=JSON.stringify({schemaVersion:1,candidates:[],padding:'a'.repeat(MAX_CONTRIBUTION_BYTES-JSON.stringify({schemaVersion:1,candidates:[],padding:''}).length)});assert.equal(Buffer.byteLength(contributionQueue),MAX_CONTRIBUTION_BYTES);await store.write({key:CONTRIBUTIONS,value:contributionQueue});
+    const contributionPaddingBytes=MAX_CONTRIBUTION_BYTES-Buffer.byteLength(JSON.stringify({schemaVersion:1,candidates:[],padding:''})),contributionQueue=JSON.stringify({schemaVersion:1,candidates:[],padding:'界'.repeat(Math.floor(contributionPaddingBytes/3))+'a'.repeat(contributionPaddingBytes%3)});assert.equal(Buffer.byteLength(contributionQueue),MAX_CONTRIBUTION_BYTES);await store.write({key:CONTRIBUTIONS,value:contributionQueue});await assert.rejects(store.write({key:CONTRIBUTIONS,value:contributionQueue+' '}),/Invalid/,'One extra byte is rejected at the exact UTF-8 contribution boundary');
     const work=Array.from({length:30},(_,n)=>store.write({key:CHARACTER_STORAGE_KEYS[n%2],value:JSON.stringify({schemaVersion:1,n})}));
     await Promise.all(work);await store.write({key:ROSTER,value:roster});const finalWrite=store.write({key:CHARACTER_STORAGE_KEYS[0],value:JSON.stringify({schemaVersion:1,n:30})});await Promise.all([finalWrite,store.close()]);assert.equal(handlers.has(CHANNEL),false);
     const restored=new CharacterStorage({directory});await restored.initialize();
@@ -47,5 +47,5 @@ try{
     const oversizedDirectory=join(directory,'oversized-roster');await mkdir(oversizedDirectory);const oversizedFile=join(oversizedDirectory,'eye-of-zomm-character-storage.json'),oversized=JSON.stringify({schemaVersion:1,values:{[ROSTER]:roster+' '}});await writeFile(oversizedFile,oversized);const oversizedStore=new CharacterStorage({directory:oversizedDirectory});assert((await oversizedStore.initialize()).error);await assert.rejects(oversizedStore.write({key:ROSTER,value:null}),/could not be read/);await assert.rejects(oversizedStore.close(),/could not be read/);assert.equal(await readFile(oversizedFile,'utf8'),oversized,'An oversized roster in a valid outer envelope is preserved, never replaced');
     const failure=join(directory,'write-failure');await mkdir(failure);const failed=new CharacterStorage({directory:failure,warn:value=>warnings.push(value)});await failed.initialize();await mkdir(failed.file);
     await assert.rejects(failed.write({key:CHARACTER_STORAGE_KEYS[0],value:'synthetic'}),/could not be saved/);assert(warnings.some(value=>value.includes('could not be saved')));assert.equal(dirname(resolve(failed.file)),resolve(failure));await rm(failed.file,{recursive:true});await failed.flush();await failed.close();
-    console.log('Character/contribution storage: exact-main four-key IPC, independent8MiB model/32MiB roster/1.8MB queue bounds, atomic writes/restart, tombstones, preserved corruption and retryable failures passed.');
+    console.log('Character/contribution storage: exact-main four-key IPC, independent 8MiB model/32MiB roster/10MB UTF-8 queue bounds, atomic writes/restart, tombstones, preserved corruption and retryable failures passed.');
 }finally{assert.equal(dirname(resolve(directory)),resolve(tmpdir()));assert.ok(basename(directory).startsWith('eoz-character-storage-unit-'));await rm(directory,{recursive:true,force:true});}

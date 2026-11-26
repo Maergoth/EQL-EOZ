@@ -1,8 +1,27 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current `v1.0.13` candidate: preserve the complete drop-observation backlog in a private SQLite worker, upload newest pending records automatically after EoZ startup/login in paced acknowledged batches, and keep offline, disabled or account-bound records for retry. Spell-rule notices never become zone names. Public Character Select attribution is a separate default-off option for new events; historical names remain unavailable. The [developer guide](../DEVELOPMENT.md) and [observation contract](CONTRIBUTION_EVIDENCE_PLAN.md#separate-durable-observation-outbox) describe ownership and migration. Synthetic checks and release component captures are distinct from installed-profile migration, live account uploads, platform/package checks and publication receipts.
+Current `v1.0.14` candidate: keep contribution drafts within a 10 MB private limit, replace only the oldest untouched automatic discoveries when room is needed, and preserve authored evidence and unfinished reviews. Successful source processing retires completed source-only tasks; automatic history stays bounded. Contribute distinguishes saving from confirmed saves and offers local Process queue and confirmed completed-copy cleanup. The [developer guide](../DEVELOPMENT.md) and [contribution storage contract](CONTRIBUTION_EVIDENCE_PLAN.md#durable-storage-and-limits) describe ownership and limits. Synthetic component captures do not establish installed-profile migration, native disk failure, live uploads or packaged-release acceptance.
 
 The older implementation and acceptance notes below retain historical context. They do not identify outstanding work or replace current source inspection.
+
+## 1.0.14 contribution storage acceptance
+
+Use a disposable synthetic profile. Let fresh automatic discoveries replace
+older untouched suggestions at the automatic limit while an authored draft is
+open. Confirm its notes, screenshot, reviewed fields and focus remain intact;
+new discoveries should not interrupt review. Check that completed source-only
+tasks leave the active queue and that repeated processed events do not recreate
+them. A catalog refresh may restore an unresolved quiet coverage decision;
+confirmed publication receipts must remain valid.
+
+Hold a native write pending and confirm Contribute says Saving until the write
+is acknowledged. Simulate a failed disk write, then retry with Process queue;
+the persistent status must identify unsaved work until the retry succeeds.
+Exercise a queue filled with protected drafts, cancel and confirm Clear completed
+local drafts, and verify unfinished/partial work survives both actions. Neither
+local processing nor completed-copy cleanup may publish a wiki edit. Reopen the
+profile to check saved data; record real disk and installed-profile acceptance
+separately from component screenshots and synthetic storage tests.
 
 ## 1.0.13 observation acceptance
 
