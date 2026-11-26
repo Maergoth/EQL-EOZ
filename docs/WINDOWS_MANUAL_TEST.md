@@ -1,10 +1,10 @@
 # Eye of Zomm Windows/game-client acceptance test
 
-Current `v1.0.14` candidate: keep contribution drafts within a 10 MB private limit, replace only the oldest untouched automatic discoveries when room is needed, and preserve authored evidence and unfinished reviews. Successful source processing retires completed source-only tasks; automatic history stays bounded. Contribute distinguishes saving from confirmed saves and offers local Process queue and confirmed completed-copy cleanup. The [developer guide](../DEVELOPMENT.md) and [contribution storage contract](CONTRIBUTION_EVIDENCE_PLAN.md#durable-storage-and-limits) describe ownership and limits. Synthetic component captures do not establish installed-profile migration, native disk failure, live uploads or packaged-release acceptance.
+Current `v1.0.15` candidate: keep contribution drafts within a 10 MB private limit, replace only the oldest untouched automatic discoveries when room is needed, and preserve authored evidence and unfinished reviews. Successful source processing retires completed source-only tasks; automatic history stays bounded. Contribute distinguishes saving from confirmed saves and offers local Process queue and confirmed completed-copy cleanup. The [developer guide](../DEVELOPMENT.md) and [contribution storage contract](CONTRIBUTION_EVIDENCE_PLAN.md#durable-storage-and-limits) describe ownership and limits. Synthetic component captures do not establish installed-profile migration, native disk failure, live uploads or packaged-release acceptance.
 
 The older implementation and acceptance notes below retain historical context. They do not identify outstanding work or replace current source inspection.
 
-## 1.0.14 contribution storage acceptance
+## 1.0.15 contribution storage acceptance
 
 Use a disposable synthetic profile. Let fresh automatic discoveries replace
 older untouched suggestions at the automatic limit while an authored draft is

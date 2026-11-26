@@ -27,9 +27,10 @@ try {
     await writeFile(join(temporary,'package.json'),JSON.stringify({name:'eoz-window-lifecycle-fixture',version:pkg.version,main:'main.cjs'}));
     const run=async({root,profile,scenario,currentTour,navigationTour,version})=>{
         const electron=require('electron'),{app,BrowserWindow,screen}=electron,Module=require('node:module'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
-        const optionsById=new Map(),callsById=new Map();
+        const optionsById=new Map(),callsById=new Map(),rendererErrors=[];
         function RecordedWindow(options){
             const window=new BrowserWindow(options);optionsById.set(window.id,options);callsById.set(window.id,{show:0,hide:0});
+            window.webContents.on('console-message',(_event,...values)=>{const message=values.map(value=>typeof value==='string'?value:JSON.stringify(value)).join(' ');if(/error|exception|failed/i.test(message)&&rendererErrors.length<20)rendererErrors.push(message.slice(0,1500));});
             // Use nonactivating presentation for test windows. Actual native
             // minimize/maximize/bounds/tray state is retained and asserted.
             window.show=()=>{callsById.get(window.id).show++;window.showInactive();};
@@ -42,7 +43,7 @@ try {
         Module._load=function(name,...args){if(name==='electron')return {...electron,BrowserWindow:RecordedWindow,...(scenario.startsWith('taskbar')?{Tray:class{constructor(){throw Error('Synthetic unavailable tray');}}}:{})};return nativeLoad.call(this,name,...args);};
         global.fetch=async()=>{throw Error('External network disabled for lifecycle smoke');};
         const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-        const until=async(predicate,label)=>{const end=Date.now()+10000;while(Date.now()<end){const result=await predicate();if(result)return result;await wait(50);}throw Error(`Timed out: ${label}`);};
+        const until=async(predicate,label)=>{const end=Date.now()+10000;while(Date.now()<end){const result=await predicate();if(result)return result;await wait(50);}throw Error(`Timed out: ${label}; scenario=${scenario}; renderer=${JSON.stringify(rendererErrors)}`);};
         const execute=(win,fn,...args)=>win.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
         let owner,started=false;
         async function inspect(){
