@@ -1,5 +1,18 @@
 # Browsable release history
 
+The 1.0.14 image shows the actual Contribute component after a new synthetic
+discovery replaces the oldest untouched automatic suggestion in a 900-entry
+queue. The isolated sandboxed Electron check retains the selected authored item
+and its saved note, verifies the queue stays bounded, and records zero plan or
+publication calls. Wiki and storage APIs are local fixtures; no installed
+profile, player data, game pixels or public wiki requests are used. This is
+component evidence, separate from native disk, production upload and packaged
+release acceptance. Reproduce with
+`node scripts/test-contribution-storage-workspace.mjs --screenshot <private-output.png>`.
+The visually reviewed version-owned PNG has SHA-256
+`b015faa9c56302ccef42561e491a83a2428927fc270ad4c2e80174cd16830eb7`.
+All prior history entries and image bytes remain unchanged.
+
 The 1.0.11 image is an actual sandboxed Character share review with synthetic
 resources, attributes, resists and independent AC/Attack components. The focused
 Chromium component check uses fixture capture/wiki boundaries and confirms exact

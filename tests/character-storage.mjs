@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createCharacterStorage} from '../app/character-storage.js';
 import {createCharacterModel,CHARACTER_STORAGE_KEY as KEY} from '../app/character-model.js';
 import {createCharacterWalkthrough,CHARACTER_WALKTHROUGH_KEY as FLOW} from '../app/character-walkthrough.js';
+import {CONTRIBUTION_QUEUE_BYTES} from '../app/contribution-evidence.js';
 const ROSTER='eql-eye-of-zomm-character-profiles-v1';
 const CONTRIBUTIONS='eql-eye-of-zomm-contributions-v1';
 {
@@ -13,6 +14,17 @@ const CONTRIBUTIONS='eql-eye-of-zomm-contributions-v1';
 }
 const memory=()=>{const values=new Map();return{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};};
 const draft=label=>JSON.stringify({schemaVersion:1,label});
+{
+    const requests=[],states=[],deferred=await createCharacterStorage({api:{read:async()=>({values:{}}),write:()=>new Promise((resolve,reject)=>requests.push({resolve,reject})),flush:async()=>({ok:true})},legacyStorage:memory()});
+    const idle={pending:false,failed:false,blocked:false};assert.deepEqual(deferred.status(CONTRIBUTIONS),idle);
+    const unsubscribe=deferred.subscribe(()=>states.push(deferred.status(CONTRIBUTIONS))),unsubscribeBroken=deferred.subscribe(()=>{throw Error('Synthetic listener error');});
+    deferred.setItem(CONTRIBUTIONS,draft('first delayed save'));deferred.setItem(CONTRIBUTIONS,draft('second delayed save'));assert.deepEqual(deferred.status(CONTRIBUTIONS),{...idle,pending:true});assert.deepEqual(deferred.status(KEY),idle,'Pending status is scoped to its key');
+    requests.shift().resolve({ok:true});await new Promise(resolve=>setTimeout(resolve,0));assert.equal(deferred.status(CONTRIBUTIONS).pending,true,'Another pending write keeps the key in saving state');
+    requests.shift().resolve({ok:true});assert((await deferred.flush()).ok);assert.deepEqual(deferred.status(CONTRIBUTIONS),idle);assert(states.some(state=>state.pending));assert.equal(states.at(-1).pending,false);
+    deferred.setItem(CONTRIBUTIONS,draft('failed delayed save'));requests.shift().reject(Error('Synthetic disk failure'));assert.equal((await deferred.flush()).ok,false);assert.deepEqual(deferred.status(CONTRIBUTIONS),{...idle,failed:true});
+    deferred.setItem(CONTRIBUTIONS,draft('retry delayed save'));assert.deepEqual(deferred.status(CONTRIBUTIONS),{...idle,pending:true,failed:true},'A retry remains unsaved until confirmed');requests.shift().resolve({ok:true});assert((await deferred.flush()).ok);assert.deepEqual(deferred.status(CONTRIBUTIONS),idle);
+    unsubscribe();unsubscribeBroken();const count=states.length;deferred.setItem(CONTRIBUTIONS,draft('after unsubscribe'));requests.shift().resolve({ok:true});await deferred.flush();assert.equal(states.length,count,'Unsubscribed listeners receive no persistence updates');
+}
 const legacy=memory(),disk={},writes=[],warnings=[];legacy.setItem(KEY,draft('legacy inventory'));legacy.setItem(FLOW,draft('legacy flow'));legacy.setItem(ROSTER,draft('legacy roster'));legacy.setItem(CONTRIBUTIONS,JSON.stringify({schemaVersion:1,candidates:[{id:'synthetic-draft',kind:'npc',name:'a saved watcher'}]}));
 const api={read:async()=>({values:{...disk},error:null}),write:async({key,value})=>{writes.push({key,value});disk[key]=value;return{ok:true};},flush:async()=>({ok:true})};
 const first=await createCharacterStorage({api,legacyStorage:legacy,onWarning:message=>warnings.push(message)});
@@ -31,8 +43,8 @@ restored.removeItem(ROSTER);assert((await restored.flush()).ok);fallbackOrigin.s
 assert.throws(()=>first.setItem('other-app-key','x'),/Unsupported/);assert.throws(()=>first.setItem(KEY,'x'.repeat(8*1024*1024+1)),/limit/);assert.throws(()=>first.setItem(KEY,'界'.repeat(Math.floor(8*1024*1024/3)+1)),/limit/);
 assert.throws(()=>first.setItem(FLOW,'x'.repeat(1500001)),/limit/,'The original walkthrough cap does not grow with the roster');
 const exactModel=JSON.stringify({schemaVersion:1,padding:''}),modelAtLimit=JSON.stringify({schemaVersion:1,padding:'a'.repeat(8*1024*1024-exactModel.length)});first.setItem(KEY,modelAtLimit);assert((await first.flush()).ok);assert.equal(disk[KEY],modelAtLimit,'The bridge accepts an8MiB model without changing its schema');
-assert.throws(()=>first.setItem(CONTRIBUTIONS,'x'.repeat(1800001)),/limit/);assert.throws(()=>first.setItem(CONTRIBUTIONS,'界'.repeat(600001)),/limit/);
-const exactContributions=JSON.stringify({schemaVersion:1,candidates:[],padding:''}),contributionsAtLimit=JSON.stringify({schemaVersion:1,candidates:[],padding:'a'.repeat(1800000-exactContributions.length)});first.setItem(CONTRIBUTIONS,contributionsAtLimit);assert((await first.flush()).ok);assert.equal(disk[CONTRIBUTIONS],contributionsAtLimit,'A full bounded contribution entry is independent of Character and roster limits');
+assert.equal(CONTRIBUTION_QUEUE_BYTES,10000000);assert.throws(()=>first.setItem(CONTRIBUTIONS,'x'.repeat(CONTRIBUTION_QUEUE_BYTES+1)),/limit/);assert.throws(()=>first.setItem(CONTRIBUTIONS,'界'.repeat(Math.floor(CONTRIBUTION_QUEUE_BYTES/3)+1)),/limit/);
+const exactContributions=JSON.stringify({schemaVersion:1,candidates:[],padding:''}),contributionPaddingBytes=CONTRIBUTION_QUEUE_BYTES-Buffer.byteLength(exactContributions),contributionsAtLimit=JSON.stringify({schemaVersion:1,candidates:[],padding:'界'.repeat(Math.floor(contributionPaddingBytes/3))+'a'.repeat(contributionPaddingBytes%3)});assert.equal(Buffer.byteLength(contributionsAtLimit),CONTRIBUTION_QUEUE_BYTES);first.setItem(CONTRIBUTIONS,contributionsAtLimit);assert((await first.flush()).ok);assert.equal(disk[CONTRIBUTIONS],contributionsAtLimit,'A full UTF-8 bounded contribution entry is independent of Character and roster limits');assert.throws(()=>first.setItem(CONTRIBUTIONS,contributionsAtLimit+' '),/limit/);
 const exactRoster=JSON.stringify({schemaVersion:1,padding:''}),rosterAtLimit=JSON.stringify({schemaVersion:1,padding:'a'.repeat((32*1024*1024)-exactRoster.length)});
 assert.equal(Buffer.byteLength(rosterAtLimit,'utf8'),(32*1024*1024));first.setItem(ROSTER,rosterAtLimit);assert((await first.flush()).ok);assert.equal(disk[ROSTER],rosterAtLimit,'A32MiB roster is supported independently of original key limits');
 assert.throws(()=>first.setItem(ROSTER,rosterAtLimit+' '),/limit/);assert.throws(()=>first.setItem(ROSTER,'界'.repeat((Math.floor(32*1024*1024/3)+1))),/limit/,'Roster bounds count UTF-8 bytes, not only JS characters');
@@ -44,6 +56,9 @@ blocked.setItem(KEY,draft('local edit'));assert.equal(writes.length,priorWrites,
 const failureWarnings=[],failed=await createCharacterStorage({api:{...api,write:async()=>{throw Error('Disk unavailable');}},legacyStorage:memory(),onWarning:message=>failureWarnings.push(message)});
 failed.setItem(KEY,draft('unsaved edit'));assert.equal((await failed.flush()).ok,false);assert.equal(failed.getItem(KEY),draft('unsaved edit'));assert.equal(failureWarnings.length,1);
 await new Promise(resolve=>setTimeout(resolve,0));assert.equal((await failed.flush()).ok,false,'A settled failed write remains visible');
+const contributionFailureWarnings=[],failedContributions=await createCharacterStorage({repositoryMode:true,api:{...api,write:async()=>{throw Error('Disk unavailable');}},legacyStorage:memory(),onWarning:message=>contributionFailureWarnings.push(message)});
+failedContributions.setItem(CONTRIBUTIONS,draft('unsaved contribution'));assert.equal((await failedContributions.flush()).ok,false);assert.equal(failedContributions.getItem(CONTRIBUTIONS),draft('unsaved contribution'));assert.equal(contributionFailureWarnings.length,1);assert.match(contributionFailureWarnings[0],/^Contribution drafts could not be saved to disk/,'A contribution save failure identifies the affected data');
+const contributionFlushWarnings=[],unflushedContributions=await createCharacterStorage({repositoryMode:true,api:{...api,flush:async()=>{throw Error('Flush unavailable');}},legacyStorage:memory(),onWarning:message=>contributionFlushWarnings.push(message)});assert.equal((await unflushedContributions.flush()).ok,false);assert.match(contributionFlushWarnings[0],/^Contribution drafts are still waiting to save/);
 assert(warnings.some(message=>message.includes('could not be loaded')));
 for(const key of [KEY,FLOW,ROSTER,CONTRIBUTIONS])for(const original of ['{broken synthetic JSON',JSON.stringify({schemaVersion:2,label:'future version'}),'[]','null',JSON.stringify({label:'missing schema'})])for(const authority of ['host','legacy']){
     const local=memory(),entryWarnings=[],entryWrites=[],hostValues=authority==='host'?{[key]:original}:{};
@@ -51,10 +66,11 @@ for(const key of [KEY,FLOW,ROSTER,CONTRIBUTIONS])for(const original of ['{broken
     const localBefore=local.getItem(key),hostBefore=JSON.stringify(hostValues);
     const entry=await createCharacterStorage({api:{read:async()=>({values:hostValues,error:null}),write:async value=>{entryWrites.push(value);hostValues[value.key]=value.value;return{ok:true};},flush:async()=>({ok:true})},legacyStorage:local,onWarning:message=>entryWarnings.push(message)});
     assert.equal(entry.getItem(key),null,'An unreadable entry does not reach a model fallback that can overwrite it');
+    assert.deepEqual(entry.status(key),{pending:false,failed:false,blocked:true},'Status identifies preserved entries that cannot be saved');
     if(key===KEY)assert.equal(createCharacterModel({storage:entry}).setMetadata({name:'Synthetic startup seed'}).saved,false,'Real model startup fallback cannot overwrite the preserved entry');
     else if(key===FLOW)createCharacterWalkthrough({storage:entry,id:()=> 'synthetic-blocked-flow'}).begin();
     assert.throws(()=>entry.setItem(key,draft('attempted replacement')),/preserved/);assert.throws(()=>entry.removeItem(key),/preserved/);
     assert.equal(local.getItem(key),localBefore,'Blocked writes/removals preserve original browser-only data too');assert.equal(JSON.stringify(hostValues),hostBefore,'Blocked host entries remain byte-for-byte unchanged');assert.equal(entryWrites.length,0);assert.equal((await entry.flush()).ok,false);assert(entryWarnings.some(message=>message.includes('malformed')||message.includes('unsupported')));
 }
 const browserOnly=memory(),browserOriginal='{malformed browser-only draft';browserOnly.setItem(KEY,browserOriginal);const browserBlocked=await createCharacterStorage({api:null,legacyStorage:browserOnly});assert.throws(()=>browserBlocked.setItem(KEY,draft('new')),/preserved/);assert.throws(()=>browserBlocked.removeItem(KEY),/preserved/);assert.equal(browserOnly.getItem(KEY),browserOriginal);
-console.log('Character/contribution renderer storage: four fixed keys, independent queue/roster/draft bounds, port-independent authority, migration, tombstones, corruption preservation and visible async failure passed.');
+console.log('Character/contribution renderer storage: four fixed keys, independent 10MB UTF-8 queue/32MiB roster/draft bounds, port-independent authority, migration, tombstones, corruption preservation and subscribed per-key async save status passed.');

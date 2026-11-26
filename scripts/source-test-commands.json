@@ -11,6 +11,8 @@
   ["tests/character-itembox.mjs"],
   ["tests/catalog-itembox.mjs"],
   ["tests/contribution-tier-zero.mjs"],
+  ["tests/contribution-capacity.mjs"],
+  ["tests/contribution-capacity-workspace.mjs"],
   ["tests/wiki-identity.mjs"],
   ["tests/contribution-099-identity.mjs"],
   ["tests/contribution-presentation.mjs"],

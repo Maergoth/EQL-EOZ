@@ -5,6 +5,13 @@ start with the [user guide](README.md); the app's **Settings → About Eye of
 Zomm → What's new** also retains the illustrated release archive. Older entries
 describe behavior at that release, including workflows replaced in later versions.
 
+## 1.0.14 - Reliable contribution drafts
+
+- Expand private contribution storage to 10 MB, reserving room for edits and reviewed evidence instead of letting automatic log discoveries use the whole allowance.
+- Make room for new discoveries by replacing the oldest untouched automatic suggestions. Keep authored notes, screenshots, active reviews and unfinished submissions.
+- Remove successfully processed source-only tasks from the active queue and retain bounded automatic history. Published source receipts survive catalog refreshes; quiet coverage decisions can reopen an unresolved suggestion when the catalog changes.
+- Show saving and failed-save status beside the queue, with concrete recovery instructions. Process queue retries local storage and cleans completed work; Clear completed local drafts removes completed copies only after confirmation. These actions publish no wiki edits.
+
 ## 1.0.13 - Automatic drop observation uploads
 
 - Keep Bind Affinity and levitation area notices from replacing the real zone on following observations.

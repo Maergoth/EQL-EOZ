@@ -2,6 +2,28 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
+  "version": "1.0.14",
+  "title": "Reliable contribution drafts",
+  "changes": [
+    "Keep contribution drafts within a larger 10 MB private limit, with room reserved for review and edits.",
+    "Make room for new discoveries by removing the oldest untouched automatic suggestions while keeping authored notes, screenshots and unfinished reviews.",
+    "Retire successfully processed source-only tasks from the active queue and keep automatic history bounded.",
+    "See saving and failed-save status directly in Contribute. Process queue retries local saves; clearing completed local copies requires confirmation and never publishes wiki edits."
+  ],
+  "steps": [
+    {
+      "title": "Keep reviewing while new discoveries arrive",
+      "image": "1.0.14/contribution-queue-room",
+      "view": "contribute",
+      "action": "Open Contribute",
+      "copy": "Open Contribute to see whether drafts are saved or still saving. Eye of Zomm makes room for new automatic discoveries by replacing older untouched suggestions, while your notes and unfinished reviews remain. If protected work fills the available space, choose Process queue or review completed local copies before clearing them.",
+      "alt": "Actual Contribute component reporting that one older unedited discovery was removed, alongside the unfinished Synthetic Contributor Relic review.",
+      "caption": "Production Contribute component rendered in isolated sandboxed Electron Chromium with 900 synthetic drafts and local fixture wiki/storage APIs. The check confirms one automatic replacement, preserved authored notes and no publication calls. No installed profile, player logs, game pixels or public wiki requests were used; this component capture does not establish native disk or live upload acceptance.",
+      "imageSha256": "b015faa9c56302ccef42561e491a83a2428927fc270ad4c2e80174cd16830eb7"
+    }
+  ]
+},
+{
   "version": "1.0.13",
   "title": "Automatic drop observation uploads",
   "changes": [

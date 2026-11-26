@@ -495,6 +495,9 @@ page/fact until supported current-public proof confirms it. Failed, stale,
 unsupported or ambiguous checks stay unknown. Keep raw evidence immutable;
 OCR may enrich a matching log-backed draft, not invent a kill, zone or source.
 Protect manual, reviewed, published and uncertain-write work during cleanup.
+The local queue retires processed suggestions and replaces the oldest untouched
+log discoveries when it needs room. It saves removals with their replacements
+and reserves capacity for edits. See the [storage and retention rules](docs/CONTRIBUTION_EVIDENCE_PLAN.md#durable-storage-and-limits).
 Proof renewal should update an existing editor without replacing its DOM.
 
 `desktop/wiki-host.cjs` owns trusted actions and a separate cookie-backed wiki

@@ -255,6 +255,13 @@ A task may update sources or locations on an existing page rather than create
 an article. Review the match and destination first. Automatic gaps require
 live public checks; failed checks do not prove that a page is missing.
 
+The queue saves drafts locally. As space runs low, it clears obsolete suggestions
+and replaces the oldest untouched discoveries from logs. Edited drafts and
+unfinished submissions are kept. If the queue needs your help to make more room,
+its status explains when to use **Process queue** or **Clear completed local
+drafts**. Clearing completed local copies keeps your wiki pages and submission
+history. Optional drop observations have their own automatic upload and retry path.
+
 For an item prompt, open its complete examine window. With Screen Reading
 enabled, fresh matching readings can fill unedited fields and stage a
 screenshot. A screenshot alone does not establish a new discovery.

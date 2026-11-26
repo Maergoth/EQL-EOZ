@@ -57,6 +57,16 @@ export function contributionItemEvidenceMarkup(candidate,fields=candidate?.field
     if(candidate?.kind!=='item')return '';
     return `<section class="contribution-item-evidence" aria-label="Item screenshot and icon">${contributionScreenshotMarkup(candidate)}${contributionFieldMarkup('iconId',fields.iconId||{value:'',confirmed:false},{kind:'item'})}</section>`;
 }
+export function contributionStorageMessage(status={}){
+    if(status.unsaved)return 'Your latest changes are not saved. Keep Eye of Zomm open and select Process queue to retry. Your previously saved drafts are kept.';
+    if(status.saving)return 'Saving contribution drafts…';
+    if(status.paused&&status.reason==='storage')return 'EoZ cannot save to this device right now. Check that your drive is connected and has free space, then select Process queue to retry. Previously saved drafts are kept.';
+    if(status.paused&&status.reason==='quota')return 'Browser storage is full. Clear completed local drafts or remove an unwanted screenshot, then select Process queue to retry. Previously saved drafts are kept.';
+    if(status.paused&&status.reason==='sources')return 'This item has many source suggestions. Add further drop sources manually in its draft. Your saved work is kept.';
+    if(status.paused)return status.completedHistory>0?'Your saved work fills the discovery queue. Select Clear completed local drafts to make room. New discoveries will resume when there is space.':'Your saved drafts fill the discovery queue. Finish or dismiss an unwanted draft, or remove its screenshot, to resume new discoveries. Existing drafts are saved.';
+    if(Number.isSafeInteger(status.evictedDiscoveries)&&status.evictedDiscoveries>0)return `Made room by removing ${status.evictedDiscoveries} older, unedited ${status.evictedDiscoveries===1?'discovery':'discoveries'}. Your drafts are saved.`;
+    return 'Your drafts are saved. Older, unedited discoveries are cleared automatically when space is needed.';
+}
 const OCR_AREA_STORAGE_KEY='eql-eye-of-zomm-ocr-areas-v1',MAX_OCR_AREAS=12;
 export function normalizeOcrArea(value){
     if(!value||typeof value!=='object')return null;
@@ -92,7 +102,8 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     let ignoreEntries=[],ignoreMatcher=null,ignoreMatcherPack=null,ignoreRevision=0,ignoreMatcherRevision=-1;
     let ignoresReady=typeof wiki?.contributionIgnores!=='function',ignoreLoad=null,ignoreLoadEpoch=0,blueprintsLoaded=false;
     function entityIgnored(target){const pack=getPack();if(!ignoreMatcher||ignoreMatcherPack!==pack||ignoreMatcherRevision!==ignoreRevision){ignoreMatcher=createContributionIgnoreMatcher(ignoreEntries,pack);ignoreMatcherPack=pack;ignoreMatcherRevision=ignoreRevision;}return ignoreMatcher(target);}
-    const warning=message=>notify(message,{tone:'warning'}),queue=createContributionQueue({storage:contributionStorage,getPack,onWarning:warning,isIgnored:entityIgnored});
+    const warning=message=>notify(message,{tone:'warning'}),queue=createContributionQueue({storage:contributionStorage,getPack,onWarning:warning,isIgnored:entityIgnored,
+        isDraftInUse:id=>manuallyEditedContributions.has(id)||id===selectedId&&Boolean(document.activeElement?.closest('[data-candidate-form]'))});
     const repositoryClient=typeof characterRepository?.bootstrap==='function'?createCharacterRepositoryClient({api:characterRepository,legacyStorage:storage,onWarning:warning,onChange:repositoryChanged}):null;
     const profiles=repositoryClient?.profiles||createCharacterProfiles({storage:characterStorage,onWarning:warning});
     let contributionResolverCache=null;
@@ -159,7 +170,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     function markContributionEdited(){if(selectedId)manuallyEditedContributions.add(selectedId);cancelAutomaticContribution();}
     try{const raw=storage?.getItem(OCR_AREA_STORAGE_KEY);if(raw&&raw.length<=24000){const parsed=JSON.parse(raw);if(Array.isArray(parsed))areaProfiles=parsed.slice(-MAX_OCR_AREAS).filter(value=>typeof value?.key==='string'&&value.key.length<=1000&&validAreaProfile(value)).map(value=>({key:value.key,region:normalizeOcrArea(value.region),referenceSize:frameSize(value.referenceSize)}));}}catch{/* A damaged optional calibration must not block ordinary capture. */}
     root.innerHTML=`<header class="capture-toolbar contribution-heading"><div><h2>Contribute</h2><p>Review discoveries or view your saved wiki submissions.</p></div><div class="capture-actions contribution-account"><span data-account-status role="status">Not connected</span><button class="secondary-button" data-wiki-login>Log in to wiki</button><button class="text-button" data-wiki-refresh>Refresh account</button></div></header>
-        <div class="contribution-layout"><aside class="panel contribution-sidebar"><h3>Discovery queue</h3><fieldset class="contribution-filters"><legend>Show gaps</legend><div data-contribution-filters></div></fieldset><p class="settings-helper" data-contribution-count role="status"></p><details class="contribution-manual"><summary>Add a page manually</summary><form data-add-contribution><label>Type<select name="kind"><option value="item">Item</option><option value="npc">Monster</option><option value="zone">Zone</option></select></label><label>Name<input name="name" required maxlength="230" placeholder="ex. Thornstinger"></label><button class="secondary-button">Add for review</button></form></details><div data-contribution-list></div></aside><article class="panel contribution-editor" data-contribution-editor></article></div><div class="panel wiki-review" data-wiki-review hidden></div>`;
+        <div class="contribution-layout"><aside class="panel contribution-sidebar"><h3>Discovery queue</h3><fieldset class="contribution-filters"><legend>Show gaps</legend><div data-contribution-filters></div></fieldset><p class="settings-helper" data-contribution-count role="status"></p><p class="settings-helper" data-contribution-storage-status role="status"></p><button class="secondary-button" type="button" data-process-contribution-queue>Process queue</button><p class="settings-helper" data-contribution-process-result role="status" hidden></p><div data-completed-history-controls hidden><button class="text-button" type="button" data-clear-completed-contributions>Clear completed local drafts</button><p class="settings-helper">Removes completed draft copies from this device; keeps unfinished work and wiki pages.</p></div><details class="contribution-manual"><summary>Add a page manually</summary><form data-add-contribution><label>Type<select name="kind"><option value="item">Item</option><option value="npc">Monster</option><option value="zone">Zone</option></select></label><label>Name<input name="name" required maxlength="230" placeholder="ex. Thornstinger"></label><button class="secondary-button">Add for review</button></form></details><div data-contribution-list></div></aside><article class="panel contribution-editor" data-contribution-editor></article></div><div class="panel wiki-review" data-wiki-review hidden></div>`;
     settingsRoot.innerHTML=`<h2>Screen reading</h2><label class="check-control"><input type="checkbox" data-capture-opt-in> Enable screen reading</label><p class="settings-helper">Read item windows and Character stats locally. Uses your selected game window or display. No audio or video recording.</p><details><summary>Supported layouts and privacy</summary><p class="settings-helper">Screen reading uses local OCR to propose text from visible item tooltips, full examine windows and Character statistics. The reader automatically recognizes the Default and Default Modern game layouts. For Character stats, open Inventory’s Stats tab in Default, or scroll down to the full stat panel in Default Modern. Other custom skins may be inaccurate. While enabled, opening Contribute starts item reading automatically, about once per second. A single recommended game window is selected; otherwise choose a source. OCR only fills existing items detected from chat or logs. Character stat reading starts from Character and temporarily owns that source. Screenshot files and pasted images use the same local OCR. Audio is never captured, and no video recording is saved.</p></details><p class="screen-reading-master-warning" data-screen-reading-warning>When unchecked, ALL screen reading is disabled: automatic and manual item reading, Character stat reading, screenshot capture and screenshot/clipboard OCR. Active readers stop immediately. Logs, text entry and inventory-file imports continue to work.</p><div class="capture-settings-controls" hidden><label>Source<select data-capture-source aria-label="Capture source"><option value="">Choose a window or display</option></select></label><div class="capture-actions"><button class="secondary-button" data-capture-sources>Choose source</button><button data-feature-ui="contributions" class="primary-button" data-capture-start>Start contribution capture</button><button class="secondary-button" data-capture-pause>Pause</button><button class="secondary-button" data-capture-stop>Stop all capture</button><button class="secondary-button" data-capture-calibrate disabled>Calibrate OCR area</button><button data-feature-ui="contributions" class="text-button" data-capture-import>Read a screenshot</button></div></div><p data-capture-status class="settings-helper" role="status">Screen reading disabled.</p>`;
     characterRoot.innerHTML=`<div class="capture-toolbar panel"><div><label class="character-profile-select">Character Select<select data-character-select aria-label="Character Select"></select></label><p>Import your inventory and achievements, read your displayed stats and share your character. Keep all your gear equipped.</p></div></div>
         <section class="panel character-walkthrough" aria-label="Character capture walkthrough"><ol data-walkthrough-steps></ol><div data-walkthrough-stage></div><p data-walkthrough-status role="status"></p><div class="capture-actions"><button class="text-button" data-walkthrough-back>Back</button><button class="text-button" data-character-stop>Cancel walkthrough</button></div></section><p data-character-status role="status"></p>
@@ -283,7 +294,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             patch.sources=[...sources,...raw.sources.filter(source=>!shownSources.has(sourceKey(source)))];
             for(const key of ['knownLoot','knownNPCs'])if(patch.fields[key]?.edited!==true&&Array.isArray(raw.fields[key]?.value))patch.fields[key]={...patch.fields[key],value:[...new Set([...(patch.fields[key]?.value||[]),...raw.fields[key].value])]};
         }
-        queue.update(candidate.id,patch);const saved=reviewCandidate();if(saved){renderedCandidateSignature=editorSignature(saved);renderReviewState();}return saved;
+        queue.update(candidate.id,patch);renderContributionStorage();const saved=reviewCandidate();if(saved){renderedCandidateSignature=editorSignature(saved);renderReviewState();}return saved;
     }
     function selectContribution(id){if(!id||publishing||!queueRows().some(candidate=>candidate.id===id))return false;setContributionTab('discoveries');cancelAutomaticContribution();saveCandidate();selectedId=id;iconPage=0;invalidatePlan();renderQueue();renderCandidate();return true;}
     function contributionContextMarkup(candidate,{showSpawn=true}={}){
@@ -298,8 +309,19 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         contributionIcons?.dispose();contributionIcons=mountWikiIconFinder({host,wiki,compact:true,onSelect(icon){if(publishing||selectedId!==candidate.id)return;markContributionEdited();const current=saveCandidate();contributionIconCrop=null;queue.update(candidate.id,{fields:{...current.fields,iconId:{value:icon.iconId,confirmed:true,edited:true}},planId:null,status:'needs-review'});invalidatePlan();renderCandidate();}});
         if(contributionIconCrop?.candidateId===candidate.id&&!candidate.fields.iconId?.edited&&!candidate.fields.iconId?.confirmed)void contributionIcons.readDataUrl(contributionIconCrop.dataUrl);
     }
+    function renderContributionStorage(){
+        const host=$('[data-contribution-storage-status]');if(!host)return;
+        const status=queue.storageStatus({includeBytes:false}),message=contributionStorageMessage(status);
+        if(host.textContent!==message)host.textContent=message;
+        host.dataset.contributionStorageState=status.unsaved?'unsaved':status.saving?'saving':status.paused?'paused':'saved';
+        host.classList.toggle('capture-warning',status.unsaved||status.paused);
+        const button=$('[data-process-contribution-queue]');if(button)button.disabled=publishing||busy;
+        const completed=$('[data-completed-history-controls]');if(completed)completed.hidden=!(status.completedHistory>0);
+        const clear=$('[data-clear-completed-contributions]');if(clear)clear.disabled=publishing||busy;
+    }
     function renderQueue(){
         const all=visibleQueueCandidates(),candidates=visibleContributionQueue(all,enabledGaps),counts=contributionQueueCounts(all),filters=$('[data-contribution-filters]'),list=$('[data-contribution-list]');
+        renderContributionStorage();
         const attention=root.querySelector('.contribution-latest-result[data-automatic-review-key]');
         if(attention&&!all.some(candidate=>automaticSourceDraftKeys(candidate,{resolver:contributionResolver()})?.includes(attention.dataset.automaticReviewKey))){attention.hidden=true;attention.innerHTML='';}
         if(!filters.children.length)filters.innerHTML=CONTRIBUTION_FILTERS.map(filter=>`<label class="check-control"><input type="checkbox" data-gap-filter="${filter.key}">${escape(filter.label)} <span class="contribution-filter-count"></span></label>`).join('');
@@ -1072,7 +1094,32 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
     }
     listen($('[data-contribution-filters]'),'change',event=>{const input=event.target.closest('[data-gap-filter]');if(!input||publishing)return;saveCandidate();enabledGaps=input.checked?[...new Set([...enabledGaps,input.dataset.gapFilter])]:enabledGaps.filter(key=>key!==input.dataset.gapFilter);try{storage?.setItem(filterKey,JSON.stringify(enabledGaps));}catch{}const visible=queueRows();if(!visible.some(candidate=>candidate.id===selectedId))selectedId=visible[0]?.id||'';matches=null;invalidatePlan();renderQueue();renderCandidate();});
     listen(root,'click',event=>{const dismiss=event.target.closest('[data-dismiss-discovery]'),forever=event.target.closest('[data-ignore-forever]');if(dismiss||forever){event.preventDefault();event.stopPropagation();if(forever)void act(()=>ignoreForever(forever.dataset.ignoreForever));else dismissDiscovery(dismiss.dataset.dismissDiscovery);return;}const row=event.target.closest('[data-candidate-id]');if(row&&!publishing){matches=null;selectContribution(row.dataset.candidateId);}});
-    listen($('[data-add-contribution]'),'submit',event=>{event.preventDefault();if(publishing)return;const data=new FormData(event.target),candidate=queue.add({kind:data.get('kind'),name:data.get('name')},true);if(candidate){selectedId=candidate.id;invalidatePlan();event.target.reset();renderQueue();renderCandidate();}});
+    listen($('[data-process-contribution-queue]'),'click',()=>{
+        if(publishing||busy)return;
+        void act(async()=>{
+            cancelAutomaticContribution();saveCandidate();
+            const result=queue.process(),previous=selectedId,host=$('[data-contribution-process-result]');
+            queuePresentations.clear();
+            const rows=queueRows(),retained=queue.snapshot().some(candidate=>candidate.id===selectedId);
+            if(!retained||!rows.some(candidate=>candidate.id===selectedId)&&!leasedReviewCandidate())selectedId=rows[0]?.id||'';
+            host.hidden=false;host.textContent=result.persisted===false?'The queue could not be saved. Keep Eye of Zomm open and try again.':result.changed?'Queue processed. Unfinished drafts and saved submissions were kept. No wiki edits were published.':'Queue checked. Unfinished drafts are kept for review. No wiki edits were published.';
+            renderQueue();
+            if(previous!==selectedId){invalidatePlan();renderCandidate();}else renderReviewState();
+        }).finally(()=>{if(!disposed)renderContributionStorage();});
+    });
+    listen($('[data-clear-completed-contributions]'),'click',()=>{
+        if(publishing||busy)return;
+        const count=queue.storageStatus({includeBytes:false}).completedHistory;if(!count)return;
+        const copies=count===1?'1 completed draft copy':`${count} completed draft copies`;
+        if(!document.defaultView.confirm(`Remove ${copies} from this device? Unfinished work and wiki pages are kept.`))return;
+        void act(async()=>{
+            cancelAutomaticContribution();saveCandidate();
+            const result=queue.clearCompletedHistory(),host=$('[data-contribution-process-result]');
+            host.hidden=false;host.textContent=result.persisted===false?'Completed local drafts could not be removed. Keep Eye of Zomm open and try again.':`Cleared ${result.removed} completed local ${result.removed===1?'draft copy':'draft copies'}. Unfinished work and wiki pages were kept.`;
+            renderQueue();renderReviewState();
+        }).finally(()=>{if(!disposed)renderContributionStorage();});
+    });
+    listen($('[data-add-contribution]'),'submit',event=>{event.preventDefault();if(publishing)return;const data=new FormData(event.target),candidate=queue.add({kind:data.get('kind'),name:data.get('name')},true);if(candidate){selectedId=candidate.id;invalidatePlan();event.target.reset();renderQueue();renderCandidate();}else renderContributionStorage();});
     listen($('[data-wiki-login]'),'click',()=>void act(async()=>{if(account?.authenticated)await wiki.logout();else await wiki.login();await refreshAccount();}));listen($('[data-wiki-refresh]'),'click',()=>void act(refreshAccount));
     listen($('[data-capture-opt-in]',settingsRoot),'change',event=>{const enabled=event.target.checked,epoch=++masterEpoch;masterPending=enabled;optIn=enabled;contributionReaderEpoch++;contributionReaderSuppressed=!enabled;cancelAutomaticContribution();walkthroughEpoch++;sourceListEpoch++;manualItemRead=null;closeArea();if(!capture?.setReadingEnabled){masterPending=null;optIn=false;warning('Screen reading requires the updated desktop app.');renderCapture();return;}void capture.setReadingEnabled(enabled).then(next=>{if(disposed||epoch!==masterEpoch)return;masterPending=null;captureState=next;contributionReaderSuppressed=!enabled;renderCapture();refreshContributionReader({permissionChanged:true});renderDiscoveryCapture();}).catch(error=>{if(disposed||epoch!==masterEpoch)return;masterPending=null;warning(error.message);void capture.status().then(next=>{if(!disposed&&epoch===masterEpoch){captureState=next;renderCapture();}});});});
     listen($('[data-capture-sources]',settingsRoot),'click',refreshSources);listen($('[data-capture-start]',settingsRoot),'click',()=>void act(()=>{contributionReaderSuppressed=false;contributionEnteredAt=Date.now();discoveryMessage='';return start('contribution');}));listen($('[data-capture-stop]',settingsRoot),'click',()=>{contributionReaderSuppressed=true;void stopCapture().catch(error=>warning(error.message));});listen($('[data-capture-pause]',settingsRoot),'click',()=>void act(async()=>{const resuming=captureState.phase==='paused';contributionReaderSuppressed=!resuming;if(!resuming)cancelAutomaticContribution();captureState=await (resuming?capture.resume():capture.pause());if(resuming){contributionEnteredAt=Date.now();discoveryMessage='';}renderCapture();renderDiscoveryCapture();}));listen($('[data-capture-import]',settingsRoot),'click',()=>void act(()=>importScreenshot('contribution')));
@@ -1269,7 +1316,9 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
             show();
         }).catch(()=>{});
     }
-    discoveryUiReady=true;renderQueue();renderCandidate();renderCharacter();renderCapture();
+    discoveryUiReady=true;
+    if(typeof contributionStorage?.subscribe==='function')unsubscribers.push(contributionStorage.subscribe(()=>{if(!disposed)renderContributionStorage();}));
+    renderQueue();renderCandidate();renderCharacter();renderCapture();
     if(repositoryClient){
         let closing=false;
         listen(document.defaultView,'beforeunload',event=>{if(closing||!repositoryClient.status.pending)return;event.preventDefault();event.returnValue=false;void repositoryClient.flush().then(()=>{closing=true;document.defaultView.close();}).catch(error=>warning(error.message));});
@@ -1283,7 +1332,7 @@ export function mountCaptureWorkspace({document=globalThis.document,storage=glob
         discoveryLogSource=source;
         // Only an actual fresh observation or an open discovery view starts a
         // check. Background renders can hide expired receipts without polling.
-        const result=queue.consumeLog(event,context);if(result.candidate){if(!selectedId)selectedId=result.candidate.id;renderQueue();if(!selected()||!root.contains(document.activeElement))renderCandidate();}
+        const result=queue.consumeLog(event,context);renderContributionStorage();if(result.candidate){if(!selectedId)selectedId=result.candidate.id;renderQueue();if(!selected()||!root.contains(document.activeElement))renderCandidate();}
         for(const candidate of result.candidates||[result.candidate])if(candidate)void discoveryGate.check(candidate);
         if(result.prompt)void showVerifiedSpawnPrompt(result.prompt).catch(()=>{});
         if(result.locationCaptured){let handled=false;try{handled=onDiscoveryLocation(result.locationCaptured,{...context,at:event.at||context?.at})===true;}catch(error){warning(error.message||'The discovery location could not be updated.');}if(!handled)void globalThis.eyeOfZommDiscovery?.action('dismiss',{id:'spawn-'+result.locationCaptured.candidateId}).catch(()=>{});spawnArmedId='';if(selectedId===result.locationCaptured.candidateId)renderCandidate();void notifySavedLocation(result.locationCaptured).catch(()=>{});}

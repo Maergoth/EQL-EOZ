@@ -1,23 +1,82 @@
 import { findPotentialMatches } from './contribution-model.js';
-import { CONTRIBUTION_QUEUE_KEY, CONTRIBUTION_QUEUE_BYTES, contributionSourceToken, contributionLogLine, logContributionObservation } from './contribution-evidence.js';
+import { CONTRIBUTION_QUEUE_KEY, CONTRIBUTION_QUEUE_BYTES, CONTRIBUTION_AUTOMATIC_QUEUE_BYTES, CONTRIBUTION_QUEUE_DRAFTS, CONTRIBUTION_AUTOMATIC_DRAFTS, CONTRIBUTION_ARCHIVE_DRAFTS, contributionSourceToken, contributionLogLine, logContributionObservation } from './contribution-evidence.js';
 import { createWikiResolver, normalizeWikiIdentity as contributionNameKey, itemBaseIdentity as itemIdentity, itemExaltationBaseIdentity, wikiIdentityKey, wikiEntityKind } from './wiki-identity.js';
 import { contributionReasons } from './contribution-reasons.js';
 import { classifyNpcEvidence } from './generated-pets.js';
 import { collectTierZeroEvidence, tierZeroVerificationPreview, confirmTierZeroVerification } from './contribution-tier-zero.js';
-import { automaticSourceReceiptKey } from './automatic-source-results.js';
+import { automaticSourceReceiptKey, automaticSourceDraftComplete } from './automatic-source-results.js';
 import { canonicalChatItemMatch, coveredTradeChatCaption, rankedChatItemMentions } from './chat-item-mentions.js';
 
 const KEY=CONTRIBUTION_QUEUE_KEY;
 const clean=(value,max=240)=>String(value??'').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim().slice(0,max);
 const candidateKey=(kind,name,zone='')=>`${kind}|${contributionNameKey(kind==='item'?itemIdentity(name).name:name)}|${kind==='item'?'':contributionNameKey(zone)}`;
-export function createContributionQueue({storage=globalThis.localStorage,getPack=()=>({}),isIgnored=()=>false,onWarning=()=>{},now=Date.now,autoReconcile=true}={}){
+export function createContributionQueue({storage=globalThis.localStorage,getPack=()=>({}),isIgnored=()=>false,isDraftInUse=()=>false,onWarning=()=>{},now=Date.now,autoReconcile=true}={}){
     let candidates=[],archive=[],automaticSourceReceipts=[],automaticSourceDecisions=[],sequence=0,cursor=0,catalogCache=null,lastReconciled=null,lastLog=null,armed=null,readBlocked=false,migrated=false;const ignored=new Set(),seenLogIds=new Set(),registry=new Map();
+    let automaticPause=null,saveWarning='',unsavedChanges=false,manualCapacityWarning=false,workRevision=0,processedRevision=-1,processedCatalog=null;
+    let evictedDiscoveries=0;
+    const encode=value=>new TextEncoder().encode(value).length;
+    const serialized=(overrides={})=>JSON.stringify({schemaVersion:1,sequence,cursor,candidates,archive,automaticSourceReceipts,automaticSourceDecisions,registry:[...registry.values()].slice(-2000),ignored:[...ignored].slice(-2000),seenLogIds:[...seenLogIds].slice(-2000),...overrides});
+    function warnSave(reason,message){if(saveWarning!==reason){saveWarning=reason;onWarning(message);}}
+    function storageStatus({includeBytes=true}={}){
+        const recheckBytes=automaticPause&&automaticPause.reason!=='drafts'&&workRevision!==automaticPause.revision;
+        const bytes=includeBytes||recheckBytes?encode(serialized()):null;
+        const backend=storage?.status?.(KEY);
+        if(candidates.length<CONTRIBUTION_QUEUE_DRAFTS)manualCapacityWarning=false;
+        if(automaticPause&&(automaticPause.reason==='drafts'?candidates.length<CONTRIBUTION_AUTOMATIC_DRAFTS:workRevision!==automaticPause.revision&&bytes<automaticPause.bytes&&candidates.length<=automaticPause.active))automaticPause=null;
+        const backendPause=saveWarning.startsWith('automatic-')?saveWarning.slice('automatic-'.length):null;
+        const reason=backendPause||automaticPause?.reason||null;
+        return {bytes,limitBytes:CONTRIBUTION_QUEUE_BYTES,automaticLimitBytes:CONTRIBUTION_AUTOMATIC_QUEUE_BYTES,active:candidates.length,automaticDraftLimit:CONTRIBUTION_AUTOMATIC_DRAFTS,paused:Boolean(reason),reason,evictedDiscoveries,completedHistory:archive.filter(candidate=>candidate.status==='submitted').length,saving:backend?.pending===true,unsaved:unsavedChanges||readBlocked||backend?.failed===true||backend?.blocked===true};
+    }
+    function pauseAutomatic(reason){
+        const status=storageStatus();
+        if(automaticPause?.reason!==reason){
+            const message=reason==='sources'?'This item already has 100 drop source suggestions. To add another source, open the item in Contribute and choose Add source.':'Eye of Zomm is holding new discoveries because saved drafts are taking up the available space. Open Contribute and choose Process queue. If you still need room, clear completed local copies or dismiss a draft you do not need.';
+            onWarning(message);
+        }
+        automaticPause={reason,bytes:status.bytes,active:candidates.length,revision:workRevision};return null;
+    }
+    function processForCapacity(){
+        const current=resolver();
+        if(processedRevision!==workRevision||processedCatalog!==current){
+            const result=reconcile({apply:true,includeCompleted:true,trimHistory:true,retireSources:true});processedRevision=workRevision;processedCatalog=current;
+            return result.changed;
+        }
+        return false;
+    }
     const pack=()=>{try{return getPack()||{};}catch{return {};}};
     const entityIgnored=(kind,name)=>['npc','item'].includes(wikiEntityKind(kind))&&isIgnored({kind:wikiEntityKind(kind),name})===true;
+    const datasetVersion=()=>String(pack().meta?.version||pack().meta?.manifestVersion||'');
+    const sourceDecisionKeys=()=>[...new Set([...automaticSourceReceipts,...automaticSourceDecisions.filter(entry=>String(entry.datasetVersion||'')===datasetVersion()).map(entry=>entry.key)])];
     function resolver(){const current=pack(),version=current.meta?.manifestVersion||current.meta?.version||'',entities=current.wikiEntities,complete=`${current.meta?.wikiEntitiesComplete===true}:${current.meta?.sample===true}`;if(catalogCache?.pack!==current||catalogCache.entities!==entities||catalogCache.version!==version||catalogCache.complete!==complete||catalogCache.items!==current.items||catalogCache.npcs!==current.npcs||catalogCache.zones!==current.zones)catalogCache={pack:current,entities,version,complete,items:current.items,npcs:current.npcs,zones:current.zones,resolver:createWikiResolver(current)};return catalogCache.resolver;}
     const canonicalKey=(kind,name,zone='')=>{const resolved=resolver().resolve(kind,name);return candidateKey(kind,resolved.canonicalTitle||name,zone);};
     const spawnEligible=candidate=>candidate?.kind==='npc'&&[candidate.name,candidate.title||candidate.name].every(name=>classifyNpcEvidence(name,resolver().resolve('npc',name)).eligible);
-    const protectedDraft=candidate=>Boolean(candidate.planId||candidate.baseRecovery||candidate.baseVerification||candidate.attachment||candidate.manual===true||candidate.spawnRequest?.status==='captured'||candidate.matchesReviewed===true||candidate.reviewed===true||candidate.submittedAt||!['needs-review',''].includes(candidate.status||'')||candidate.playerText||candidate.title&&contributionNameKey(candidate.title)!==contributionNameKey(candidate.name)||Object.values(candidate.fields||{}).some(field=>field?.confirmed===true||field?.edited===true)||[...(candidate.sources||[]),...(candidate.relations||[])].some(relation=>relation?.confirmed===true||relation?.type==='spawn-location'));
+    const protectedDraft=candidate=>Boolean(
+        candidate.planId||candidate.baseRecovery||candidate.baseVerification||candidate.attachment||candidate.manual===true||
+        candidate.userEvidence||Array.isArray(candidate.evidence)&&candidate.evidence.some(entry=>['ocr','manual','screen-read'].includes(entry?.kind))||
+        candidate.spawnRequest?.status==='captured'||candidate.matchesReviewed===true||candidate.reviewed===true||
+        candidate.submittedAt||!['needs-review',''].includes(candidate.status||'')||candidate.playerText||
+        candidate.title&&contributionNameKey(candidate.title)!==contributionNameKey(candidate.name)||
+        Object.values(candidate.fields||{}).some(field=>field?.confirmed===true||field?.edited===true)||
+        [...(candidate.sources||[]),...(candidate.relations||[])].some(relation=>relation?.confirmed===true||relation?.edited===true||relation?.type==='spawn-location')
+    );
+    function canReplaceDiscovery(candidate){
+        return !protectedDraft(candidate)&&!candidate.spawnRequest&&!candidate.tierZeroEvidence?.length&&
+            armed?.candidateId!==candidate.id&&!isDraftInUse(candidate.id)&&
+            candidate.evidence?.length>0&&candidate.evidence.every(entry=>entry?.kind==='game-log');
+    }
+    function fitDiscoveryProposal(proposal,bytes,byteLimit,draftLimit,keepId){
+        const removed=new Set();
+        // Candidates are ordered by admission. Only untouched log discoveries
+        // can make room, and the replacement and removals are saved together.
+        for(const candidate of proposal.candidates){
+            if(proposal.candidates.length-removed.size<=draftLimit&&bytes<=byteLimit)break;
+            if(candidate.id===keepId||!canReplaceDiscovery(candidate))continue;
+            removed.add(candidate);
+            bytes-=encode(JSON.stringify(candidate))+1;
+        }
+        if(proposal.candidates.length-removed.size>draftLimit||bytes>byteLimit)return null;
+        return removed;
+    }
     function coveredChatCaption(candidate){
         // Recheck only untouched, chat-only legacy suggestions. A known name
         // inside a real encoded unknown item, loot, OCR or reviewed work does
@@ -59,7 +118,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
     function attachmentValue(value){if(value===null)return null;const thumbnail=typeof value?.thumbnail==='string'&&/^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/]*={0,2}$/.test(value.thumbnail)&&value.thumbnail.length<=200000?value.thumbnail:null;if(!value||typeof value.attachmentId!=='string'||!value.attachmentId.trim()||value.attachmentId.length>240||!Number.isSafeInteger(value.width)||!Number.isSafeInteger(value.height)||value.width<1||value.height<1||value.width*value.height>16777216||!Number.isSafeInteger(value.bytes)||value.bytes<1||value.bytes>16*1024*1024)throw Error('Review a bounded screenshot attachment.');return {attachmentId:clean(value.attachmentId),thumbnail,width:value.width,height:value.height,bytes:value.bytes,caption:clean(value.caption,1000),license:clean(value.license,200)};}
     try{const raw=storage?.getItem(KEY);if(raw){
         if(typeof raw!=='string'||new TextEncoder().encode(raw).length>CONTRIBUTION_QUEUE_BYTES)throw Error('Queue too large');
-        const saved=JSON.parse(raw);if(saved.schemaVersion!==1||!Array.isArray(saved.candidates)||saved.candidates.length>200||saved.candidates.some(c=>!c||!['item','npc','zone'].includes(c.kind)||typeof c.id!=='string'||typeof c.name!=='string'))throw Error('Unsupported queue');
+        const saved=JSON.parse(raw);if(saved.schemaVersion!==1||!Array.isArray(saved.candidates)||saved.candidates.length>CONTRIBUTION_QUEUE_DRAFTS||saved.candidates.some(c=>!c||!['item','npc','zone'].includes(c.kind)||typeof c.id!=='string'||typeof c.name!=='string'))throw Error('Unsupported queue');
         candidates=saved.candidates.map(candidate=>{
             const key=canonicalKey(candidate.kind,candidate.name,candidate.zone),aliases=[...(candidate.aliasKeys||[]),...(candidate.key&&candidate.key!==key?[candidate.key]:[])];
             const loaded={...candidate,key,aliasKeys:[...new Set(aliases)].slice(-8),fields:candidate.fields&&typeof candidate.fields==='object'?candidate.fields:{},sources:Array.isArray(candidate.sources)?candidate.sources:[],relations:Array.isArray(candidate.relations)?candidate.relations.slice(-100):[],evidence:Array.isArray(candidate.evidence)?candidate.evidence:[]};
@@ -73,7 +132,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
             }
             return loaded;
         });sequence=Number(saved.sequence)||0;cursor=Number(saved.cursor)||0;
-        if(saved.archive!==undefined&&(!Array.isArray(saved.archive)||saved.archive.length>200))throw Error('Unsupported archive');
+        if(saved.archive!==undefined&&(!Array.isArray(saved.archive)||saved.archive.length>CONTRIBUTION_ARCHIVE_DRAFTS))throw Error('Unsupported archive');
         if((saved.archive||[]).some(candidate=>!candidate||!['item','npc','zone'].includes(candidate.kind)||typeof candidate.id!=='string'||typeof candidate.name!=='string'))throw Error('Unsupported archived candidate');
         archive=saved.archive||[];
         const validRelationKey=key=>{
@@ -86,8 +145,27 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         for(const id of (Array.isArray(saved.seenLogIds)?saved.seenLogIds:[]).slice(-2000))if(typeof id==='string'&&id.length<=240)seenLogIds.add(id);
         for(const entry of (Array.isArray(saved.registry)?saved.registry:[]).slice(-2000))if(entry&&typeof entry.key==='string'&&entry.key.length<800&&['queued','submitted','partial','ignored','notified'].includes(entry.state))registry.set(entry.key,entry);
     }}catch{readBlocked=true;onWarning('The saved contribution queue could not be read and was preserved. Recover it before saving new drafts.');}
-    function save(){if(readBlocked)return false;try{const value=JSON.stringify({schemaVersion:1,sequence,cursor,candidates,archive,automaticSourceReceipts,automaticSourceDecisions,registry:[...registry.values()].slice(-2000),ignored:[...ignored].slice(-2000),seenLogIds:[...seenLogIds].slice(-2000)});if(new TextEncoder().encode(value).length>CONTRIBUTION_QUEUE_BYTES)throw Error('Queue too large');storage?.setItem(KEY,value);return true;}catch{onWarning('Contributions remain in memory because their saved queue is full or unavailable. Review or remove drafts before closing Eye of Zomm.');return false;}}
-    function rememberState(kind,name,state,purpose='missing-page',zone=''){const resolved=resolver().resolve(kind,name),key=`${wikiIdentityKey(kind,resolved.canonicalTitle||name)}|${purpose}|${purpose==='spawn-location'?contributionNameKey(zone):''}`,prior=registry.get(key);if(prior?.state==='submitted'&&['queued','partial'].includes(state))return;registry.delete(key);registry.set(key,{key,state,at:new Date(now()).toISOString()});while(registry.size>2000)registry.delete(registry.keys().next().value);}
+    function save(overrides={},automatic=false){
+        if(readBlocked)return false;
+        try{
+            const value=serialized(overrides);
+            if(encode(value)>CONTRIBUTION_QUEUE_BYTES){if(!automatic)unsavedChanges=true;warnSave('size','Recent contribution changes exceed the 10 MB local save limit and have not been saved. Keep Eye of Zomm open. Process the queue or remove an unwanted screenshot in Contribute, then retry.');return false;}
+            // Passing null explicitly selects the existing in-memory mode.
+            // The desktop adapter must confirm that it accepted the save.
+            if(storage!==null){
+                if(typeof storage?.setItem!=='function')throw Error('Storage unavailable');
+                storage.setItem(KEY,value);
+            }
+            saveWarning='';unsavedChanges=false;return true;
+        }catch(error){
+            const quota=error?.name==='QuotaExceededError';
+            if(!automatic)unsavedChanges=true;
+            const reason=quota?'quota':'storage';
+            const message=automatic?(quota?'Automatic discoveries are paused because browser storage is full. Previously saved drafts are kept. Free storage, then process the queue in Contribute to retry.':'Automatic discoveries are paused because local storage is unavailable. Previously saved drafts are kept. Retry Process queue in Contribute after storage is available.'):(quota?'Recent contribution changes could not be saved because browser storage is full. Keep Eye of Zomm open and free storage before retrying.':'Recent contribution changes could not be written to local storage. Keep Eye of Zomm open and retry after storage is available.');
+            warnSave((automatic?'automatic-':'')+reason,message);return false;
+        }
+    }
+    function rememberState(kind,name,state,purpose='missing-page',zone='',target=registry){const resolved=resolver().resolve(kind,name),key=`${wikiIdentityKey(kind,resolved.canonicalTitle||name)}|${purpose}|${purpose==='spawn-location'?contributionNameKey(zone):''}`,prior=target.get(key);if(prior?.state==='submitted'&&['queued','partial'].includes(state))return;target.delete(key);target.set(key,{key,state,at:new Date(now()).toISOString()});while(target.size>2000)target.delete(target.keys().next().value);}
     function suppression(rawKind,name,{zone='',purpose='missing-page'}={}){const kind=wikiEntityKind(rawKind),key=canonicalKey(kind,name,zone),resolved=resolver().resolve(kind,name),entityKey=wikiIdentityKey(kind,resolved.canonicalTitle||name),entry=registry.get(`${entityKey}|${purpose}|${purpose==='spawn-location'?contributionNameKey(zone):''}`),candidate=candidates.find(value=>value.kind===kind&&(value.key===key||value.aliasKeys?.includes(key)||wikiIdentityKey(kind,resolver().resolve(kind,value.name).canonicalTitle||value.name)===entityKey&&(kind==='item'||!zone||contributionNameKey(value.zone)===contributionNameKey(zone))));
         if(entityIgnored(kind,name))return {suppressed:true,reason:'ignored',permanent:true,candidateId:candidate?.id||null};
         const ignoredMatch=[...ignored].some(value=>value===key||value.startsWith(`${kind}|`)&&canonicalKey(kind,value.split('|')[1],kind==='item'?'':value.split('|')[2])===key);
@@ -106,12 +184,14 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         const key=JSON.stringify([normalized.type,contributionNameKey(name),contributionNameKey(zone),instance,evidence,item,location]);
         candidate.relations??=[];let existing=candidate.relations.find(value=>JSON.stringify([value.type,contributionNameKey(value.name),contributionNameKey(value.zone),value.instance||'unknown',value.evidence,value.item||'',value.location])===key);
         const id=clean(relation.eventId||observation?.id),at=clean(relation.at||observation?.capturedAt,50);
-        if(!existing){if(candidate.relations.length>=100){const index=candidate.relations.findIndex(value=>value.confirmed!==true);if(index<0)return;candidate.relations.splice(index,1);}existing={...normalized,firstAt:at,lastAt:at,evidenceIds:[]};candidate.relations.push(existing);}
+        if(!existing){if(candidate.relations.length>=100){const index=candidate.relations.findIndex(value=>value.confirmed!==true&&value.edited!==true);if(index<0)return;candidate.relations.splice(index,1);}existing={...normalized,firstAt:at,lastAt:at,evidenceIds:[]};candidate.relations.push(existing);}
         if(at){if(!existing.firstAt||at<existing.firstAt)existing.firstAt=at;if(!existing.lastAt||at>existing.lastAt)existing.lastAt=at;}
         existing.evidenceIds=Array.isArray(existing.evidenceIds)?existing.evidenceIds:[];
         if(id&&!existing.evidenceIds.includes(id))existing.evidenceIds=[...existing.evidenceIds,id].slice(-8);
     }
-    function add({kind,name,zone='',instance='unknown',fields={},evidence=null,relations=[]},force=false){
+    function add(input,force=false,allowProcessing=true){
+        let {kind,name,zone='',instance='unknown',fields={},evidence=null,relations=[]}=input;
+        const automatic=!force&&!['ocr','manual','screen-read'].includes(evidence?.kind)&&!relations.some(relation=>relation?.type==='spawn-location');
         name=clean(name);if(!['item','npc','zone'].includes(kind)||!name)return null;
         const observedName=name,identity=kind==='item'?itemIdentity(name):{name,tier:null};name=identity.name;
         if(entityIgnored(kind,name))return null;
@@ -125,8 +205,12 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         const classified=contributionReasons({...candidate,kind,name,zone,instance,...(force?{manual:true}:{}),fields:{...candidate?.fields,...Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{value}]))},relations:[...(candidate?.relations||[]),...relations]},resolver(),{pack:pack()});
         if(classified.excluded==='owned-pet'||classified.excluded&&!force)return null;
         if(present==='present'&&!classified.reasons.length&&!force&&!candidate)return null;
-        if(!candidate){if(candidates.length>=200){onWarning('The contribution queue is full. Review or remove a draft to save another discovery.');return null;}candidate={id:`contribution-${++sequence}`,key,aliasKeys:[],kind,name:resolved.canonicalTitle||name,title:resolved.canonicalTitle||name,zone:clean(zone),instance:['normal','raid'].includes(instance)?instance:'unknown',era:'',playerText:'',fields:{},sources:[],relations:[],evidence:[],status:'needs-review',membership:present};candidates.push(candidate);}
+        const previous=candidate;
+        if(!candidate){
+            candidate={id:`contribution-${sequence+1}`,key,aliasKeys:[],kind,name:resolved.canonicalTitle||name,title:resolved.canonicalTitle||name,zone:clean(zone),instance:['normal','raid'].includes(instance)?instance:'unknown',era:'',playerText:'',fields:{},sources:[],relations:[],evidence:[],status:'needs-review',membership:present};
+        }else candidate=structuredClone(candidate);
         if(force)candidate.manual=true;
+        if(['ocr','manual','screen-read'].includes(evidence?.kind))candidate.userEvidence=true;
         if(kind==='item'){if(!candidate.zone&&zone)candidate.zone=clean(zone);if(legacyKey!==key)candidate.aliasKeys=[...new Set([...(candidate.aliasKeys||[]),legacyKey])].slice(-8);}
         candidate.membership=present;candidate.canonicalTitle=resolved.canonicalTitle;candidate.revisionId=resolved.record?.revisionId||null;candidate.reasons=classified.reasons.length?classified.reasons:force?['manual-review']:[];if(candidate.intent===undefined||!protectedDraft(candidate))candidate.intent=present==='present'?'update':present==='missing'?'create':'review';
         for(const [key,raw] of Object.entries(fields||{}).slice(0,80)){if(!validField(key))continue;let value=fieldValue(raw);
@@ -135,29 +219,71 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
             else if(!candidate.fields[key]?.confirmed&&!(key==='level'&&candidate.fields[key]?.edited===true))candidate.fields[key]={...candidate.fields[key],value,confirmed:false};}
         if(evidence?.levelEvidence&&Object.hasOwn(fields,'level')&&candidate.fields.level?.confirmed!==true&&candidate.fields.level?.edited!==true)candidate.fields.level={...candidate.fields.level,source:'same-zone-consider',provenance:structuredClone(evidence.levelEvidence)};
         if(evidence&&!candidate.evidence.some(e=>e.id===evidence.id)){const text=evidence.evidence?.text||(evidence.kind==='game-log'?`Observed ${clean(evidence.subject?.kind)}: ${clean(evidence.subject?.name)}${(Array.isArray(evidence.relations)?evidence.relations:[]).filter(relation=>relation.type==='drop-source').map(relation=>`\nReported source: ${clean(relation.name)} in ${clean(relation.zone)} (${clean(relation.evidence)})`).join('')}`:'');candidate.evidence.push({id:clean(evidence.id),at:clean(evidence.capturedAt),kind:clean(evidence.kind),text:clean(text,6000),...(evidence.kind==='game-log'?{event:clean(evidence.input?.event,40),logLine:contributionLogLine(evidence.evidence?.logLine),...(evidence.input?.itemLinkFormat==='plain-tiered-chat'?{itemLinkFormat:'plain-tiered-chat'}:{})}:{}),confidence:Math.min(100,Number(evidence.confidence??evidence.fields?.[0]?.confidence)||0)});const logProof=candidate.evidence.findLast(entry=>entry.kind==='game-log');candidate.evidence=candidate.evidence.slice(-6);if(logProof&&!candidate.evidence.some(entry=>entry.kind==='game-log'))candidate.evidence=[logProof,...candidate.evidence.slice(-5)];}
-        for(const relation of (Array.isArray(relations)?relations:[]).filter(r=>r?.type==='drop-source'))if(!candidate.sources.some(s=>contributionNameKey(s.npc)===contributionNameKey(relation.name)&&contributionNameKey(s.zone)===contributionNameKey(relation.zone)&&s.sourceEvidence===relation.evidence&&(s.instance||'unknown')===(relation.instance||'unknown')))candidate.sources.push({npc:clean(relation.name),zone:clean(relation.zone),instance:relation.instance||'unknown',confirmed:false,sourceEvidence:clean(relation.evidence)});
+        for(const relation of (Array.isArray(relations)?relations:[]).filter(r=>r?.type==='drop-source'))if(!candidate.sources.some(s=>contributionNameKey(s.npc)===contributionNameKey(relation.name)&&contributionNameKey(s.zone)===contributionNameKey(relation.zone)&&s.sourceEvidence===relation.evidence&&(s.instance||'unknown')===(relation.instance||'unknown'))){
+            if(automatic&&candidate.sources.length>=100)return pauseAutomatic('sources');
+            candidate.sources.push({npc:clean(relation.name),zone:clean(relation.zone),instance:relation.instance||'unknown',confirmed:false,sourceEvidence:clean(relation.evidence)});
+        }
         for(const relation of (Array.isArray(relations)?relations:[]).slice(0,100))rememberRelation(candidate,relation,evidence);
         if(kind==='item'&&evidence)collectTierZeroEvidence(candidate,evidence,{now:now()});
         if(candidate.tierZeroEvidence?.length&&!candidate.baseVerification)candidate.reasons=[...new Set([...candidate.reasons,'tier0-verification'])];
-        rememberState(kind,candidate.name,candidate.status==='submitted'?'submitted':candidate.status==='partial'?'partial':'queued');
-        save();return structuredClone(candidate);
+        // A published or currently covered source is no longer review work.
+        // Keep the durable receipt instead of recreating a hidden full draft.
+        if(automatic&&!protectedDraft(candidate)&&automaticSourceDraftComplete(candidate,sourceDecisionKeys(),{resolver:resolver()}))return null;
+        const nextCandidates=previous?candidates.map(value=>value===previous?candidate:value):[...candidates,candidate];
+        const nextRegistry=new Map(registry);rememberState(kind,candidate.name,candidate.status==='submitted'?'submitted':candidate.status==='partial'?'partial':'queued','missing-page','',nextRegistry);
+        const proposal={candidates:nextCandidates,sequence:previous?sequence:sequence+1,registry:[...nextRegistry.values()]};
+        const bytes=encode(serialized(proposal));
+        const byteLimit=automatic?CONTRIBUTION_AUTOMATIC_QUEUE_BYTES:CONTRIBUTION_QUEUE_BYTES;
+        const draftLimit=automatic?CONTRIBUTION_AUTOMATIC_DRAFTS:CONTRIBUTION_QUEUE_DRAFTS;
+        const overCount=!previous&&nextCandidates.length>draftLimit;
+        const overBytes=bytes>byteLimit&&(!automatic||bytes>encode(serialized()));
+        let removed=new Set();
+        if(overCount||overBytes){
+            if(allowProcessing&&processForCapacity())return add(input,force,false);
+            removed=fitDiscoveryProposal(proposal,bytes,overBytes?byteLimit:Infinity,overCount?draftLimit:nextCandidates.length,candidate.id);
+            if(!removed){
+                if(automatic)return pauseAutomatic(overCount?'drafts':'bytes');
+                if(overCount){
+                    if(!manualCapacityWarning){manualCapacityWarning=true;onWarning('There is no room for another draft. Open Contribute and clear completed local copies or dismiss a draft you do not need.');}
+                    return null;
+                }
+            }else if(removed.size){
+                proposal.candidates=nextCandidates.filter(value=>!removed.has(value));
+                const remaining=new Set(proposal.candidates.map(value=>wikiIdentityKey(value.kind,value.canonicalTitle||value.name)));
+                for(const value of removed){
+                    const entity=wikiIdentityKey(value.kind,value.canonicalTitle||value.name),key=`${entity}|missing-page|`;
+                    if(!remaining.has(entity)&&nextRegistry.get(key)?.state==='queued')nextRegistry.delete(key);
+                }
+                proposal.registry=[...nextRegistry.values()];
+            }
+        }
+        const persisted=save(proposal,automatic);if(!persisted&&(automatic||removed?.size))return null;
+        if(previous)Object.assign(previous,candidate);else{candidates.push(candidate);sequence++;}
+        if(removed?.size){
+            candidates=candidates.filter(value=>!removed.has(value));evictedDiscoveries+=removed.size;automaticPause=null;
+            if(processedRevision===workRevision)processedRevision++;
+        }
+        registry.clear();for(const [key,value]of nextRegistry)registry.set(key,value);
+        workRevision++;
+        return structuredClone(candidate);
     }
     function consume(observation){
+        const saveObservation=()=>save({},observation?.kind==='game-log');
         cursor=Math.max(cursor,Number(observation?.sequence)||0);
         const kind=observation?.subject?.kind==='monster'?'npc':observation?.subject?.kind;
-        if(observation?.owner==='character'||!['item','npc','zone'].includes(kind)){save();return null;}
-        if(entityIgnored(kind,observation.subject.name)){save();return null;}
+        if(observation?.owner==='character'||!['item','npc','zone'].includes(kind)){saveObservation();return null;}
+        if(entityIgnored(kind,observation.subject.name)){saveObservation();return null;}
         if(['ocr','manual','screen-read'].includes(observation.kind)){
             // Images can enrich an existing item, never manufacture discovery
             // identities, monster/zone tasks or loot-source relationships.
             const key=canonicalKey('item',observation.subject.name);
-            if(kind!=='item'||!candidates.some(candidate=>candidate.kind==='item'&&(candidate.key===key||candidate.aliasKeys?.includes(key)))){save();return null;}
+            if(kind!=='item'||!candidates.some(candidate=>candidate.kind==='item'&&(candidate.key===key||candidate.aliasKeys?.includes(key)))){saveObservation();return null;}
             observation={...observation,input:{...observation.input,zone:''},relations:[],fields:(observation.fields||[]).filter(field=>!['knownNPCs','knownLoot'].includes(field.key))};
         }
         // Persisted journal replay follows the same rule as fresh parsing.
         // Considers still drive Intel, but never create verification work.
-        if(observation.kind==='game-log'&&(observation.input?.event==='consider'||kind==='npc'&&observation.input?.event!=='kill')){save();return null;}
-        if(kind==='npc'&&!classifyNpcEvidence(observation.subject.name,resolver().resolve(kind,observation.subject.name)).eligible){save();return null;}
+        if(observation.kind==='game-log'&&(observation.input?.event==='consider'||kind==='npc'&&observation.input?.event!=='kill')){saveObservation();return null;}
+        if(kind==='npc'&&!classifyNpcEvidence(observation.subject.name,resolver().resolve(kind,observation.subject.name)).eligible){saveObservation();return null;}
         const fields=Object.fromEntries((observation.fields||[]).filter(f=>f.key!=='name').map(f=>[f.key,f.value]));
         if(Array.isArray(fields.knownNPCs))fields.knownNPCs=fields.knownNPCs.filter(name=>!entityIgnored('npc',name)&&classifyNpcEvidence(name,resolver().resolve('npc',name)).eligible);
         if(Array.isArray(fields.knownLoot))fields.knownLoot=fields.knownLoot.filter(name=>!entityIgnored('item',name));
@@ -181,7 +307,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
             const zoneFields={...(population.length?{knownNPCs:population}:{}),...(loot.length?{knownLoot:loot}:{})};
             if(kind!=='zone'&&(population.length||loot.length)){const proposal=add({kind:'zone',name:zone,zone,instance,fields:zoneFields,evidence:observation,relations});if(proposal)relatedCandidate??=proposal;}
         }
-        save();return result||relatedCandidate;
+        saveObservation();return result||relatedCandidate;
     }
     function consumeLog(event,context={}){
         if(event?.type==='kill'&&entityIgnored('npc',event.victim)||['loot','item-link'].includes(event?.type)&&entityIgnored('item',itemExaltationBaseIdentity(event.item)))return {candidate:null,prompt:null,locationCaptured:null};
@@ -206,7 +332,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
             const pending=armed;
             const afterBoundary=pending&&at>=Math.floor(pending.armedAt/1000)*1000&&(Number.isSafeInteger(pending.cursor)&&Number.isSafeInteger(observation.input.cursor)?observation.input.cursor>pending.cursor:at>=pending.armedAt);
             const candidate=pending&&candidates.find(value=>value.id===pending.candidateId&&value.kind==='npc'&&contributionNameKey(value.zone)===contributionNameKey(zone));
-            if(!candidate||!afterBoundary){save();return {candidate:null,prompt:null,locationCaptured:null};}
+            if(!candidate||!afterBoundary){save({},true);return {candidate:null,prompt:null,locationCaptured:null};}
             armed=null;const location=observation.location,display=[location.y,location.x,location.z].join(', ');
             const evidence={...observation,subject:{kind:'monster',name:candidate.name},evidence:{text:`Player requested the next /loc for ${candidate.name} in ${zone}: ${display}. Spawn location still requires review.`,logLine:observation.evidence.logLine}};
             const updated=add({kind:'npc',name:candidate.name,zone,fields:{location:display},evidence,relations:[{type:'spawn-location',name:candidate.name,zone,evidence:'player-requested-next-loc',location,eventId:observation.id,at:observation.capturedAt}]});
@@ -214,24 +340,52 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
             return {candidate:updated?structuredClone(candidate):null,prompt:null,locationCaptured:{candidateId:candidate.id,name:candidate.name,zone,location,display}};
         }
         const candidate=consume(observation);let prompt=null;
-        if(event.type==='kill'&&classifyNpcEvidence(observation.subject.name,resolver().resolve('npc',observation.subject.name)).eligible){
+        if(event.type==='kill'&&candidate?.kind==='npc'&&classifyNpcEvidence(observation.subject.name,resolver().resolve('npc',observation.subject.name)).eligible){
             const target=candidates.find(value=>value.kind==='npc'&&value.key===canonicalKey('npc',observation.subject.name,zone));
-            if(target&&zone&&!target.spawnRequest&&target.fields.location?.confirmed!==true&&target.membership==='missing'&&!suppression('npc',target.name,{zone,purpose:'spawn-location'}).suppressed){
+            if(target&&candidate.id===target.id&&zone&&!target.spawnRequest&&target.fields.location?.confirmed!==true&&target.membership==='missing'&&!suppression('npc',target.name,{zone,purpose:'spawn-location'}).suppressed){
                 target.spawnRequest={status:'requested',requestedAt:observation.capturedAt,evidenceId:observation.id};const result=armSpawnLocation(target.id);if(result.ok){prompt={candidateId:target.id,name:target.name,zone,spawnEvidenceId:observation.id,armed:true,expiresAt:result.expiresAt,...(target.fields.notable?.confirmed===true&&typeof target.fields.notable.value==='boolean'?{notable:target.fields.notable.value}:{})};rememberState('npc',target.name,'notified','spawn-location',zone);}save();
             }
         }
         return {candidate:prompt?structuredClone(candidates.find(value=>value.id===prompt.candidateId)):candidate,prompt,locationCaptured:null};
     }
     function armSpawnLocation(candidateId,{persistent=false}={}){const candidate=candidates.find(value=>value.id===candidateId&&value.kind==='npc');if(candidate&&!spawnEligible(candidate))return {ok:false,error:'Pets do not have wiki spawn locations.'};if(!candidate||!lastLog?.zone||contributionNameKey(candidate.zone)!==contributionNameKey(lastLog.zone))return {ok:false,error:'Return to the monster’s zone before recording its spawn location.'};const armedAt=now();armed={candidateId,source:lastLog.source,zone:lastLog.zone,cursor:lastLog.cursor,armedAt,expiresAt:persistent===true?null:armedAt+300000,...(persistent===true?{persistent:true}:{})};return {ok:true,candidateId,name:candidate.name,zone:candidate.zone,expiresAt:armed.expiresAt,...(persistent===true?{persistent:true}:{})};}
-    function reconcile({apply=false}={}){
+    function trimAutomaticHistory(){
+        const disposable=new Set(['known-complete','duplicate','generated-pet','owned-pet','passive-monster-observation','chat-caption-covered','chat-trade-caption-covered','automatic-source-receipt','automatic-source-decision']);
+        const history=archive.map((candidate,index)=>({candidate,index,at:Date.parse(candidate.archive?.at)})).filter(({candidate})=>!protectedDraft(candidate)&&disposable.has(candidate.archive?.reason));
+        history.sort((a,b)=>(Number.isFinite(b.at)?b.at:0)-(Number.isFinite(a.at)?a.at:0)||b.index-a.index);
+        let retained=0,bytes=0;const cutoff=now()-30*86400000,removed=new Set();
+        for(const {candidate,at}of history){
+            const size=encode(JSON.stringify(candidate));
+            if(retained>=200||bytes+size>2000000||Number.isFinite(at)&&at<cutoff){removed.add(candidate);continue;}
+            retained++;bytes+=size;
+        }
+        archive=archive.filter(candidate=>!removed.has(candidate));return removed.size;
+    }
+    function reconcile({apply=false,includeCompleted=false,trimHistory=false,retireSources=false}={}){
         if(apply&&readBlocked)return {version:1,applied:false,changed:false,rows:[],active:candidates.length,archived:archive.length,blocked:true,persisted:false,error:'The preserved queue must be recovered before reconciliation.'};
         const rows=[],seen=new Map(),before=apply?{candidates:structuredClone(candidates),archive:structuredClone(archive),armed:structuredClone(armed)}:null;let changed=false;
+        // Quiet decisions are scoped to their dataset. Restore an unresolved
+        // suggestion when that scope changes; publication receipts remain valid.
+        if(apply)for(const archived of [...archive]){
+            if(archived.archive?.reason!=='automatic-source-decision'||archived.archive.datasetVersion===datasetVersion())continue;
+            const {archive:history,...original}=archived,classification=contributionReasons(original,resolver(),{pack:pack()});
+            const restored={...original,membership:classification.resolved.membership,reasons:classification.reasons};
+            if(classification.excluded||!classification.reasons.length||automaticSourceDraftComplete(restored,sourceDecisionKeys(),{resolver:resolver()})||candidates.some(candidate=>canonicalKey(candidate.kind,candidate.name,candidate.zone)===canonicalKey(restored.kind,restored.name,restored.zone)))continue;
+            if(candidates.length>=CONTRIBUTION_AUTOMATIC_DRAFTS)continue;
+            candidates.push(restored);archive=archive.filter(candidate=>candidate!==archived);changed=true;
+        }
+        // Retire disposable history first so a full archive can still accept
+        // newly completed work in this same processing pass.
+        let retiredHistory=apply&&trimHistory?trimAutomaticHistory():0;if(retiredHistory)changed=true;
         for(const candidate of [...candidates]){
             const passive=passiveFacts(candidate),reviewCandidate=passive&&!passive.archive?{...candidate,fields:passive.fields,relations:passive.relations}:candidate;
             const chatTitle=coveredChatCaption(candidate),classification=chatTitle?{excluded:chatTitle.reason,reasons:[],resolved:resolver().resolve('item',chatTitle.title||candidate.name)}:contributionReasons(reviewCandidate,resolver(),{pack:pack()}),resolved=classification.resolved,key=canonicalKey(candidate.kind,candidate.name,candidate.zone),protectedWork=protectedDraft(candidate),prior=seen.get(key),realGap=classification.reasons.some(reason=>['missing-source','missing-population','tier0-verification','identity-review'].includes(reason)),conflict=prior&&Object.entries(candidate.fields||{}).some(([field,value])=>prior.fields?.[field]&&!['knownLoot','knownNPCs'].includes(field)&&JSON.stringify(prior.fields[field].value)!==JSON.stringify(value.value)),duplicate=prior&&!protectedWork&&!protectedDraft(prior)&&!realGap&&!conflict;
             if(!prior&&!chatTitle)seen.set(key,candidate);
-            const obsolete=passive?.archive?'passive-monster-observation':classification.excluded||(resolved.membership==='present'&&!classification.reasons.length?'known-complete':duplicate?'duplicate':null);
-            const reason=protectedWork?'protected-work':prior&&conflict?'duplicate-conflict':obsolete||(passive?'passive-monster-observation':classification.reasons[0]||'unresolved'),action=obsolete&&!protectedWork&&archive.length<200?'archive':passive&&!passive.archive&&archive.length<200?'prune-passive-observations':'keep';
+            const completed=includeCompleted&&candidate.status==='submitted';
+            const sourceComplete=retireSources&&!protectedWork&&automaticSourceDraftComplete(candidate,sourceDecisionKeys(),{resolver:resolver()});
+            const sourceReason=sourceComplete?(automaticSourceDraftComplete(candidate,automaticSourceReceipts,{resolver:resolver()})?'automatic-source-receipt':'automatic-source-decision'):null;
+            const obsolete=completed?'submitted':sourceReason|| (passive?.archive?'passive-monster-observation':classification.excluded||(resolved.membership==='present'&&!classification.reasons.length?'known-complete':duplicate?'duplicate':null));
+            const reason=completed?'submitted':protectedWork?'protected-work':prior&&conflict?'duplicate-conflict':obsolete||(passive?'passive-monster-observation':classification.reasons[0]||'unresolved'),action=obsolete&&(!protectedWork||completed)&&archive.length<CONTRIBUTION_ARCHIVE_DRAFTS?'archive':passive&&!passive.archive&&archive.length<CONTRIBUTION_ARCHIVE_DRAFTS?'prune-passive-observations':'keep';
             rows.push({id:candidate.id,name:candidate.name,kind:candidate.kind,classification:reason,reasons:classification.reasons,action,canonicalTitle:resolved.canonicalTitle,membership:resolved.membership,...(prior?{duplicateOf:prior.id}:{})});
             if(!apply)continue;
             if(action==='archive'){
@@ -240,7 +394,7 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
                     prior.aliasKeys=[...new Set([...(prior.aliasKeys||[]),candidate.key,...(candidate.aliasKeys||[])])].slice(-8);
                     for(const field of ['sources','relations','evidence'])prior[field]=[...new Map([...(prior[field]||[]),...(candidate[field]||[])].map(value=>[field==='evidence'?value.id:JSON.stringify(value),value])).values()].slice(field==='evidence'?-6:-100);
                 }
-                archive.push({...structuredClone(candidate),archive:{version:1,reason:obsolete,at:new Date(now()).toISOString()}});candidates=candidates.filter(value=>value.id!==candidate.id);if(armed?.candidateId===candidate.id)armed=null;changed=true;
+                archive.push({...structuredClone(candidate),archive:{version:1,reason:obsolete,at:new Date(now()).toISOString(),...(sourceReason==='automatic-source-decision'?{datasetVersion:datasetVersion()}:{})}});candidates=candidates.filter(value=>value.id!==candidate.id);if(armed?.candidateId===candidate.id)armed=null;changed=true;
             }else{
                 if(action==='prune-passive-observations'){
                     archive.push({...structuredClone(candidate),archive:{version:1,reason:'passive-monster-observation',at:new Date(now()).toISOString()}});
@@ -251,27 +405,41 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
                 if(Object.entries(patch).some(([key,value])=>JSON.stringify(candidate[key])!==JSON.stringify(value))){Object.assign(candidate,patch);changed=true;}
             }
         }
-        const persisted=!changed||save();if(apply&&!persisted){candidates=before.candidates;archive=before.archive;armed=before.armed;}
-        return {version:1,applied:apply&&persisted,changed:changed&&persisted,rows,active:candidates.length,archived:archive.length,blocked:readBlocked,persisted,...(!persisted?{error:'Reconciliation could not be saved; the active queue was retained.'}:{})};
+        // Only disposable automatic history expires. Keep authored, reviewed,
+        // captured-location and submission records in full, even under pressure.
+        if(apply&&trimHistory){
+            retiredHistory+=trimAutomaticHistory();
+            if(retiredHistory)changed=true;
+        }
+        const retrySave=Boolean(saveWarning)||storage?.status?.(KEY)?.failed===true;
+        const persisted=!apply||!changed&&!retrySave||save({},!unsavedChanges);if(apply&&!persisted){candidates=before.candidates;archive=before.archive;armed=before.armed;}else if(apply&&changed)workRevision++;
+        return {version:1,applied:apply&&persisted,changed:changed&&persisted,rows,active:candidates.length,archived:archive.length,retiredHistory:persisted?retiredHistory:0,blocked:readBlocked,persisted,...(!persisted?{error:'Reconciliation could not be saved; the active queue was retained.'}:{})};
     }
-    function ensureReconciled(){const current=resolver();if(autoReconcile&&lastReconciled!==current){lastReconciled=current;return reconcile({apply:true});}return null;}
+    function ensureReconciled(){const current=resolver();if(autoReconcile&&lastReconciled!==current){lastReconciled=current;return reconcile({apply:true,retireSources:true,trimHistory:true});}return null;}
     ensureReconciled();
     return{
-        snapshot:()=>{ensureReconciled();return structuredClone(candidates);},cursor:()=>cursor,archived:()=>structuredClone(archive),reconcile,suppression,refreshCatalog:ensureReconciled,
+        snapshot:()=>{ensureReconciled();return structuredClone(candidates);},cursor:()=>cursor,archived:()=>structuredClone(archive),reconcile,suppression,refreshCatalog:ensureReconciled,storageStatus,
+        process:()=>reconcile({apply:true,includeCompleted:true,trimHistory:true,retireSources:true}),
+        clearCompletedHistory(){
+            if(readBlocked)return {persisted:false,removed:0};
+            const before=archive;archive=archive.filter(candidate=>candidate.status!=='submitted');const removed=before.length-archive.length;
+            if(!save()){archive=before;return {persisted:false,removed:0};}
+            if(removed)workRevision++;return {persisted:true,removed};
+        },
         sourceReceiptKeys:()=>[...automaticSourceReceipts],
-        sourceDecisionKeys:()=>{const version=String(pack().meta?.version||pack().meta?.manifestVersion||'');return[...new Set([...automaticSourceReceipts,...automaticSourceDecisions.filter(entry=>String(entry.datasetVersion||'')===version).map(entry=>entry.key)])];},
+        sourceDecisionKeys,
         recordAutomaticSourceDecision(result){
             if(readBlocked||result?.schemaVersion!==1||result.status!=='quiet'||!['covered','routine'].includes(result.decision))return false;
             const key=automaticSourceReceiptKey(result,{resolver:resolver()});if(!key)return false;
             const before=automaticSourceDecisions;
             const proofs=(Array.isArray(result.proofs)?result.proofs:[]).slice(0,8).map(proof=>({wikiTitle:clean(proof.wikiTitle),revisionId:Number.isSafeInteger(proof.revisionId)&&proof.revisionId>0?proof.revisionId:null,field:clean(proof.field,80),...(proof.setTitle?{setTitle:clean(proof.setTitle)}:{})}));
             automaticSourceDecisions=[...before.filter(entry=>entry.key!==key),{key,decision:result.decision,reason:clean(result.reason,120),datasetVersion:clean(result.datasetVersion,120),proofs,at:new Date(now()).toISOString()}].slice(-500);
-            if(!save()){automaticSourceDecisions=before;return false;}return true;
+            if(!save()){automaticSourceDecisions=before;return false;}workRevision++;reconcile({apply:true,retireSources:true,trimHistory:true});return true;
         },
         recordAutomaticSourceReceipt(result){
             if(result?.status!=='submitted')return false;
             const key=automaticSourceReceiptKey(result,{resolver:resolver()});if(!key)return false;
-            automaticSourceReceipts=[...automaticSourceReceipts.filter(value=>value!==key),key].slice(-500);save();return true;
+            const before=automaticSourceReceipts;automaticSourceReceipts=[...before.filter(value=>value!==key),key].slice(-500);if(!save()){automaticSourceReceipts=before;return false;}workRevision++;reconcile({apply:true,retireSources:true,trimHistory:true});return true;
         },
         spawnStatus(){if(armed&&(!spawnEligible(candidates.find(candidate=>candidate.id===armed.candidateId))||!armed.persistent&&now()>armed.expiresAt))armed=null;return armed?{...armed}:null;},
         tierZeroReview(id,options={}){return tierZeroVerificationPreview(candidates.find(value=>value.id===id),{...options,now:now()});},
@@ -307,8 +475,8 @@ export function createContributionQueue({storage=globalThis.localStorage,getPack
         cancelSpawnLocation(){armed=null;},
         update(id,patch){const candidate=candidates.find(c=>c.id===id);if(!candidate)return null;const attachment=Object.hasOwn(patch,'attachment')?attachmentValue(patch.attachment):undefined;const priorKey=candidate.key,priorTitle=contributionNameKey(candidate.title);for(const key of ['name','title','zone','instance','era','playerText','fields','sources','relations','status','matchesReviewed','planId','baseRecovery'])if(Object.hasOwn(patch,key))candidate[key]=structuredClone(patch[key]);if(Object.hasOwn(patch,'intent')&&['create','update','review'].includes(patch.intent))candidate.intent=patch.intent;
             if(Object.hasOwn(patch,'attachment'))candidate.attachment=attachment;
-            candidate.key=canonicalKey(candidate.kind,candidate.name,candidate.zone);if(priorKey!==candidate.key)candidate.aliasKeys=[...new Set([...(candidate.aliasKeys||[]),priorKey])].slice(-8);if(armed?.candidateId===id&&(priorKey!==candidate.key||priorTitle!==contributionNameKey(candidate.title)))armed=null;rememberState(candidate.kind,candidate.name,candidate.status==='submitted'?'submitted':candidate.status==='partial'?'partial':'queued');save();return structuredClone(candidate);},
-        remove(id){const candidate=candidates.find(c=>c.id===id);if(candidate){for(const key of [candidate.key,...(candidate.aliasKeys||[])])ignored.add(key);rememberState(candidate.kind,candidate.name,'ignored');rememberState(candidate.kind,candidate.name,'ignored','spawn-location',candidate.zone);}while(ignored.size>2000)ignored.delete(ignored.values().next().value);candidates=candidates.filter(c=>c.id!==id);if(armed?.candidateId===id)armed=null;save();},
+            candidate.key=canonicalKey(candidate.kind,candidate.name,candidate.zone);if(priorKey!==candidate.key)candidate.aliasKeys=[...new Set([...(candidate.aliasKeys||[]),priorKey])].slice(-8);if(armed?.candidateId===id&&(priorKey!==candidate.key||priorTitle!==contributionNameKey(candidate.title)))armed=null;rememberState(candidate.kind,candidate.name,candidate.status==='submitted'?'submitted':candidate.status==='partial'?'partial':'queued');workRevision++;save();return structuredClone(candidate);},
+        remove(id){const candidate=candidates.find(c=>c.id===id);if(candidate){for(const key of [candidate.key,...(candidate.aliasKeys||[])])ignored.add(key);rememberState(candidate.kind,candidate.name,'ignored');rememberState(candidate.kind,candidate.name,'ignored','spawn-location',candidate.zone);}while(ignored.size>2000)ignored.delete(ignored.values().next().value);candidates=candidates.filter(c=>c.id!==id);if(armed?.candidateId===id)armed=null;workRevision++;save();},
         suppress(kind,name,{zone='',purpose='missing-page',state='ignored'}={}){rememberState(wikiEntityKind(kind),name,state,purpose,zone);save();},
         matches(candidate){const current=pack(),entries=candidate.kind==='item'?current.items:candidate.kind==='npc'?current.npcs:current.zones;return findPotentialMatches(candidate.title||candidate.name,entries||[]);}
     };
