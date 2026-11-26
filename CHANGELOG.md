@@ -5,7 +5,7 @@ start with the [user guide](README.md); the app's **Settings → About Eye of
 Zomm → What's new** also retains the illustrated release archive. Older entries
 describe behavior at that release, including workflows replaced in later versions.
 
-## 1.0.14 - Reliable contribution drafts
+## 1.0.15 - Reliable contribution drafts
 
 - Expand private contribution storage to 10 MB, reserving room for edits and reviewed evidence instead of letting automatic log discoveries use the whole allowance.
 - Make room for new discoveries by replacing the oldest untouched automatic suggestions. Keep authored notes, screenshots, active reviews and unfinished submissions.

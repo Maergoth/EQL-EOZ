@@ -1,6 +1,6 @@
 # Browsable release history
 
-The 1.0.14 image shows the actual Contribute component after a new synthetic
+The 1.0.15 image shows the actual Contribute component after a new synthetic
 discovery replaces the oldest untouched automatic suggestion in a 900-entry
 queue. The isolated sandboxed Electron check retains the selected authored item
 and its saved note, verifies the queue stays bounded, and records zero plan or

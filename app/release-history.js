@@ -2,7 +2,7 @@
 const freeze = value => { if(value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 export const RELEASE_HISTORY = freeze([
 {
-  "version": "1.0.14",
+  "version": "1.0.15",
   "title": "Reliable contribution drafts",
   "changes": [
     "Keep contribution drafts within a larger 10 MB private limit, with room reserved for review and edits.",
@@ -13,7 +13,7 @@ export const RELEASE_HISTORY = freeze([
   "steps": [
     {
       "title": "Keep reviewing while new discoveries arrive",
-      "image": "1.0.14/contribution-queue-room",
+      "image": "1.0.15/contribution-queue-room",
       "view": "contribute",
       "action": "Open Contribute",
       "copy": "Open Contribute to see whether drafts are saved or still saving. Eye of Zomm makes room for new automatic discoveries by replacing older untouched suggestions, while your notes and unfinished reviews remain. If protected work fills the available space, choose Process queue or review completed local copies before clearing them.",
